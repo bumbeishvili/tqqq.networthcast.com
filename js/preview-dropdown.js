@@ -48,6 +48,7 @@
     'select-sma-rsi-cool-window': { kind: 'sma', apply: (p, v) => { p.rsiCoolWindow = +v; } },
     'select-sma-confirm-buy':     { kind: 'sma', apply: (p, v) => { p.confirmBuySteps = +v; } },
     'select-sma-confirm-sell':    { kind: 'sma', apply: (p, v) => { p.confirmSellSteps = +v; } },
+    'select-sma-settle':          { kind: 'sma', apply: (p, v) => { p.settleDays = +v; } },
   };
   const PREVIEW_SELECT_IDS = Object.keys(PREVIEW_SELECTS);
 
@@ -63,7 +64,7 @@
     if (exitIdx  > maxIdx) exitIdx  = maxIdx;
     return {
       initial:     sliderToInitial(+document.getElementById('slider-initial').value),
-      monthly:     +document.getElementById('slider-monthly').value,
+      monthly:     sliderToMonthly(+document.getElementById('slider-monthly').value),
       annualRaise: +document.getElementById('slider-raise').value / 100,
       simEntryIdx: entryIdx > 0 ? entryIdx - 1 : entryIdx,
       exitIdx,
@@ -111,6 +112,7 @@
       rebalanceCheck: 'daily',
       confirmBuySteps: _num('select-sma-confirm-buy', 0),
       confirmSellSteps: _num('select-sma-confirm-sell', 0),
+      settleDays: _num('select-sma-settle', 0),
     });
   }
 
@@ -131,7 +133,7 @@
       outAsset: p.outAsset, dcaInMonths: p.dcaInMonths, dcaToOutMonths: p.dcaToOutMonths,
       bgGtfoPct: p.bgGtfoPct, bgAsset: p.bgAsset, tradeCostPct: p.tradeCostPct,
       rsiOhWindow: p.rsiOhWindow, rsiCoolWindow: p.rsiCoolWindow,
-      rebalanceCheck: p.rebalanceCheck, confirmBuySteps: p.confirmBuySteps, confirmSellSteps: p.confirmSellSteps,
+      rebalanceCheck: p.rebalanceCheck, confirmBuySteps: p.confirmBuySteps, confirmSellSteps: p.confirmSellSteps, settleDays: p.settleDays,
     });
     return (r.smaPoints && r.smaPoints.length) ? r.smaPoints[r.smaPoints.length - 1].value : 0;
   }

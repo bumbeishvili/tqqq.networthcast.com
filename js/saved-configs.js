@@ -24,7 +24,7 @@ const CONFIG_PARAM_IDS = {
            'select-sma-cashrate', 'select-sma-entry-buf', 'select-sma-exit-buf',
            'select-sma-rsi-oh', 'select-sma-rsi-cool',
            'select-sma-rsi-oh-window', 'select-sma-rsi-cool-window',
-           'select-sma-confirm-buy', 'select-sma-confirm-sell',
+           'select-sma-confirm-buy', 'select-sma-confirm-sell', 'select-sma-settle',
            'select-sma-out-asset', 'select-sma-dca-in', 'select-sma-dca-to-out',
            'select-sma-bg-gtfo', 'select-sma-bg-asset', 'select-sma-cost'],
   'bh':   ['select-bh-underlying'],
@@ -381,7 +381,7 @@ const CUSTOM_PROMPT = `You are writing ONE backtest strategy for a charting app.
 === INPUTS: data (every array has the SAME length and is aligned by index i) ===
 data.dates : array of ISO "YYYY-MM-DD" strings, ascending. TRADING days only, so they are NOT
              consecutive calendar days (weekends and holidays are skipped).
-data.tqqq  : daily closing price of TQQQ  (3x Nasdaq-100), synthesized back to 1938
+data.tqqq  : daily closing price of TQQQ  (3x Nasdaq-100), synthesized back to 1953
 data.qqq   : daily closing price of QQQ   (Nasdaq-100)
 data.spy   : daily closing price of SPY   (S&P 500)
 data.qld   : daily closing price of QLD   (2x Nasdaq-100, ProShares Ultra QQQ)
@@ -820,6 +820,7 @@ function computeConfigSeries(cfg, ctx) {
       rebalanceCheck: 'daily',
       confirmBuySteps: +pget(p, 'select-sma-confirm-buy', 0) || 0,
       confirmSellSteps: +pget(p, 'select-sma-confirm-sell', 0) || 0,
+      settleDays: +pget(p, 'select-sma-settle', 0) || 0,
       emitDD: true,
     };
     const cashRate = (+pget(p, 'select-sma-cashrate', 4) || 0) / 100;

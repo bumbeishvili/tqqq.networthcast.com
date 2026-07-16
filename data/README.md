@@ -13,7 +13,9 @@ This folder contains daily closing-price series for **TQQQ, QLD, QQQ, SPY, SSO, 
 
 Pre-launch history is reconstructed from longer-lived indexes (Nasdaq-100, S&P 500, PHLX Semiconductor), using the same daily formulas the ETFs themselves use (leverage, expense ratios, financing costs on the borrowed leg, swap-counterparty spreads), and stitched onto the real series at each ETF's launch day.
 
-The result is a continuous "what it would have looked like" series for each fund going back as far as 1938 in some cases. It's not what really happened — those investments didn't exist yet — but it's what *the math says* their daily prices would have done given the underlying index **and the prevailing short-term interest rates of each era**.
+The result is a continuous "what it would have looked like" series for each fund. It's not what really happened — those investments didn't exist yet — but it's what *the math says* their daily prices would have done given the underlying index **and the prevailing short-term interest rates of each era**.
+
+> **Shipped range: January 2, 1953 → present.** The underlying index reconstruction runs back to 1938, but the published TSVs are trimmed to start in **1953** — the point where daily data becomes clean (before 1953 the NYSE ran Saturday sessions, and the pre-1953 reconstruction is the roughest). Everything below describing 1938–1953 synthesis is how that early stretch *was* built; it's no longer included in the files.
 
 ## The files
 

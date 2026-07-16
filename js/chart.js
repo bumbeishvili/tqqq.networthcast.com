@@ -391,16 +391,33 @@ function buildSmaLogTableHtml(smaLog) {
     const ac = (l.action === 'EXIT' || l.action === 'BG-GTFO') ? 'action-sell'
              : l.action === 'ENTER' ? 'action-buy'
              : 'action-hold';
-    // Contribution rows carry their amount; label them "+ $X" (money in).
-    const actionLabel = l.action === 'CONTRIB'
-      ? '+ ' + fmtFull(Math.round(l.contribAmt || 0))
-      : (LABEL[l.action] || l.action);
+    const prev = i > 0 ? smaLog[i - 1] : null;
+    // Name BOTH legs of the trade — what was sold and what was bought — so it's
+    // clear whether you moved into cash or the backup fund (SPXL/QQQ/…), and
+    // that each leg is a real trade that pays the trading cost. `from` is the
+    // previous holding, `held` the new one.
+    const held = (l.held || l.state || '').toUpperCase();
+    const from = prev ? (prev.held || prev.state || '').toUpperCase() : '';
+    const swap = (a, b) => a === 'CASH' ? `Buy ${b}`
+                         : b === 'CASH' ? `Sell ${a} → cash`
+                         : `Sell ${a} → buy ${b}`;
+    let actionLabel;
+    switch (l.action) {
+      case 'CONTRIB':  actionLabel = '+ ' + fmtFull(Math.round(l.contribAmt || 0)); break;
+      case 'ENTER':
+      case 'EXIT':     actionLabel = swap(from, held); break;
+      case 'BG-GTFO':  actionLabel = `Bubble: sell ${from} → cash`; break;
+      case 'BG-CLEAR': actionLabel = `Bubble over: buy ${held}`; break;
+      default:         actionLabel = LABEL[l.action] || l.action; // START / END
+    }
     // Gain since the previous action: how much the portfolio grew/shrank over
     // the stretch you held that position, with any contributions added in
     // between removed so it reflects the holding's own return, not new money.
     let gainCell = '';
-    const prev = i > 0 ? smaLog[i - 1] : null;
-    if (prev && prev.total > 0) {
+    // Skip the (%) when the previous row is the SAME day — that's the other leg
+    // of a switch (a sell then a buy), so the "gain" would be a zero-length
+    // interval (just the fee). The sell leg already shows the real holding gain.
+    if (prev && prev.total > 0 && l.date !== prev.date) {
       const contrib = (l.invested || 0) - (prev.invested || 0);
       const g = (l.total - prev.total - contrib) / prev.total * 100;
       const gc = g >= 0 ? 'action-buy' : 'action-sell';
@@ -430,7 +447,7 @@ function buildSmaLogTableHtml(smaLog) {
           <tr>
             <th># <span class="info-icon" tabindex="0" data-tip="Event number. Start is 0 (your opening position), then each row — every trade and every monthly contribution — counts up, so the last number is the total number of events over this window.">ⓘ</span></th>
             <th>Date <span class="info-icon" tabindex="0" data-tip="The trading day this row happened on.&#10;&#10;The log only lists days the strategy actually did something — most days it just holds and aren't shown.">ⓘ</span></th>
-            <th>Action <span class="info-icon" tabindex="0" data-tip="What the strategy did on this day:&#10;&#10;• Start — your very first position&#10;• Buy ${ulName} / Sell ${ulName} — the trend signal moved you into or out of the 3× fund&#10;• + $X — a monthly contribution went in&#10;• Bubble → cash — the bubble brake sold everything to cash&#10;• Bubble over — the brake let go; the trend signal is back in charge&#10;• End of range — a final snapshot at the end of your dates (no trade); its Total matches the chart's endpoint&#10;&#10;The (%) in brackets is the gain or loss since the PREVIOUS action — how much the position you were holding earned over that stretch. Contributions added in between are removed, so it's the holding's own return: green for up, red for down.">ⓘ</span></th>
+            <th>Action <span class="info-icon" tabindex="0" data-tip="What the strategy did on this day:&#10;&#10;• Start — your very first position&#10;• Sell A → cash — sold your holding out to cash&#10;• Buy B — bought into B&#10;A switch shows as TWO rows on the same day — a sell then a buy — because it's two real trades, each paying the trading cost.&#10;• + $X — a monthly contribution went in&#10;• Bubble: sell A → cash — the bubble brake sold everything to cash&#10;• Bubble over: buy B — the brake let go and bought back in&#10;• End of range — a final snapshot at the end of your dates (no trade); its Total matches the chart's endpoint&#10;&#10;The (%) in brackets is the gain or loss since the PREVIOUS action — how much the position you were holding earned over that stretch. Contributions added in between are removed, so it's the holding's own return: green for up, red for down.">ⓘ</span></th>
             <th>Holding <span class="info-icon" tabindex="0" data-tip="What you actually owned right after this trade:&#10;&#10;• ${ulName} — the 3× fund, fully invested&#10;• QQQ / SPY — a plain, un-leveraged fund (much safer)&#10;• CASH — sitting out of the market&#10;&#10;This can differ from the trend signal: when the bubble brake fires, the trend may still say 'in' while you're actually parked in cash.">ⓘ</span></th>
             <th>${ulName} Price <span class="info-icon" tabindex="0" data-tip="The closing price of ${ulName} (the 3× fund) on this day.">ⓘ</span></th>
             <th>${ulName} Shares <span class="info-icon" tabindex="0" data-tip="How many shares of ${ulName} you held after this trade.&#10;&#10;0 means you were in cash or a plain fund instead — so this column reads 0 on every bubble-brake and sell row.">ⓘ</span></th>
@@ -446,7 +463,7 @@ function buildSmaLogTableHtml(smaLog) {
   `;
 }
 
-// Per-share price formatter — synthetic prices span tiny (1938) to large.
+// Per-share price formatter — synthetic prices span tiny (1953) to large.
 function fmtLogPrice(p) {
   if (!Number.isFinite(p) || p <= 0) return '–';
   if (p >= 1000) return '$' + p.toLocaleString(undefined, { maximumFractionDigits: 0 });
@@ -800,9 +817,15 @@ function withAlpha(color, a) {
 // Which dataset does the open detail panel belong to? -1 = no panel open.
 function activePanelDatasetIdx() {
   if (!chart || !chart.data) return -1;
+  // Editing a saved/custom config → its OWN line is the active one (the base
+  // line the shared sidebar sits on may be hidden). Match the main config line,
+  // not its sub-series / envelope ghosts.
+  const cid = window._editingConfigId || window._openCustomCfgId;
+  if (cid) {
+    const i = chart.data.datasets.findIndex(d => d && d._configId === cid && !d._configSub && !d._isShift);
+    if (i >= 0) return i;
+  }
   if (typeof _currentPanelIdx !== 'undefined' && _currentPanelIdx != null) return _currentPanelIdx;
-  const cid = window._openCustomCfgId;
-  if (cid) return chart.data.datasets.findIndex(d => d && d._configId === cid);
   return -1;
 }
 function applyPanelEmphasis(doUpdate) {
@@ -819,10 +842,12 @@ function applyPanelEmphasis(doUpdate) {
     if (d._emphBaseW == null) d._emphBaseW = (d.borderWidth != null ? d.borderWidth : 1);
     const isActive = active && i === activeIdx;
     const isDim = active && !isActive;
-    // The SMA line (idx 8), when it's the open panel, is fully replaced by the
+    // The active SMA line, while the SMA panel is open, is fully replaced by the
     // detailed quarter+transaction overlay drawn in the marker plugin — so hide
     // its coarse smooth Chart.js line (0 width). The overlay draws at 2× itself.
-    const hideCoarseSma = isActive && i === 8;
+    // Applies whether the active line is the base SMA (idx 8) or a saved SMA
+    // config's own line — both open panel idx 8.
+    const hideCoarseSma = isActive && (typeof _currentPanelIdx !== 'undefined' && _currentPanelIdx === 8);
     d.borderWidth = hideCoarseSma ? 0 : (isActive ? d._emphBaseW * 2 : d._emphBaseW);
     if (d._emphBaseC) d.borderColor = isDim ? withAlpha(d._emphBaseC, 0.5) : d._emphBaseC;
     d._emphDimmed = isDim;
@@ -1100,7 +1125,7 @@ function render() {
   // strategy). Restored just before the panel/legends are rebuilt below.
   if (typeof freezeBaseForEditing === 'function') freezeBaseForEditing();
   const initial = sliderToInitial(+document.getElementById('slider-initial').value);
-  const monthly = +document.getElementById('slider-monthly').value;
+  const monthly = sliderToMonthly(+document.getElementById('slider-monthly').value);
   const annualRaise = +document.getElementById('slider-raise').value / 100;
   // `rate` is the Invested Compounded baseline rate (the slider in that
   // sidebar). 9sig and SMA each have their own parked-cash rate now.
@@ -1255,6 +1280,7 @@ function render() {
     rebalanceCheck: 'daily',
     confirmBuySteps:  +((document.getElementById('select-sma-confirm-buy')  || {}).value) || 0,
     confirmSellSteps: +((document.getElementById('select-sma-confirm-sell') || {}).value) || 0,
+    settleDays:       +((document.getElementById('select-sma-settle')       || {}).value) || 0,
   };
   const { smaPoints, smaLog } = simulateSMA(initial, monthly, smaCashRate, simEntryIdx, exitIdx, annualRaise, smaOpts);
 
@@ -1758,9 +1784,13 @@ function render() {
     afterDatasetsDraw(c) {
       _smaMarkers = [];
       const SMA_IDX = 8;
-      // Markers + detailed line only appear while the SMA detail panel is open.
-      if (activePanelDatasetIdx() !== SMA_IDX) return;
-      if (!c.isDatasetVisible || !c.isDatasetVisible(SMA_IDX)) return;
+      // Markers + detailed line appear only while the SMA panel is open — the
+      // base SMA panel OR a saved SMA config (both open panel idx 8). Draw them
+      // against whichever line is the active one (base 8, or the config's own
+      // line, which is what's visible when a saved strategy is open).
+      if (typeof _currentPanelIdx === 'undefined' || _currentPanelIdx !== SMA_IDX) return;
+      const TARGET = activePanelDatasetIdx();
+      if (TARGET < 0 || !c.isDatasetVisible || !c.isDatasetVisible(TARGET)) return;
       const log = _logData && _logData.smaLog;
       const labs = c.data.labels;
       if (!log || !log.length || !labs || !labs.length) return;
@@ -1783,8 +1813,8 @@ function render() {
       // end snapshot). The base Chart.js line only has quarter-grain points, so
       // between quarters it draws straight; this shows the real transaction-level
       // kinks. Drawn in the SMA line's own colour/width so it reads as the line.
-      if (activePanelDatasetIdx() === SMA_IDX && c.data.datasets[SMA_IDX]) {
-        const smaDs = c.data.datasets[SMA_IDX];
+      if (c.data.datasets[TARGET]) {
+        const smaDs = c.data.datasets[TARGET];
         const arr = smaDs.data || [];
         const pts = [];
         for (let i = 0; i < labs.length; i++) if (arr[i] != null) pts.push({ x: xs.getPixelForValue(i), v: arr[i] });
@@ -1804,10 +1834,19 @@ function render() {
       }
 
       const hoveredKey = _smaHoverKey;
+      // A switch draws two markers on the same day (sell leg + buy leg). Count
+      // per-date so we can fan them out horizontally instead of stacking one
+      // exactly on top of the other (which would hide the sell under the buy).
+      const dateCounts = {};
+      for (const ev of log) if (SMA_EVENT_STYLE[ev.action] && ev.total > 0) dateCounts[ev.date] = (dateCounts[ev.date] || 0) + 1;
+      const dateSeen = {};
       for (const ev of log) {
         const st = SMA_EVENT_STYLE[ev.action];
         if (!st || !(ev.total > 0)) continue; // skip START / CONTRIB / END / money-in
-        const px = xForDate(ev.date);
+        const nAt = dateCounts[ev.date] || 1;
+        const idxAt = (dateSeen[ev.date] = (dateSeen[ev.date] || 0) + 1) - 1;
+        const spread = nAt > 1 ? (idxAt - (nAt - 1) / 2) * 9 : 0;
+        const px = xForDate(ev.date) + spread;
         if (px < area.left - 2 || px > area.right + 2) continue;
         const py = ys.getPixelForValue(ev.total);
         if (!(py >= area.top - 2 && py <= area.bottom + 2)) continue;

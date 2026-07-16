@@ -31,13 +31,13 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=71">
+<link rel="stylesheet" href="styles.css?v=81">
 </head>
 <body>
 
 <div class="header">
   <h1>Strategies Simulator</h1>
-  <p>Backtesting &middot; synthetic TQQQ (3x QQQ) &middot; 1938&ndash;2026</p>
+  <p>Backtesting &middot; synthetic TQQQ (3x QQQ) &middot; 1953&ndash;2026</p>
   <button id="share-btn" onclick="shareConfig()" aria-label="Share current configuration" title="Share current configuration">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
     <span class="share-btn-label">Share current configuration</span>
@@ -85,7 +85,8 @@
           <option value="25">25%</option>
         </select> /yr
       </label>
-      <input type="range" id="slider-monthly" min="0" max="100000" step="50" value="500">
+      <!-- Logarithmic $0–$1M scale (see sliderToMonthly). Position 233 ≈ $500. -->
+      <input type="range" id="slider-monthly" min="0" max="1000" step="1" value="233">
     </div>
 
     <!-- Build a strategy from pasted (e.g. LLM-written) code. -->
@@ -681,8 +682,8 @@
     <div class="adaptive-line">
       Require at least
       <select class="inline-select" id="select-sma-entry-buf">
-        <option value="0">0%</option>
-        <option value="0.1" selected>0.1%</option>
+        <option value="0" selected>0%</option>
+        <option value="0.1">0.1%</option>
         <option value="0.2">0.2%</option>
         <option value="0.3">0.3%</option>
         <option value="0.4">0.4%</option>
@@ -852,6 +853,19 @@
       <span class="info-icon" tabindex="0" data-tip="Stops jumpy in-and-out trading.&#10;The price must stay on the new side of the line this many days before you trade.&#10;&#10;Example: set to 3 —&#10;if QQQ dips below the line for a day then bounces, you don't sell. It must close below 3 days straight.&#10;&#10;0 = trade the first day it crosses.">ⓘ</span>
     </div>
     <div class="adaptive-line">
+      After any trade, wait
+      <select class="inline-select" id="select-sma-settle">
+        <option value="0">0 (instant)</option>
+        <option value="1">1</option>
+        <option value="2" selected>2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+      </select>
+      trading days before the next.
+      <span class="info-icon" tabindex="0" data-tip="Cash-account settlement (T+N).&#10;&#10;After you buy or sell, the money/shares haven't settled yet — so you can't make the next trade for this many trading days. Models the real broker rule where selling too soon after a buy (or buying right after a sell) isn't allowed.&#10;&#10;Example: set to 2 — sell on Monday, you can't buy back until Wednesday.&#10;&#10;0 = settles instantly (no restriction).">ⓘ</span>
+    </div>
+    <div class="adaptive-line">
       Also sell when RSI(<select class="inline-select sma-rsi-win" id="select-sma-rsi-oh-window">
         <option value="2">2</option>
         <option value="3">3</option>
@@ -899,8 +913,8 @@
         <option value="70">above 70</option>
         <option value="75">above 75</option>
         <option value="80">above 80</option>
-        <option value="85" selected>above 85</option>
-        <option value="90">above 90</option>
+        <option value="85">above 85</option>
+        <option value="90" selected>above 90</option>
         <option value="0">never too hot (off)</option>
       </select>
     </div>
@@ -964,12 +978,12 @@
       When out of the market, hold
       <select class="inline-select" id="select-sma-out-asset">
         <option value="cash">cash</option>
-        <option value="qqq" selected>QQQ</option>
+        <option value="qqq">QQQ</option>
         <option value="spy">SPY</option>
         <option value="tqqq">TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
-        <option value="spxl">SPXL</option>
+        <option value="spxl" selected>SPXL</option>
       </select>
       instead.
       <span class="info-icon" tabindex="0" data-tip="What you hold after a sell.&#10;&#10;• cash — just waits, earning the interest rate below&#10;• QQQ / SPY — keeps your money in the plain, non-leveraged market: much safer than the 3× fund, but still grows if the market drifts up&#10;&#10;Example: sell TQQQ → sit in QQQ → jump back to TQQQ when the buy signal returns.">ⓘ</span>
@@ -1066,9 +1080,9 @@
         <option value="0.02">0.02%</option>
         <option value="0.03">0.03%</option>
         <option value="0.05">0.05%</option>
-        <option value="0.1" selected>0.1%</option>
+        <option value="0.1">0.1%</option>
         <option value="0.15">0.15%</option>
-        <option value="0.2">0.2%</option>
+        <option value="0.2" selected>0.2%</option>
         <option value="0.25">0.25%</option>
         <option value="0.3">0.3%</option>
         <option value="0.5">0.5%</option>
@@ -1086,9 +1100,9 @@
     <div class="adaptive-line">
       Sell everything to cash when
       <select class="inline-select" id="select-sma-bg-asset">
-        <option value="qqq" selected>QQQ</option>
+        <option value="qqq">QQQ</option>
         <option value="spy">SPY</option>
-        <option value="tqqq">TQQQ</option>
+        <option value="tqqq" selected>TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
         <option value="spxl">SPXL</option>
@@ -1097,12 +1111,12 @@
       <select class="inline-select" id="select-sma-bg-gtfo">
         <option value="5">+5%</option>
         <option value="10">+10%</option>
-        <option value="15" selected>+15%</option>
+        <option value="15">+15%</option>
         <option value="20">+20%</option>
         <option value="25">+25%</option>
         <option value="30">+30%</option>
         <option value="35">+35%</option>
-        <option value="40">+40%</option>
+        <option value="40" selected>+40%</option>
         <option value="45">+45%</option>
         <option value="50">+50%</option>
         <option value="55">+55%</option>
@@ -1127,18 +1141,18 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=71"></script>
-<script src="js/utils.js?v=71"></script>
-<script src="js/simulate.js?v=71"></script>
-<script src="js/metrics.js?v=71"></script>
-<script src="js/chart.js?v=71"></script>
-<script src="js/controls.js?v=71"></script>
-<script src="js/analytics.js?v=71"></script>
-<script src="js/preview-dropdown.js?v=71"></script>
-<script src="js/saved-configs.js?v=71"></script>
-<script src="js/strategy-library-code.js?v=71"></script>
-<script src="js/strategy-library.js?v=71"></script>
-<script src="js/init.js?v=71"></script>
+<script src="js/data.js?v=81"></script>
+<script src="js/utils.js?v=81"></script>
+<script src="js/simulate.js?v=81"></script>
+<script src="js/metrics.js?v=81"></script>
+<script src="js/chart.js?v=81"></script>
+<script src="js/controls.js?v=81"></script>
+<script src="js/analytics.js?v=81"></script>
+<script src="js/preview-dropdown.js?v=81"></script>
+<script src="js/saved-configs.js?v=81"></script>
+<script src="js/strategy-library-code.js?v=81"></script>
+<script src="js/strategy-library.js?v=81"></script>
+<script src="js/init.js?v=81"></script>
 
 </body>
 </html>

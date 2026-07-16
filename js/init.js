@@ -51,7 +51,11 @@
     const val = params.get(key);
     if (val !== null) {
       // URL `r` is always the rate %, regardless of slider-curve format.
-      const sliderVal = (sliderId === 'slider-rate') ? rateToSlider(+val) : val;
+      // URL `r` is the rate %, and `m` is monthly dollars, regardless of the
+      // slider curve — convert each back to its slider position.
+      const sliderVal = sliderId === 'slider-rate' ? rateToSlider(+val)
+        : sliderId === 'slider-monthly' ? monthlyToSlider(+val)
+        : val;
       document.getElementById(sliderId).value = sliderVal;
       hasUrlParams = true;
     }
@@ -71,6 +75,7 @@
   if (params.get('srcw') !== null) { document.getElementById('select-sma-rsi-cool-window').value = params.get('srcw'); hasUrlParams = true; }
   if (params.get('scb') !== null) { document.getElementById('select-sma-confirm-buy').value  = params.get('scb'); hasUrlParams = true; }
   if (params.get('scs') !== null) { document.getElementById('select-sma-confirm-sell').value = params.get('scs'); hasUrlParams = true; }
+  if (params.get('ssd') !== null) { document.getElementById('select-sma-settle').value        = params.get('ssd'); hasUrlParams = true; }
   if (params.get('scr') !== null) { document.getElementById('select-sma-cashrate').value    = params.get('scr'); hasUrlParams = true; }
   if (params.get('soa') !== null) { document.getElementById('select-sma-out-asset').value   = params.get('soa'); hasUrlParams = true; }
   if (params.get('sdi') !== null) { document.getElementById('select-sma-dca-in').value      = params.get('sdi'); hasUrlParams = true; }
@@ -126,7 +131,11 @@
             return;
           }
           // localStorage `slider-rate` is the rate %, not the slider position.
-          const v = (id === 'slider-rate') ? rateToSlider(+saved[id]) : saved[id];
+          // localStorage stores semantic values for rate (%) and monthly ($),
+          // not slider positions, so curve changes stay backward-compatible.
+          const v = id === 'slider-rate' ? rateToSlider(+saved[id])
+            : id === 'slider-monthly' ? monthlyToSlider(+saved[id])
+            : saved[id];
           el.value = v;
         });
         // 'toggle-envelope' deliberately not restored — alternate runs reset
@@ -177,7 +186,7 @@
   // param at all, which means "fall back to localStorage / defaults".
   if (hd !== null && chart) {
     applyHiddenList(hd === '' ? [] : hd.split(','));
-  } else if (chart) {
+  } else if (chart && !skipLS) {
     try {
       const saved = JSON.parse(localStorage.getItem(LS_KEY));
       if (saved && Array.isArray(saved['hidden-datasets'])) {

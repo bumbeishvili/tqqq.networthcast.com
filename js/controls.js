@@ -1,6 +1,6 @@
 // Slider max is set in init() after data loads
 
-const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-cost'];
+const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-cost'];
 const LS_KEY = '9sig-sliders';
 // Bump APP_VERSION whenever a backwards-incompatible change ships (a control
 // id is renamed, a default flips, a strategy is dropped). On mismatch we
@@ -8,10 +8,12 @@ const LS_KEY = '9sig-sliders';
 // nuking storage silently; the user clicks it when they're ready to load
 // the new defaults. If they've never visited before (no stored version),
 // we just record the current one without prompting.
-const APP_VERSION = 23; // bumped when 9sig got a park-asset option (safety side as QQQ/SPY/QLD/TQQQ/SSO/SPXL instead of cash)
-// NOTE: when you change any js/*.js or styles.css, also bump the matching ?v=
-// cache-bust query on the <script>/<link> tags in index.html (keep it equal to
-// APP_VERSION) so returning browsers fetch the new files instead of stale cache.
+const APP_VERSION = 24; // bumped when pre-1953 price data was dropped (quarter indices shifted down 60)
+// NOTE: APP_VERSION drives shared-link migration + the localStorage reset
+// prompt; bump it only on a breaking param/data change that needs a migration.
+// Separately, when you change any js/*.js or styles.css, bump the ?v= cache-bust
+// query on the <script>/<link> tags in index.html (its own monotonic counter,
+// now ahead of APP_VERSION) so returning browsers fetch the new files.
 const LS_VERSION_KEY = '9sig-app-version';
 // '9sig-saved-configs' holds user-saved strategies (saved-configs.js). Base
 // line-colour overrides and the alternate-runs toggle are session-only, so the
@@ -59,9 +61,17 @@ function showResetVersionButtonIfNeeded() {
 // mutate `params` (a URLSearchParams) in place — rename keys, remap values,
 // set defaults for newly-required params, or rewrite to a canonical link.
 const LINK_MIGRATIONS = [
-  // Template (no migrations needed yet — v1..v9 only added/removed controls,
-  // which best-effort param reading already tolerates):
-  // { from: 9, migrate(p) { if (p.has('old')) { p.set('new', p.get('old')); p.delete('old'); } } },
+  // v24: pre-1953 price data was dropped — exactly 60 quarters removed from the
+  // front of the series, so every quarter index shifted down by 60. Older links
+  // encoded entry/exit (e/x) as indices into the old 1938-based array, so remap
+  // them; clamp at 0 for links that pointed into the now-dropped 1938–1952 span.
+  { from: 23, migrate(p) {
+      for (const k of ['e', 'x']) {
+        if (!p.has(k)) continue;
+        const v = parseInt(p.get(k), 10);
+        if (Number.isFinite(v)) p.set(k, String(Math.max(0, v - 60)));
+      }
+    } },
 ];
 
 // Upgrade a shared link's params from the version it was stamped with up to
@@ -109,6 +119,7 @@ function saveSliders() {
     // slider position — keeps storage stable across slider-curve changes and
     // backward-compatible with the old linear slider (which also stored %).
     if (id === 'slider-rate') v = String(sliderToRate(+v));
+    if (id === 'slider-monthly') v = String(sliderToMonthly(+v));
     vals[id] = v;
   });
   // 'toggle-envelope' (alternate runs) is intentionally NOT persisted — it's a
@@ -145,7 +156,56 @@ function saveSliders() {
     render();
   });
 });
-['select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-cost'].forEach(id => {
+
+// Arrow-key stepping for the logarithmic monthly-contribution slider. A single
+// slider position (step=1) barely moves the dollar amount at the low end — many
+// positions round to the same $ tier — so plain arrow keys feel dead. Intercept
+// them and step by one dollar tier per press so each key visibly changes it.
+(function () {
+  const el = document.getElementById('slider-monthly');
+  if (!el || typeof sliderToMonthly !== 'function') return;
+  const stepSize = (v) => v < 1500 ? 50 : v < 10000 ? 100 : v < 100000 ? 1000 : 10000;
+  el.addEventListener('keydown', (e) => {
+    const dir = (e.key === 'ArrowRight' || e.key === 'ArrowUp') ? 1
+              : (e.key === 'ArrowLeft'  || e.key === 'ArrowDown') ? -1 : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const cur  = sliderToMonthly(+el.value);
+    const next = dir > 0 ? cur + stepSize(cur)
+                         : Math.max(0, cur - stepSize(Math.max(0, cur - 1)));
+    el.value = String(monthlyToSlider(next));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+})();
+
+// Same fix for the logarithmic initial-investment slider — arrow keys step by
+// one dollar tier so each press visibly changes the amount.
+(function () {
+  const el = document.getElementById('slider-initial');
+  if (!el || typeof sliderToInitial !== 'function') return;
+  const stepSize = (v) => v < 10000 ? 100 : v < 100000 ? 1000 : v < 1000000 ? 10000 : v < 10000000 ? 100000 : 1000000;
+  el.addEventListener('keydown', (e) => {
+    const dir = (e.key === 'ArrowRight' || e.key === 'ArrowUp') ? 1
+              : (e.key === 'ArrowLeft'  || e.key === 'ArrowDown') ? -1 : 0;
+    if (!dir) return;
+    e.preventDefault();
+    const cur  = sliderToInitial(+el.value);
+    const next = dir > 0 ? cur + stepSize(cur)
+                         : Math.max(0, cur - stepSize(Math.max(0, cur - 1)));
+    let ns = initialToSlider(next);
+    // The log slider is coarse near $0–$100 (a dollar tier can round back to the
+    // same position). Nudge the position until the DISPLAYED amount actually
+    // moves in the chosen direction, so a press is never dead.
+    let guard = 0;
+    while (guard++ < 2000 && ns >= 0 && ns <= 1000 &&
+           ((dir > 0 && sliderToInitial(ns) <= cur) || (dir < 0 && sliderToInitial(ns) >= cur))) {
+      ns += dir;
+    }
+    el.value = String(Math.max(0, Math.min(1000, ns)));
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+})();
+['select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-cost'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', () => {
     saveSliders();
@@ -191,7 +251,7 @@ function updateSmaCashRateVisibility() {
 // reads as "the checkbox is broken" — so disable + dim it (and surface a
 // hint) whenever monthly is 0.
 function updateDeployAvailability() {
-  const monthly = +((document.getElementById('slider-monthly') || {}).value) || 0;
+  const monthly = sliderToMonthly(+((document.getElementById('slider-monthly') || {}).value || 0));
   const cb = document.getElementById('select-9sig-deploy');
   if (!cb) return;
   const hasMonthly = monthly > 0;
@@ -496,7 +556,7 @@ function shareConfig() {
 
   // Core sliders (existing keys — keep stable so old links keep working)
   params.set('i', get('slider-initial').value);
-  params.set('m', get('slider-monthly').value);
+  params.set('m', String(sliderToMonthly(+get('slider-monthly').value)));
   params.set('a', get('slider-raise').value);
   // Share the rate as percent (matches old-format share URLs and is stable
   // across slider-curve changes).
@@ -519,6 +579,7 @@ function shareConfig() {
   if (get('select-sma-rsi-cool-window')) params.set('srcw', get('select-sma-rsi-cool-window').value);
   if (get('select-sma-confirm-buy'))    params.set('scb',  get('select-sma-confirm-buy').value);
   if (get('select-sma-confirm-sell'))   params.set('scs',  get('select-sma-confirm-sell').value);
+  if (get('select-sma-settle'))         params.set('ssd',  get('select-sma-settle').value);
   if (get('select-sma-cashrate'))    params.set('scr', get('select-sma-cashrate').value);
   if (get('select-sma-out-asset'))   params.set('soa', get('select-sma-out-asset').value);
   if (get('select-sma-dca-in'))      params.set('sdi', get('select-sma-dca-in').value);

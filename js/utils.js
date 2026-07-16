@@ -87,6 +87,29 @@ function initialToSlider(v) {
   return Math.round(((logVal - minLog) / (maxLog - minLog)) * 1000);
 }
 
+// Logarithmic slider for monthly contribution: slider 0 maps to $0, and slider
+// 1-1000 maps to $50-$1M with contribution-friendly rounding (fine steps low,
+// coarse steps high). Semantic (dollar) values are what get stored/shared, so
+// the curve can change without breaking saved state — mirrors the rate slider.
+const MONTHLY_MIN = 50;
+const MONTHLY_MAX = 1000000;
+const MONTHLY_LOG_MIN   = Math.log10(MONTHLY_MIN);
+const MONTHLY_LOG_RANGE = Math.log10(MONTHLY_MAX) - MONTHLY_LOG_MIN;
+const MONTHLY_TIERS     = [[1500, 50], [10000, 100], [100000, 1000], [Infinity, 10000]];
+
+function sliderToMonthly(s) {
+  if (!Number.isFinite(s) || s <= 0) return 0;
+  const raw = 10 ** (MONTHLY_LOG_MIN + ((Math.min(s, 1000) - 1) / 999) * MONTHLY_LOG_RANGE);
+  const [, step] = MONTHLY_TIERS.find(([cap]) => raw < cap);
+  return Math.min(MONTHLY_MAX, Math.round(raw / step) * step);
+}
+
+function monthlyToSlider(v) {
+  if (!Number.isFinite(v) || v <= 0) return 0;
+  const norm = (Math.log10(Math.min(v, MONTHLY_MAX)) - MONTHLY_LOG_MIN) / MONTHLY_LOG_RANGE;
+  return Math.round(Math.max(1, Math.min(1000, 1 + norm * 999)));
+}
+
 // Quadratic-curve mapping for the cash-interest-rate slider: slider position
 // 0–1000 maps to rate 0–100 %. The squared curve packs fine resolution into
 // the realistic 0–10 % range (where most users live) while the upper third
