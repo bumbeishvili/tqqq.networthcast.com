@@ -1089,7 +1089,13 @@ document.addEventListener('click', (e) => {
     render();
     return;
   }
-  chart.update();
+  // Snap (no animation) rather than animate. An animated toggle animates the
+  // line's points and the y-axis bounds on separate tracks, so a just-shown line
+  // — especially on a rapid hide→show before the prior animation settles — is
+  // drawn at its true values while the viewport hasn't grown to fit it yet, and
+  // it overflows off-screen. update('none') recomputes the scale and redraws in
+  // one synchronous pass, so the line and its viewport are always in sync.
+  chart.update('none');
   refreshAllLegends();
   // Persist so a plain page refresh keeps the same legend visibility mix.
   if (typeof saveSliders === 'function') saveSliders();
