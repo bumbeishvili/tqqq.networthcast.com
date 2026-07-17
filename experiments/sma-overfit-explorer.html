@@ -40,11 +40,13 @@
     border-radius:8px;background:color-mix(in srgb,var(--amber) 8%,transparent);color:var(--muted);font-size:12.5px}
   .warn b{color:var(--amber)}
   /* tabs */
-  .tabs{display:flex;flex-wrap:wrap;gap:4px;margin:22px 0 0;border-bottom:1px solid var(--border)}
-  .tab .tspan{font-family:var(--mono);font-size:11px;color:var(--faint);font-weight:500}
+  .tabs{display:flex;flex-wrap:nowrap;gap:2px;margin:6px 0 0;border-bottom:1px solid var(--border);
+    overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+  .tab .tspan{font-family:var(--mono);font-size:10px;color:var(--faint);font-weight:500}
   .tab.on .tspan{color:var(--muted)}
-  .tab{appearance:none;border:0;background:none;color:var(--muted);font-family:var(--sans);font-size:14px;font-weight:550;
-    padding:11px 16px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;gap:8px}
+  .tab{appearance:none;border:0;background:none;color:var(--muted);font-family:var(--sans);font-size:13px;font-weight:550;
+    padding:10px 11px;cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px;display:flex;align-items:center;
+    gap:6px;white-space:nowrap;flex:none}
   .tab:hover{color:var(--text)}
   .tab.on{color:var(--text);border-bottom-color:var(--cyan)}
   .tab .dot{width:8px;height:8px;border-radius:50%}
@@ -153,13 +155,6 @@
 
 <button class="themebtn" id="themebtn" title="Toggle light / dark">◐ theme</button>
 <div class="wrap">
-  <header>
-    <p class="eyebrow">Backtest overfit search · SMA trend-timing</p>
-    <h1>Overfit strategy explorer</h1>
-    <p class="sub">Every combination of <b>primary fund</b>, <b>signal asset</b>, <b>out-asset</b> (incl. cash), and <b>bubble-insurance asset</b> — <b>1,512 skeletons</b> per run. The 14 tuning knobs were optimized per objective and per window. Fixed starter: <b>$10,000</b> + <b>$500/mo</b>, exit Q3 2026, 0.02% cost.</p>
-    <p class="warn"><b>These are in-sample overfits</b> — parameters fit to each exact past window, so read them as "what would have worked," not forecasts. Reference: Buy &amp; Hold TQQQ 2010–2026 ≈ $8.6M / +41.8% CAGR / −81.6% DD.</p>
-  </header>
-
   <div class="tabs" role="tablist" id="tabs"></div>
   <div class="panel" id="panes"></div>
 </div>
