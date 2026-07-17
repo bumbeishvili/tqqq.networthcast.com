@@ -239,7 +239,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     date: sm0[0],
     state, held: prevHeldAsset, action: 'START',
     fee: prevHeldAsset !== 'cash' ? initial * cost : 0, // initial deploy pays the fee too
-    price: ul0, shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,  // leveraged-side share count
+    price: ul0, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl,  // leveraged-side share count
     stockVal: totalAt(sm0) - cash, cash, total: totalAt(sm0),
     invested: initial,
   }];
@@ -351,7 +351,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     const pushLog = (action, heldAsset, fee) => {
       smaLog.push({
         date: mDate, state, held: heldAsset, action, fee: fee || 0,
-        price: ulP, shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,
+        price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl,
         stockVal: totalAt(row) - cash,
         cash, total: totalAt(row),
         invested: totalInvested,
@@ -397,7 +397,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
           // it as a contribution, but it still pays the trading fee.
           smaLog.push({
             date: mDate, state, held: target, action: 'CONTRIB', contribAmt: currentMonthly, fee: buyAmt * cost,
-            price: ulP, shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,
+            price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl,
             stockVal: totalAt(row) - cash, cash, total: totalAt(row), invested: totalInvested,
           });
         } else {
@@ -416,7 +416,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
       // money-in events show up in the transaction list too.
       smaLog.push({
         date: mDate, state, held: prevHeldAsset, action: 'CONTRIB', contribAmt: currentMonthly, fee: 0,
-        price: ulP, shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,
+        price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl,
         stockVal: totalAt(row) - cash,
         cash, total: totalAt(row),
         invested: totalInvested,
@@ -440,7 +440,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     smaLog.push({
       date: lastRow[0], state, held: dominantHeld(lastRow), action: 'END', fee: 0,
       price: lastRow[ulCol] || 0,
-      shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,
+      shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl,
       stockVal: totalAt(lastRow) - cash,
       cash, total: totalAt(lastRow),
       invested: totalInvested,
