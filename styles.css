@@ -529,6 +529,25 @@
   }
   .strategy-library-btn:active { transform: translateY(1px); }
 
+  /* Link from the SMA panel out to the standalone overfit explorer. */
+  .sma-explorer-link {
+    display: block;
+    margin: 0 0 14px;
+    padding: 10px 12px;
+    background: linear-gradient(180deg, rgba(163, 230, 53, 0.10), rgba(56, 189, 248, 0.06));
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font: 600 12px 'DM Sans', sans-serif;
+    letter-spacing: 0.2px;
+    text-decoration: none;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .sma-explorer-link:hover {
+    border-color: #a3e635;
+    background: linear-gradient(180deg, rgba(163, 230, 53, 0.18), rgba(56, 189, 248, 0.10));
+  }
+
   .strategy-library-modal-content {
     width: min(1180px, 96vw);
     height: auto;
