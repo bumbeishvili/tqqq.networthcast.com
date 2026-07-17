@@ -195,7 +195,11 @@ function buildLink(r){
   q.set('soa',p['select-sma-out-asset']);q.set('sdi',p['select-sma-dca-in']);q.set('sdo',p['select-sma-dca-to-out']);
   q.set('sbg',p['select-sma-bg-gtfo']);q.set('sbga',p['select-sma-bg-asset']);q.set('sbgw',p['select-sma-bg-window']);q.set('stc','0.02');
   q.set('sc',encodeURIComponent(JSON.stringify([cfg])));
-  return DATA.host+'/?'+q.toString();
+  // Dynamic host: open the app on the SAME origin that serves this explorer
+  // (localhost when local, the live domain when deployed). Falls back to the
+  // build-time host only when opened as a bare file:// (no origin).
+  const base=(location.origin && location.origin!=='null') ? location.origin : DATA.host;
+  return base+'/?'+q.toString();
 }
 
 const COLS=[
