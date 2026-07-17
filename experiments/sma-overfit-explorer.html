@@ -223,13 +223,13 @@ const COL_DD   = COLS.findIndex(c=>c.k===2);
 // ---------- filters: every column, numeric ones bucketed into range categories ----------
 const INF=1/0;
 const FILTERS=[
+  {idx:0,lbl:'Final value',kind:'range',b:[['< $25M',0,25e6],['$25–75M',25e6,75e6],['$75–150M',75e6,150e6],['≥ $150M',150e6,INF]]},
+  {idx:1,lbl:'CAGR',kind:'range',b:[['< 40%',0,40],['40–55%',40,55],['55–65%',55,65],['65–72%',65,72],['≥ 72%',72,INF]]},
+  {idx:2,lbl:'Max drawdown',kind:'range',b:[['< 40%',0,40],['40–55%',40,55],['55–70%',55,70],['≥ 70%',70,INF]]},
   {idx:3,lbl:'Primary',kind:'asset'},
   {idx:4,lbl:'Signal',kind:'asset'},
   {idx:5,lbl:'Out',kind:'asset'},
   {idx:6,lbl:'Bubble asset',kind:'asset'},
-  {idx:0,lbl:'Final value',kind:'range',b:[['< $25M',0,25e6],['$25–75M',25e6,75e6],['$75–150M',75e6,150e6],['≥ $150M',150e6,INF]]},
-  {idx:1,lbl:'CAGR',kind:'range',b:[['< 40%',0,40],['40–55%',40,55],['55–65%',55,65],['65–72%',65,72],['≥ 72%',72,INF]]},
-  {idx:2,lbl:'Max drawdown',kind:'range',b:[['< 40%',0,40],['40–55%',40,55],['55–70%',55,70],['≥ 70%',70,INF]]},
   {idx:7,lbl:'Signal window',kind:'range',b:[['10–50',10,51],['60–120',60,121],['130–200',130,201],['210–300',210,301]]},
   {idx:8,lbl:'Entry buffer',kind:'range',b:[['0–1%',0,1.0001],['1–5%',1.0001,5],['5–15%',5,15],['≥ 15%',15,INF]]},
   {idx:9,lbl:'Exit buffer',kind:'range',b:[['0–1%',0,1.0001],['1–5%',1.0001,5],['5–15%',5,15],['≥ 15%',15,INF]]},
