@@ -108,10 +108,11 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   // pick any tradeable ticker.
   const bgAsset = (opts.bgAsset || SMA_UNLEVERAGED_OF[ulName] || 'qqq').toLowerCase();
   const bgCol   = SMA_ASSET_COL[bgAsset] || SMA_ASSET_COL.qqq;
-  // Bodyguard SMA — the bubble ticker's own moving average, same window as the
-  // primary signal ("% above its average").
+  // Bodyguard SMA — the bubble ticker's own moving average. Its window is
+  // independent of the primary signal; falls back to the primary window if unset.
+  const bgWindow = +opts.bgWindow || smaWindow;
   const bgSmaAtStep = (bgGtfo > 0)
-    ? (haveDaily ? smaAtDailyByKey[bgAsset + '_' + smaWindow] : smaAtMonthlyByKey[bgAsset + '_' + smaWindow])
+    ? (haveDaily ? smaAtDailyByKey[bgAsset + '_' + bgWindow] : smaAtMonthlyByKey[bgAsset + '_' + bgWindow])
     : null;
 
   // First step index at-or-after the entry quarter; last at-or-before exit.
@@ -237,6 +238,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   const smaLog = [{
     date: sm0[0],
     state, held: prevHeldAsset, action: 'START',
+    fee: prevHeldAsset !== 'cash' ? initial * cost : 0, // initial deploy pays the fee too
     price: ul0, shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,  // leveraged-side share count
     stockVal: totalAt(sm0) - cash, cash, total: totalAt(sm0),
     invested: initial,
@@ -317,8 +319,10 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     const canSell = settleDays === 0 || (m - lastBuyStep) >= settleDays;
 
     // Arm the DCA ladder the moment the desired direction changes (the deploy
-    // below uses it once buying is actually allowed). Bodyguard moves are
-    // instant; sells to cash need no ladder.
+    // below spreads the buy over this many trading days). Bodyguard moves are
+    // instant; sells to cash need no ladder. NOTE: dcaInMonths / dcaToOutMonths
+    // are named "Months" for legacy reasons but now carry a trading-DAY count
+    // (the dropdown offers 1–30 days plus 2–6 months ≈ 42–126 trading days).
     if (target !== prevTarget) {
       const bgChange = (bgState !== 'normal') || (prevBg !== 'normal');
       if (target === 'cash' || bgChange) dcaRemaining = 0;
@@ -329,24 +333,24 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     // SELL leg: liquidate anything that isn't the target → cash. Blocked while
     // shares are unsettled (within N days of the last buy) — so you can't dump a
     // freshly-bought position; it waits until the window clears.
+    let sellFee = 0, soldThisStep = false;
     if (canSell) {
-      let sold = false;
       for (const a of Object.keys(shares)) {
         if (a !== target && shares[a] > 0) {
           const p = priceOf(row, a);
-          if (p > 0) { cash += shares[a] * p * (1 - cost); shares[a] = 0; sold = true; }
+          if (p > 0) { const val = shares[a] * p; cash += val * (1 - cost); sellFee += val * cost; shares[a] = 0; soldThisStep = true; }
         }
       }
-      if (sold) lastSellStep = m;
+      if (soldThisStep) lastSellStep = m;
     }
 
     // One transaction = one row. A switch is really two trades — a sell and a
     // buy, each with its own fee — so log each leg separately (below), keyed off
     // the ACTUAL holding right after that leg. This also makes laddered (DCA)
     // moves honest: the sell-to-cash and the later buy show as their own rows.
-    const pushLog = (action, heldAsset) => {
+    const pushLog = (action, heldAsset, fee) => {
       smaLog.push({
-        date: mDate, state, held: heldAsset, action,
+        date: mDate, state, held: heldAsset, action, fee: fee || 0,
         price: ulP, shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,
         stockVal: totalAt(row) - cash,
         cash, total: totalAt(row),
@@ -355,50 +359,63 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
       prevHeldAsset = heldAsset;
     };
     let tradedThisStep = false;
-    // SELL leg: the sell above moved us out of our asset into cash.
-    if (dominantHeld(row) === 'cash' && prevHeldAsset !== 'cash') {
-      pushLog((bgState === 'gtfo') ? 'BG-GTFO' : 'EXIT', 'cash');
+    // SELL leg: log ONLY when an actual liquidation happened this step (not just
+    // because cash is momentarily the biggest bucket mid-ease). Sold to cash.
+    if (soldThisStep) {
+      pushLog((bgState === 'gtfo') ? 'BG-GTFO' : 'EXIT', 'cash', sellFee);
       parkedByBubble = (bgState === 'gtfo');
       tradedThisStep = true;
     }
 
-    // Deploy from cash → target stock. An instant deploy (no active ladder)
-    // happens on any step; a laddered deploy releases 1/N of cash per MONTH.
+    // Deploy cash → target. An instant deploy (no active ladder) happens on any
+    // step; a laddered deploy releases 1/N of the remaining cash PER TRADING DAY,
+    // so the ease genuinely spreads over N trading days. EACH slice is a real
+    // trade (its own fee), so it gets its own log row — the first slice into a
+    // position is the "Buy" (ENTER / EXIT / BG-CLEAR); later slices are "Buy more"
+    // top-ups (DCA-ADD), collapsible in the table.
     // Buy gate: cash must have settled (N days since the last sell — including a
     // sell this very step, so a switch's buy waits N days, sitting in cash).
     const canBuy = settleDays === 0 || (m - lastSellStep) >= settleDays;
     if (canBuy && seeded && target !== 'cash' && cash > 0) {
       const p = priceOf(row, target);
       if (p > 0) {
+        const easeActive = dcaRemaining > 0; // an ease spread is mid-flight
+        let buyAmt;
         if (dcaRemaining > 1) {
-          if (newMonth) {
-            const buy = cash * (1 / dcaRemaining);
-            shares[target] += (buy * (1 - cost)) / p; cash -= buy; dcaRemaining--;
-            lastBuyStep = m;
-          }
+          buyAmt = cash * (1 / dcaRemaining);
+          shares[target] += (buyAmt * (1 - cost)) / p; cash -= buyAmt; dcaRemaining--;
         } else {
-          shares[target] += (cash * (1 - cost)) / p; cash = 0;
+          buyAmt = cash;
+          shares[target] += (buyAmt * (1 - cost)) / p; cash = 0;
           if (dcaRemaining === 1) dcaRemaining = 0;
-          lastBuyStep = m;
         }
+        lastBuyStep = m;
+        const isAdd = (prevHeldAsset === target); // already in it → a top-up
+        if (isAdd && !easeActive && newMonth) {
+          // New money (this month's contribution) deployed into the fund you
+          // already hold — a deposit that bought shares, NOT an ease slice. Show
+          // it as a contribution, but it still pays the trading fee.
+          smaLog.push({
+            date: mDate, state, held: target, action: 'CONTRIB', contribAmt: currentMonthly, fee: buyAmt * cost,
+            price: ulP, shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,
+            stockVal: totalAt(row) - cash, cash, total: totalAt(row), invested: totalInvested,
+          });
+        } else {
+          const action = isAdd ? 'DCA-ADD'
+                       : parkedByBubble ? 'BG-CLEAR'
+                       : (target === ulName ? 'ENTER' : 'EXIT');
+          pushLog(action, target, buyAmt * cost);
+          if (!isAdd) parkedByBubble = false;
+        }
+        tradedThisStep = true;
       }
     }
 
-    // BUY leg: the deploy above moved cash into an asset. Classify by where we
-    // landed — the leveraged fund is a re-entry (ENTER), the backup fund is
-    // settling into safety (EXIT); "bubble over" (BG-CLEAR) only when the brake
-    // was what had parked us in cash.
-    const heldNow = dominantHeld(row);
-    if (heldNow !== 'cash' && heldNow !== prevHeldAsset) {
-      pushLog(parkedByBubble ? 'BG-CLEAR' : (heldNow === ulName ? 'ENTER' : 'EXIT'), heldNow);
-      parkedByBubble = false;
-      tradedThisStep = true;
-    }
     if (!tradedThisStep && newMonth && currentMonthly > 0) {
       // No trade this step, but a monthly contribution went in — log it so the
       // money-in events show up in the transaction list too.
       smaLog.push({
-        date: mDate, state, held: prevHeldAsset, action: 'CONTRIB', contribAmt: currentMonthly,
+        date: mDate, state, held: prevHeldAsset, action: 'CONTRIB', contribAmt: currentMonthly, fee: 0,
         price: ulP, shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,
         stockVal: totalAt(row) - cash,
         cash, total: totalAt(row),
@@ -421,7 +438,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   const lastRow = stepRows[mEnd];
   if (lastRow && (!smaLog.length || smaLog[smaLog.length - 1].date !== lastRow[0])) {
     smaLog.push({
-      date: lastRow[0], state, held: dominantHeld(lastRow), action: 'END',
+      date: lastRow[0], state, held: dominantHeld(lastRow), action: 'END', fee: 0,
       price: lastRow[ulCol] || 0,
       shares: shares.tqqq + shares.qld + shares.sso + shares.spxl,
       stockVal: totalAt(lastRow) - cash,

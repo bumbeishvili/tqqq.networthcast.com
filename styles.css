@@ -2831,6 +2831,30 @@
     background: rgba(251, 191, 36, 0.07);
     font-style: italic;
   }
+  /* "Hide monthly contributions" checkbox above the transaction log. */
+  .strategy-panel-body .log-contrib-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    cursor: pointer;
+    margin-bottom: 8px;
+    user-select: none;
+  }
+  .strategy-panel-body .log-contrib-toggle input { cursor: pointer; margin: 0; }
+  /* Collapsed state: drop the monthly-contribution rows from the table. */
+  .strategy-panel-body .quarter-table-wrap.hide-contrib tr.log-row-contrib { display: none; }
+  /* Collapsed state: drop the ease-in "Buy more" slice rows. */
+  .strategy-panel-body .quarter-table-wrap.hide-dca tr.log-row-dca { display: none; }
+  /* Allocation-mix cell: compact, muted, never wraps. */
+  .strategy-panel-body .quarter-table-wrap td.log-mix { white-space: nowrap; color: var(--text-muted); font-size: 11px; }
+  /* Trade rows (those with a chart action-point) highlight on hover, cueing that
+     hovering also lights up the matching marker on the chart. */
+  .strategy-panel-body .quarter-table-wrap tr.log-row-mk { cursor: pointer; }
+  .strategy-panel-body .quarter-table-wrap tr.log-row-mk:hover td {
+    background: rgba(56, 189, 248, 0.10);
+  }
   .strategy-panel-body .quarter-table-wrap td.action-sell { color: var(--red); }
   .strategy-panel-body .quarter-table-wrap td.action-buy  { color: var(--green); }
   .strategy-panel-body .quarter-table-wrap td.action-hold { color: var(--text-muted); }
@@ -2874,6 +2898,33 @@
     color: var(--accent);
   }
 
+  /* "deinflated $" toggle — JS parks it at the plot's top-left corner (endLabels
+     plugin); these are just the pre-first-draw fallback coordinates. */
+  .chart-infl-toggle {
+    position: absolute;
+    left: 58px;
+    top: 6px;
+    padding: 3px 7px;
+    font: 600 10px 'DM Sans', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #475569;
+    background: rgba(148, 163, 184, 0.06);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    z-index: 3;
+  }
+  .chart-infl-toggle:hover { color: #94a3b8; background: rgba(148, 163, 184, 0.12); }
+  .chart-infl-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .chart-infl-toggle[aria-pressed="true"] {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+    background: color-mix(in srgb, var(--accent) 14%, transparent);
+  }
+
   /* SMA action-marker hover tooltip. position:fixed (JS sets left/top from the
      symbol's screen box) so it escapes any chart-container clipping. */
   #marker-tooltip {
@@ -2882,23 +2933,40 @@
     pointer-events: none;
     background: #141c2b;
     border: 1px solid #2a3550;
-    border-radius: 8px;
-    padding: 8px 10px;
+    border-radius: 10px;
+    padding: 0;
+    overflow: hidden;
     z-index: 10050;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.5);
-    font-size: 11px;
+    box-shadow: 0 8px 26px rgba(0,0,0,0.55);
+    font-size: 11.5px;
     line-height: 1.4;
     white-space: nowrap;
+    min-width: 212px;
+    max-width: 300px;
   }
-  #marker-tooltip .mt-head { font-weight: 700; font-size: 12px; display: flex; align-items: center; gap: 6px; }
-  #marker-tooltip .mt-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
-  #marker-tooltip .mt-date { color: var(--text-muted); font-size: 10px; margin: 2px 0 6px; }
-  #marker-tooltip .mt-grid {
-    display: grid; grid-template-columns: auto auto; gap: 1px 12px;
-    font-family: 'JetBrains Mono', monospace;
+  /* Header: marker shape + action title/date, with the gain pill on the right. */
+  #marker-tooltip .mt-head {
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 10px 12px 9px;
+    background: rgba(255,255,255,0.025);
+    border-bottom: 1px solid #263048;
   }
-  #marker-tooltip .mt-grid span { color: var(--text-muted); }
-  #marker-tooltip .mt-grid b { color: var(--text); text-align: right; font-weight: 500; }
+  #marker-tooltip .mt-shape { flex-shrink: 0; margin-top: 1px; display: inline-flex; }
+  #marker-tooltip .mt-htext { flex: 1; min-width: 0; }
+  #marker-tooltip .mt-title { font-weight: 700; font-size: 12.5px; }
+  #marker-tooltip .mt-sub { color: var(--text-muted); font-size: 10px; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+  #marker-tooltip .mt-gain {
+    flex-shrink: 0; align-self: center;
+    font-size: 11px; font-weight: 700;
+    padding: 2px 8px; border-radius: 999px;
+  }
+  /* Metric rows: muted iconed label on the left, mono value on the right. */
+  #marker-tooltip .mt-rows { padding: 8px 12px 10px; display: flex; flex-direction: column; gap: 5px; }
+  #marker-tooltip .mt-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  #marker-tooltip .mt-k { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); }
+  #marker-tooltip .mt-ico { opacity: 0.7; flex-shrink: 0; }
+  #marker-tooltip .mt-row b { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--text); }
+  #marker-tooltip .mt-strong b { font-size: 13px; font-weight: 700; }
 
   /* Live signal-metrics dashboard inside the SMA strategy panel. */
   .signal-metrics { font-size: 12px; margin-top: 2px; }

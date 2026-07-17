@@ -15,16 +15,83 @@ const SMA_EVENT_STYLE = {
 };
 let _smaMarkers = [];
 let _smaHoverKey = null;
+let _smaLogHideContrib = false; // "hide monthly contributions" checkbox state (sticky across re-renders)
+
+// Toggle the monthly-contribution rows in the SMA transaction log. Flips a class
+// on the table wrap (CSS hides .log-row-contrib rows) — no full re-render needed,
+// and the state is remembered so it survives the panel re-rendering.
+function toggleSmaLogContrib(hide) {
+  _smaLogHideContrib = !!hide;
+  const body = document.getElementById('strategy-panel-body');
+  if (body) body.querySelectorAll('.quarter-table-wrap').forEach(w => w.classList.toggle('hide-contrib', _smaLogHideContrib));
+}
+let _smaLogHideEase = false; // "hide ease-in slices" checkbox state (collapses DCA-ADD rows)
+function toggleSmaLogEase(hide) {
+  _smaLogHideEase = !!hide;
+  const body = document.getElementById('strategy-panel-body');
+  if (body) body.querySelectorAll('.quarter-table-wrap').forEach(w => w.classList.toggle('hide-dca', _smaLogHideEase));
+}
+
+// --- Inflation adjustment ("real $" toggle) ----------------------------------
+// When on, every dollar line is expressed in constant start-of-view dollars:
+// each point is divided by (1 + rate)^(years since the first label), so the
+// chart shows real growth rather than the slice that's just prices rising.
+const INFLATION_RATE = 0.03; // ~US long-run average CPI (deflate ~3%/yr)
+const _YEAR_MS = 365.25 * 86400000;
+function inflationOn() {
+  const b = document.getElementById('chart-inflation-toggle');
+  return !!b && b.getAttribute('aria-pressed') === 'true';
+}
+// Deflation multiplier for a date relative to a base date (1 when off / at base).
+function inflFactor(date, baseDate) {
+  if (!inflationOn() || !baseDate || !date) return 1;
+  const years = (Date.parse(date) - Date.parse(baseDate)) / _YEAR_MS;
+  return years > 0 ? 1 / Math.pow(1 + INFLATION_RATE, years) : 1;
+}
+// Deflate every dollar line in place (called each render on freshly-built data,
+// so it never compounds). Base date = the first (leftmost) label on screen.
+function applyInflationToChart(chart) {
+  if (!inflationOn()) return;
+  const labels = (chart.data && chart.data.labels) || [];
+  if (!labels.length) return;
+  const base = labels[0];
+  const f = labels.map(d => inflFactor(d, base));
+  for (const ds of chart.data.datasets) {
+    if (ds && Array.isArray(ds.data)) ds.data = ds.data.map((v, i) => (typeof v === 'number' ? v * (f[i] || 1) : v));
+  }
+}
 
 // Hover hit-test for the SMA markers: on mousemove over the canvas, find the
 // nearest marker within a small radius and show/refresh its detail tooltip.
-// Runs alongside Chart.js's own line tooltip; the marker tooltip is anchored
-// right at the symbol so the two read as separate things.
-function handleSmaMarkerHover(e) {
+// While a marker tooltip is up it takes precedence over Chart.js's line hover
+// tooltip (hidden here and in externalTooltip) so the two never stack.
+// Show the marker detail tooltip anchored above a given marker ({x,y} in canvas
+// pixels). Shared by canvas hover and transaction-log row hover.
+function showSmaMarkerTooltip(m) {
   const tt = document.getElementById('marker-tooltip');
   if (!tt || !chart) return;
-  const canvas = chart.canvas;
-  const rect = canvas.getBoundingClientRect();
+  // Marker tooltip wins over the line tooltip — hide that so the two don't stack.
+  const lineTip = document.getElementById('custom-tooltip');
+  if (lineTip) lineTip.style.display = 'none';
+  const rect = chart.canvas.getBoundingClientRect();
+  tt.innerHTML = smaMarkerTooltipHtml(m);
+  tt.style.display = 'block';
+  // Position above the marker, clamped to the viewport.
+  const tw = tt.offsetWidth || 180, th = tt.offsetHeight || 80;
+  let left = rect.left + m.x - tw / 2;
+  left = Math.max(8, Math.min(window.innerWidth - tw - 8, left));
+  let top = rect.top + m.y - th - 12;
+  if (top < 8) top = rect.top + m.y + 14;
+  tt.style.left = left + 'px';
+  tt.style.top = top + 'px';
+}
+function hideSmaMarkerTooltip() {
+  const tt = document.getElementById('marker-tooltip');
+  if (tt) tt.style.display = 'none';
+}
+function handleSmaMarkerHover(e) {
+  if (!chart) return;
+  const rect = chart.canvas.getBoundingClientRect();
   const mx = e.clientX - rect.left, my = e.clientY - rect.top;
   let hit = null, best = 11;
   for (const m of _smaMarkers) {
@@ -36,20 +103,8 @@ function handleSmaMarkerHover(e) {
     _smaHoverKey = newKey;
     if (chart.draw) chart.draw(); // redraw to grow the hovered symbol
   }
-  if (hit) {
-    tt.innerHTML = smaMarkerTooltipHtml(hit);
-    tt.style.display = 'block';
-    // Position above the marker, clamped to the viewport.
-    const tw = tt.offsetWidth || 180, th = tt.offsetHeight || 80;
-    let left = rect.left + hit.x - tw / 2;
-    left = Math.max(8, Math.min(window.innerWidth - tw - 8, left));
-    let top = rect.top + hit.y - th - 12;
-    if (top < 8) top = rect.top + hit.y + 14;
-    tt.style.left = left + 'px';
-    tt.style.top = top + 'px';
-  } else {
-    tt.style.display = 'none';
-  }
+  if (hit) showSmaMarkerTooltip(hit);
+  else hideSmaMarkerTooltip();
 }
 
 function drawSmaMarker(cx, x, y, style, hovered) {
@@ -77,19 +132,59 @@ function smaMarkerLabel(ev, ulName) {
   return st.label;
 }
 
+// A mini SVG of the marker's own shape, so the tooltip visually ties to the
+// exact symbol on the chart (same shape + colour).
+function markerShapeSvg(shape, color) {
+  const inner = {
+    triUp:   '<polygon points="7,1.5 12.5,11.5 1.5,11.5"/>',
+    triDown: '<polygon points="7,12.5 1.5,2.5 12.5,2.5"/>',
+    diamond: '<polygon points="7,1 13,7 7,13 1,7"/>',
+    square:  '<rect x="2" y="2" width="10" height="10" rx="1.5"/>',
+  }[shape] || '<circle cx="7" cy="7" r="5.5"/>';
+  return `<svg viewBox="0 0 14 14" width="15" height="15" style="fill:${color};stroke:rgba(255,255,255,0.65);stroke-width:1">${inner}</svg>`;
+}
+// Small stroked row icon for the tooltip metrics.
+function mtIco(paths) {
+  return `<svg class="mt-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${paths}</svg>`;
+}
 function smaMarkerTooltipHtml(m) {
   const ev = m.ev, st = m.st;
-  const held = (ev.held || ev.state || '').toString().toUpperCase();
-  const price = (typeof fmtLogPrice === 'function') ? fmtLogPrice(ev.price) : ('$' + ev.price);
+  const smaLog = _logData && _logData.smaLog;
+  const i = (m.i != null) ? m.i : (smaLog ? smaLog.indexOf(ev) : -1);
+  // Same label + gain the table shows for this row, so the tooltip mirrors it.
+  const info = (smaLog && i >= 0) ? smaLogRowInfo(smaLog, i, m.ulName)
+                                  : { label: smaMarkerLabel(ev, m.ulName), gain: null };
+  const held  = (ev.held || ev.state || '').toString().toUpperCase();
+  // Deflate to real $ (matching the chart) when the toggle is on.
+  const _f = inflFactor(ev.date, chart && chart.data && chart.data.labels && chart.data.labels[0]);
+  const total = Math.round((ev.total || 0) * _f);
+  const invested = Math.round((ev.invested || 0) * _f);
+  const profit = total - invested;
+  const date = (typeof fmtLogDate === 'function') ? fmtLogDate(ev.date) : ev.date;
+  const gainPill = info.gain != null
+    ? `<span class="mt-gain" style="color:${info.gain >= 0 ? 'var(--green)' : 'var(--red)'};background:${info.gain >= 0 ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)'}">${info.gain >= 0 ? '▲ ' : '▼ '}${Math.abs(info.gain).toFixed(1)}%</span>`
+    : '';
+  const ICON = {
+    box:     '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    dollar:  STAT_ICONS.dollar,
+    deposit: '<path d="M12 3v13"/><polyline points="7 11 12 16 17 11"/><line x1="4" y1="21" x2="20" y2="21"/>',
+    trend:   profit >= 0 ? STAT_ICONS.trendUp : STAT_ICONS.trendDown,
+  };
+  const pc = profit >= 0 ? 'var(--green)' : 'var(--red)';
   return `
-    <div class="mt-head" style="color:${st.color}">
-      <span class="mt-dot" style="background:${st.color}"></span>${smaMarkerLabel(ev, m.ulName)}
+    <div class="mt-head">
+      <span class="mt-shape">${markerShapeSvg(st.shape, st.color)}</span>
+      <div class="mt-htext">
+        <div class="mt-title" style="color:${st.color}">${info.label}</div>
+        <div class="mt-sub">${i >= 0 ? '#' + i + ' · ' : ''}${date}</div>
+      </div>
+      ${gainPill}
     </div>
-    <div class="mt-date">${(typeof fmtLogDate === 'function') ? fmtLogDate(ev.date) : ev.date}</div>
-    <div class="mt-grid">
-      <span>Holding</span><b>${held}</b>
-      <span>Price</span><b>${price}</b>
-      <span>Portfolio</span><b>${fmtFull(Math.round(ev.total))}</b>
+    <div class="mt-rows">
+      <div class="mt-row"><span class="mt-k">${mtIco(ICON.box)}Holding</span><b>${held}</b></div>
+      <div class="mt-row mt-strong"><span class="mt-k">${mtIco(ICON.dollar)}Portfolio</span><b>${fmtFull(total)}</b></div>
+      <div class="mt-row"><span class="mt-k">${mtIco(ICON.deposit)}Invested</span><b>${fmtFull(invested)}</b></div>
+      <div class="mt-row"><span class="mt-k">${mtIco(ICON.trend)}Profit</span><b style="color:${pc}">${profit >= 0 ? '+' : '−'}${fmtFull(Math.abs(profit))}</b></div>
     </div>`;
 }
 
@@ -370,6 +465,45 @@ function buildSignalMetricsHtml() {
     <div class="strategy-stats">${cards.join('')}</div>`;
 }
 
+// One smaLog row → { label, gain%, colour-class }. Shared by the transaction-log
+// TABLE and the chart marker TOOLTIP so both always read identically. `label`
+// names both legs of a trade (what was sold / bought); `gain` is the holding's
+// own return since the previous action (null when it isn't meaningful — the
+// second leg of a same-day switch); `ac` is the sell/buy/hold colour class.
+function smaLogRowInfo(smaLog, i, ulName) {
+  const l = smaLog[i];
+  const prev = i > 0 ? smaLog[i - 1] : null;
+  const held = (l.held || l.state || '').toString().toUpperCase();
+  const from = prev ? (prev.held || prev.state || '').toString().toUpperCase() : '';
+  const swap = (a, b) => a === 'CASH' ? `Buy ${b}`
+                       : b === 'CASH' ? `Sell ${a} → cash`
+                       : `Sell ${a} → buy ${b}`;
+  const LABEL = {
+    START: 'Start', ENTER: 'Buy ' + ulName, EXIT: 'Sell ' + ulName,
+    'BG-GTFO': 'Bubble → cash', 'BG-CLEAR': 'Bubble over', END: 'End of range',
+  };
+  let label;
+  switch (l.action) {
+    case 'CONTRIB':  label = '+ ' + fmtFull(Math.round(l.contribAmt || 0)); break;
+    case 'DCA-ADD':  label = `Buy more ${held}`; break; // an ease top-up slice
+    case 'ENTER':
+    case 'EXIT':     label = swap(from, held); break;
+    case 'BG-GTFO':  label = `Bubble: sell ${from} → cash`; break;
+    case 'BG-CLEAR': label = `Bubble over: buy ${held}`; break;
+    default:         label = LABEL[l.action] || l.action; // START / END
+  }
+  let gain = null;
+  // Skip the (%) when the previous row is the SAME day — that's the other leg of
+  // a switch (sell then buy), so the gain would span a zero-length interval.
+  if (prev && prev.total > 0 && l.date !== prev.date) {
+    const contrib = (l.invested || 0) - (prev.invested || 0);
+    gain = (l.total - prev.total - contrib) / prev.total * 100;
+  }
+  const ac = (l.action === 'EXIT' || l.action === 'BG-GTFO') ? 'action-sell'
+           : (l.action === 'ENTER' || l.action === 'DCA-ADD') ? 'action-buy' : 'action-hold';
+  return { label, gain, ac };
+}
+
 // Event-driven log table for the SMA strategy. Shows one row per actual
 // trade (ENTER / EXIT) — not one row per quarter — because SMA only does
 // something when the signal flips. Most quarters would just be noise.
@@ -377,84 +511,85 @@ function buildSmaLogTableHtml(smaLog) {
   if (!smaLog || smaLog.length === 0) return '';
   // The leveraged ETF the SMA strategy holds when "in" (TQQQ).
   const ulName = ((document.getElementById('select-sma-underlying') || {}).value || 'tqqq').toUpperCase();
-  // Plain-English labels for the internal action codes (kept as-is in the data
-  // for styling/tests). "BG-*" = the bubble-insurance brake firing.
-  const LABEL = {
-    START: 'Start',
-    ENTER: 'Buy ' + ulName,
-    EXIT:  'Sell ' + ulName,
-    'BG-GTFO':  'Bubble → cash',   // sell everything to cash
-    'BG-CLEAR': 'Bubble over',     // brake released, back to normal
-    'END':      'End of range',    // final snapshot — matches the chart endpoint
-  };
   const rows = smaLog.map((l, i) => {
-    const ac = (l.action === 'EXIT' || l.action === 'BG-GTFO') ? 'action-sell'
-             : l.action === 'ENTER' ? 'action-buy'
-             : 'action-hold';
-    const prev = i > 0 ? smaLog[i - 1] : null;
-    // Name BOTH legs of the trade — what was sold and what was bought — so it's
-    // clear whether you moved into cash or the backup fund (SPXL/QQQ/…), and
-    // that each leg is a real trade that pays the trading cost. `from` is the
-    // previous holding, `held` the new one.
-    const held = (l.held || l.state || '').toUpperCase();
-    const from = prev ? (prev.held || prev.state || '').toUpperCase() : '';
-    const swap = (a, b) => a === 'CASH' ? `Buy ${b}`
-                         : b === 'CASH' ? `Sell ${a} → cash`
-                         : `Sell ${a} → buy ${b}`;
-    let actionLabel;
-    switch (l.action) {
-      case 'CONTRIB':  actionLabel = '+ ' + fmtFull(Math.round(l.contribAmt || 0)); break;
-      case 'ENTER':
-      case 'EXIT':     actionLabel = swap(from, held); break;
-      case 'BG-GTFO':  actionLabel = `Bubble: sell ${from} → cash`; break;
-      case 'BG-CLEAR': actionLabel = `Bubble over: buy ${held}`; break;
-      default:         actionLabel = LABEL[l.action] || l.action; // START / END
-    }
-    // Gain since the previous action: how much the portfolio grew/shrank over
-    // the stretch you held that position, with any contributions added in
-    // between removed so it reflects the holding's own return, not new money.
+    // Action label, gain %, and colour class come from the shared helper so the
+    // table and the chart marker tooltip always read identically.
+    const { label: actionLabel, gain, ac } = smaLogRowInfo(smaLog, i, ulName);
     let gainCell = '';
-    // Skip the (%) when the previous row is the SAME day — that's the other leg
-    // of a switch (a sell then a buy), so the "gain" would be a zero-length
-    // interval (just the fee). The sell leg already shows the real holding gain.
-    if (prev && prev.total > 0 && l.date !== prev.date) {
-      const contrib = (l.invested || 0) - (prev.invested || 0);
-      const g = (l.total - prev.total - contrib) / prev.total * 100;
-      const gc = g >= 0 ? 'action-buy' : 'action-sell';
-      gainCell = ` <span class="${gc}">(${g >= 0 ? '+' : '−'}${Math.abs(g).toFixed(1)}%)</span>`;
+    if (gain != null) {
+      const gc = gain >= 0 ? 'action-buy' : 'action-sell';
+      gainCell = ` <span class="${gc}">(${gain >= 0 ? '+' : '−'}${Math.abs(gain).toFixed(1)}%)</span>`;
     }
-    return `<tr>
+    // Trade rows have a chart marker (keyed by this row's index, i); tag them so
+    // hovering the row can highlight that action point on the chart. START / END
+    // rows have no marker. CONTRIB rows are tagged separately so the "hide
+    // monthly" checkbox can collapse them.
+    const hasMarker = !!(SMA_EVENT_STYLE[l.action] && l.total > 0);
+    const cls = hasMarker ? 'log-row-mk'
+              : l.action === 'CONTRIB' ? 'log-row-contrib'
+              : l.action === 'DCA-ADD' ? 'log-row-dca' : '';
+    const trAttr = (cls ? ` class="${cls}"` : '') + (hasMarker ? ` data-mkey="${i}"` : '');
+    // Fee paid on this row's trade. Sub-$1 fees keep 2 decimals; $0 shows a dash.
+    const feeStr = !l.fee ? '—' : l.fee >= 1 ? fmtFull(Math.round(l.fee)) : '$' + l.fee.toFixed(2);
+    // Allocation mix: what % sits in the fund you hold (primary TQQQ or the backup)
+    // vs cash. Mid-ease you're split, e.g. "58% SPXL · 42% cash".
+    const mixTot = l.total || 0;
+    const pctFund = mixTot > 0 ? (l.stockVal || 0) / mixTot * 100 : 0;
+    const pctCash = mixTot > 0 ? (l.cash || 0) / mixTot * 100 : 0;
+    const mixParts = [];
+    if (pctFund >= 0.5) mixParts.push(`${Math.round(pctFund)}% ${(l.held || '').toUpperCase()}`);
+    if (pctCash >= 0.5) mixParts.push(`${Math.round(pctCash)}% cash`);
+    const mixStr = mixParts.length ? mixParts.join(' · ') : (mixTot > 0 ? '100% cash' : '—');
+    return `<tr${trAttr}>
       <td>${i}</td>
       <td>${fmtLogDate(l.date)}</td>
       <td class="${ac}">${actionLabel}${gainCell}</td>
       <td>${(l.held || l.state).toUpperCase()}</td>
+      <td class="log-mix">${mixStr}</td>
       <td>${fmtLogPrice(l.price)}</td>
       <td>${fmtLogShares(l.shares)}</td>
       <td>${fmtFull(Math.round(l.stockVal))}</td>
       <td>${fmtFull(Math.round(l.cash))}</td>
       <td>${fmtFull(Math.round(l.total))}</td>
       <td>${fmtFull(l.invested)}</td>
+      <td>${feeStr}</td>
     </tr>`;
   }).join('');
+  const contribCount = smaLog.filter(l => l.action === 'CONTRIB').length;
+  const easeCount = smaLog.filter(l => l.action === 'DCA-ADD').length;
+  const totalFee = smaLog.reduce((s, l) => s + (l.fee || 0), 0);
+  const contribToggle = contribCount > 0 ? `
+    <label class="log-contrib-toggle">
+      <input type="checkbox" onchange="toggleSmaLogContrib(this.checked)" ${_smaLogHideContrib ? 'checked' : ''}>
+      Hide monthly contributions (${contribCount})
+    </label>` : '';
+  const easeToggle = easeCount > 0 ? `
+    <label class="log-contrib-toggle">
+      <input type="checkbox" onchange="toggleSmaLogEase(this.checked)" ${_smaLogHideEase ? 'checked' : ''}>
+      Hide ease-in slices (${easeCount})
+    </label>` : '';
   return `
     <div class="strategy-panel-section-label" style="margin-top:24px">SMA Transaction Log</div>
     <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">
-      One row per trade or monthly contribution. ${smaLog.length} event${smaLog.length===1?'':'s'} over this window.
+      One row per trade, ease slice, or monthly contribution. ${smaLog.length} event${smaLog.length===1?'':'s'}, ${fmtFull(Math.round(totalFee))} total in fees over this window.
     </div>
-    <div class="quarter-table-wrap">
+    <div style="display:flex;gap:16px;flex-wrap:wrap">${contribToggle}${easeToggle}</div>
+    <div class="quarter-table-wrap${_smaLogHideContrib ? ' hide-contrib' : ''}${_smaLogHideEase ? ' hide-dca' : ''}">
       <table>
         <thead>
           <tr>
             <th># <span class="info-icon" tabindex="0" data-tip="Event number. Start is 0 (your opening position), then each row — every trade and every monthly contribution — counts up, so the last number is the total number of events over this window.">ⓘ</span></th>
             <th>Date <span class="info-icon" tabindex="0" data-tip="The trading day this row happened on.&#10;&#10;The log only lists days the strategy actually did something — most days it just holds and aren't shown.">ⓘ</span></th>
-            <th>Action <span class="info-icon" tabindex="0" data-tip="What the strategy did on this day:&#10;&#10;• Start — your very first position&#10;• Sell A → cash — sold your holding out to cash&#10;• Buy B — bought into B&#10;A switch shows as TWO rows on the same day — a sell then a buy — because it's two real trades, each paying the trading cost.&#10;• + $X — a monthly contribution went in&#10;• Bubble: sell A → cash — the bubble brake sold everything to cash&#10;• Bubble over: buy B — the brake let go and bought back in&#10;• End of range — a final snapshot at the end of your dates (no trade); its Total matches the chart's endpoint&#10;&#10;The (%) in brackets is the gain or loss since the PREVIOUS action — how much the position you were holding earned over that stretch. Contributions added in between are removed, so it's the holding's own return: green for up, red for down.">ⓘ</span></th>
+            <th>Action <span class="info-icon" tabindex="0" data-tip="What the strategy did on this day:&#10;&#10;• Start — your very first position&#10;• Sell A → cash — sold your holding out to cash&#10;• Buy B — bought into B&#10;A switch shows as TWO rows on the same day — a sell then a buy — because it's two real trades, each paying the trading cost.&#10;• Buy more B — an ease slice: when a buy is spread out, each daily slice is its own trade (its own fee). The 'Hide ease-in slices' box collapses these.&#10;• + $X — a monthly contribution went in&#10;• Bubble: sell A → cash — the bubble brake sold everything to cash&#10;• Bubble over: buy B — the brake let go and bought back in&#10;• End of range — a final snapshot at the end of your dates (no trade); its Total matches the chart's endpoint&#10;&#10;The (%) in brackets is the gain or loss since the PREVIOUS action — how much the position you were holding earned over that stretch. Contributions added in between are removed, so it's the holding's own return: green for up, red for down.">ⓘ</span></th>
             <th>Holding <span class="info-icon" tabindex="0" data-tip="What you actually owned right after this trade:&#10;&#10;• ${ulName} — the 3× fund, fully invested&#10;• QQQ / SPY — a plain, un-leveraged fund (much safer)&#10;• CASH — sitting out of the market&#10;&#10;This can differ from the trend signal: when the bubble brake fires, the trend may still say 'in' while you're actually parked in cash.">ⓘ</span></th>
+            <th>Mix <span class="info-icon" tabindex="0" data-tip="How the money is split right now, as percentages: how much sits in your primary fund (${ulName}) or backup fund vs cash.&#10;&#10;Mid-ease you're partly deployed — e.g. '58% SPXL · 42% cash' as the backup buy fills in slice by slice.">ⓘ</span></th>
             <th>${ulName} Price <span class="info-icon" tabindex="0" data-tip="The closing price of ${ulName} (the 3× fund) on this day.">ⓘ</span></th>
             <th>${ulName} Shares <span class="info-icon" tabindex="0" data-tip="How many shares of ${ulName} you held after this trade.&#10;&#10;0 means you were in cash or a plain fund instead — so this column reads 0 on every bubble-brake and sell row.">ⓘ</span></th>
             <th>Stock Val <span class="info-icon" tabindex="0" data-tip="The dollar value of whatever fund you were holding at this point — everything in the portfolio except cash.">ⓘ</span></th>
             <th>Cash <span class="info-icon" tabindex="0" data-tip="How much was sitting in cash after this trade, earning the cash interest rate until it's put back to work.">ⓘ</span></th>
             <th>Total <span class="info-icon" tabindex="0" data-tip="Your entire portfolio value that day: fund value + cash. This is the number the strategy's line plots on the chart.">ⓘ</span></th>
             <th>Invested <span class="info-icon" tabindex="0" data-tip="Total money you had put in by this date — your starting amount plus every contribution so far.&#10;&#10;Total minus Invested is your profit.">ⓘ</span></th>
+            <th>Fee <span class="info-icon" tabindex="0" data-tip="The trading cost paid on THIS row's trade (your fee % × the amount traded). Sells and every buy slice each pay it.&#10;&#10;Contributions, Start snapshot, and End of range pay nothing (—). The header line shows the running total across the whole window.">ⓘ</span></th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -1280,6 +1415,7 @@ function render() {
     dcaToOutMonths: +((document.getElementById('select-sma-dca-to-out')  || {}).value) || 0,
     bgGtfoPct:      +((document.getElementById('select-sma-bg-gtfo')     || {}).value) || 0,
     bgAsset:        ((document.getElementById('select-sma-bg-asset')     || {}).value) || 'qqq',
+    bgWindow:       +((document.getElementById('select-sma-bg-window')   || {}).value) || 0,
     tradeCostPct:   +((document.getElementById('select-sma-cost')        || {}).value) || 0,
     rsiOhWindow:    +((document.getElementById('select-sma-rsi-oh-window')   || {}).value) || 10,
     rsiCoolWindow:  +((document.getElementById('select-sma-rsi-cool-window') || {}).value) || 10,
@@ -1287,8 +1423,9 @@ function render() {
     confirmBuySteps:  +((document.getElementById('select-sma-confirm-buy')  || {}).value) || 0,
     confirmSellSteps: +((document.getElementById('select-sma-confirm-sell') || {}).value) || 0,
     settleDays:       +((document.getElementById('select-sma-settle')       || {}).value) || 0,
+    emitDD: true, // dense per-step multi-asset control points for an accurate max-drawdown
   };
-  const { smaPoints, smaLog } = simulateSMA(initial, monthly, smaCashRate, simEntryIdx, exitIdx, annualRaise, smaOpts);
+  const { smaPoints, smaLog, ddControls: smaDdControls } = simulateSMA(initial, monthly, smaCashRate, simEntryIdx, exitIdx, annualRaise, smaOpts);
 
   // The base envelope is the MAIN 9sig line's own alternate runs, gated by its own
   // session flag — independent of any saved strategy's envelope. Visibility is
@@ -1480,9 +1617,12 @@ function render() {
       dailyDDByIdx[2] = computeDailyMaxDrawdown(
         bhPicked.series.map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 })), dailyRows, bhKeyName);
     }
-    if (smaLog && smaLog.length) {
-      dailyDDByIdx[8] = computeDailyMaxDrawdown(
-        smaLog.map(r => ({ date: r.date, shares: r.shares, cash: r.cash })), dailyRows, UL_KEY[smaUlCol] || 'qqq');
+    if (smaDdControls && smaDdControls.length) {
+      // The SMA strategy can hold the leveraged fund, a different out-asset (e.g.
+      // SPXL), and cash at once. Revalue each real per-asset holding at its own
+      // daily price — the single-asset path mis-valued the summed share count
+      // (which becomes the SPXL count when out) against the TQQQ price.
+      dailyDDByIdx[8] = computeDailyMaxDrawdownMulti(smaDdControls, dailyRows);
     }
   }
   window._strategyMetrics = {};
@@ -1561,6 +1701,7 @@ function render() {
     if (typeof applyBaseColorOverrides === 'function') applyBaseColorOverrides(chart);
     if (typeof applyNineSigFamily === 'function') applyNineSigFamily(chart);
     syncEnvelopeVisibility();
+    applyInflationToChart(chart); // deflate all lines to real $ when the toggle is on
     chart.options.scales.y.type = logScale ? 'logarithmic' : 'linear';
     chart.options.scales.y.beginAtZero = !logScale;
     // Linear is anchored at 0; the log axis auto-scales (dynamic min). Values below
@@ -1607,6 +1748,9 @@ function render() {
   const externalTooltip = (context) => {
     const { chart: c, tooltip } = context;
     const el = document.getElementById('custom-tooltip');
+    // An action-point marker tooltip takes precedence: while one is up, keep the
+    // line hover tooltip hidden so the two never stack on top of each other.
+    if (_smaHoverKey !== null) { el.style.display = 'none'; return; }
     if (tooltip.opacity === 0) {
       if (isTouchChart && chartTooltipPinned) return; // stay open until dismissed
       el.style.display = 'none';
@@ -1701,6 +1845,16 @@ function render() {
     afterDraw(c) {
       const { ctx: cx, chartArea: area } = c;
       if (!area) return;
+      // Park the "deinflated $" pill just inside the plot's top-left corner, so
+      // it clears the y-axis value labels no matter how wide they get.
+      const inflBtn = document.getElementById('chart-inflation-toggle');
+      if (inflBtn) {
+        const bx = Math.round(area.left + 4), by = Math.round(area.top + 4);
+        if (inflBtn._lx !== bx || inflBtn._ly !== by) {
+          inflBtn.style.left = bx + 'px'; inflBtn.style.top = by + 'px';
+          inflBtn._lx = bx; inflBtn._ly = by;
+        }
+      }
       // On phone-width viewports the end-of-line labels are suppressed —
       // the legend chips above already show name + CAGR + DD, and reclaiming
       // the right margin gives the actual plot a usable width.
@@ -1824,7 +1978,7 @@ function render() {
         const arr = smaDs.data || [];
         const pts = [];
         for (let i = 0; i < labs.length; i++) if (arr[i] != null) pts.push({ x: xs.getPixelForValue(i), v: arr[i] });
-        for (const ev of log) if (ev.total > 0) pts.push({ x: xForDate(ev.date), v: ev.total });
+        for (const ev of log) if (ev.total > 0) pts.push({ x: xForDate(ev.date), v: ev.total * inflFactor(ev.date, labs[0]) });
         pts.sort((a, b) => a.x - b.x);
         if (pts.length > 1) {
           cx.beginPath();
@@ -1840,26 +1994,56 @@ function render() {
       }
 
       const hoveredKey = _smaHoverKey;
-      // A switch draws two markers on the same day (sell leg + buy leg). Count
-      // per-date so we can fan them out horizontally instead of stacking one
-      // exactly on top of the other (which would hide the sell under the buy).
-      const dateCounts = {};
-      for (const ev of log) if (SMA_EVENT_STYLE[ev.action] && ev.total > 0) dateCounts[ev.date] = (dateCounts[ev.date] || 0) + 1;
-      const dateSeen = {};
-      for (const ev of log) {
+      // Markers cluster wherever trades bunch up — a switch's two legs on one day,
+      // or several trades within a few days at nearly the same portfolio value —
+      // so they'd stack on top of each other. Keep each marker's x (its date)
+      // exact, and when one would land too close to an already-placed marker, fan
+      // it vertically around the line: search 0, +step, −step, +2·step… for the
+      // nearest free slot. Dates stay honest; overlaps spread up/down the line.
+      const MIN = 6;     // min center-to-center gap (px). Markers are ~10px across,
+                         // so this lets them overlap by ~half — fine, and it keeps
+                         // clusters compact instead of fanning far up/down the line.
+      const placed = []; // {x, y} already drawn this pass, in ascending x (date order)
+      let win = 0;       // sliding-window start: placed[<win] are >MIN px left of px
+      // Only markers within MIN px horizontally can clash — and placed is x-sorted
+      // (dates are chronological), so we scan just the window [win, end).
+      const clashes = (y) => {
+        for (let j = win; j < placed.length; j++) {
+          if (Math.hypot(placed[j].x - clashX, y - placed[j].y) < MIN) return true;
+        }
+        return false;
+      };
+      let clashX = 0;
+      let hovered = null; // draw the highlighted marker LAST so it sits on top
+      for (let li = 0; li < log.length; li++) {
+        const ev = log[li];
         const st = SMA_EVENT_STYLE[ev.action];
         if (!st || !(ev.total > 0)) continue; // skip START / CONTRIB / END / money-in
-        const nAt = dateCounts[ev.date] || 1;
-        const idxAt = (dateSeen[ev.date] = (dateSeen[ev.date] || 0) + 1) - 1;
-        const spread = nAt > 1 ? (idxAt - (nAt - 1) / 2) * 9 : 0;
-        const px = xForDate(ev.date) + spread;
+        const px = xForDate(ev.date);
         if (px < area.left - 2 || px > area.right + 2) continue;
-        const py = ys.getPixelForValue(ev.total);
-        if (!(py >= area.top - 2 && py <= area.bottom + 2)) continue;
-        const key = ev.date + ev.action;
-        drawSmaMarker(cx, px, py, st, key === hoveredKey);
-        _smaMarkers.push({ x: px, y: py, ev, st, ulName, key });
+        const basePy = ys.getPixelForValue(ev.total * inflFactor(ev.date, labs[0]));
+        if (!(basePy >= area.top - 2 && basePy <= area.bottom + 2)) continue;
+        clashX = px;
+        while (win < placed.length && placed[win].x < px - MIN) win++;
+        let py = basePy;
+        for (let k = 1; k <= 24 && clashes(py); k++) {
+          const half = Math.ceil(k / 2) * MIN;
+          const cand = basePy + (k % 2 ? half : -half); // +MIN, −MIN, +2MIN, −2MIN…
+          if (cand < area.top + 5 || cand > area.bottom - 5) continue; // stay on-plot
+          if (!clashes(cand)) { py = cand; break; }
+        }
+        // Key by the smaLog row index — unique even when a switch puts two
+        // same-date, same-action (EXIT) legs on the chart, and it matches the
+        // table row's data-mkey so row hover can highlight this exact marker.
+        const key = String(li);
+        if (key === hoveredKey) hovered = { px, py, st }; // defer — draw on top below
+        else drawSmaMarker(cx, px, py, st, false);
+        _smaMarkers.push({ x: px, y: py, ev, st, ulName, key, i: li });
+        placed.push({ x: px, y: py });
       }
+      // The highlighted marker draws last (over any overlapping neighbours) and
+      // enlarged with a white outline so it clearly stands out of a cluster.
+      if (hovered) drawSmaMarker(cx, hovered.px, hovered.py, hovered.st, true);
       cx.restore();
     }
   };
@@ -2100,6 +2284,7 @@ function render() {
   if (typeof applyBaseColorOverrides === 'function') applyBaseColorOverrides(chart);
   if (typeof applyNineSigFamily === 'function') applyNineSigFamily(chart);
   syncEnvelopeVisibility();
+  applyInflationToChart(chart); // deflate all lines to real $ when the toggle is on
   clampChartMin(chart);
   chart.update('none');
   // SMA action-marker hover (chart is created exactly once, so attach here).
@@ -2109,6 +2294,35 @@ function render() {
     if (tt) tt.style.display = 'none';
     if (_smaHoverKey !== null) { _smaHoverKey = null; if (chart.draw) chart.draw(); }
   });
+
+  // Reverse link: hovering a transaction-log row highlights that trade's action
+  // point on the chart. Rows carry data-mkey = their smaLog index, which is the
+  // marker's key, so we just set _smaHoverKey and redraw. Delegated on the
+  // (static) panel body so it survives the table being re-rendered.
+  const panelBody = document.getElementById('strategy-panel-body');
+  if (panelBody) {
+    const setRowHover = (key) => {
+      if (_smaHoverKey === key) return;
+      _smaHoverKey = key;
+      // Redraw first so the marker plugin rebuilds _smaMarkers with fresh screen
+      // positions, then show that marker's tooltip (or hide it on row-leave / a
+      // marker that isn't currently on-screen).
+      if (chart && chart.draw) chart.draw();
+      if (key == null) { hideSmaMarkerTooltip(); return; }
+      const m = _smaMarkers.find(mk => mk.key === key);
+      if (m) showSmaMarkerTooltip(m);
+      else hideSmaMarkerTooltip();
+    };
+    panelBody.addEventListener('mouseover', (ev) => {
+      const row = ev.target.closest('tr[data-mkey]');
+      if (row) setRowHover(row.getAttribute('data-mkey'));
+    });
+    panelBody.addEventListener('mouseout', (ev) => {
+      const row = ev.target.closest('tr[data-mkey]');
+      // Ignore moves between cells of the same row; only clear on actually leaving.
+      if (row && !(ev.relatedTarget && row.contains(ev.relatedTarget))) setRowHover(null);
+    });
+  }
   } // end else (first render)
 
   // Stash latest data for the side-panel log tables. Normally this is the

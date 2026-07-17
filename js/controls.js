@@ -1,6 +1,6 @@
 // Slider max is set in init() after data loads
 
-const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-cost'];
+const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-bg-window','select-sma-cost'];
 const LS_KEY = '9sig-sliders';
 // Bump APP_VERSION whenever a backwards-incompatible change ships (a control
 // id is renamed, a default flips, a strategy is dropped). On mismatch we
@@ -8,7 +8,7 @@ const LS_KEY = '9sig-sliders';
 // nuking storage silently; the user clicks it when they're ready to load
 // the new defaults. If they've never visited before (no stored version),
 // we just record the current one without prompting.
-const APP_VERSION = 24; // bumped when pre-1953 price data was dropped (quarter indices shifted down 60)
+const APP_VERSION = 26; // bumped when the bubble brake got its own MA window (sbgw); old links mirror sw
 // NOTE: APP_VERSION drives shared-link migration + the localStorage reset
 // prompt; bump it only on a breaking param/data change that needs a migration.
 // Separately, when you change any js/*.js or styles.css, bump the ?v= cache-bust
@@ -72,6 +72,25 @@ const LINK_MIGRATIONS = [
         if (Number.isFinite(v)) p.set(k, String(Math.max(0, v - 60)));
       }
     } },
+  // v25: the SMA "ease into your trades" dropdowns (sdi = buy ease, sdo = backup
+  // ease) changed from a MONTH count to a TRADING-DAY count (the engine now
+  // spreads the buy per trading day). Convert old month values to the nearest new
+  // option: 1mo → 20 days, N mo → N×21 trading days, capped at 6 months (126).
+  { from: 24, migrate(p) {
+      const conv = (raw) => {
+        const v = parseInt(raw, 10);
+        if (!Number.isFinite(v) || v <= 0) return 0;
+        if (v === 1) return 20;               // ~1 month ≈ 21 days → nearest option
+        return Math.min(126, v * 21);         // 2–6 mo land exactly on options; >6 mo clamps
+      };
+      for (const k of ['sdi', 'sdo']) if (p.has(k)) p.set(k, String(conv(p.get(k))));
+    } },
+  // v26: the bubble brake got its own moving-average window (sbgw). Before this it
+  // always reused the primary signal window (sw). Old links have no sbgw, so mirror
+  // sw into it to preserve the original coupled behavior.
+  { from: 25, migrate(p) {
+      if (!p.has('sbgw') && p.has('sw')) p.set('sbgw', p.get('sw'));
+    } },
 ];
 
 // Upgrade a shared link's params from the version it was stamped with up to
@@ -126,6 +145,9 @@ function saveSliders() {
   // canonical 9sig view option that resets to off on refresh.
   vals['toggle-log-scale'] =
     document.getElementById('chart-log-toggle').getAttribute('aria-pressed') === 'true';
+  vals['toggle-inflation'] =
+    (document.getElementById('chart-inflation-toggle') || {}).getAttribute &&
+    document.getElementById('chart-inflation-toggle').getAttribute('aria-pressed') === 'true';
   // Per-line visibility (legend-chip eye toggles). Persisted so a plain page
   // refresh restores the same hidden/visible mix the user left things in.
   if (typeof chart !== 'undefined' && chart) {
@@ -205,7 +227,7 @@ function saveSliders() {
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 })();
-['select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-cost'].forEach(id => {
+['select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-bg-window','select-sma-cost'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', () => {
     saveSliders();
@@ -217,9 +239,19 @@ function saveSliders() {
     }
     if (id === 'select-9sig-cash' || id === 'select-9sig-park-asset') update9sigCashSpans();
     if (id === 'select-sma-out-asset') updateSmaCashRateVisibility();
+    if (id === 'select-sma-window') syncBgSmaWindowLabel();
     render();
   });
 });
+
+// The bubble brake measures its ticker against the SAME moving-average window as
+// the main SMA signal, so echo that window count into the "above its N-day
+// average" label whenever the window changes (and on load).
+function syncBgSmaWindowLabel() {
+  const win = (document.getElementById('select-sma-window') || {}).value;
+  const label = document.getElementById('bg-sma-window-label');
+  if (win && label) label.textContent = win;
+}
 
 // Update the inline "(100−x)%" stock-share and spike-reset-target spans
 // when the user picks a different initial cash %. Also retitles the
@@ -354,6 +386,14 @@ const isLogScale = () => logPill.getAttribute('aria-pressed') === 'true';
 const setLogScale = (on) => logPill.setAttribute('aria-pressed', on ? 'true' : 'false');
 logPill.addEventListener('click', () => {
   setLogScale(!isLogScale());
+  saveSliders();
+  render();
+});
+
+// In-chart "real $" pill toggles inflation-adjustment of every line.
+const inflPill = document.getElementById('chart-inflation-toggle');
+if (inflPill) inflPill.addEventListener('click', () => {
+  inflPill.setAttribute('aria-pressed', inflPill.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
   saveSliders();
   render();
 });
@@ -586,6 +626,7 @@ function shareConfig() {
   if (get('select-sma-dca-to-out'))  params.set('sdo', get('select-sma-dca-to-out').value);
   if (get('select-sma-bg-gtfo'))     params.set('sbg', get('select-sma-bg-gtfo').value);
   if (get('select-sma-bg-asset'))    params.set('sbga', get('select-sma-bg-asset').value);
+  if (get('select-sma-bg-window'))   params.set('sbgw', get('select-sma-bg-window').value);
   if (get('select-sma-cost'))        params.set('stc', get('select-sma-cost').value);
 
   // 9sig: underlying + signal-line growth + rule customization
@@ -605,6 +646,9 @@ function shareConfig() {
   // Toggles
   params.set('l',
     document.getElementById('chart-log-toggle').getAttribute('aria-pressed') === 'true' ? '1' : '0');
+  if (document.getElementById('chart-inflation-toggle'))
+    params.set('if',
+      document.getElementById('chart-inflation-toggle').getAttribute('aria-pressed') === 'true' ? '1' : '0');
   params.set('ev', get('toggle-envelope').checked    ? '1' : '0');
 
   // Dataset visibility — captures per-line legend toggles. Always set, even

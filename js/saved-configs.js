@@ -26,7 +26,7 @@ const CONFIG_PARAM_IDS = {
            'select-sma-rsi-oh-window', 'select-sma-rsi-cool-window',
            'select-sma-confirm-buy', 'select-sma-confirm-sell', 'select-sma-settle',
            'select-sma-out-asset', 'select-sma-dca-in', 'select-sma-dca-to-out',
-           'select-sma-bg-gtfo', 'select-sma-bg-asset', 'select-sma-cost'],
+           'select-sma-bg-gtfo', 'select-sma-bg-asset', 'select-sma-bg-window', 'select-sma-cost'],
   'bh':   ['select-bh-underlying'],
   'invested': ['slider-rate'],
 };
@@ -814,6 +814,7 @@ function computeConfigSeries(cfg, ctx) {
       dcaToOutMonths: +pget(p, 'select-sma-dca-to-out', 0) || 0,
       bgGtfoPct: +pget(p, 'select-sma-bg-gtfo', 0) || 0,
       bgAsset: pget(p, 'select-sma-bg-asset', 'qqq') || 'qqq',
+      bgWindow: +pget(p, 'select-sma-bg-window', 0) || 0,
       tradeCostPct: +pget(p, 'select-sma-cost', 0) || 0,
       rsiOhWindow: +pget(p, 'select-sma-rsi-oh-window', 10) || 10,
       rsiCoolWindow: +pget(p, 'select-sma-rsi-cool-window', 10) || 10,
@@ -1163,6 +1164,7 @@ function resetBaseControlsToCanonical(type) {
   if (typeof refresh9sigDisplayLabels === 'function') refresh9sigDisplayLabels();
   if (typeof update9sigCashSpans === 'function') update9sigCashSpans();
   if (typeof updateSmaCashRateVisibility === 'function') updateSmaCashRateVisibility();
+  if (typeof syncBgSmaWindowLabel === "function") syncBgSmaWindowLabel();
   if (typeof updateDeployAvailability === 'function') updateDeployAvailability();
   if (typeof window.refreshPreviewTriggers === 'function') window.refreshPreviewTriggers();
 }
@@ -1363,6 +1365,7 @@ function openConfigForEdit(id) {
   if (typeof refresh9sigDisplayLabels === 'function') refresh9sigDisplayLabels();
   if (typeof update9sigCashSpans === 'function') update9sigCashSpans();
   if (typeof updateSmaCashRateVisibility === 'function') updateSmaCashRateVisibility();
+  if (typeof syncBgSmaWindowLabel === "function") syncBgSmaWindowLabel();
   if (typeof updateDeployAvailability === 'function') updateDeployAvailability();
   if (typeof saveSliders === 'function') saveSliders();
   window._editingConfigId = id;

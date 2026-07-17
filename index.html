@@ -31,7 +31,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=82">
+<link rel="stylesheet" href="styles.css?v=99">
 </head>
 <body>
 
@@ -107,6 +107,7 @@
       <div class="chart-container">
         <canvas id="mainChart"></canvas>
         <button type="button" id="chart-log-toggle" class="chart-log-toggle" aria-pressed="false" title="Toggle logarithmic Y-axis">log</button>
+        <button type="button" id="chart-inflation-toggle" class="chart-infl-toggle" aria-pressed="false" title="Deinflate every line by ~3%/yr average inflation, so values are shown in constant start-of-view dollars — real growth, not the part that's just prices rising.">deinflated $</button>
       </div>
       <div id="custom-tooltip"></div>
       <div id="marker-tooltip"></div>
@@ -682,7 +683,7 @@
     <div class="adaptive-line">
       Require at least
       <select class="inline-select" id="select-sma-entry-buf">
-        <option value="0" selected>0%</option>
+        <option value="0">0%</option>
         <option value="0.1">0.1%</option>
         <option value="0.2">0.2%</option>
         <option value="0.3">0.3%</option>
@@ -691,7 +692,7 @@
         <option value="0.6">0.6%</option>
         <option value="0.7">0.7%</option>
         <option value="0.8">0.8%</option>
-        <option value="0.9">0.9%</option>
+        <option value="0.9" selected>0.9%</option>
         <option value="1">1%</option>
         <option value="1.1">1.1%</option>
         <option value="1.2">1.2%</option>
@@ -757,7 +758,7 @@
       </select>
       above the average to buy, and
       <select class="inline-select" id="select-sma-exit-buf">
-        <option value="0" selected>0%</option>
+        <option value="0">0%</option>
         <option value="0.1">0.1%</option>
         <option value="0.2">0.2%</option>
         <option value="0.3">0.3%</option>
@@ -773,7 +774,7 @@
         <option value="1.3">1.3%</option>
         <option value="1.4">1.4%</option>
         <option value="1.5">1.5%</option>
-        <option value="1.6">1.6%</option>
+        <option value="1.6" selected>1.6%</option>
         <option value="1.7">1.7%</option>
         <option value="1.8">1.8%</option>
         <option value="1.9">1.9%</option>
@@ -856,8 +857,8 @@
       After any trade, wait
       <select class="inline-select" id="select-sma-settle">
         <option value="0">0 (instant)</option>
-        <option value="1">1</option>
-        <option value="2" selected>2</option>
+        <option value="1" selected>1</option>
+        <option value="2">2</option>
         <option value="3">3</option>
         <option value="4">4</option>
         <option value="5">5</option>
@@ -874,8 +875,8 @@
         <option value="6">6</option>
         <option value="7">7</option>
         <option value="8">8</option>
-        <option value="9">9</option>
-        <option value="10" selected>10</option>
+        <option value="9" selected>9</option>
+        <option value="10">10</option>
         <option value="11">11</option>
         <option value="12">12</option>
         <option value="13">13</option>
@@ -925,10 +926,10 @@
         <option value="4">4</option>
         <option value="5">5</option>
         <option value="6">6</option>
-        <option value="7">7</option>
+        <option value="7" selected>7</option>
         <option value="8">8</option>
         <option value="9">9</option>
-        <option value="10" selected>10</option>
+        <option value="10">10</option>
         <option value="11">11</option>
         <option value="12">12</option>
         <option value="13">13</option>
@@ -1031,42 +1032,66 @@
 
     <div class="strategy-panel-section-label" style="margin-top:18px">Ease into your trades</div>
     <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:10px">
-      By default a buy or sell happens all at once. You can spread a buy over a few months so you're not betting everything on one day's price. Selling is always instant — only buying can be eased in.
+      By default every trade happens all at once. Here you can spread a <b>buy</b> across several months — a slice each month, so you're not betting everything on one day's price. Only buying is spread; every sell still happens the same day.
+      <br><br>
+      Example: set the backup ease to <b>5 days</b>, and the day the strategy goes out it sells your primary fund to cash right away, then buys into the backup fund a slice each trading day for the next five days. Pick <b>2 months</b> and it spreads that buy across roughly two months instead. If the buy signal comes back before it finishes, it stops and rotates into the primary fund.
     </div>
     <div class="adaptive-line">
-      When you buy, ease into the leveraged fund over
+      When you buy, ease into the primary fund over
       <select class="inline-select" id="select-sma-dca-in">
-        <option value="0" selected>instant</option>
-        <option value="1">1 month</option>
-        <option value="2">2 months</option>
-        <option value="3">3 months</option>
-        <option value="4">4 months</option>
-        <option value="5">5 months</option>
-        <option value="6">6 months</option>
-        <option value="7">7 months</option>
-        <option value="8">8 months</option>
-        <option value="9">9 months</option>
-        <option value="10">10 months</option>
-        <option value="11">11 months</option>
-        <option value="12">12 months</option>
+        <option value="0">instant</option>
+        <option value="1">1 day</option>
+        <option value="2">2 days</option>
+        <option value="3">3 days</option>
+        <option value="4">4 days</option>
+        <option value="5">5 days</option>
+        <option value="6">6 days</option>
+        <option value="7">7 days</option>
+        <option value="8">8 days</option>
+        <option value="9">9 days</option>
+        <option value="10">10 days</option>
+        <option value="11">11 days</option>
+        <option value="12">12 days</option>
+        <option value="13">13 days</option>
+        <option value="14">14 days</option>
+        <option value="15" selected>15 days</option>
+        <option value="20">20 days</option>
+        <option value="25">25 days</option>
+        <option value="30">30 days</option>
+        <option value="42">2 months</option>
+        <option value="63">3 months</option>
+        <option value="84">4 months</option>
+        <option value="105">5 months</option>
+        <option value="126">6 months</option>
       </select>.
     </div>
     <div class="adaptive-line">
       When you sell, ease into your backup holding over
       <select class="inline-select" id="select-sma-dca-to-out">
         <option value="0">instant</option>
-        <option value="1">1 month</option>
-        <option value="2" selected>2 months</option>
-        <option value="3">3 months</option>
-        <option value="4">4 months</option>
-        <option value="5">5 months</option>
-        <option value="6">6 months</option>
-        <option value="7">7 months</option>
-        <option value="8">8 months</option>
-        <option value="9">9 months</option>
-        <option value="10">10 months</option>
-        <option value="11">11 months</option>
-        <option value="12">12 months</option>
+        <option value="1">1 day</option>
+        <option value="2">2 days</option>
+        <option value="3">3 days</option>
+        <option value="4">4 days</option>
+        <option value="5">5 days</option>
+        <option value="6">6 days</option>
+        <option value="7">7 days</option>
+        <option value="8">8 days</option>
+        <option value="9">9 days</option>
+        <option value="10">10 days</option>
+        <option value="11">11 days</option>
+        <option value="12">12 days</option>
+        <option value="13">13 days</option>
+        <option value="14">14 days</option>
+        <option value="15" selected>15 days</option>
+        <option value="20">20 days</option>
+        <option value="25">25 days</option>
+        <option value="30">30 days</option>
+        <option value="42">2 months</option>
+        <option value="63">3 months</option>
+        <option value="84">4 months</option>
+        <option value="105">5 months</option>
+        <option value="126">6 months</option>
       </select>.
       <span class="info-icon" tabindex="0" data-tip="Only matters if you park in QQQ/SPY instead of cash.&#10;&#10;On a sell it dumps the 3× fund right away, then eases into QQQ/SPY over this many months.&#10;&#10;Example: 6 = move a sixth of the money each month for six months.&#10;If the buy signal returns mid-way, it stops and switches back to the 3× fund.">ⓘ</span>
     </div>
@@ -1077,12 +1102,12 @@
       <select class="inline-select" id="select-sma-cost">
         <option value="0">0%</option>
         <option value="0.01">0.01%</option>
-        <option value="0.02">0.02%</option>
+        <option value="0.02" selected>0.02%</option>
         <option value="0.03">0.03%</option>
         <option value="0.05">0.05%</option>
         <option value="0.1">0.1%</option>
         <option value="0.15">0.15%</option>
-        <option value="0.2" selected>0.2%</option>
+        <option value="0.2">0.2%</option>
         <option value="0.25">0.25%</option>
         <option value="0.3">0.3%</option>
         <option value="0.5">0.5%</option>
@@ -1131,7 +1156,39 @@
         <option value="100">+100%</option>
         <option value="0">off</option>
       </select>
-      above its average.
+      above its
+      <select class="inline-select" id="select-sma-bg-window">
+        <option value="10">10</option>
+        <option value="20">20</option>
+        <option value="30">30</option>
+        <option value="40">40</option>
+        <option value="50">50</option>
+        <option value="60">60</option>
+        <option value="70">70</option>
+        <option value="80">80</option>
+        <option value="90">90</option>
+        <option value="100">100</option>
+        <option value="110">110</option>
+        <option value="120">120</option>
+        <option value="130">130</option>
+        <option value="140">140</option>
+        <option value="150">150</option>
+        <option value="160">160</option>
+        <option value="170">170</option>
+        <option value="180">180</option>
+        <option value="190">190</option>
+        <option value="200" selected>200</option>
+        <option value="210">210</option>
+        <option value="220">220</option>
+        <option value="230">230</option>
+        <option value="240">240</option>
+        <option value="250">250</option>
+        <option value="260">260</option>
+        <option value="270">270</option>
+        <option value="280">280</option>
+        <option value="290">290</option>
+        <option value="300">300</option>
+      </select>-day average.
     </div>
 
   </div>
@@ -1141,18 +1198,18 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=82"></script>
-<script src="js/utils.js?v=82"></script>
-<script src="js/simulate.js?v=82"></script>
-<script src="js/metrics.js?v=82"></script>
-<script src="js/chart.js?v=82"></script>
-<script src="js/controls.js?v=82"></script>
-<script src="js/analytics.js?v=82"></script>
-<script src="js/preview-dropdown.js?v=82"></script>
-<script src="js/saved-configs.js?v=82"></script>
-<script src="js/strategy-library-code.js?v=82"></script>
-<script src="js/strategy-library.js?v=82"></script>
-<script src="js/init.js?v=82"></script>
+<script src="js/data.js?v=99"></script>
+<script src="js/utils.js?v=99"></script>
+<script src="js/simulate.js?v=99"></script>
+<script src="js/metrics.js?v=99"></script>
+<script src="js/chart.js?v=99"></script>
+<script src="js/controls.js?v=99"></script>
+<script src="js/analytics.js?v=99"></script>
+<script src="js/preview-dropdown.js?v=99"></script>
+<script src="js/saved-configs.js?v=99"></script>
+<script src="js/strategy-library-code.js?v=99"></script>
+<script src="js/strategy-library.js?v=99"></script>
+<script src="js/init.js?v=99"></script>
 
 </body>
 </html>

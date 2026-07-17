@@ -82,6 +82,7 @@
   if (params.get('sdo') !== null) { document.getElementById('select-sma-dca-to-out').value  = params.get('sdo'); hasUrlParams = true; }
   if (params.get('sbg') !== null) { document.getElementById('select-sma-bg-gtfo').value     = params.get('sbg'); hasUrlParams = true; }
   if (params.get('sbga') !== null) { document.getElementById('select-sma-bg-asset').value   = params.get('sbga'); hasUrlParams = true; }
+  if (params.get('sbgw') !== null) { document.getElementById('select-sma-bg-window').value  = params.get('sbgw'); hasUrlParams = true; }
   if (params.get('stc') !== null) { document.getElementById('select-sma-cost').value        = params.get('stc'); hasUrlParams = true; }
   // 9sig underlying + signal-line growth
   if (params.get('nu') !== null) { document.getElementById('select-9sig-underlying').value = params.get('nu'); hasUrlParams = true; }
@@ -98,6 +99,7 @@
   if (params.get('npa') !== null) { document.getElementById('select-9sig-park-asset').value = params.get('npa'); hasUrlParams = true; }
   // Toggles
   if (params.get('l')  !== null) { setLogScale(params.get('l') === '1'); hasUrlParams = true; }
+  if (params.get('if') !== null) { const b = document.getElementById('chart-inflation-toggle'); if (b) b.setAttribute('aria-pressed', params.get('if') === '1' ? 'true' : 'false'); hasUrlParams = true; }
   if (params.get('ev') !== null) { document.getElementById('toggle-envelope').checked    = params.get('ev') === '1'; hasUrlParams = true; }
   // Analytics modal pre-state (modal is opened after render() so the chart exists)
   if (params.get('as')) analyticsStrategy = params.get('as');
@@ -141,6 +143,7 @@
         // 'toggle-envelope' deliberately not restored — alternate runs reset
         // to off on refresh (canonical 9sig view).
         if (saved['toggle-log-scale'] != null) setLogScale(!!saved['toggle-log-scale']);
+        if (saved['toggle-inflation'] != null) { const b = document.getElementById('chart-inflation-toggle'); if (b) b.setAttribute('aria-pressed', saved['toggle-inflation'] ? 'true' : 'false'); }
       }
     } catch(e) {}
   }
@@ -150,6 +153,7 @@
   if (typeof refresh9sigDisplayLabels === 'function') refresh9sigDisplayLabels();
   if (typeof update9sigCashSpans      === 'function') update9sigCashSpans();
   if (typeof updateSmaCashRateVisibility === 'function') updateSmaCashRateVisibility();
+  if (typeof syncBgSmaWindowLabel === 'function') syncBgSmaWindowLabel();
   if (typeof updateDeployAvailability === 'function') updateDeployAvailability();
   // Don't offer the localStorage "reset saved data" prompt when viewing a
   // shared link — clicking it would reload to a clean URL and lose the link.
