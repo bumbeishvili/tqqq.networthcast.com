@@ -558,6 +558,20 @@ function buildSmaLogTableHtml(smaLog) {
   const contribCount = smaLog.filter(l => l.action === 'CONTRIB').length;
   const easeCount = smaLog.filter(l => l.action === 'DCA-ADD').length;
   const totalFee = smaLog.reduce((s, l) => s + (l.fee || 0), 0);
+  // Share of calendar time spent in each holding — weighted by the days between
+  // events (the holding is constant between two log rows). Uses the same
+  // held-asset resolution as the Holding column.
+  const holdMs = {}; let holdTot = 0;
+  for (let i = 0; i < smaLog.length - 1; i++) {
+    const a = (smaLog[i].held || smaLog[i].state || 'cash').toUpperCase();
+    const dt = Date.parse(smaLog[i + 1].date) - Date.parse(smaLog[i].date);
+    if (dt > 0) { holdMs[a] = (holdMs[a] || 0) + dt; holdTot += dt; }
+  }
+  const holdChips = holdTot > 0 ? Object.entries(holdMs).sort((a, b) => b[1] - a[1]).map(([a, ms]) => {
+    const yrs = ms / 31557600000; // 365.25 d
+    return `<span style="margin-right:16px;white-space:nowrap"><b style="color:var(--text)">${a}</b> ${(ms / holdTot * 100).toFixed(1)}% <span style="opacity:.55">(${yrs >= 1 ? yrs.toFixed(1) + 'y' : Math.round(yrs * 12) + 'mo'})</span></span>`;
+  }).join('') : '';
+  const holdSummary = holdChips ? `<div style="font-size:12px;color:var(--text-muted);margin-top:10px"><span style="font-weight:600;color:var(--text);margin-right:8px">Time in each holding:</span>${holdChips}</div>` : '';
   const contribToggle = contribCount > 0 ? `
     <label class="log-contrib-toggle">
       <input type="checkbox" onchange="toggleSmaLogContrib(this.checked)" ${_smaLogHideContrib ? 'checked' : ''}>
@@ -570,9 +584,6 @@ function buildSmaLogTableHtml(smaLog) {
     </label>` : '';
   return `
     <div class="strategy-panel-section-label" style="margin-top:24px">SMA Transaction Log</div>
-    <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">
-      One row per trade, ease slice, or monthly contribution. ${smaLog.length} event${smaLog.length===1?'':'s'}, ${fmtFull(Math.round(totalFee))} total in fees over this window.
-    </div>
     <div style="display:flex;gap:16px;flex-wrap:wrap">${contribToggle}${easeToggle}</div>
     <div class="quarter-table-wrap${_smaLogHideContrib ? ' hide-contrib' : ''}${_smaLogHideEase ? ' hide-dca' : ''}">
       <table>
@@ -589,12 +600,13 @@ function buildSmaLogTableHtml(smaLog) {
             <th>Cash <span class="info-icon" tabindex="0" data-tip="How much was sitting in cash after this trade, earning the cash interest rate until it's put back to work.">ⓘ</span></th>
             <th>Total <span class="info-icon" tabindex="0" data-tip="Your entire portfolio value that day: fund value + cash. This is the number the strategy's line plots on the chart.">ⓘ</span></th>
             <th>Invested <span class="info-icon" tabindex="0" data-tip="Total money you had put in by this date — your starting amount plus every contribution so far.&#10;&#10;Total minus Invested is your profit.">ⓘ</span></th>
-            <th>Fee <span class="info-icon" tabindex="0" data-tip="The trading cost paid on THIS row's trade (your fee % × the amount traded). Sells and every buy slice each pay it.&#10;&#10;Contributions, Start snapshot, and End of range pay nothing (—). The header line shows the running total across the whole window.">ⓘ</span></th>
+            <th>Fee <span class="info-icon" tabindex="0" data-tip="The trading cost paid on THIS row's trade (your fee % × the amount traded). Sells and every buy slice each pay it.&#10;&#10;Contributions, Start snapshot, and End of range pay nothing (—).">ⓘ</span></th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
     </div>
+    ${holdSummary}
   `;
 }
 
