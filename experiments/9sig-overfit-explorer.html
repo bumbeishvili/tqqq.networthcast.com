@@ -354,11 +354,11 @@ function renderDataset(k){
   if(!ds.ready){ pane.innerHTML='<div class="pending"><span class="spin"></span>'+(ds.kind==='dd'?'Drawdown optimization':'Optimization')+' for '+ds.span+' still running — this tab fills in when it finishes.</div>'; return; }
   const table='<div class="head"><div class="bar" id="'+k+'-bar"></div></div><div class="filters" id="'+k+'-filters"></div><div class="scroll"><table id="'+k+'-tbl"></table></div>';
   if(ds.kind==='ret'){
-    pane.innerHTML=table+'<p class="foot">Optimized to <b>maximize final value</b> (≡ max money-weighted CAGR) over '+ds.span+'. Filters &amp; CSV act on the current view.</p>';
+    pane.innerHTML=table+'<p class="foot">Optimized to <b>maximize final value</b> (≡ max money-weighted CAGR) over '+ds.span+', on a <b>$10,000 initial + $500/month</b> contribution stream — identical for every strategy, so Final values are directly comparable. Filters &amp; CSV act on the current view.</p>';
     renderPane(k,ds.rows,state);
   } else {
     if(!ds.n){ pane.innerHTML='<div class="pending">No strategy reached CAGR ≥ '+ds.cagrMin+'% over '+ds.span+' — the floor is above what any strategy achieved on this window.</div>'; return; }
-    pane.innerHTML=table+'<p class="foot">Optimized to <b>minimize max-drawdown subject to CAGR ≥ '+ds.cagrMin+'%</b> over '+ds.span+'. Showing the '+ds.n+' strategies that met the constraint (of '+ds.total+'), sorted by lowest drawdown. Filters &amp; CSV act on the current view.</p>';
+    pane.innerHTML=table+'<p class="foot">Optimized to <b>minimize max-drawdown subject to CAGR ≥ '+ds.cagrMin+'%</b> over '+ds.span+', on a <b>$10,000 initial + $500/month</b> contribution stream — identical for every strategy. Showing the '+ds.n+' strategies that met the constraint (of '+ds.total+'), sorted by lowest drawdown. Filters &amp; CSV act on the current view.</p>';
     renderPane(k,ds.rows,state);
   }
 }
