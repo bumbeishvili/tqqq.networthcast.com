@@ -19,7 +19,7 @@ const CONFIG_PARAM_IDS = {
   '9sig': ['select-9sig-underlying', 'select-9sig-growth', 'select-9sig-crashdrop',
            'select-9sig-crashwin', 'select-9sig-spike', 'select-9sig-period',
            'select-9sig-cash', 'select-9sig-cashrate', 'select-9sig-buypower',
-           'select-9sig-deploy', 'select-9sig-target-compound','select-9sig-park-asset'],
+           'select-9sig-deploy', 'select-9sig-target-compound','select-9sig-park-asset','select-9sig-rebalance-point','select-9sig-spike-target','select-9sig-cost'],
   'sma':  ['select-sma-asset', 'select-sma-window', 'select-sma-underlying',
            'select-sma-cashrate', 'select-sma-entry-buf', 'select-sma-exit-buf',
            'select-sma-rsi-oh', 'select-sma-rsi-cool',
@@ -780,11 +780,23 @@ function computeConfigSeries(cfg, ctx) {
       spikeTriggerPct: Number.isFinite(sp) ? sp : 100,
       rebalancePeriod: pget(p, 'select-9sig-period', 'quarterly') || 'quarterly',
       cashPct: (+pget(p, 'select-9sig-cash', 40) || 0) / 100,
-      contribDeployPct: (pget(p, 'select-9sig-deploy', '0') === '1') ? 0.5 : 0,
-      targetFromPrevTarget: pget(p, 'select-9sig-target-compound', '0') === '1',
+      contribDeployPct: pget(p, 'select-9sig-deploy', '0') === '1' ? 0.5 : (+pget(p, 'select-9sig-deploy', '0') || 0) / 100,
+      targetFromPrevTarget: ['target', '1'].includes(pget(p, 'select-9sig-target-compound', 'holding')),
       parkAsset: pget(p, 'select-9sig-park-asset', 'cash') || 'cash',
       buyThrottlePct: +pget(p, 'select-9sig-buypower', 90) || 90,
+      spikeResetPct: pget(p, 'select-9sig-spike-target', 'auto') || 'auto',
+      tradeCostPct: +pget(p, 'select-9sig-cost', 0) || 0,
     };
+    // Rebalance point: shift the schedule to N% through each period.
+    const _rp = +pget(p, 'select-9sig-rebalance-point', 0) || 0;
+    if (_rp > 0 && typeof buildEnvelopeQData === 'function' && typeof PERIOD_DAYS !== 'undefined') {
+      const _pd = PERIOD_DAYS[opts.rebalancePeriod] || 63;
+      const _off = Math.round(_rp / 100 * (_pd - 1));
+      const _q = buildEnvelopeQData(opts.rebalancePeriod, _off,
+        quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0],
+        quarterlyData[exitIdx] && quarterlyData[exitIdx][0]);
+      if (_q && _q.length >= 2) opts.qData = _q;
+    }
     // A yearly config is coarser than the chart's quarterly axis floor → get
     // quarter-end value snapshots so its line/sub-series draw at quarter detail.
     opts.sampleQuarterly = (opts.rebalancePeriod === 'yearly');
@@ -926,7 +938,7 @@ function computeConfigGhosts(cfg, ctx) {
     spikeTriggerPct: Number.isFinite(sp) ? sp : 100,
     rebalancePeriod: period,
     cashPct: (+pget(p, 'select-9sig-cash', 40) || 0) / 100,
-    contribDeployPct: (pget(p, 'select-9sig-deploy', '0') === '1') ? 0.5 : 0,
+    contribDeployPct: pget(p, 'select-9sig-deploy', '0') === '1' ? 0.5 : (+pget(p, 'select-9sig-deploy', '0') || 0) / 100,
     buyThrottlePct: +pget(p, 'select-9sig-buypower', 90) || 90,
     parkAsset: pget(p, 'select-9sig-park-asset', 'cash') || 'cash',
   };

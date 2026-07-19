@@ -1,6 +1,6 @@
 // Slider max is set in init() after data loads
 
-const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-bg-window','select-sma-cost'];
+const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-9sig-rebalance-point','select-9sig-spike-target','select-9sig-cost','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-bg-window','select-sma-cost'];
 const LS_KEY = '9sig-sliders';
 // Bump APP_VERSION whenever a backwards-incompatible change ships (a control
 // id is renamed, a default flips, a strategy is dropped). On mismatch we
@@ -8,7 +8,7 @@ const LS_KEY = '9sig-sliders';
 // nuking storage silently; the user clicks it when they're ready to load
 // the new defaults. If they've never visited before (no stored version),
 // we just record the current one without prompting.
-const APP_VERSION = 26; // bumped when the bubble brake got its own MA window (sbgw); old links mirror sw
+const APP_VERSION = 27; // bumped when 9sig spike reset target got its own dropdown (srp); old links pin to 100−cash%
 // NOTE: APP_VERSION drives shared-link migration + the localStorage reset
 // prompt; bump it only on a breaking param/data change that needs a migration.
 // Separately, when you change any js/*.js or styles.css, bump the ?v= cache-bust
@@ -90,6 +90,16 @@ const LINK_MIGRATIONS = [
   // sw into it to preserve the original coupled behavior.
   { from: 25, migrate(p) {
       if (!p.has('sbgw') && p.has('sw')) p.set('sbgw', p.get('sw'));
+    } },
+  // v27: the 9sig spike reset target (srp) became its own dropdown. Before this it
+  // always reset back to the starting stock weight (100 − cash%). Old links have no
+  // srp, so pin it to the stock weight they implied (cash key nh, default 40).
+  { from: 26, migrate(p) {
+      if (!p.has('srp')) {
+        const cash = p.has('nh') ? parseFloat(p.get('nh')) : 40;
+        const stock = Number.isFinite(cash) ? Math.max(0, Math.min(100, 100 - cash)) : 60;
+        p.set('srp', String(stock));
+      }
     } },
 ];
 
@@ -227,7 +237,7 @@ function saveSliders() {
     el.dispatchEvent(new Event('input', { bubbles: true }));
   });
 })();
-['select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-bg-window','select-sma-cost'].forEach(id => {
+['select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-9sig-rebalance-point','select-9sig-spike-target','select-9sig-cost','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-bg-window','select-sma-cost'].forEach(id => {
   const el = document.getElementById(id);
   if (el) el.addEventListener('change', () => {
     saveSliders();
@@ -261,9 +271,7 @@ function update9sigCashSpans() {
   const cashP = +((document.getElementById('select-9sig-cash') || {}).value) || 0;
   const stockP = 100 - cashP;
   const a = document.getElementById('9sig-stock-pct');
-  const b = document.getElementById('9sig-spike-target');
   if (a) a.textContent = stockP + '%';
-  if (b) b.textContent = stockP + '%';
   const park = ((document.getElementById('select-9sig-park-asset') || {}).value) || 'cash';
   const rateRow = document.getElementById('9sig-cashrate-row');
   if (rateRow) rateRow.style.display = park === 'cash' ? '' : 'none';
@@ -288,7 +296,7 @@ function updateDeployAvailability() {
   if (!cb) return;
   const hasMonthly = monthly > 0;
   cb.disabled = !hasMonthly;
-  const wrap = cb.closest('label');
+  const wrap = cb.closest('.adaptive-line') || cb.closest('label');
   if (wrap) {
     wrap.style.opacity = hasMonthly ? '' : '0.45';
     wrap.style.cursor  = hasMonthly ? 'pointer' : 'not-allowed';
@@ -318,13 +326,6 @@ function positionInfoTip(e) {
 document.addEventListener('mouseover', positionInfoTip);
 document.addEventListener('focusin',   positionInfoTip);
 
-document.getElementById('toggle-envelope').addEventListener('change', (e) => {
-  // "Show alternate runs" is per-strategy: write the flag for whichever strategy
-  // is currently open (main session flag, or the open saved strategy's config).
-  if (typeof setCurrentEnvelopeFlag === 'function') setCurrentEnvelopeFlag(e.target.checked);
-  saveSliders();
-  render();
-});
 
 // Draggable resize handle on the strategy panel — like a code-editor split.
 // Width persists in its own localStorage key (separate from LS_KEY so it
@@ -639,8 +640,8 @@ function shareConfig() {
   if (get('select-9sig-cash'))       params.set('nh', get('select-9sig-cash').value);
   if (get('select-9sig-cashrate'))   params.set('nr', get('select-9sig-cashrate').value);
   if (get('select-9sig-buypower'))   params.set('nbp', get('select-9sig-buypower').value);
-  if (get('select-9sig-deploy'))     params.set('nd', get('select-9sig-deploy').checked ? '1' : '0');
-  if (get('select-9sig-target-compound')) params.set('tc', get('select-9sig-target-compound').checked ? '1' : '0');
+  if (get('select-9sig-deploy'))     params.set('nd', get('select-9sig-deploy').value);
+  if (get('select-9sig-target-compound')) params.set('tc', get('select-9sig-target-compound').value);
   if (get('select-9sig-park-asset')) params.set('npa', get('select-9sig-park-asset').value);
 
   // Toggles
@@ -649,7 +650,9 @@ function shareConfig() {
   if (document.getElementById('chart-inflation-toggle'))
     params.set('if',
       document.getElementById('chart-inflation-toggle').getAttribute('aria-pressed') === 'true' ? '1' : '0');
-  params.set('ev', get('toggle-envelope').checked    ? '1' : '0');
+  if (get('select-9sig-rebalance-point')) params.set('rp', get('select-9sig-rebalance-point').value);
+  if (get('select-9sig-spike-target')) params.set('srp', get('select-9sig-spike-target').value);
+  if (get('select-9sig-cost')) params.set('ntc', get('select-9sig-cost').value);
 
   // Dataset visibility — captures per-line legend toggles. Always set, even
   // if empty, so the URL is fully authoritative. Recipient code treats `hd=`

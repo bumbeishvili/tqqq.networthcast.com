@@ -728,6 +728,7 @@ function buildLogTableHtml(d) {
       <td style="color:#fb923c">${fmtFull(Math.round(l.target))}</td>
       <td>${fmtFull(Math.round(l.cash))}</td>
       <td>${fmtFull(Math.round(l.total))}</td>
+      <td>${!l.fee ? '—' : (l.fee >= 1 ? fmtFull(Math.round(l.fee)) : '+$' + l.fee.toFixed(2))}</td>
       <td class="${ac} log-action">${l.action}</td>
     </tr>`;
   }).join('');
@@ -747,6 +748,7 @@ function buildLogTableHtml(d) {
             <th>Target</th>
             <th>Cash</th>
             <th>Total Portfolio</th>
+            <th>Fee <span class="info-icon" tabindex="0" data-tip="The trading cost (your fee % × the dollars traded) paid on this rebalance — sells, buys, spike resets, and any contribution deployed straight into stock. A rebalance that only HOLDs pays nothing (—).">ⓘ</span></th>
             <th class="log-action">Action</th>
           </tr>
         </thead>
@@ -1359,13 +1361,29 @@ function render() {
   const cashPct = (+((document.getElementById('select-9sig-cash') || {}).value) || 0) / 100;
   // Checkbox: ticked → deploy half of each contribution into stock immediately
   // at the month's price, rest waits for rebalance. Off → canonical 9sig.
-  const contribDeployPct = ((document.getElementById('select-9sig-deploy') || {}).checked) ? 0.5 : 0;
-  const targetFromPrevTarget = !!((document.getElementById('select-9sig-target-compound') || {}).checked);
+  const contribDeployPct = (+((document.getElementById('select-9sig-deploy') || {}).value) || 0) / 100;
+  const targetFromPrevTarget = ((document.getElementById('select-9sig-target-compound') || {}).value) === 'target';
   const buyThrottlePct = (+((document.getElementById('select-9sig-buypower') || {}).value) || 90);
   const parkAsset = ((document.getElementById('select-9sig-park-asset') || {}).value) || 'cash';
 
+  // Rebalance point: % of the way through each period where the check happens
+  // (0 = start, 100 = end). Maps to a trading-day offset and shifts the schedule
+  // via buildEnvelopeQData(). Only builds a custom schedule when > 0 so the
+  // default keeps the fast period-boundary path.
+  const _rebalPct = (+((document.getElementById('select-9sig-rebalance-point') || {}).value) || 0);
+  let _rebalQData = null;
+  if (_rebalPct > 0 && typeof buildEnvelopeQData === 'function' && typeof PERIOD_DAYS !== 'undefined') {
+    const _pd = PERIOD_DAYS[mainPeriod] || 63;
+    const _off = Math.round(_rebalPct / 100 * (_pd - 1));
+    const _eD = quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0];
+    const _xD = quarterlyData[exitIdx] && quarterlyData[exitIdx][0];
+    const _q = buildEnvelopeQData(mainPeriod, _off, _eD, _xD);
+    if (_q && _q.length >= 2) _rebalQData = _q;
+  }
+
   const sigOpts = {
     qGrowth,
+    ...(_rebalQData ? { qData: _rebalQData } : {}),
     underlyingCol: sigUlCol,
     crashDropPct:   Number.isFinite(crashDropPct) ? crashDropPct : 30,
     crashLookbackMonths,
@@ -1376,6 +1394,8 @@ function render() {
     targetFromPrevTarget,
     buyThrottlePct,
     parkAsset,
+    spikeResetPct: ((document.getElementById('select-9sig-spike-target') || {}).value) || 'auto',
+    tradeCostPct: (+((document.getElementById('select-9sig-cost') || {}).value) || 0),
     // A yearly run is coarser than the quarterly x-axis floor → ask the sim for
     // quarter-end value snapshots so the line/hover have quarter resolution.
     sampleQuarterly: mainPeriod === 'yearly',

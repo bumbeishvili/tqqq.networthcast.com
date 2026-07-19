@@ -29,6 +29,11 @@
     'select-9sig-spike':      { kind: '9sig', apply: (p, v) => { p.spikeTriggerPct = +v; } },
     'select-9sig-buypower':   { kind: '9sig', apply: (p, v) => { p.buyThrottlePct = +v; } },
     'select-9sig-park-asset': { kind: '9sig', apply: (p, v) => { p.parkAsset = v; } },
+    'select-9sig-deploy':     { kind: '9sig', apply: (p, v) => { p.contribDeployPct = (+v || 0) / 100; } },
+    'select-9sig-target-compound': { kind: '9sig', apply: (p, v) => { p.targetFromPrevTarget = v === 'target'; } },
+    'select-9sig-rebalance-point': { kind: '9sig', apply: (p, v) => { p.rebalPct = +v || 0; } },
+    'select-9sig-spike-target': { kind: '9sig', apply: (p, v) => { p.spikeResetPct = v; } },
+    'select-9sig-cost':       { kind: '9sig', apply: (p, v) => { p.tradeCostPct = +v || 0; } },
     'select-bh-underlying':   { kind: 'bh' },
     'select-sma-underlying':  { kind: 'sma', apply: (p, v) => { p.underlyingCol = v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : 1; } },
     'select-sma-asset':       { kind: 'sma', apply: (p, v) => { p.smaAsset = v; } },
@@ -85,10 +90,13 @@
       spikeTriggerPct: _num('select-9sig-spike', 100),
       rebalancePeriod: _str('select-9sig-period', 'quarterly'),
       cashPct:       _num('select-9sig-cash', 40) / 100,
-      contribDeployPct: (document.getElementById('select-9sig-deploy') || {}).checked ? 0.5 : 0,
-      targetFromPrevTarget: !!(document.getElementById('select-9sig-target-compound') || {}).checked,
+      contribDeployPct: (+((document.getElementById('select-9sig-deploy') || {}).value) || 0) / 100,
+      targetFromPrevTarget: ((document.getElementById('select-9sig-target-compound') || {}).value) === 'target',
+      rebalPct: _num('select-9sig-rebalance-point', 0),
       buyThrottlePct: _num('select-9sig-buypower', 90),
       parkAsset: _str('select-9sig-park-asset', 'cash'),
+      spikeResetPct: _str('select-9sig-spike-target', 'auto'),
+      tradeCostPct: _num('select-9sig-cost', 0),
     });
   }
 
@@ -119,11 +127,22 @@
   }
 
   function nineSigFinal(p) {
+    let _qd;
+    if (p.rebalPct > 0 && typeof buildEnvelopeQData === 'function' && typeof PERIOD_DAYS !== 'undefined') {
+      const pd = PERIOD_DAYS[p.rebalancePeriod] || 63;
+      const off = Math.round(p.rebalPct / 100 * (pd - 1));
+      const eD = quarterlyData[p.simEntryIdx] && quarterlyData[p.simEntryIdx][0];
+      const xD = quarterlyData[p.exitIdx] && quarterlyData[p.exitIdx][0];
+      const q = buildEnvelopeQData(p.rebalancePeriod, off, eD, xD);
+      if (q && q.length >= 2) _qd = q;
+    }
     const r = simulate(p.initial, p.monthly, p.cashRate, p.simEntryIdx, p.exitIdx, p.annualRaise, {
+      ...(_qd ? { qData: _qd } : {}),
       qGrowth: p.qGrowth, underlyingCol: p.underlyingCol, crashDropPct: p.crashDropPct,
       crashLookbackMonths: p.crashLookbackMonths, spikeTriggerPct: p.spikeTriggerPct,
       rebalancePeriod: p.rebalancePeriod, cashPct: p.cashPct, contribDeployPct: p.contribDeployPct,
-      buyThrottlePct: p.buyThrottlePct, parkAsset: p.parkAsset, baselineRate: p.baselineRate, skipBH: true,
+      targetFromPrevTarget: p.targetFromPrevTarget,
+      buyThrottlePct: p.buyThrottlePct, parkAsset: p.parkAsset, spikeResetPct: p.spikeResetPct, tradeCostPct: p.tradeCostPct, baselineRate: p.baselineRate, skipBH: true,
     });
     return (r.log && r.log.length) ? r.log[r.log.length - 1].total : 0;
   }

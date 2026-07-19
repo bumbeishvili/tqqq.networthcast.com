@@ -1331,12 +1331,14 @@ function _underlyingAndGrowth() {
   const sp = +((document.getElementById('select-9sig-spike')     || {}).value);
   const np = ((document.getElementById('select-9sig-period')    || {}).value) || 'quarterly';
   const cashPct = (+((document.getElementById('select-9sig-cash') || {}).value) || 0) / 100;
-  const contribDeployPct = ((document.getElementById('select-9sig-deploy') || {}).checked) ? 0.5 : 0;
-  const targetFromPrevTarget = !!((document.getElementById('select-9sig-target-compound') || {}).checked);
+  const contribDeployPct = (+((document.getElementById('select-9sig-deploy') || {}).value) || 0) / 100;
+  const targetFromPrevTarget = ((document.getElementById('select-9sig-target-compound') || {}).value) === 'target';
   const nineSigCashRate = (+((document.getElementById('select-9sig-cashrate') || {}).value) || 0) / 100;
   const smaCashRate     = (+((document.getElementById('select-sma-cashrate')  || {}).value) || 0) / 100;
   const buyThrottlePct  = (+((document.getElementById('select-9sig-buypower') || {}).value) || 90);
   const parkAsset = ((document.getElementById('select-9sig-park-asset') || {}).value) || 'cash';
+  const spikeResetPct = ((document.getElementById('select-9sig-spike-target') || {}).value) || 'auto';
+  const nineSigTradeCostPct = (+((document.getElementById('select-9sig-cost') || {}).value) || 0);
   return {
     sigUlCol: ulSel('select-9sig-underlying'),
     smaUlCol: ulSel('select-sma-underlying'),
@@ -1350,6 +1352,8 @@ function _underlyingAndGrowth() {
     targetFromPrevTarget,
     buyThrottlePct,
     parkAsset,
+    spikeResetPct,
+    nineSigTradeCostPct,
     nineSigCashRate,
     smaCashRate,
   };
@@ -1393,8 +1397,8 @@ function _runAnalyticsSim(initial, monthly, rate, entryIdx, exitIdx, annualRaise
   // `rate` here is the Invested Compounded baseline rate; 9sig and SMA each
   // use their own parked-cash rate (mirrors chart.js render()).
   const _ug = _underlyingAndGrowth();
-  const { sigUlCol, qGrowth, crashDropPct, crashLookbackMonths, spikeTriggerPct, rebalancePeriod, cashPct, contribDeployPct, targetFromPrevTarget, buyThrottlePct, parkAsset, nineSigCashRate, smaCashRate } = _ug;
-  opts = Object.assign({ underlyingCol: sigUlCol, qGrowth, crashDropPct, crashLookbackMonths, spikeTriggerPct, rebalancePeriod, cashPct, contribDeployPct, targetFromPrevTarget, buyThrottlePct, parkAsset, baselineRate: rate }, opts);
+  const { sigUlCol, qGrowth, crashDropPct, crashLookbackMonths, spikeTriggerPct, rebalancePeriod, cashPct, contribDeployPct, targetFromPrevTarget, buyThrottlePct, parkAsset, spikeResetPct, nineSigTradeCostPct, nineSigCashRate, smaCashRate } = _ug;
+  opts = Object.assign({ underlyingCol: sigUlCol, qGrowth, crashDropPct, crashLookbackMonths, spikeTriggerPct, rebalancePeriod, cashPct, contribDeployPct, targetFromPrevTarget, buyThrottlePct, parkAsset, spikeResetPct, tradeCostPct: nineSigTradeCostPct, baselineRate: rate }, opts);
   const sim = simulate(initial, monthly, nineSigCashRate, entryIdx, exitIdx, annualRaise, opts);
   const smaP = _smaParamsForAnalytics();
   if (smaP) {
@@ -1430,10 +1434,12 @@ function analyticsConfigPoints(cfg, initial, monthly, rate, annualRaise, entryId
       spikeTriggerPct: Number.isFinite(sp) ? sp : 100,
       rebalancePeriod: get(p, 'select-9sig-period', 'quarterly') || 'quarterly',
       cashPct: (+get(p, 'select-9sig-cash', 40) || 0) / 100,
-      contribDeployPct: (get(p, 'select-9sig-deploy', '0') === '1') ? 0.5 : 0,
-      targetFromPrevTarget: get(p, 'select-9sig-target-compound', '0') === '1',
+      contribDeployPct: get(p, 'select-9sig-deploy', '0') === '1' ? 0.5 : (+get(p, 'select-9sig-deploy', '0') || 0) / 100,
+      targetFromPrevTarget: ['target', '1'].includes(get(p, 'select-9sig-target-compound', 'holding')),
       buyThrottlePct: +get(p, 'select-9sig-buypower', 90) || 90,
       parkAsset: get(p, 'select-9sig-park-asset', 'cash') || 'cash',
+      spikeResetPct: get(p, 'select-9sig-spike-target', 'auto') || 'auto',
+      tradeCostPct: +get(p, 'select-9sig-cost', 0) || 0,
     };
     const cashRate = (+get(p, 'select-9sig-cashrate', 4) || 0) / 100;
     const r = simulate(initial, monthly, cashRate, entryIdx, exitIdx, annualRaise, opts);
@@ -1628,7 +1634,7 @@ function getCellSim(startYear, period) {
 
   const smaP = _smaParamsForAnalytics();
   const _ug = _underlyingAndGrowth();
-  const key = JSON.stringify({ initial, monthly, rate, annualRaise, sma: smaP, ul: _ug.sigUlCol, qg: _ug.qGrowth, cd: _ug.crashDropPct, cw: _ug.crashLookbackMonths, sp: _ug.spikeTriggerPct, np: _ug.rebalancePeriod, ch: _ug.cashPct, dp: _ug.contribDeployPct, tc: _ug.targetFromPrevTarget, ncr: _ug.nineSigCashRate, scr: _ug.smaCashRate, nbp: _ug.buyThrottlePct, pa: _ug.parkAsset });
+  const key = JSON.stringify({ initial, monthly, rate, annualRaise, sma: smaP, ul: _ug.sigUlCol, qg: _ug.qGrowth, cd: _ug.crashDropPct, cw: _ug.crashLookbackMonths, sp: _ug.spikeTriggerPct, np: _ug.rebalancePeriod, ch: _ug.cashPct, dp: _ug.contribDeployPct, tc: _ug.targetFromPrevTarget, ncr: _ug.nineSigCashRate, scr: _ug.smaCashRate, nbp: _ug.buyThrottlePct, pa: _ug.parkAsset, srp: _ug.spikeResetPct, ntc: _ug.nineSigTradeCostPct });
   if (_cellSimsKey !== key) {
     _cellSims    = new Map();
     _cellSimsKey = key;
@@ -1664,7 +1670,7 @@ function getYearStartSim(startYear) {
 
   const smaP = _smaParamsForAnalytics();
   const _ug = _underlyingAndGrowth();
-  const key = JSON.stringify({ initial, monthly, rate, annualRaise, sma: smaP, ul: _ug.sigUlCol, qg: _ug.qGrowth, cd: _ug.crashDropPct, cw: _ug.crashLookbackMonths, sp: _ug.spikeTriggerPct, np: _ug.rebalancePeriod, ch: _ug.cashPct, dp: _ug.contribDeployPct, tc: _ug.targetFromPrevTarget, ncr: _ug.nineSigCashRate, scr: _ug.smaCashRate, nbp: _ug.buyThrottlePct, pa: _ug.parkAsset });
+  const key = JSON.stringify({ initial, monthly, rate, annualRaise, sma: smaP, ul: _ug.sigUlCol, qg: _ug.qGrowth, cd: _ug.crashDropPct, cw: _ug.crashLookbackMonths, sp: _ug.spikeTriggerPct, np: _ug.rebalancePeriod, ch: _ug.cashPct, dp: _ug.contribDeployPct, tc: _ug.targetFromPrevTarget, ncr: _ug.nineSigCashRate, scr: _ug.smaCashRate, nbp: _ug.buyThrottlePct, pa: _ug.parkAsset, srp: _ug.spikeResetPct, ntc: _ug.nineSigTradeCostPct });
   if (_perYearSimsKey !== key) {
     _perYearSims    = new Map();
     _perYearSimsKey = key;
@@ -1933,7 +1939,7 @@ function getSpiralSim(initial, monthly, rate, annualRaise, opts) {
     cw: _ug.crashLookbackMonths,
     sp: _ug.spikeTriggerPct,
     np: _ug.rebalancePeriod,
-    ch: _ug.cashPct, dp: _ug.contribDeployPct, ncr: _ug.nineSigCashRate, scr: _ug.smaCashRate, nbp: _ug.buyThrottlePct, pa: _ug.parkAsset,
+    ch: _ug.cashPct, dp: _ug.contribDeployPct, ncr: _ug.nineSigCashRate, scr: _ug.smaCashRate, nbp: _ug.buyThrottlePct, pa: _ug.parkAsset, srp: _ug.spikeResetPct, ntc: _ug.nineSigTradeCostPct,
   });
   if (_spiralSimKey === key && _spiralSim) return _spiralSim;
   _spiralSim    = _runAnalyticsSim(initial, monthly, rate, 0, quarterlyData.length - 1, annualRaise, opts);

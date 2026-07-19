@@ -31,7 +31,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=107">
+<link rel="stylesheet" href="styles.css?v=115">
 </head>
 <body>
 
@@ -221,6 +221,7 @@
 
 <div id="9sig-controls-host" hidden>
   <div class="control-group" id="9sig-controls">
+    <a class="sma-explorer-link" href="experiments/9sig-overfit-explorer.html" target="_blank" rel="noopener">🔬 Overfit explorer — best-fit 9sig parameters across 1953 / 1990 / 2010 windows ↗</a>
     <div class="adaptive-line">
       Divide entry amount into
       <select class="inline-select" id="select-9sig-cash">
@@ -251,6 +252,8 @@
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
         <option value="spxl">SPXL</option>
+        <option value="qqq">QQQ</option>
+        <option value="spy">SPY</option>
       </select>.
     </div>
 
@@ -511,7 +514,23 @@
       <span class="info-icon" tabindex="0" data-tip="When the stock has tanked this far below its recent peak, skip the usual sell for up to two quarters in a row (standard 9sig is quarterly) so you don't dump at the bottom. The lookback window controls how far back 'recent peak' looks — standard 9sig uses 2 years.">ⓘ</span>
     </div>
     <div class="adaptive-line">
-      After a big rally, take profits back down to <span id="9sig-spike-target">60%</span> stock once gains hit
+      After a big rally, take profits back down to
+      <select class="inline-select" id="select-9sig-spike-target">
+        <option value="0">0%</option>
+        <option value="10">10%</option>
+        <option value="20">20%</option>
+        <option value="25">25%</option>
+        <option value="30">30%</option>
+        <option value="40">40%</option>
+        <option value="50">50%</option>
+        <option value="60" selected>60%</option>
+        <option value="70">70%</option>
+        <option value="75">75%</option>
+        <option value="80">80%</option>
+        <option value="90">90%</option>
+        <option value="100">100%</option>
+      </select>
+      stock once gains hit
       <select class="inline-select" id="select-9sig-spike">
         <option value="0">off</option>
         <option value="25">25%</option>
@@ -559,6 +578,26 @@
       of your cash.
       <span class="info-icon" tabindex="0" data-tip="When the signal says buy, this caps how much of your cash goes in, so you always keep some spare cash. Standard 9sig spends 90% (keeps 10%). Set to 100% to spend all your cash on every buy.">ⓘ</span>
     </div>
+    <div class="adaptive-line">
+      Each rebalance trade costs
+      <select class="inline-select" id="select-9sig-cost">
+        <option value="0">0%</option>
+        <option value="0.01">0.01%</option>
+        <option value="0.02" selected>0.02%</option>
+        <option value="0.03">0.03%</option>
+        <option value="0.05">0.05%</option>
+        <option value="0.1">0.1%</option>
+        <option value="0.15">0.15%</option>
+        <option value="0.2">0.2%</option>
+        <option value="0.25">0.25%</option>
+        <option value="0.3">0.3%</option>
+        <option value="0.5">0.5%</option>
+        <option value="0.75">0.75%</option>
+        <option value="1">1%</option>
+      </select>
+      in fees and slippage.
+      <span class="info-icon" tabindex="0" data-tip="Trading cost charged on the dollars traded at each rebalance — sells, buys, spike resets, and any contribution deployed straight into stock. 0.02% is a realistic retail estimate; raise it to stress-test how much a wider spread eats returns.">ⓘ</span>
+    </div>
   </div>
 </div>
 
@@ -577,31 +616,60 @@
 
 <div id="what-if-controls-host" hidden>
   <div class="control-group" id="what-if-controls">
-    <label>What If You Deployed Cash Right Away?</label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0 8px;font-size:12px">
-      <input type="checkbox" id="select-9sig-deploy" style="cursor:pointer;accent-color:var(--accent)">
-      <span style="color:var(--text)">Deploy 50% of each contribution straight into stock</span>
-    </label>
+    <label>Deploy Contributions Right Away</label>
+    <div class="adaptive-line" style="margin:6px 0 4px">
+      Put <select class="inline-select" id="select-9sig-deploy">
+        <option value="0" selected>0%</option>
+        <option value="10">10%</option>
+        <option value="25">25%</option>
+        <option value="50">50%</option>
+        <option value="75">75%</option>
+        <option value="100">100%</option>
+      </select> of each contribution straight into stock.
+    </div>
     <div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.4">
-      Only affects monthly contributions (not the initial amount). By default, 9sig holds each contribution as cash until the next rebalance. Tick this to instead put half of every contribution straight into the fund at that month's price.
+      Only affects monthly contributions (not the initial amount). At 0%, 9sig holds each contribution as cash until the next rebalance; a higher % puts that share straight into the fund at that month's price.
     </div>
 
-    <label style="margin-top:18px;display:block">What If You Rebalanced on a Different Day?</label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0 8px;font-size:12px">
-      <input type="checkbox" id="toggle-envelope" style="cursor:pointer;accent-color:var(--accent)">
-      <span style="color:var(--text)">Show alternate runs</span>
-    </label>
-    <div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.4" id="envelope-note">
-      Each ghost line is the same 9sig strategy with rebalance shifted to a different day — see how much the outcome depends on when you rebalance.
+    <label style="margin-top:18px;display:block">Rebalance Point</label>
+    <div class="adaptive-line" style="margin:6px 0 4px">
+      Rebalance <select class="inline-select" id="select-9sig-rebalance-point">
+        <option value="0" selected>0%</option>
+        <option value="5">5%</option>
+        <option value="10">10%</option>
+        <option value="15">15%</option>
+        <option value="20">20%</option>
+        <option value="25">25%</option>
+        <option value="30">30%</option>
+        <option value="35">35%</option>
+        <option value="40">40%</option>
+        <option value="45">45%</option>
+        <option value="50">50%</option>
+        <option value="55">55%</option>
+        <option value="60">60%</option>
+        <option value="65">65%</option>
+        <option value="70">70%</option>
+        <option value="75">75%</option>
+        <option value="80">80%</option>
+        <option value="85">85%</option>
+        <option value="90">90%</option>
+        <option value="95">95%</option>
+        <option value="100">100%</option>
+      </select> of the way through each period.
+    </div>
+    <div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.4">
+      Where within each rebalance period the check happens: 0% = near the start of the period, 100% = near the end. Test how sensitive the strategy is to the exact rebalance day.
     </div>
 
-    <label style="margin-top:18px;display:block">What If The Target Kept Compounding?</label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:6px 0 8px;font-size:12px">
-      <input type="checkbox" id="select-9sig-target-compound" style="cursor:pointer;accent-color:var(--accent)">
-      <span style="color:var(--text)">Grow target from prior target (instead of prior holding)</span>
-    </label>
+    <label style="margin-top:18px;display:block">Target Growth Base</label>
+    <div class="adaptive-line" style="margin:6px 0 4px">
+      Grow each period's target from the <select class="inline-select" id="select-9sig-target-compound">
+        <option value="holding" selected>prior holding</option>
+        <option value="target">prior target</option>
+      </select>.
+    </div>
     <div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.4">
-      Default: each period's target grows from the prior holding. Tick this to grow it from the prior target instead.<br><br>Example (9% growth): if last period's target was $10,000 but you only held $8,000, the next target is <b>$8,720</b> (8,000 &times; 1.09) by default, or <b>$10,900</b> (10,000 &times; 1.09) if ticked.
+      Example (9% growth): if last period's target was $10,000 but you only held $8,000, the next target is <b>$8,720</b> (8,000 &times; 1.09) from the prior holding, or <b>$10,900</b> (10,000 &times; 1.09) from the prior target.
     </div>
   </div>
 </div>
@@ -1198,18 +1266,18 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=107"></script>
-<script src="js/utils.js?v=107"></script>
-<script src="js/simulate.js?v=107"></script>
-<script src="js/metrics.js?v=107"></script>
-<script src="js/chart.js?v=107"></script>
-<script src="js/controls.js?v=107"></script>
-<script src="js/analytics.js?v=107"></script>
-<script src="js/preview-dropdown.js?v=107"></script>
-<script src="js/saved-configs.js?v=107"></script>
-<script src="js/strategy-library-code.js?v=107"></script>
-<script src="js/strategy-library.js?v=107"></script>
-<script src="js/init.js?v=107"></script>
+<script src="js/data.js?v=115"></script>
+<script src="js/utils.js?v=115"></script>
+<script src="js/simulate.js?v=115"></script>
+<script src="js/metrics.js?v=115"></script>
+<script src="js/chart.js?v=115"></script>
+<script src="js/controls.js?v=115"></script>
+<script src="js/analytics.js?v=115"></script>
+<script src="js/preview-dropdown.js?v=115"></script>
+<script src="js/saved-configs.js?v=115"></script>
+<script src="js/strategy-library-code.js?v=115"></script>
+<script src="js/strategy-library.js?v=115"></script>
+<script src="js/init.js?v=115"></script>
 
 </body>
 </html>

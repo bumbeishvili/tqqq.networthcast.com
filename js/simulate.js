@@ -502,6 +502,13 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   // reset rebalances back to the same stock weight the user started with.
   const cashPct       = opts.cashPct != null ? +opts.cashPct : 0.4;
   const stockPct      = 1 - cashPct;
+  // Where a spike reset lands you. 'auto' (default) tracks the starting stock
+  // weight — exactly the legacy behavior. An explicit percent decouples the
+  // reset target from the cash split so you can e.g. reset down to 60% even
+  // though you started at 80% stock.
+  const _srp = opts.spikeResetPct;
+  const spikeResetFrac = (_srp == null || _srp === 'auto' || _srp === '')
+    ? stockPct : (+_srp / 100);
   // Fraction of each monthly contribution to deploy immediately into the
   // underlying at the contribution-month's price (rest goes to cash and
   // earns interest until the next rebalance). Default 0 = canonical 9Sig
@@ -530,6 +537,10 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   // ratchets ahead during drawdowns and the strategy buys toward a higher
   // number). Exposed as a checkbox in the 9sig panel so users can compare both.
   const targetFromPrevTarget = !!opts.targetFromPrevTarget;
+  // Trading cost (fees + slippage) as a fraction of every buy/sell dollar volume.
+  // Applied on the initial deploy, every rebalance buy/sell, spike resets, and
+  // any contribution deployed straight into stock. 0 = frictionless.
+  const cost = Math.max(0, +opts.tradeCostPct || 0) / 100;
 
   // entryIdx / exitIdx are passed as indices into `quarterlyData` (slider
   // position, with the "enter at quarter start" shift already applied by the
@@ -596,7 +607,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       }
     }
   }
-  if (!_customYearly && period !== 'quarterly' && quarterlyData && qData !== quarterlyData && periodData) {
+  if (!_customYearly && quarterlyData && qData !== quarterlyData && ((period !== 'quarterly' && periodData) || opts.qData)) {
     const entryDate = quarterlyData[entryIdx] && quarterlyData[entryIdx][0];
     const exitDate  = quarterlyData[exitIdx]  && quarterlyData[exitIdx][0];
     if (entryDate && exitDate) {
@@ -626,14 +637,16 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
     const p0 = parkPriceAt(qSlice[0]);
     parkShares = p0 > 0 ? cash / p0 : 0;
   }
-  let tqqqShares = (initial * stockPct) / qSlice[0][ulCol];
+  const _initFee = cost > 0 ? initial * stockPct * cost : 0;
+  let tqqqShares = (initial * stockPct * (1 - cost)) / qSlice[0][ulCol];
   let signalLine = initial * stockPct; // target value starts at initial stock allocation
   // Each new target grows from the PREVIOUS REBALANCE's post-rebalance holding
   // (not from the prior target). If the strategy underperforms — a throttled
   // buy, a crash-zone HOLD, or a spike reset — the target naturally tracks the
   // lower holding instead of ratcheting away on its own formula.
-  let prevHolding = initial * stockPct; // = the post-rebalance tqqqVal at qi=0
+  let prevHolding = initial * stockPct * (1 - cost); // = the post-rebalance tqqqVal at qi=0
   let totalInvested = initial;
+  let totalFee = _initFee;
   let investedCompounded = initial;
   let currentMonthly = monthly;
   const startYear = parseInt(qSlice[0][0].substring(0, 4));
@@ -655,6 +668,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   for (let qi = 0; qi < qSlice.length; qi++) {
     const qDate  = qSlice[qi][0];
     const qPrice = qSlice[qi][ulCol];
+    let qFee = 0; // trading cost paid across this period's contributions + rebalance
 
     if (qi > 0) {
       // Annual raise: increase monthly contribution at each new year
@@ -682,7 +696,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
         const toStock = currentMonthly * contribDeployPct;
         const toPark  = currentMonthly - toStock;
         if (toStock > 0 && mPrice > 0) {
-          tqqqShares += toStock / mPrice;
+          tqqqShares += toStock * (1 - cost) / mPrice; qFee += toStock * cost;
         } else if (toStock > 0) {
           // No underlying price (data gap) — the would-be stock half waits as
           // park instead. (For cash park that's `cash`; for asset park that's
@@ -792,7 +806,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
           // SELL: TQQQ above signal, sell excess to cash (or park asset)
           const sharesToSell = diff / qPrice;
           tqqqShares -= sharesToSell;
-          moveIntoPark(diff);
+          moveIntoPark(diff * (1 - cost)); qFee += diff * cost;
           action = 'SELL ' + fmt(diff);
           crashNoSellCount = 0;
         } else if (diff > 0 && inCrashZone && crashNoSellCount < 2) {
@@ -803,7 +817,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
           // Crash zone but already skipped 2 consecutive quarters — sell anyway
           const sharesToSell = diff / qPrice;
           tqqqShares -= sharesToSell;
-          moveIntoPark(diff);
+          moveIntoPark(diff * (1 - cost)); qFee += diff * cost;
           action = 'SELL ' + fmt(diff) + ' (30d expired)';
           crashNoSellCount = 0;
         } else if (diff < 0 && cash > 0) {
@@ -812,9 +826,9 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
           const available = cash * buyThrottle;
           const needed = Math.min(-diff, available);
           if (needed > 0) {
-            const sharesToBuy = needed / qPrice;
+            const sharesToBuy = needed * (1 - cost) / qPrice;
             tqqqShares += sharesToBuy;
-            moveOutOfPark(needed);
+            moveOutOfPark(needed); qFee += needed * cost;
             action = needed < -diff ? 'BUY ' + fmt(needed) + ' (part)' : 'BUY ' + fmt(needed);
           } else {
             action = 'HOLD';
@@ -834,11 +848,11 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
         const postTqqqVal = tqqqShares * qPrice;
         const postTotal   = postTqqqVal + cash;
         const postAlloc   = postTotal > 0 ? postTqqqVal / postTotal : 0;
-        if (quarterlyTqqqGain >= spikeTrigger && postAlloc >= stockPct && postAlloc <= 1.0 && !inCrashZone) {
-          const targetTqqqVal = postTotal * stockPct;
+        if (quarterlyTqqqGain >= spikeTrigger && postAlloc >= spikeResetFrac && postAlloc <= 1.0 && !inCrashZone) {
+          const targetTqqqVal = postTotal * spikeResetFrac;
           const reduceBy = postTqqqVal - targetTqqqVal;
           tqqqShares = targetTqqqVal / qPrice;
-          cash       = postTotal - targetTqqqVal;
+          cash       = postTotal - targetTqqqVal - reduceBy * cost; qFee += reduceBy * cost;
           if (!isCashPark && parkPriceNow > 0) parkShares = cash / parkPriceNow;
           signalLine = targetTqqqVal;
           action = 'RESET ' + fmt(reduceBy) + ' (spike)';
@@ -848,14 +862,15 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       }
 
       const tqqqVal = tqqqShares * qPrice;
-      log.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, action, invested: totalInvested, investedCompounded, target: signalLine });
+      totalFee += qFee;
+      log.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, action, fee: qFee, invested: totalInvested, investedCompounded, target: signalLine });
       // Period-end snapshot (post-rebalance) — keeps the quarter series continuous.
       if (sampleQuarterly) samplePoints.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, target: signalLine, invested: totalInvested, investedCompounded });
       prevHolding = tqqqVal; // next period's target grows from THIS period's holding
     } else {
       // First quarter — just record starting state
       const tqqqVal = tqqqShares * qSlice[0][ulCol];
-      log.push({ date: qDate, price: qSlice[0][ulCol], tqqqVal, cash, total: tqqqVal + cash, action: 'START', invested: totalInvested, investedCompounded, target: signalLine });
+      log.push({ date: qDate, price: qSlice[0][ulCol], tqqqVal, cash, total: tqqqVal + cash, action: 'START', fee: _initFee, invested: totalInvested, investedCompounded, target: signalLine });
       if (sampleQuarterly) samplePoints.push({ date: qDate, price: qSlice[0][ulCol], tqqqVal, cash, total: tqqqVal + cash, target: signalLine, invested: totalInvested, investedCompounded });
       prevHolding = tqqqVal;
     }

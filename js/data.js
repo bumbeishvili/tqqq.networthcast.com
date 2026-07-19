@@ -204,20 +204,12 @@ let _envelopeCacheByPeriod = {};
 let _currentEnvelopePeriod = null;
 
 function ensureEnvelopeCacheForPeriod(period) {
-  period = period || 'quarterly';
-  if (_currentEnvelopePeriod === period && _envelopeCacheByPeriod[period]) {
-    return;
-  }
-  if (!_envelopeCacheByPeriod[period]) {
-    const shifts = buildEnvelopeShifts(period);
-    const cache  = shifts.map(s => getShiftedPeriodData(period, s));
-    _envelopeCacheByPeriod[period] = { shifts, cache };
-  }
-  const entry = _envelopeCacheByPeriod[period];
-  envelopeShiftDays     = entry.shifts;
-  envelopeShiftCount    = entry.shifts.length;
-  shiftedQuarterlyCache = entry.cache;
-  _currentEnvelopePeriod = period;
+  // The "alternate runs" envelope ghost-lines were removed — the rebalance point
+  // is now a real strategy parameter (select-9sig-rebalance-point) that shifts the
+  // schedule via buildEnvelopeQData(). Keeping this as a no-op (0 shifts) means
+  // every render site that loops over envelopeShiftCount draws nothing.
+  envelopeShiftDays  = [];
+  envelopeShiftCount = 0;
 }
 
 // One trading-quarter is roughly 63 trading days (5 days × 13 weeks, holidays

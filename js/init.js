@@ -19,13 +19,6 @@
   precomputeMonthlyByQuarter();
   precomputeSMASeries();
   recomputeEarliestQIdx();
-  // Build the quarterly envelope cache up front (default). Switching the
-  // rebalance period in the UI lazy-builds the cache for that period.
-  ensureEnvelopeCacheForPeriod('quarterly');
-  envelopeShiftCount = envelopeShiftDays.length;
-  shiftedQuarterlyCache = envelopeShiftDays.map(getShiftedQuarterly);
-  document.getElementById('envelope-note').textContent =
-    `Each ghost line is the same 9sig strategy with rebalance shifted by 1..${ENVELOPE_DAYS_PER_QUARTER} trading days within the quarter — pure rebalance-day sensitivity, same entry/exit dates.`;
   const maxQIdx = quarterlyData.length - 1;
   document.getElementById('slider-exit').value = maxQIdx;
   // Default the entry to Q1 2010 (the TQQQ era — real 3× funds launched then).
@@ -94,13 +87,15 @@
   if (params.get('nh') !== null) { document.getElementById('select-9sig-cash').value       = params.get('nh'); hasUrlParams = true; }
   if (params.get('nr') !== null) { document.getElementById('select-9sig-cashrate').value   = params.get('nr'); hasUrlParams = true; }
   if (params.get('nbp') !== null){ document.getElementById('select-9sig-buypower').value    = params.get('nbp'); hasUrlParams = true; }
-  if (params.get('nd') !== null) { document.getElementById('select-9sig-deploy').checked   = params.get('nd') === '1'; hasUrlParams = true; }
-  if (params.get('tc') !== null) { document.getElementById('select-9sig-target-compound').checked = params.get('tc') === '1'; hasUrlParams = true; }
+  if (params.get('nd') !== null) { const nd = params.get('nd'); document.getElementById('select-9sig-deploy').value = nd === '1' ? '50' : nd; hasUrlParams = true; }  // legacy '1' = 50%
+  if (params.get('tc') !== null) { const tc = params.get('tc'); document.getElementById('select-9sig-target-compound').value = (tc === '1' || tc === 'target') ? 'target' : 'holding'; hasUrlParams = true; }
   if (params.get('npa') !== null) { document.getElementById('select-9sig-park-asset').value = params.get('npa'); hasUrlParams = true; }
   // Toggles
   if (params.get('l')  !== null) { setLogScale(params.get('l') === '1'); hasUrlParams = true; }
   if (params.get('if') !== null) { const b = document.getElementById('chart-inflation-toggle'); if (b) b.setAttribute('aria-pressed', params.get('if') === '1' ? 'true' : 'false'); hasUrlParams = true; }
-  if (params.get('ev') !== null) { document.getElementById('toggle-envelope').checked    = params.get('ev') === '1'; hasUrlParams = true; }
+  if (params.get('rp') !== null) { const el = document.getElementById('select-9sig-rebalance-point'); if (el) el.value = params.get('rp'); hasUrlParams = true; }
+  if (params.get('srp') !== null) { const el = document.getElementById('select-9sig-spike-target'); if (el) el.value = params.get('srp'); hasUrlParams = true; }
+  if (params.get('ntc') !== null) { const el = document.getElementById('select-9sig-cost'); if (el) el.value = params.get('ntc'); hasUrlParams = true; }
   // Analytics modal pre-state (modal is opened after render() so the chart exists)
   if (params.get('as')) analyticsStrategy = params.get('as');
   if (params.get('ab')) analyticsBaseline = params.get('ab');
