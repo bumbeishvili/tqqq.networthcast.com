@@ -46,10 +46,13 @@ function fmtDDRange(peakDate, troughDate) {
 }
 function fmtLogDate(dateStr) {
   if (!dateStr || dateStr.length < 10) return dateStr || '';
-  // UTC-anchored to avoid DST quirks shifting the day.
+  // UTC-anchored to avoid DST quirks shifting the day. Show the logged trading
+  // day exactly as stored — the engine records each event on the actual trading
+  // day it executes (date: mDate, priced at that day's close), so no offset.
+  // (A previous +1-day shift here made Friday trades render as Saturday and
+  // pre-holiday trades render on the holiday — real trades, wrong labels.)
   const dt = new Date(dateStr + 'T00:00:00Z');
   if (Number.isNaN(dt.getTime())) return dateStr;
-  dt.setUTCDate(dt.getUTCDate() + 1);
   const d = dt.getUTCDate();
   const m = dt.getUTCMonth();
   const y = String(dt.getUTCFullYear()).slice(2);
