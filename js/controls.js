@@ -333,7 +333,7 @@ document.addEventListener('focusin',   positionInfoTip);
 // panel can't get uselessly narrow or eat the whole viewport.
 const PANEL_WIDTH_KEY = '9sig-panel-width';
 const PANEL_MIN_W = 280;
-const panelMaxW = () => Math.min(900, Math.round(window.innerWidth * 0.92));
+const panelMaxW = () => Math.round(window.innerWidth * 0.98);
 function applyPanelWidth(w) {
   const content = document.querySelector('.strategy-panel-content');
   if (!content) return;

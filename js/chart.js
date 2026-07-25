@@ -394,6 +394,9 @@ function buildSignalMetricsHtml() {
   const rsiCool  = +g('select-sma-rsi-cool') || 0;
   const bgAsset  = (g('select-sma-bg-asset') || 'qqq').toLowerCase();
   const bgGtfo   = +g('select-sma-bg-gtfo') || 0;
+  // The bubble brake has its OWN moving-average window; fall back to the main SMA
+  // window when unset (mirrors the engine's `bgWindow = +opts.bgWindow || smaWindow`).
+  const bgWin    = +g('select-sma-bg-window') || win;
   const entryBuf = +g('select-sma-entry-buf') || 0;
   const exitBuf  = +g('select-sma-exit-buf') || 0;
 
@@ -447,22 +450,71 @@ function buildSignalMetricsHtml() {
   cards.push(rsiCard('buy', coolWin, rsiCool, 'below',
     `Relative Strength Index over ${coolWin} days on ${AN} — a 0–100 momentum gauge.&#10;&#10;How it's calculated:&#10;1. Each day, take the close-to-close change; split into up moves and down moves.&#10;2. Keep a ${coolWin}-day average of each, Wilder-smoothed: newAvg = (prevAvg × ${coolWin - 1} + today) ÷ ${coolWin}.&#10;3. RS = avg gain ÷ avg loss.&#10;4. RSI = 100 − 100 ÷ (1 + RS).&#10;&#10;50 = balanced · above ~70 = overbought · below ~30 = oversold.&#10;&#10;Buy rule: wait until RSI cools below your level${rsiCool > 0 ? ` (${rsiCool})` : ''} before re-entering, so you don't buy an overheated top.`));
 
-  const bgArr = smaAtDailyByKey[bgAsset + '_' + win];
+  const bgArr = smaAtDailyByKey[bgAsset + '_' + bgWin];
   if (bgArr && bgArr[di] != null) {
     const bp = daily[di][bgAsset], bs = bgArr[di];
     const babove = (bp / bs - 1) * 100;
     const armed = bgGtfo > 0 && babove >= bgGtfo;
     const sub = armed ? red('⚠ armed — would sell to cash')
               : (bgGtfo > 0 ? `to cash at +${bgGtfo}%` : 'off');
-    cards.push(statCard(`${bgAsset.toUpperCase()} vs ${win}-day avg`, 'shield',
+    cards.push(statCard(`${bgAsset.toUpperCase()} vs ${bgWin}-day avg`, 'shield',
       `${babove >= 0 ? '+' : '−'}${Math.abs(babove).toFixed(2)}%`,
       armed ? 'negative' : (babove >= 0 ? 'positive' : 'negative'), sub,
-      `The bubble-insurance gauge: how far ${bgAsset.toUpperCase()} sits above its own ${win}-day average.&#10;&#10;${bgGtfo > 0 ? `When it reaches +${bgGtfo}%, the brake sells everything to cash — no matter what the main signal says.` : 'The brake is off (no cash trigger set).'}`));
+      `The bubble-insurance gauge: how far ${bgAsset.toUpperCase()} sits above its own ${bgWin}-day average.&#10;&#10;${bgGtfo > 0 ? `When it reaches +${bgGtfo}%, the brake sells everything to cash — no matter what the main signal says.` : 'The brake is off (no cash trigger set).'}`));
   }
+
+  // --- "Right now" decision -------------------------------------------------
+  // Fold every live signal into the single action a fresh lump sum would take
+  // today, and show what each metric is individually pushing toward. Mirrors the
+  // engine's evalSignal + bodyguard for an entry from flat.
+  const primary = (g('select-sma-underlying') || smaAsset).toLowerCase();
+  const backup  = (g('select-sma-out-asset') || 'cash').toLowerCase();
+  const easeIn  = +g('select-sma-dca-in') || 0;
+  const P = primary.toUpperCase();
+  const B = backup === 'cash' ? 'cash' : backup.toUpperCase();
+  const rk = (w) => (typeof rsiAtDailyByKey !== 'undefined' && rsiAtDailyByKey) ? rsiAtDailyByKey[smaAsset + '_' + w] : null;
+  const ohA = rk(ohWin), clA = rk(coolWin);
+  const ohV = ohA && ohA[di] != null ? ohA[di] : null;
+  const clV = clA && clA[di] != null ? clA[di] : null;
+  const bgPct = (bgArr && bgArr[di] != null) ? (daily[di][bgAsset] / bgArr[di] - 1) * 100 : null;
+  const pctStr = (v) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(2)}%`;
+
+  const trendIn = pct > entryBuf;
+  const hot     = rsiOh > 0 && ohV != null && ohV >= rsiOh;
+  const blocked = rsiCool > 0 && clV != null && clV >= rsiCool;
+  const armed   = bgGtfo > 0 && bgPct != null && bgPct >= bgGtfo;
+
+  const rV = (v, d = 1) => v == null ? '—' : v.toFixed(d);
+  const reasons = [];
+  reasons.push({ lean: trendIn ? 'buy' : 'out', name: 'Trend',
+    val: `${AN} ${pctStr(pct)} vs ${win}d`, tag: trendIn ? `in · ${P}` : `out · ${B}` });
+  if (rsiOh > 0) reasons.push({ lean: hot ? 'out' : 'buy', name: 'Overheat',
+    val: `RSI(${ohWin}) ${rV(ohV)}`, tag: hot ? `sell ≥${rsiOh}` : 'clear' });
+  if (rsiCool > 0) reasons.push({ lean: blocked ? 'out' : 'buy', name: 'Re-entry',
+    val: `RSI(${coolWin}) ${rV(clV)}`, tag: blocked ? `wait <${rsiCool}` : 'open' });
+  if (bgGtfo > 0) reasons.push({ lean: armed ? 'cash' : 'buy', name: 'Bubble',
+    val: `${bgAsset.toUpperCase()} ${bgPct == null ? '—' : pctStr(bgPct)}`, tag: armed ? `cash +${bgGtfo}%` : 'off' });
+
+  let action, cls, note;
+  if (armed) { action = 'Move to cash'; cls = 'cash'; note = 'the bubble brake overrides the trend'; }
+  else if (trendIn && !hot && !blocked) { action = `Buy ${P}`; cls = 'buy'; note = easeIn > 1 ? `eased in over ${easeIn} trading days` : 'all at once'; }
+  else { const inCash = B === 'cash'; action = inCash ? 'Stay in cash' : `Buy ${B}`; cls = 'hold'; note = inCash ? 'buy signal is off' : 'the backup fund — buy signal is off'; }
+
+  const decisionHtml = `
+    <div class="strategy-panel-section-label" style="margin-top:22px">Right now</div>
+    <div class="signal-decision">
+      <div class="sd-hero sd-${cls}">
+        <span class="sd-hero-lead">Lump sum today</span>
+        <span class="sd-hero-action">${action}</span>
+        ${note ? `<span class="sd-hero-note">${note}</span>` : ''}
+      </div>
+      <div class="sd-signals">${reasons.map(r => `<div class="sd-sig sd-lean-${r.lean}"><span class="sd-dot"></span><span class="sd-sig-name">${r.name}</span><span class="sd-sig-val">${r.val}</span><span class="sd-sig-tag">${r.tag}</span></div>`).join('')}</div>
+    </div>`;
 
   return `
     <div class="strategy-panel-section-label" style="margin-top:24px">Signal metrics <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">· as of ${fmtLogDate(dateStr)}</span></div>
-    <div class="strategy-stats">${cards.join('')}</div>`;
+    <div class="strategy-stats">${cards.join('')}</div>
+    ${decisionHtml}`;
 }
 
 // One smaLog row → { label, gain%, colour-class }. Shared by the transaction-log

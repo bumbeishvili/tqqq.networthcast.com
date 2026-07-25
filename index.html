@@ -31,7 +31,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=116">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
+<link rel="stylesheet" href="styles.css?v=126">
 </head>
 <body>
 
@@ -1098,12 +1099,7 @@
     </div>
 
 
-    <div class="strategy-panel-section-label" style="margin-top:18px">Ease into your trades</div>
-    <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:10px">
-      By default every trade happens all at once. Here you can spread a <b>buy</b> across several months — a slice each month, so you're not betting everything on one day's price. Only buying is spread; every sell still happens the same day.
-      <br><br>
-      Example: set the backup ease to <b>5 days</b>, and the day the strategy goes out it sells your primary fund to cash right away, then buys into the backup fund a slice each trading day for the next five days. Pick <b>2 months</b> and it spreads that buy across roughly two months instead. If the buy signal comes back before it finishes, it stops and rotates into the primary fund.
-    </div>
+    <div class="strategy-panel-section-label" style="margin-top:18px">Ease into your trades <span class="info-icon" tabindex="0" data-tip="By default every trade happens all at once. Here you can spread a buy across several months — a slice each month, so you're not betting everything on one day's price. Only buying is spread; every sell still happens the same day.&#10;&#10;Example: set the backup ease to 5 days — the day the strategy goes out it sells your primary fund to cash right away, then buys into the backup fund a slice each trading day for the next five days. Pick 2 months and it spreads that buy across roughly two months instead. If the buy signal comes back before it finishes, it stops and rotates into the primary fund.">ⓘ</span></div>
     <div class="adaptive-line">
       When you buy, ease into the primary fund over
       <select class="inline-select" id="select-sma-dca-in">
@@ -1183,13 +1179,10 @@
         <option value="1">1%</option>
       </select>
       in fees and slippage.
-      <span class="info-icon" tabindex="0" data-tip="What each trade costs you — broker fees plus slippage (the gap between the price you expect and the price you actually get).&#10;&#10;Charged on every buy AND every sell, so switching funds pays it twice.&#10;&#10;Example: 0.1% turns a $10,000 buy into $9,990 of fund. A strategy that trades often (like this one) feels this a lot — crank it up to stress-test whether the edge survives real-world friction.">ⓘ</span>
+      <span class="info-icon" tabindex="0" data-tip="What each trade costs you — broker fees plus slippage (the gap between the price you expect and the price you actually get).&#10;&#10;Charged on every buy AND every sell, so switching funds pays it twice.&#10;&#10;Example: 0.1% turns a $10,000 buy into $9,990 of fund. A strategy that trades often pays it many times, so raising it shows how much real-world friction eats into the result.">ⓘ</span>
     </div>
 
-    <div class="strategy-panel-section-label" style="margin-top:18px">Bubble insurance</div>
-    <div style="font-size:11px;color:var(--text-muted);line-height:1.5;margin-bottom:10px">
-      A safety brake for bubbles. When the market has run far above its average line (think 1999 or late 2021), holding a 3× fund is extra risky — so this rule sells everything to cash early, no matter what the main buy/sell signal says. It measures how far the ticker you pick below sits above its own moving average, and it's separate from "What to hold when you sell" above (that only decides where normal trend exits go).
-    </div>
+    <div class="strategy-panel-section-label" style="margin-top:18px">Bubble insurance <span class="info-icon" tabindex="0" data-tip="A safety brake for bubbles. When the market has run far above its average line (think 1999 or late 2021), holding a 3× fund is extra risky — so this rule sells everything to cash early, no matter what the main buy/sell signal says. It measures how far the ticker you pick sits above its own moving average, and it's separate from &quot;What to hold when you sell&quot; above (that only decides where normal trend exits go).">ⓘ</span></div>
     <div class="adaptive-line">
       Sell everything to cash when
       <select class="inline-select" id="select-sma-bg-asset">
@@ -1266,18 +1259,18 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=116"></script>
-<script src="js/utils.js?v=116"></script>
-<script src="js/simulate.js?v=116"></script>
-<script src="js/metrics.js?v=116"></script>
-<script src="js/chart.js?v=116"></script>
-<script src="js/controls.js?v=116"></script>
-<script src="js/analytics.js?v=116"></script>
-<script src="js/preview-dropdown.js?v=116"></script>
-<script src="js/saved-configs.js?v=116"></script>
-<script src="js/strategy-library-code.js?v=116"></script>
-<script src="js/strategy-library.js?v=116"></script>
-<script src="js/init.js?v=116"></script>
+<script src="js/data.js?v=126"></script>
+<script src="js/utils.js?v=126"></script>
+<script src="js/simulate.js?v=126"></script>
+<script src="js/metrics.js?v=126"></script>
+<script src="js/chart.js?v=126"></script>
+<script src="js/controls.js?v=126"></script>
+<script src="js/analytics.js?v=126"></script>
+<script src="js/preview-dropdown.js?v=126"></script>
+<script src="js/saved-configs.js?v=126"></script>
+<script src="js/strategy-library-code.js?v=126"></script>
+<script src="js/strategy-library.js?v=126"></script>
+<script src="js/init.js?v=126"></script>
 
 </body>
 </html>

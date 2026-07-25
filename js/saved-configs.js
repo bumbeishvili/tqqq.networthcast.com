@@ -1255,7 +1255,13 @@ function renderCustomBuilder() {
         <button type="button" class="custom-copy-btn" data-builder-copy>Copy prompt for ChatGPT / Claude</button>
         <div class="builder-step-label">Paste the reply here</div>
         ${(err && cfg.code) ? `<div class="custom-error"><b>Couldn't run it:</b> ${_escHtml(err)}</div>` : ''}
-        <textarea id="builder-code" class="builder-textarea code" spellcheck="false" placeholder="Paste the strategy code here…">${_escHtml(cfg.code || '')}</textarea>
+        <div class="code-editor">
+          <div class="code-editor-gutter" aria-hidden="true"></div>
+          <div class="code-editor-scroll">
+            <pre class="code-editor-hl" aria-hidden="true"><code></code></pre>
+            <textarea id="builder-code" class="code-editor-input" spellcheck="false" autocapitalize="off" autocorrect="off" placeholder="Paste the strategy code here…">${_escHtml(cfg.code || '')}</textarea>
+          </div>
+        </div>
         <div class="builder-actions">
           <button type="button" class="sc-modal-btn" data-builder-back>← Back</button>
           <button type="button" class="sc-modal-btn primary" data-builder-apply>Apply &amp; show</button>
@@ -1263,8 +1269,75 @@ function renderCustomBuilder() {
       </div>`;
   }
   modal.innerHTML = inner;
+  const codeTa = modal.querySelector('#builder-code');
+  if (codeTa) initCodeEditor(codeTa);
   const focusEl = modal.querySelector('textarea');
   if (focusEl) focusEl.focus();
+}
+
+// --- Custom-strategy code editor: syntax highlighting + auto-format ----------
+// Lightweight JS tokenizer. Output is HTML-escaped; it only drives colors, so a
+// mis-tokenized edge case (e.g. a regex literal) is cosmetic and never touches
+// the textarea's actual value.
+const _CODE_KW = new Set(('const let var function return if else for while do switch case break continue ' +
+  'new typeof instanceof in of delete void this null true false undefined class extends super import ' +
+  'export default try catch finally throw async await yield').split(' '));
+function _highlightJS(src) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  let out = '', i = 0; const n = src.length;
+  const push = (cls, txt) => { out += cls ? `<span class="tk-${cls}">${esc(txt)}</span>` : esc(txt); };
+  while (i < n) {
+    const c = src[i];
+    if (c === '/' && src[i + 1] === '/') { let j = src.indexOf('\n', i); if (j < 0) j = n; push('cmt', src.slice(i, j)); i = j; continue; }
+    if (c === '/' && src[i + 1] === '*') { let j = src.indexOf('*/', i + 2); j = j < 0 ? n : j + 2; push('cmt', src.slice(i, j)); i = j; continue; }
+    if (c === '"' || c === "'" || c === '`') { let j = i + 1; while (j < n) { if (src[j] === '\\') { j += 2; continue; } if (src[j] === c) break; j++; } j = Math.min(j + 1, n); push('str', src.slice(i, j)); i = j; continue; }
+    if ((c >= '0' && c <= '9') || (c === '.' && src[i + 1] >= '0' && src[i + 1] <= '9')) { let j = i + 1; while (j < n && /[0-9a-fA-FxXeE._+-]/.test(src[j])) j++; push('num', src.slice(i, j)); i = j; continue; }
+    if (/[A-Za-z_$]/.test(c)) { let j = i + 1; while (j < n && /[A-Za-z0-9_$]/.test(src[j])) j++; const w = src.slice(i, j); let k = j; while (k < n && (src[k] === ' ' || src[k] === '\t')) k++; const cls = _CODE_KW.has(w) ? 'kw' : (src[k] === '(' ? 'fn' : (/[A-Z]/.test(w[0]) ? 'cls' : null)); push(cls, w); i = j; continue; }
+    if (/[{}()\[\].,;]/.test(c)) { push('pn', c); i++; continue; }
+    if (/[+\-*/%=<>!&|^~?:]/.test(c)) { push('op', c); i++; continue; }
+    push(null, c); i++;
+  }
+  return out;
+}
+
+// Turn <textarea id="builder-code"> into a highlighted, auto-formatting editor.
+// The textarea stays the real input (native paste/undo/caret/selection); a synced
+// <pre> behind it renders the colors. js-beautify (CDN, loaded deferred) reformats
+// on paste and on blur — whitespace only, so it can never change what the code does.
+function initCodeEditor(ta) {
+  const scroll = ta.parentElement;                 // .code-editor-scroll
+  const pre = scroll && scroll.querySelector('.code-editor-hl');
+  const code = pre && pre.querySelector('code');
+  if (!code) return;
+  const editor = scroll.parentElement;             // .code-editor
+  const gutter = editor && editor.querySelector('.code-editor-gutter');
+  let lastLines = -1;
+  const paintGutter = () => {
+    if (!gutter) return;
+    const lines = ta.value.split('\n').length;
+    if (lines === lastLines) return;           // only rebuild when the count changes
+    lastLines = lines;
+    let g = ''; for (let k = 1; k <= lines; k++) g += k + '\n';
+    gutter.textContent = g;
+  };
+  const paint = () => { code.innerHTML = _highlightJS(ta.value) + '\n'; paintGutter(); };
+  const sync = () => { pre.scrollTop = ta.scrollTop; pre.scrollLeft = ta.scrollLeft; if (gutter) gutter.scrollTop = ta.scrollTop; };
+  const format = () => {
+    const v = ta.value.trim();
+    if (v && typeof js_beautify === 'function') {
+      try {
+        const f = js_beautify(v, { indent_size: 2, brace_style: 'collapse,preserve-inline', space_in_empty_paren: true, end_with_newline: false });
+        if (f && f !== ta.value) ta.value = f;
+      } catch (e) { /* unparseable draft — leave it exactly as typed */ }
+    }
+    paint(); sync();
+  };
+  ta.addEventListener('input', paint);
+  ta.addEventListener('scroll', sync);
+  ta.addEventListener('paste', () => setTimeout(format, 0));
+  ta.addEventListener('blur', format);
+  if (ta.value.trim()) format(); else paint();
+  sync();
 }
 
 // Merge saved strategies carried in a share link. Custom code is safe to run

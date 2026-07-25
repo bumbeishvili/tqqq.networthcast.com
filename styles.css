@@ -281,9 +281,19 @@
 
   .adaptive-line {
     font-size: 12px;
-    line-height: 1.9;
+    line-height: 1.8;
     color: var(--text-muted);
-    margin: 2px 0;
+    margin: 1px 0;
+  }
+  /* SMA controls: flow each rule line inline so they pack horizontally across the
+     (now wide) panel instead of stacking one per row. Section labels stay block,
+     so each section still starts on its own row. */
+  #sma-controls .adaptive-line {
+    display: inline-flex;
+    align-items: baseline;
+    white-space: nowrap;
+    margin: 0 20px 7px 0;
+    line-height: 1.6;
   }
   .adaptive-line strong {
     color: var(--accent2);
@@ -2116,6 +2126,103 @@
   }
   .builder-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 
+  /* Custom-strategy code editor: a highlighted <pre> sits behind a transparent
+     <textarea>. Both share identical text metrics + padding so the caret lands on
+     the colored text; the textarea scrolls and the <pre> is scroll-synced in JS. */
+  .code-editor {
+    position: relative;
+    display: flex;                /* gutter | code as separate columns — can't overlap */
+    min-height: 220px;
+    height: 300px;
+    resize: vertical;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #0b1120;
+  }
+  .code-editor:focus-within { border-color: var(--accent); }
+  /* line-number gutter: its own column, so code can never slide under the numbers */
+  .code-editor-gutter {
+    flex: 0 0 auto;
+    width: 44px;
+    margin: 0;
+    padding: 12px 8px 12px 0;
+    box-sizing: border-box;
+    font: 400 12px/1.5 'JetBrains Mono', ui-monospace, monospace;
+    text-align: right;
+    white-space: pre;
+    color: #313a4b;               /* faint — dimmer than comments, blends into the editor */
+    overflow: hidden;
+    pointer-events: none;
+    user-select: none;
+  }
+  .code-editor-scroll {
+    position: relative;
+    flex: 1 1 auto;
+    min-width: 0;                 /* let it shrink so the code scrolls horizontally in-place */
+    overflow: hidden;
+  }
+  .code-editor-hl,
+  .code-editor-input {
+    position: absolute;
+    inset: 0;
+    margin: 0;
+    box-sizing: border-box;
+    padding: 12px 14px;
+    border: 0;
+    font: 400 12px/1.5 'JetBrains Mono', ui-monospace, monospace;
+    tab-size: 2;
+    white-space: pre;
+    word-wrap: normal;
+    overflow-wrap: normal;
+  }
+  .code-editor-hl {
+    z-index: 0;
+    overflow: hidden;
+    pointer-events: none;
+    color: #cbd5e1;
+    background: transparent;
+  }
+  .code-editor-hl code { font: inherit; color: inherit; }
+  .code-editor-input {
+    z-index: 1;
+    overflow: auto;
+    resize: none;
+    outline: none;
+    color: transparent;
+    background: transparent;
+    caret-color: #e2e8f0;
+  }
+  .code-editor-input::placeholder { color: var(--text-muted); }
+  /* token colors */
+  .tk-kw  { color: #c792ea; }
+  .tk-str { color: #b7e07a; }
+  .tk-num { color: #f7c948; }
+  .tk-cmt { color: #5c6b82; font-style: italic; }
+  .tk-fn  { color: #56b6ff; }
+  .tk-cls { color: #7dd3fc; }
+  .tk-op,
+  .tk-pn  { color: #8b98ac; }
+
+  /* Themed scrollbars — code editor + the modal itself (replaces the OS default). */
+  .code-editor-input,
+  .builder-modal { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.55) transparent; }
+  .code-editor-input::-webkit-scrollbar,
+  .builder-modal::-webkit-scrollbar { width: 11px; height: 11px; }
+  .code-editor-input::-webkit-scrollbar-track,
+  .builder-modal::-webkit-scrollbar-track { background: transparent; }
+  .code-editor-input::-webkit-scrollbar-thumb,
+  .builder-modal::-webkit-scrollbar-thumb {
+    background: rgba(100, 116, 139, 0.5);
+    border-radius: 7px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  .code-editor-input::-webkit-scrollbar-thumb:hover,
+  .builder-modal::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.7); background-clip: padding-box; }
+  .code-editor-input::-webkit-scrollbar-corner,
+  .builder-modal::-webkit-scrollbar-corner { background: transparent; }
+
   /* Custom-strategy sidebar (result view) */
   .custom-edit-btn {
     width: 100%;
@@ -2646,6 +2753,41 @@
     gap: 8px;
     margin: 12px 0 20px;
   }
+
+  /* "Right now" decision — a hero action bar (what a lump sum does today) over
+     the individual signals that drove it, each with a colored dot + pill tag. */
+  .signal-decision { margin: 0 0 20px; }
+  .sd-hero {
+    display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px;
+    padding: 12px 15px; border-radius: 10px; margin-bottom: 10px;
+    border: 1px solid var(--border); background: var(--surface2);
+  }
+  .sd-hero-lead { font-size: 12px; color: var(--text-muted); }
+  .sd-hero-action { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+  .sd-hero-note { flex-basis: 100%; font-size: 11px; color: var(--text-muted); }
+  .sd-hero.sd-buy  { border-color: rgba(52, 211, 153, 0.5);  background: rgba(52, 211, 153, 0.10); }
+  .sd-hero.sd-buy  .sd-hero-action { color: var(--green); }
+  .sd-hero.sd-hold { border-color: rgba(245, 181, 68, 0.45); background: rgba(245, 181, 68, 0.09); }
+  .sd-hero.sd-hold .sd-hero-action { color: #f5b544; }
+  .sd-hero.sd-cash { border-color: rgba(248, 113, 113, 0.5);  background: rgba(248, 113, 113, 0.10); }
+  .sd-hero.sd-cash .sd-hero-action { color: var(--red); }
+
+  .sd-signals { display: flex; flex-direction: column; }
+  .sd-sig {
+    display: grid; grid-template-columns: 8px auto 1fr auto; align-items: center; gap: 9px;
+    padding: 7px 5px; font-size: 11.5px; border-top: 1px solid var(--border);
+  }
+  .sd-sig:first-child { border-top: 0; }
+  .sd-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
+  .sd-sig-name { color: var(--text); font-weight: 600; }
+  .sd-sig-val { color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .sd-sig-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.2px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .sd-lean-buy  .sd-dot { background: var(--green); }
+  .sd-lean-buy  .sd-sig-tag { color: var(--green); background: rgba(52, 211, 153, 0.14); }
+  .sd-lean-out  .sd-dot { background: #f5b544; }
+  .sd-lean-out  .sd-sig-tag { color: #f5b544; background: rgba(245, 181, 68, 0.15); }
+  .sd-lean-cash .sd-dot { background: var(--red); }
+  .sd-lean-cash .sd-sig-tag { color: var(--red); background: rgba(248, 113, 113, 0.14); }
   .strategy-stat {
     background: var(--surface2);
     border: 1px solid var(--border);
