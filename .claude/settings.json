@@ -1,17 +1,18 @@
 {
   "permissions": {
-    "defaultMode": "acceptEdits",
     "allow": [
       "Edit",
       "Write",
       "Read",
       "Bash(*)",
-      "WebFetch(*)"
+      "WebFetch(*)",
+      "Bash(node -e ' *)"
     ],
     "deny": [
       "Bash(rm -rf:*)",
       "Bash(sudo:*)",
       "Bash(git commit:*)"
-    ]
+    ],
+    "defaultMode": "acceptEdits"
   }
 }

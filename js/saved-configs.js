@@ -110,6 +110,17 @@ const CONFIG_SUB_DEFS = [
   { key: 'target',  label: 'Target',  src: 'target',  dash: [9, 4] },
   { key: 'cash',    label: 'Cash',    src: 'cash',    dash: [2, 4, 9, 4] },
 ];
+// Label a sub-series from the config's own chosen assets: "TQQQ holding",
+// "TQQQ target", and the park fund (e.g. "QQQ") — or "Cash" when the park is cash.
+function configSubLabel(def, cfg) {
+  const p = (cfg && cfg.params) || {};
+  const ul = String(p['select-9sig-underlying'] || 'tqqq').toUpperCase();
+  const park = String(p['select-9sig-park-asset'] || 'cash').toLowerCase();
+  if (def.key === 'holding') return ul + ' holding';
+  if (def.key === 'target')  return ul + ' target';
+  if (def.key === 'cash')    return park === 'cash' ? 'Cash' : park.toUpperCase();
+  return def.label;
+}
 // Sub-series chips for a saved 9sig (toggle cfg.subShown[key], persisted).
 function buildConfigSubChipsHtml(cfg) {
   const sv = cfg.subShown || {};
@@ -120,7 +131,7 @@ function buildConfigSubChipsHtml(cfg) {
     return `<div class="legend-chip cfg-sub-chip${on ? '' : ' legend-hidden'}" data-config-id="${cfg.id}" data-config-sub="${def.key}" role="button" tabindex="0" title="Show / hide on chart">
       <svg class="legend-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${on ? eyeOpen : eyeOff}</svg>
       <span class="legend-dot" style="background:${cfg.color}"></span>
-      <span class="legend-name">${def.label}</span>
+      <span class="legend-name">${configSubLabel(def, cfg)}</span>
     </div>`;
   }).join('');
 }
@@ -1000,7 +1011,7 @@ function appendConfigDatasets(chart, ctx) {
       for (const def of CONFIG_SUB_DEFS) {
         if (!cfg.subShown[def.key]) continue;
         chart.data.datasets.push({
-          label: cfg.name + ' ' + def.label,
+          label: cfg.name + ' · ' + configSubLabel(def, cfg),
           data: resampleByDate(s.subPoints[def.key], ctx.labels),
           borderColor: cfg.color, borderDash: def.dash, borderWidth: 1.5,
           backgroundColor: 'transparent', fill: false, tension: def.key === 'target' ? 0 : 0.3,

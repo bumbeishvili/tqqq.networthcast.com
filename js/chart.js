@@ -208,6 +208,18 @@ const LEGEND_ORDER = [
 // single B&H entry, with the underlying picked via the sidebar selector.
 // When a strategy chip's "more" is clicked, its panel can show nested
 // chips for related sub-series. Currently only 9sig has any.
+// 9sig sub-series names follow the chosen assets: "TQQQ holding", "TQQQ target",
+// and the park fund ("QQQ") or "Cash" when parking in cash.
+function nineSigSubLabels() {
+  const ul = String(((document.getElementById('select-9sig-underlying') || {}).value) || 'tqqq').toUpperCase();
+  const park = String(((document.getElementById('select-9sig-park-asset') || {}).value) || 'cash').toLowerCase();
+  return {
+    holding: ul + ' holding',
+    target: ul + ' target',
+    cash: park === 'cash' ? 'Cash' : park.toUpperCase()
+  };
+}
+
 const SUB_LEGEND = {
   0: [1, 5, 6], // 9sig → TQQQ Holding, TQQQ Target, 9sig Cash
 };
@@ -1737,11 +1749,12 @@ function render() {
     if (typeof removeConfigDatasets === 'function') removeConfigDatasets(chart);
     chart.data.labels = labels;
     // Strategy labels are static plain names (no parameter encoding).
+    const subLbl = nineSigSubLabels();
     chart.data.datasets[0].label = LBL_9SIG;
-    chart.data.datasets[1].label = '9sig Holding';
+    chart.data.datasets[1].label = subLbl.holding;
     chart.data.datasets[2].label = LBL_BH; // consolidated B&H chip
-    chart.data.datasets[5].label = '9sig Target';
-    chart.data.datasets[6].label = '9sig Cash';
+    chart.data.datasets[5].label = subLbl.target;
+    chart.data.datasets[6].label = subLbl.cash;
     chart.data.datasets[7].label = LBL_INV;
     chart.data.datasets[8].label = LBL_SMA;
     chart.data.datasets[0].data = totalD;
@@ -1812,7 +1825,8 @@ function render() {
   //  11  B&H SSO       purple     #c084fc
   //  12  B&H SPXL      rose       #f43f5e
   const lineColors = ['#22d3ee', '#38bdf8', '#f87171', '#4ade80', '#f472b6', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)', '#a3e635', '#06b6d4', '#c084fc', '#f43f5e'];
-  const lineNames  = [LBL_9SIG, '9sig Holding', LBL_BH, 'B&H QQQ', 'B&H SPY', '9sig Target', '9sig Cash', LBL_INV, LBL_SMA, 'B&H QLD', 'B&H SSO', 'B&H SPXL'];
+  const _sub = nineSigSubLabels();
+  const lineNames  = [LBL_9SIG, _sub.holding, LBL_BH, 'B&H QQQ', 'B&H SPY', _sub.target, _sub.cash, LBL_INV, LBL_SMA, 'B&H QLD', 'B&H SSO', 'B&H SPXL'];
   // Match the borderDash on the corresponding chart dataset; null = solid.
   //   2 B&H TQQQ   [6,3]       medium dash
   //   3 B&H QQQ    [8,4]       long dash
@@ -2151,7 +2165,7 @@ function render() {
           hidden: true
         },
         {
-          label: '9sig Holding',
+          label: nineSigSubLabels().holding,
           data: tqqqValD,
           borderColor: '#38bdf8',
           backgroundColor: 'transparent',
@@ -2204,7 +2218,7 @@ function render() {
           hidden: true
         },
         {
-          label: '9sig Target',
+          label: nineSigSubLabels().target,
           data: targetD,
           borderColor: '#fb923c',
           backgroundColor: 'transparent',
@@ -2217,7 +2231,7 @@ function render() {
           hidden: true
         },
         {
-          label: '9sig Cash',
+          label: nineSigSubLabels().cash,
           data: cashD,
           borderColor: '#fbbf24',
           backgroundColor: 'rgba(251,191,36,0.05)',

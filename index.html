@@ -32,7 +32,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=126">
+<link rel="stylesheet" href="styles.css?v=127">
 </head>
 <body>
 
@@ -246,7 +246,7 @@
         <option value="sso">SSO</option>
         <option value="spxl">SPXL</option>
       </select>
-      <span class="info-icon" tabindex="0" data-tip="By default the safety slice (your cash %) is held as actual cash, earning the rate below. Pick QQQ/SPY/etc. instead to hold that slice in that fund — new money and rebalances buy into it, and the cash interest stops applying. Picking a leveraged fund leverages both slices.">ⓘ</span>
+      <span class="info-icon" tabindex="0" data-tip="By default the safety slice (your cash %) is held as cash, earning the rate below. Pick QQQ/SPY/etc. instead to hold that slice in that fund — new money and rebalances buy into it, and the cash interest stops applying. Picking a leveraged fund leverages both slices.">ⓘ</span>
       and use remaining <span id="9sig-stock-pct">60%</span> to buy
       <select class="inline-select" id="select-9sig-underlying">
         <option value="tqqq" selected>TQQQ</option>
@@ -295,7 +295,7 @@
         <option value="20">20.0%</option>
       </select>
       a year.
-      <span class="info-icon" tabindex="0" data-tip="Annual interest the 9sig strategy's idle cash earns while it waits to be deployed at the next rebalance. Independent of the SMA and Invested Compounded rates.">ⓘ</span>
+      <span class="info-icon" tabindex="0" data-tip="Annual interest the 9sig strategy's idle cash earns between rebalances. Independent of the SMA and Invested Compounded rates.">ⓘ</span>
     </div>
 
     <div class="adaptive-line">
@@ -306,7 +306,7 @@
         <option value="quarterly" selected>quarterly</option>
         <option value="yearly">yearly</option>
       </select>
-      <span class="info-icon" tabindex="0" data-tip="How often you sit down and rebalance. The classical 9sig is quarterly with a 9% per-quarter target, so the growth rate next to this is read as 'per chosen period' — quarterly + 9% means the target grows 9% every quarter.">ⓘ</span>
+      <span class="info-icon" tabindex="0" data-tip="How often you rebalance. Classical 9sig is quarterly with a 9% per-quarter target, so the growth rate next to this is read as 'per chosen period' — quarterly + 9% means the target grows 9% every quarter.">ⓘ</span>
       and grow the target by
       <select class="inline-select" id="select-9sig-growth">
         <option value="0.5">0.5%</option>
@@ -512,7 +512,7 @@
         <option value="60">5 years</option>
       </select>
       high.
-      <span class="info-icon" tabindex="0" data-tip="When the stock has tanked this far below its recent peak, skip the usual sell for up to two quarters in a row (standard 9sig is quarterly) so you don't dump at the bottom. The lookback window controls how far back 'recent peak' looks — standard 9sig uses 2 years.">ⓘ</span>
+      <span class="info-icon" tabindex="0" data-tip="When the stock has fallen this far below its recent peak, skip the usual sell for up to two quarters in a row (standard 9sig is quarterly) so you don't dump at the bottom. The lookback window controls how far back 'recent peak' looks — standard 9sig uses 2 years.">ⓘ</span>
     </div>
     <div class="adaptive-line">
       After a big rally, take profits back down to
@@ -561,7 +561,7 @@
         <option value="500">500%</option>
       </select>
       in one period.
-      <span class="info-icon" tabindex="0" data-tip="If the stock rips this much in a single quarter (standard 9sig is quarterly), force a rebalance back to your starting stock weight so a runaway spike doesn't leave you too concentrated in the fund. Set to off to let winners keep running.">ⓘ</span>
+      <span class="info-icon" tabindex="0" data-tip="If the stock jumps this much in a single quarter (standard 9sig is quarterly), force a rebalance back to your starting stock weight so a runaway spike doesn't leave you too concentrated in the fund. Set to off to let a rally run.">ⓘ</span>
     </div>
     <div class="adaptive-line">
       A buy never spends more than
@@ -597,7 +597,7 @@
         <option value="1">1%</option>
       </select>
       in fees and slippage.
-      <span class="info-icon" tabindex="0" data-tip="Trading cost charged on the dollars traded at each rebalance — sells, buys, spike resets, and any contribution deployed straight into stock. 0.02% is a realistic retail estimate; raise it to stress-test how much a wider spread eats returns.">ⓘ</span>
+      <span class="info-icon" tabindex="0" data-tip="Trading cost charged on the dollars traded at each rebalance — sells, buys, spike resets, and any contribution deployed straight into stock. 0.02% is a realistic retail estimate; raise it to see how much a wider spread costs.">ⓘ</span>
     </div>
   </div>
 </div>
@@ -629,7 +629,7 @@
       </select> of each contribution straight into stock.
     </div>
     <div style="font-size:10px;color:var(--text-muted);margin-top:4px;line-height:1.4">
-      Only affects monthly contributions (not the initial amount). At 0%, 9sig holds each contribution as cash until the next rebalance; a higher % puts that share straight into the fund at that month's price.
+      Only affects monthly contributions (not the initial amount). At 0%, 9sig holds each contribution as cash until the next rebalance; a higher % buys that share of the fund at that month's price.
     </div>
 
     <label style="margin-top:18px;display:block">Rebalance Point</label>
@@ -1259,18 +1259,18 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=126"></script>
-<script src="js/utils.js?v=126"></script>
-<script src="js/simulate.js?v=126"></script>
-<script src="js/metrics.js?v=126"></script>
-<script src="js/chart.js?v=126"></script>
-<script src="js/controls.js?v=126"></script>
-<script src="js/analytics.js?v=126"></script>
-<script src="js/preview-dropdown.js?v=126"></script>
-<script src="js/saved-configs.js?v=126"></script>
-<script src="js/strategy-library-code.js?v=126"></script>
-<script src="js/strategy-library.js?v=126"></script>
-<script src="js/init.js?v=126"></script>
+<script src="js/data.js?v=127"></script>
+<script src="js/utils.js?v=127"></script>
+<script src="js/simulate.js?v=127"></script>
+<script src="js/metrics.js?v=127"></script>
+<script src="js/chart.js?v=127"></script>
+<script src="js/controls.js?v=127"></script>
+<script src="js/analytics.js?v=127"></script>
+<script src="js/preview-dropdown.js?v=127"></script>
+<script src="js/saved-configs.js?v=127"></script>
+<script src="js/strategy-library-code.js?v=127"></script>
+<script src="js/strategy-library.js?v=127"></script>
+<script src="js/init.js?v=127"></script>
 
 </body>
 </html>
