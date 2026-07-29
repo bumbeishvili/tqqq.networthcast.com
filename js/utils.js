@@ -179,3 +179,44 @@ function makeLetterBadge(letter, color) {
 const switchIcon9sig = makeLetterBadge('9', '#22d3ee');
 const switchIconTqqq = makeLetterBadge('T', '#f87171');
 
+
+// ---- share-link payload compression -----------------------------------
+// A shared custom strategy carries its entire source. Written the old way —
+// JSON, percent-encoded, then percent-encoded AGAIN by URLSearchParams — one
+// strategy came to 34,000 characters, and servers reject a URL long before
+// that ("URI too long"). Deflating the JSON and writing it in base64url gets
+// the same strategy to ~4,500 characters: base64url uses only [A-Za-z0-9-_],
+// so URLSearchParams leaves it untouched — no escaping tax on top.
+//
+// Both helpers return null when the browser has no CompressionStream (or the
+// payload is corrupt), so callers fall back to the plain `sc` param.
+function u8ToB64url(u8) {
+  let s = '';
+  for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlToU8(str) {
+  const b64 = String(str).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64 + '==='.slice((b64.length + 3) % 4));
+  const u8 = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+  return u8;
+}
+async function packSharePayload(str) {
+  if (typeof CompressionStream === 'undefined') return null;
+  try {
+    const stream = new Blob([new TextEncoder().encode(str)]).stream()
+      .pipeThrough(new CompressionStream('deflate-raw'));
+    const buf = await new Response(stream).arrayBuffer();
+    return u8ToB64url(new Uint8Array(buf));
+  } catch (e) { return null; }
+}
+async function unpackSharePayload(packed) {
+  if (typeof DecompressionStream === 'undefined') return null;
+  try {
+    const stream = new Blob([b64urlToU8(packed)]).stream()
+      .pipeThrough(new DecompressionStream('deflate-raw'));
+    const buf = await new Response(stream).arrayBuffer();
+    return new TextDecoder().decode(buf);
+  } catch (e) { return null; }
+}

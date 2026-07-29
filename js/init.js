@@ -158,9 +158,14 @@
   if (typeof window.refreshPreviewTriggers === 'function') window.refreshPreviewTriggers();
   // Saved strategies carried in a share link (`sc`) — merged in; custom ones
   // are flagged untrusted (their code won't run until the user clicks Run).
+  // `scz` is the compressed form (current links); `sc` is the older plain one.
+  const scz = params.get('scz');
   const sc = params.get('sc');
-  if (sc && typeof importSharedConfigs === 'function') {
-    try { importSharedConfigs(JSON.parse(decodeURIComponent(sc))); } catch (e) {}
+  if (typeof importSharedConfigs === 'function') {
+    let json = null;
+    if (scz && typeof unpackSharePayload === 'function') json = await unpackSharePayload(scz);
+    else if (sc) { try { json = decodeURIComponent(sc); } catch (e) { json = null; } }
+    if (json) { try { importSharedConfigs(JSON.parse(json)); } catch (e) {} }
   }
   render();
 

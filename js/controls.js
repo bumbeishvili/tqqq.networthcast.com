@@ -586,7 +586,7 @@ if (inflPill) inflPill.addEventListener('click', () => {
 // the exact same view. Includes sliders, strategy params, toggles, envelope
 // opacity, dataset visibility (per-line legend toggles), and the analytics
 // modal state (open + selected strategy + selected baseline).
-function shareConfig() {
+async function shareConfig() {
   const get = (id) => document.getElementById(id);
   const params = new URLSearchParams();
 
@@ -673,9 +673,10 @@ function shareConfig() {
   }
 
   // Saved strategies, including custom ones (code + description). SECURITY: shared
-  // custom code is never trusted on arrival — it's flagged `untrusted` and ALWAYS
-  // executed inside a locked-down Web Worker sandbox (no DOM, storage, cookies, or
-  // network), so running someone else's strategy can't harm the recipient.
+  // custom code is never trusted on arrival — it arrives `_transient` (nothing is
+  // written to the recipient's localStorage until they click Save) and, like all
+  // custom code, ALWAYS runs inside a locked-down Web Worker sandbox (no DOM,
+  // storage, cookies, or network), so running someone else's strategy is safe.
   if (typeof getSavedConfigs === 'function') {
     const cfgs = getSavedConfigs();
     if (cfgs && cfgs.length) {
@@ -684,7 +685,16 @@ function shareConfig() {
         if (c.type === 'custom') { o.code = c.code || ''; o.desc = c.desc || ''; }
         return o;
       });
-      try { params.set('sc', encodeURIComponent(JSON.stringify(lean))); } catch (e) {}
+      // `scz` is the deflated payload (see packSharePayload) — a custom
+      // strategy's source is long enough that the plain form blows the URL
+      // length limit. `sc` stays as the fallback for browsers without
+      // CompressionStream, and old links carrying it still load.
+      try {
+        const json = JSON.stringify(lean);
+        const packed = await packSharePayload(json);
+        if (packed) params.set('scz', packed);
+        else params.set('sc', encodeURIComponent(json));
+      } catch (e) {}
     }
   }
 
@@ -709,10 +719,18 @@ function shareConfig() {
 
   const url = window.location.origin + window.location.pathname + '?' + params.toString();
 
+  const toast = document.getElementById('share-toast');
+  // Servers and chat apps start rejecting URLs around 8k characters. The
+  // payload is compressed, so this only trips with a pile of long custom
+  // strategies — say so rather than handing over a link that 414s.
+  const tooLong = url.length > 8000;
+  if (toast) toast.textContent = tooLong
+    ? 'Link copied — but it is very long (' + Math.round(url.length / 1000) + 'k chars) and some apps may cut it off'
+    : 'Link copied to clipboard';
   navigator.clipboard.writeText(url).then(() => {
-    const toast = document.getElementById('share-toast');
+    if (!toast) return;
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), 2000);
+    setTimeout(() => toast.classList.remove('show'), tooLong ? 4000 : 2000);
   }).catch(() => {
     prompt('Copy this link:', url);
   });
