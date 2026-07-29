@@ -32,6 +32,72 @@ function toggleSmaLogEase(hide) {
   if (body) body.querySelectorAll('.quarter-table-wrap').forEach(w => w.classList.toggle('hide-dca', _smaLogHideEase));
 }
 
+// ── Custom-strategy action markers ────────────────────────────────────────
+// A custom strategy writes its own log, so the app can't know its internal
+// state names. The build prompt pins a small action vocabulary instead — "buy",
+// "sell", "switch", "rebalance", "ease-in", "contribution", "hold", "start",
+// "end" — and everything here keys off the LEADING word, so a row labelled
+// "buy — 3 of 5 slices" still reads as a buy. Only the four trade kinds below
+// get a chart symbol; money-in and snapshot rows would just be noise.
+const CUSTOM_EVENT_STYLE = {
+  buy:       { color: '#4ade80', shape: 'triUp',   label: 'Buy' },
+  sell:      { color: '#f87171', shape: 'triDown', label: 'Sell' },
+  switch:    { color: '#38bdf8', shape: 'diamond', label: 'Switch' },
+  rebalance: { color: '#fbbf24', shape: 'square',  label: 'Rebalance' },
+};
+// Classify a free-text action into one of the vocabulary kinds. Tolerant on
+// purpose: strategies come from an LLM, so near-misses ("exit", "rotate",
+// "deposit", "DCA slice") must still land in the right bucket.
+function customActionKind(action) {
+  const s = String(action == null ? '' : action).trim().toLowerCase();
+  if (!s) return 'hold';
+  if (/^(contrib|deposit|\+)/.test(s)) return 'contribution';
+  if (/^(ease|dca|slice|tranche)/.test(s)) return 'ease';
+  if (/^(start|init|open)/.test(s)) return 'start';
+  if (/^(end|final)/.test(s)) return 'end';
+  if (/^(switch|swap|rotate)/.test(s)) return 'switch';
+  if (/^(rebal|trim|adjust)/.test(s)) return 'rebalance';
+  if (/^(sell|exit|park)/.test(s)) return 'sell';
+  if (/^(buy|enter)/.test(s)) return 'buy';
+  if (s.includes('contribution')) return 'contribution';
+  if (s.includes('sell')) return 'sell';
+  if (s.includes('buy')) return 'buy';
+  return 'hold';
+}
+// Human label for a custom row's action: the strategy's own text when it wrote
+// more than the bare keyword, otherwise the kind's stock label.
+function customActionLabel(action) {
+  const raw = String(action == null ? '' : action).trim();
+  const st = CUSTOM_EVENT_STYLE[customActionKind(raw)];
+  if (!raw) return 'Hold';
+  if (/[\s—:\-]/.test(raw.slice(1)) && raw.length > (st ? st.label.length + 2 : 6)) {
+    return raw.charAt(0).toUpperCase() + raw.slice(1);
+  }
+  return st ? st.label : raw.charAt(0).toUpperCase() + raw.slice(1);
+}
+// Gain since the previous log row, with any contribution that landed on this
+// row removed — so it reads as the holding's own return, like the SMA log's (%).
+function customLogGain(log, i) {
+  const cur = log[i], prev = i > 0 ? log[i - 1] : null;
+  if (!cur || !prev) return null;
+  const pv = +prev.value, cv = +cur.value;
+  if (!(pv > 0) || !Number.isFinite(cv) || cur.date === prev.date) return null;
+  const contrib = Number.isFinite(+cur.contributed) ? +cur.contributed : 0;
+  return (cv - pv - contrib) / pv * 100;
+}
+// The log rows that earn a chart symbol, in log order.
+function customMarkerEvents(log) {
+  const out = [];
+  if (!log) return out;
+  for (let i = 0; i < log.length; i++) {
+    const r = log[i];
+    if (!r || r.date == null || !(+r.value > 0)) continue;
+    const st = CUSTOM_EVENT_STYLE[customActionKind(r.action)];
+    if (st) out.push({ i: i, row: r, st: st });
+  }
+  return out;
+}
+
 // --- Inflation adjustment ("real $" toggle) ----------------------------------
 // When on, every dollar line is expressed in constant start-of-view dollars:
 // each point is divided by (1 + rate)^(years since the first label), so the
@@ -74,7 +140,7 @@ function showSmaMarkerTooltip(m) {
   const lineTip = document.getElementById('custom-tooltip');
   if (lineTip) lineTip.style.display = 'none';
   const rect = chart.canvas.getBoundingClientRect();
-  tt.innerHTML = smaMarkerTooltipHtml(m);
+  tt.innerHTML = (m.kind === 'custom') ? customMarkerTooltipHtml(m) : smaMarkerTooltipHtml(m);
   tt.style.display = 'block';
   // Position above the marker, clamped to the viewport.
   const tw = tt.offsetWidth || 180, th = tt.offsetHeight || 80;
@@ -122,6 +188,43 @@ function drawSmaMarker(cx, x, y, style, hovered) {
   cx.strokeStyle = hovered ? '#fff' : 'rgba(10,14,23,0.85)';
   cx.fill();
   cx.stroke();
+}
+
+// Pixel x for an arbitrary date on the category axis: find the two labels that
+// bracket it and interpolate between their pixels, so an event lands on its
+// real date rather than snapping to the nearest label.
+function chartXForDate(c, date) {
+  const labs = c.data.labels, xs = c.scales.x;
+  let i = 0;
+  while (i + 1 < labs.length && labs[i + 1] <= date) i++;
+  if (i >= labs.length - 1) return xs.getPixelForValue(labs.length - 1);
+  const x0 = xs.getPixelForValue(i), x1 = xs.getPixelForValue(i + 1);
+  const t0 = Date.parse(labs[i]), t1 = Date.parse(labs[i + 1]), t = Date.parse(date);
+  const frac = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
+  return x0 + (x1 - x0) * Math.max(0, Math.min(1, frac));
+}
+// Markers cluster wherever trades bunch up (both legs of a switch on one day,
+// or several trades within a few days at nearly the same portfolio value), so
+// they'd stack. Keep x exact and fan the clashing ones vertically: search
+// 0, +step, −step, +2·step… for the nearest free slot. `placed` is the
+// already-drawn {x, y} list in ascending x.
+function spreadMarkerY(placed, x, baseY, area) {
+  const MIN = 6; // min center-to-center gap (px); markers are ~10px across
+  const clashes = (y) => {
+    for (let j = placed.length - 1; j >= 0; j--) {
+      if (placed[j].x < x - MIN) break; // x-sorted → nothing further left can clash
+      if (Math.hypot(placed[j].x - x, y - placed[j].y) < MIN) return true;
+    }
+    return false;
+  };
+  if (!clashes(baseY)) return baseY;
+  for (let k = 1; k <= 24; k++) {
+    const half = Math.ceil(k / 2) * MIN;
+    const cand = baseY + (k % 2 ? half : -half);
+    if (cand < area.top + 5 || cand > area.bottom - 5) continue; // stay on-plot
+    if (!clashes(cand)) return cand;
+  }
+  return baseY;
 }
 
 function smaMarkerLabel(ev, ulName) {
@@ -186,6 +289,59 @@ function smaMarkerTooltipHtml(m) {
       <div class="mt-row"><span class="mt-k">${mtIco(ICON.deposit)}Invested</span><b>${fmtFull(invested)}</b></div>
       <div class="mt-row"><span class="mt-k">${mtIco(ICON.trend)}Profit</span><b style="color:${pc}">${profit >= 0 ? '+' : '−'}${fmtFull(Math.abs(profit))}</b></div>
     </div>`;
+}
+
+// Same tooltip, for a custom strategy's action point. The row is whatever the
+// strategy logged, so every line is conditional: we show the standard keys it
+// filled in (holding, price, cash, portfolio, invested) and skip the rest.
+function customMarkerTooltipHtml(m) {
+  const r = m.row, st = m.st;
+  const log = (window._customLogs || {})[window._openCustomCfgId] || [];
+  const gain = customLogGain(log, m.i);
+  const labels = chart && chart.data && chart.data.labels;
+  const _f = inflFactor(r.date, labels && labels[0]);
+  const num = (v) => (Number.isFinite(+v) ? +v : null);
+  const total = num(r.value) != null ? Math.round(num(r.value) * _f) : null;
+  const invested = num(r.invested) != null ? Math.round(num(r.invested) * _f) : null;
+  const cash = num(r.cash) != null ? Math.round(num(r.cash) * _f) : null;
+  const price = num(r.price);
+  const held = (r.held != null && r.held !== '') ? String(r.held).toUpperCase() : null;
+  const date = (typeof fmtLogDate === 'function') ? fmtLogDate(r.date) : r.date;
+  const gainPill = gain != null
+    ? `<span class="mt-gain" style="color:${gain >= 0 ? 'var(--green)' : 'var(--red)'};background:${gain >= 0 ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)'}">${gain >= 0 ? '▲ ' : '▼ '}${Math.abs(gain).toFixed(1)}%</span>`
+    : '';
+  const ICON = {
+    box:     '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
+    tag:     '<path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/>',
+    dollar:  STAT_ICONS.dollar,
+    deposit: '<path d="M12 3v13"/><polyline points="7 11 12 16 17 11"/><line x1="4" y1="21" x2="20" y2="21"/>',
+  };
+  const rows = [];
+  if (held) rows.push(`<div class="mt-row"><span class="mt-k">${mtIco(ICON.box)}Holding</span><b>${held}</b></div>`);
+  if (price != null && price > 0) rows.push(`<div class="mt-row"><span class="mt-k">${mtIco(ICON.tag)}Price</span><b>${fmtLogPrice(price)}</b></div>`);
+  if (total != null) rows.push(`<div class="mt-row mt-strong"><span class="mt-k">${mtIco(ICON.dollar)}Portfolio</span><b>${fmtFull(total)}</b></div>`);
+  if (cash != null && cash > 0) rows.push(`<div class="mt-row"><span class="mt-k">${mtIco(ICON.dollar)}Cash</span><b>${fmtFull(cash)}</b></div>`);
+  if (invested != null) {
+    rows.push(`<div class="mt-row"><span class="mt-k">${mtIco(ICON.deposit)}Invested</span><b>${fmtFull(invested)}</b></div>`);
+    if (total != null) {
+      const profit = total - invested;
+      const pc = profit >= 0 ? 'var(--green)' : 'var(--red)';
+      const ico = profit >= 0 ? STAT_ICONS.trendUp : STAT_ICONS.trendDown;
+      rows.push(`<div class="mt-row"><span class="mt-k">${mtIco(ico)}Profit</span><b style="color:${pc}">${profit >= 0 ? '+' : '−'}${fmtFull(Math.abs(profit))}</b></div>`);
+    }
+  }
+  const note = (r.note != null && r.note !== '') ? `<div class="mt-note">${String(r.note).replace(/[<>&]/g, '')}</div>` : '';
+  return `
+    <div class="mt-head">
+      <span class="mt-shape">${markerShapeSvg(st.shape, st.color)}</span>
+      <div class="mt-htext">
+        <div class="mt-title" style="color:${st.color}">${customActionLabel(r.action)}</div>
+        <div class="mt-sub">#${m.i} · ${date}</div>
+      </div>
+      ${gainPill}
+    </div>
+    <div class="mt-rows">${rows.join('')}</div>
+    ${note}`;
 }
 
 // Build the compact legend chips that sit above the chart. Each chip
@@ -1059,9 +1215,10 @@ function applyPanelEmphasis(doUpdate) {
     // detailed quarter+transaction overlay drawn in the marker plugin — so hide
     // its coarse smooth Chart.js line (0 width). The overlay draws at 2× itself.
     // Applies whether the active line is the base SMA (idx 8) or a saved SMA
-    // config's own line — both open panel idx 8.
-    const hideCoarseSma = isActive && (typeof _currentPanelIdx !== 'undefined' && _currentPanelIdx === 8);
-    d.borderWidth = hideCoarseSma ? 0 : (isActive ? d._emphBaseW * 2 : d._emphBaseW);
+    // config's own line — both open panel idx 8. A custom strategy's panel does
+    // the same thing with its own log-detail overlay.
+    const hideCoarse = isActive && ((typeof _currentPanelIdx !== 'undefined' && _currentPanelIdx === 8) || !!window._openCustomCfgId);
+    d.borderWidth = hideCoarse ? 0 : (isActive ? d._emphBaseW * 2 : d._emphBaseW);
     if (d._emphBaseC) d.borderColor = isDim ? withAlpha(d._emphBaseC, 0.5) : d._emphBaseC;
     d._emphDimmed = isDim;
   });
@@ -2146,9 +2303,66 @@ function render() {
     }
   };
 
+  // The same treatment for a custom strategy while ITS panel is open: a
+  // transaction-detail overlay threaded through the logged rows, plus a symbol
+  // at every trade row. The two plugins never both draw — the SMA one needs
+  // panel idx 8, this one needs an open custom panel (which sets idx to null).
+  const customMarkerPlugin = {
+    id: 'customMarkers',
+    afterDatasetsDraw(c) {
+      const cfgId = window._openCustomCfgId;
+      if (!cfgId) return;
+      const TARGET = activePanelDatasetIdx();
+      if (TARGET < 0 || !c.isDatasetVisible || !c.isDatasetVisible(TARGET)) return;
+      const log = (window._customLogs || {})[cfgId] || [];
+      const labs = c.data.labels;
+      if (!log.length || !labs || !labs.length) return;
+      const xs = c.scales.x, ys = c.scales.y, area = c.chartArea, cx = c.ctx;
+      const ds = c.data.datasets[TARGET];
+      cx.save();
+
+      // Detail line — the Chart.js line only carries label-grain points, so it
+      // draws straight between them; this threads through every logged row so
+      // the real transaction-level kinks show. Its coarse line is hidden
+      // (width 0) while the panel is open, so draw at the same 2× emphasis.
+      const pts = [];
+      const arr = (ds && ds.data) || [];
+      for (let i = 0; i < labs.length; i++) if (arr[i] != null) pts.push({ x: xs.getPixelForValue(i), v: arr[i] });
+      for (const r of log) if (+r.value > 0 && r.date != null) pts.push({ x: chartXForDate(c, r.date), v: +r.value * inflFactor(r.date, labs[0]) });
+      pts.sort((a, b) => a.x - b.x);
+      if (pts.length > 1 && ds) {
+        cx.beginPath();
+        cx.moveTo(pts[0].x, ys.getPixelForValue(pts[0].v));
+        for (let k = 1; k < pts.length; k++) cx.lineTo(pts[k].x, ys.getPixelForValue(pts[k].v));
+        cx.strokeStyle = (typeof ds.borderColor === 'string' ? ds.borderColor : '#a78bfa');
+        cx.lineWidth = (ds._emphBaseW || 2) * 2;
+        cx.lineJoin = 'round';
+        cx.stroke();
+      }
+
+      const hoveredKey = _smaHoverKey;
+      const placed = [];
+      let hovered = null; // the highlighted marker draws last, on top of its cluster
+      for (const ev of customMarkerEvents(log)) {
+        const px = chartXForDate(c, ev.row.date);
+        if (px < area.left - 2 || px > area.right + 2) continue;
+        const basePy = ys.getPixelForValue(+ev.row.value * inflFactor(ev.row.date, labs[0]));
+        if (!(basePy >= area.top - 2 && basePy <= area.bottom + 2)) continue;
+        const py = spreadMarkerY(placed, px, basePy, area);
+        const key = String(ev.i);
+        if (key === hoveredKey) hovered = { px, py, st: ev.st };
+        else drawSmaMarker(cx, px, py, ev.st, false);
+        _smaMarkers.push({ x: px, y: py, st: ev.st, key, i: ev.i, row: ev.row, kind: 'custom' });
+        placed.push({ x: px, y: py });
+      }
+      if (hovered) drawSmaMarker(cx, hovered.px, hovered.py, hovered.st, true);
+      cx.restore();
+    }
+  };
+
   chart = new Chart(ctx, {
     type: 'line',
-    plugins: [endLabelPlugin, smaMarkerPlugin],
+    plugins: [endLabelPlugin, smaMarkerPlugin, customMarkerPlugin],
     data: {
       labels,
       datasets: [

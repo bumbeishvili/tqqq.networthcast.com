@@ -2449,7 +2449,7 @@
     cursor: pointer;
   }
   .custom-apply-btn:hover { background: rgba(34, 211, 238, 0.26); }
-  .custom-log-wrap { max-height: 320px; overflow: auto; margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; }
+  .custom-log-wrap { max-height: 420px; overflow: auto; margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; }
   table.custom-log { width: 100%; border-collapse: collapse; font-size: 11px; }
   table.custom-log th, table.custom-log td {
     padding: 5px 8px;
@@ -2469,6 +2469,23 @@
   }
   table.custom-log td { color: var(--text); font-family: 'JetBrains Mono', monospace; }
   table.custom-log td:first-child, table.custom-log th:first-child { text-align: left; }
+  /* A custom strategy's log gets the same affordances as the SMA one:
+     collapsible contribution / ease-in rows, and trade rows that highlight
+     (and light up their marker on the chart) on hover. */
+  .custom-log-wrap.hide-contrib tr.log-row-contrib { display: none; }
+  .custom-log-wrap.hide-dca tr.log-row-dca { display: none; }
+  table.custom-log tr.log-row-mk { cursor: pointer; }
+  table.custom-log tr.log-row-mk:hover td { background: rgba(56, 189, 248, 0.10); }
+  /* Action column: a short verb, colour-coded by what the row did. The nested
+     spans are the (%) gain pills, which colour independently of the action. */
+  table.custom-log td.action-buy    { color: var(--green); }
+  table.custom-log td.action-sell   { color: var(--red); }
+  table.custom-log td.action-switch { color: var(--accent); }
+  table.custom-log td.action-rebal  { color: #fbbf24; }
+  table.custom-log td.action-hold   { color: var(--text-muted); }
+  table.custom-log td .action-buy   { color: var(--green); }
+  table.custom-log td .action-sell  { color: var(--red); }
+  table.custom-log th .info-icon { margin-left: 2px; }
 
   /* In-sidebar "save as / update configuration" bar */
   .config-savebar {
