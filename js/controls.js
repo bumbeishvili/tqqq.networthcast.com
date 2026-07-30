@@ -667,9 +667,17 @@ async function shareConfig() {
   }
 
   // Open strategy sidebar (which chip's detail panel is showing), by stable key.
+  // `sp` covers the four BASE panels; `spc` covers a saved/custom strategy's own
+  // panel, as an index into the `sc`/`scz` array serialised below (same order).
+  // A saved base-type strategy sets both: `sp` opens the right panel shape even
+  // if the strategy itself fails to resolve on arrival.
   if (typeof getOpenPanelKey === 'function') {
     const pk = getOpenPanelKey();
     if (pk) params.set('sp', pk);
+  }
+  if (typeof openSavedConfigIndex === 'function') {
+    const ci = openSavedConfigIndex();
+    if (ci >= 0) params.set('spc', String(ci));
   }
 
   // Saved strategies, including custom ones (code + description). SECURITY: shared

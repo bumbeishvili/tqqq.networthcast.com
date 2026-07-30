@@ -161,11 +161,19 @@
   // `scz` is the compressed form (current links); `sc` is the older plain one.
   const scz = params.get('scz');
   const sc = params.get('sc');
+  // Kept so the `spc` restore below can resolve which of these was the open one.
+  let _sharedCfgArr = null;
   if (typeof importSharedConfigs === 'function') {
     let json = null;
     if (scz && typeof unpackSharePayload === 'function') json = await unpackSharePayload(scz);
     else if (sc) { try { json = decodeURIComponent(sc); } catch (e) { json = null; } }
-    if (json) { try { importSharedConfigs(JSON.parse(json)); } catch (e) {} }
+    if (json) {
+      try {
+        const arr = JSON.parse(json);
+        importSharedConfigs(arr);
+        if (Array.isArray(arr)) _sharedCfgArr = arr;
+      } catch (e) {}
+    }
   }
   render();
 
@@ -223,6 +231,19 @@
   }
 
   // Reopen the strategy sidebar that was open when the link was shared.
-  const sp = params.get('sp');
-  if (sp && typeof openPanelByKey === 'function') openPanelByKey(sp);
+  // `spc` (a specific saved/custom strategy) wins over `sp` (a base panel):
+  // openConfigForEdit opens the right panel itself and also loads the strategy's
+  // params into the sidebar, which plain openPanelByKey would not.
+  const spcRaw = params.get('spc');
+  const spcIdx = spcRaw != null ? parseInt(spcRaw, 10) : NaN;
+  let opened = false;
+  if (_sharedCfgArr && Number.isInteger(spcIdx) && spcIdx >= 0 && spcIdx < _sharedCfgArr.length
+      && typeof resolveSharedConfigId === 'function' && typeof openConfigForEdit === 'function') {
+    const cid = resolveSharedConfigId(_sharedCfgArr[spcIdx]);
+    if (cid) { openConfigForEdit(cid); opened = true; }
+  }
+  if (!opened) {
+    const base = params.get('sp');
+    if (base && typeof openPanelByKey === 'function') openPanelByKey(base);
+  }
 })();

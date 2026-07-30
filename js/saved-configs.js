@@ -1680,6 +1680,29 @@ function importSharedConfigs(arr) {
   }
 }
 
+// Which saved strategy (if any) has its panel open right now, as an INDEX into
+// getSavedConfigs() — that array is what a share link serialises, in order, so
+// the index is the stable cross-machine reference. Covers custom panels (which
+// leave _currentPanelIdx null) and saved base-type panels alike.
+function openSavedConfigIndex() {
+  const id = window._openCustomCfgId || window._editingConfigId;
+  if (!id) return -1;
+  return savedConfigs.findIndex(c => c.id === id);
+}
+// Resolve a shared-array entry back to a LOCAL config id after import. Cannot
+// match on the dedup signature: importSharedConfigs runs the name through
+// uniqueName(), so a name collision renames the copy. Match on the parts that
+// survive — type + code + params — and prefer a just-imported (transient) hit
+// over an identical strategy the recipient already had.
+function resolveSharedConfigId(entry) {
+  if (!entry || !entry.type) return null;
+  const key = (c) => `${c.type}|${c.code || ''}|${JSON.stringify(c.params || {})}`;
+  const want = key(entry);
+  const hits = savedConfigs.filter(c => key(c) === want);
+  if (!hits.length) return null;
+  return (hits.find(c => c._transient) || hits[0]).id;
+}
+
 // Convert every currently-transient (share-link) config into a regular saved
 // strategy and write to localStorage. Triggered by the "Save" banner button.
 function saveSharedStrategies() {
