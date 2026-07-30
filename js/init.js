@@ -37,7 +37,15 @@
   // is someone else's config — we suppress the "reset saved data" prompt so
   // the recipient can't accidentally wipe + reload away the shared params.
   const isSharedLink = params.get('v') !== null;
-  if (typeof migrateSharedLink === 'function') migrateSharedLink(params);
+  // Only migrate when the URL actually carries params. A bare load has none,
+  // and a migration is meaningless there — but several steps are of the form
+  // "set this key if the link omits it", so on an empty query string they
+  // happily inject values and those then override the HTML defaults. That is
+  // exactly how the new canonical SMA defaults got clobbered back to the old
+  // SPY/SPXL set. Gating on `v` alone would be wrong: legacy pre-versioning
+  // links carry params but no `v`, and they still need the older steps.
+  const hasAnyParam = Array.from(params.keys()).length > 0;
+  if (hasAnyParam && typeof migrateSharedLink === 'function') migrateSharedLink(params);
   const urlMap = { i: 'slider-initial', m: 'slider-monthly', a: 'slider-raise', r: 'slider-rate', e: 'slider-entry', x: 'slider-exit' };
   let hasUrlParams = false;
   for (const [key, sliderId] of Object.entries(urlMap)) {

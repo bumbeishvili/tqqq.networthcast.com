@@ -1,4 +1,18 @@
 let chart = null;
+// How many horizontal gridlines / y-axis labels to draw. Applied both as
+// Chart.js's maxTicksLimit (linear) and as an explicit thinning pass after the
+// log-scale "nice value" filter, which runs too late for maxTicksLimit to bind.
+const Y_TICKS = 4;
+// Axis-only money formatting: fmt() pads to a fixed width so columns of numbers
+// line up in the tables and tooltips, but on the axis that padding is just
+// noise — "$5.000M" says nothing "$5M" doesn't. Trims trailing zeros while
+// keeping significant decimals ("$1.500M" → "$1.5M", "$160.3K" unchanged).
+// Deliberately NOT applied anywhere else, so table alignment is untouched.
+function fmtAxis(v) {
+  return String(fmt(v))
+    .replace(/(\.\d*[1-9])0+([A-Za-z]*)$/, '$1$2')   // 1.500M → 1.5M
+    .replace(/\.0+([A-Za-z]*)$/, '$1');              // 10.00M → 10M
+}
 // Latest rebalance-log data, surfaced inside the 9sig side panel's table.
 // Populated on every render(); cleared when there's not enough data to sim.
 let _logData = null;
@@ -8,10 +22,10 @@ let _logData = null;
 // Each event type gets its own shape + colour so they're tellable apart, and
 // hovering one shows the trade detail. `_smaMarkers` caches on-screen hit-boxes.
 const SMA_EVENT_STYLE = {
-  ENTER:      { color: '#4ade80', shape: 'triUp',   label: 'Buy' },
-  EXIT:       { color: '#f87171', shape: 'triDown', label: 'Sell' },
-  'BG-GTFO':  { color: '#fbbf24', shape: 'diamond', label: 'Bubble → cash' },
-  'BG-CLEAR': { color: '#38bdf8', shape: 'square',  label: 'Bubble over' },
+  ENTER:      { color: "#00b929", shape: "triUp",   label: 'Buy' },
+  EXIT:       { color: "#ff2d2e", shape: "triDown", label: 'Sell' },
+  'BG-GTFO':  { color: "#b06000", shape: "diamond", label: 'Bubble → cash' },
+  'BG-CLEAR': { color: "#023aff", shape: "square",  label: 'Bubble over' },
 };
 let _smaMarkers = [];
 let _smaHoverKey = null;
@@ -40,10 +54,10 @@ function toggleSmaLogEase(hide) {
 // "buy — 3 of 5 slices" still reads as a buy. Only the four trade kinds below
 // get a chart symbol; money-in and snapshot rows would just be noise.
 const CUSTOM_EVENT_STYLE = {
-  buy:       { color: '#4ade80', shape: 'triUp',   label: 'Buy' },
-  sell:      { color: '#f87171', shape: 'triDown', label: 'Sell' },
-  switch:    { color: '#38bdf8', shape: 'diamond', label: 'Switch' },
-  rebalance: { color: '#fbbf24', shape: 'square',  label: 'Rebalance' },
+  buy:       { color: "#00b929", shape: "triUp",   label: 'Buy' },
+  sell:      { color: "#ff2d2e", shape: "triDown", label: 'Sell' },
+  switch:    { color: "#023aff", shape: "diamond", label: 'Switch' },
+  rebalance: { color: "#b06000", shape: "square",  label: 'Rebalance' },
 };
 // Classify a free-text action into one of the vocabulary kinds. Tolerant on
 // purpose: strategies come from an LLM, so near-misses ("exit", "rotate",
@@ -185,7 +199,7 @@ function drawSmaMarker(cx, x, y, style, hovered) {
   }
   cx.fillStyle = style.color;
   cx.lineWidth = hovered ? 2 : 1.5;
-  cx.strokeStyle = hovered ? '#fff' : 'rgba(10,14,23,0.85)';
+  cx.strokeStyle = hovered ? "#383874" : "rgba(255,255,255,0.9)";
   cx.fill();
   cx.stroke();
 }
@@ -244,7 +258,7 @@ function markerShapeSvg(shape, color) {
     diamond: '<polygon points="7,1 13,7 7,13 1,7"/>',
     square:  '<rect x="2" y="2" width="10" height="10" rx="1.5"/>',
   }[shape] || '<circle cx="7" cy="7" r="5.5"/>';
-  return `<svg viewBox="0 0 14 14" width="15" height="15" style="fill:${color};stroke:rgba(255,255,255,0.65);stroke-width:1">${inner}</svg>`;
+  return `<svg viewBox="0 0 14 14" width="15" height="15" style="fill:${color};stroke:rgba(56,56,116,0.35);stroke-width:1">${inner}</svg>`;
 }
 // Small stroked row icon for the tooltip metrics.
 function mtIco(paths) {
@@ -265,7 +279,7 @@ function smaMarkerTooltipHtml(m) {
   const profit = total - invested;
   const date = (typeof fmtLogDate === 'function') ? fmtLogDate(ev.date) : ev.date;
   const gainPill = info.gain != null
-    ? `<span class="mt-gain" style="color:${info.gain >= 0 ? 'var(--green)' : 'var(--red)'};background:${info.gain >= 0 ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)'}">${info.gain >= 0 ? '▲ ' : '▼ '}${Math.abs(info.gain).toFixed(1)}%</span>`
+    ? `<span class="mt-gain" style="color:${info.gain >= 0 ? 'var(--green-text)' : 'var(--red-text)'};background:${info.gain >= 0 ? 'rgba(0,185,41,0.14)' : 'rgba(255,45,46,0.12)'}">${info.gain >= 0 ? '▲ ' : '▼ '}${Math.abs(info.gain).toFixed(1)}%</span>`
     : '';
   const ICON = {
     box:     '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
@@ -308,7 +322,7 @@ function customMarkerTooltipHtml(m) {
   const held = (r.held != null && r.held !== '') ? String(r.held).toUpperCase() : null;
   const date = (typeof fmtLogDate === 'function') ? fmtLogDate(r.date) : r.date;
   const gainPill = gain != null
-    ? `<span class="mt-gain" style="color:${gain >= 0 ? 'var(--green)' : 'var(--red)'};background:${gain >= 0 ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)'}">${gain >= 0 ? '▲ ' : '▼ '}${Math.abs(gain).toFixed(1)}%</span>`
+    ? `<span class="mt-gain" style="color:${gain >= 0 ? 'var(--green-text)' : 'var(--red-text)'};background:${gain >= 0 ? 'rgba(0,185,41,0.14)' : 'rgba(255,45,46,0.12)'}">${gain >= 0 ? '▲ ' : '▼ '}${Math.abs(gain).toFixed(1)}%</span>`
     : '';
   const ICON = {
     box:     '<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',
@@ -392,7 +406,7 @@ function buildLegendChipsHtml(indices, opts) {
     const ds = chart.data.datasets[i];
     if (!ds || ds._isShift) continue;
     const isHidden = !chart.isDatasetVisible(i);
-    const dotColor = typeof ds.borderColor === 'string' ? ds.borderColor : '#94a3b8';
+    const dotColor = typeof ds.borderColor === 'string' ? ds.borderColor : "#7a7aa6";
     const cagr = cagrMap[i];
     const m    = metrics[i];
     // Two-line metrics block: CAGR row on top, max drawdown below. Each
@@ -945,7 +959,7 @@ function buildLogTableHtml(d) {
       <td>${fmtPrice(l.price)}</td>
       <td>${fmtShares(shares)}</td>
       <td>${fmtFull(Math.round(l.tqqqVal))}</td>
-      <td style="color:#fb923c">${fmtFull(Math.round(l.target))}</td>
+      <td style="color:#d9631a">${fmtFull(Math.round(l.target))}</td>
       <td>${fmtFull(Math.round(l.cash))}</td>
       <td>${fmtFull(Math.round(l.total))}</td>
       <td>${!l.fee ? '—' : (l.fee >= 1 ? fmtFull(Math.round(l.fee)) : '+$' + l.fee.toFixed(2))}</td>
@@ -1690,8 +1704,8 @@ function render() {
   const opacityVal = 0.12;
   // The envelope band belongs to the base 9sig line, so it follows that line's
   // colour (override or default), faded down.
-  const _nineSigColor = (window._lineColorOverrides && window._lineColorOverrides['9sig']) || '#22d3ee';
-  const envColor = (typeof fadeColor === 'function') ? fadeColor(_nineSigColor, opacityVal) : `rgba(34,211,238,${opacityVal})`;
+  const _nineSigColor = (window._lineColorOverrides && window._lineColorOverrides['9sig']) || "#45818e";
+  const envColor = (typeof fadeColor === 'function') ? fadeColor(_nineSigColor, opacityVal) : `rgba(134,118,255,)`;
   // Each ghost line is the same 9sig strategy with rebalance shifted to a
   // different day — must inherit ALL the user's 9sig knobs (signal-line
   // growth %, underlying, 30-down drop, spike trigger), otherwise the
@@ -1968,20 +1982,20 @@ function render() {
   } else {
   const ctx = document.getElementById('mainChart').getContext('2d');
 
-  // Hue map (indices renumbered after Adaptive removal):
-  //   0  9sig          cyan       #22d3ee
-  //   1  9sig Holding  sky-blue   #38bdf8
-  //   2  B&H TQQQ      red        #f87171
-  //   3  B&H QQQ       green      #4ade80
-  //   4  B&H SPY       pink       #f472b6
-  //   5  9sig Target   orange     #fb923c
-  //   6  9sig Cash     amber      #fbbf24
-  //   7  Invested Comp gray
-  //   8  SMA           chartreuse #a3e635
-  //  10  B&H QLD       cyan       #06b6d4
-  //  11  B&H SSO       purple     #c084fc
-  //  12  B&H SPXL      rose       #f43f5e
-  const lineColors = ['#22d3ee', '#38bdf8', '#f87171', '#4ade80', '#f472b6', '#fb923c', '#fbbf24', 'rgba(226,232,240,0.4)', '#a3e635', '#06b6d4', '#c084fc', '#f43f5e'];
+  // Hue map — Orion light theme (each chosen for contrast on a white plot area):
+  //   0  9sig          teal        #45818e
+  //   1  9sig Holding  deep blue   #023aff
+  //   2  B&H TQQQ      red         #ff2d2e
+  //   3  B&H QQQ       green       #00b929
+  //   4  B&H SPY       pink        #ff708b
+  //   5  9sig Target   orange      #d9631a
+  //   6  9sig Cash     dark amber  #b06000
+  //   7  Invested Comp faint navy  rgba(56,56,116,0.35)
+  //   8  SMA           purple-deep #c64eff
+  //  10  B&H QLD       teal        #0891b2
+  //  11  B&H SSO       violet      #7c3aed
+  //  12  B&H SPXL      rose        #e11d48
+  const lineColors = ["#45818e", "#023aff", "#ff2d2e", "#00b929", "#ff708b", "#d9631a", "#b06000", "#bf9000", "#c64eff", "#0891b2", "#7c3aed", "#e11d48"];
   const _sub = nineSigSubLabels();
   const lineNames  = [LBL_9SIG, _sub.holding, LBL_BH, 'B&H QQQ', 'B&H SPY', _sub.target, _sub.cash, LBL_INV, LBL_SMA, 'B&H QLD', 'B&H SSO', 'B&H SPXL'];
   // Match the borderDash on the corresponding chart dataset; null = solid.
@@ -2030,7 +2044,7 @@ function render() {
     // Iterate every real dataset (skip the envelope `_shift_*` ghosts). Prefer
     // each dataset's live borderColor/borderDash so colour overrides + the
     // shared 9sig-family colour show up here; fall back to the init arrays.
-    const colorFor = (i) => (typeof ds[i].borderColor === 'string' ? ds[i].borderColor : null) || lineColors[i] || '#94a3b8';
+    const colorFor = (i) => (typeof ds[i].borderColor === 'string' ? ds[i].borderColor : null) || lineColors[i] || "#7a7aa6";
     const dashFor  = (i) => ds[i].borderDash || lineDashes[i] || null;
     const items = ds
       .map((d, i) => ({ i, n: d.label, v: d.data ? d.data[idx] : null, col: colorFor(i), dash: dashFor(i) }))
@@ -2123,11 +2137,29 @@ function render() {
         const meta = c.getDatasetMeta(i);
         const pt = meta.data[lastIdx];
         if (!pt) return null;
+        const val = ds.data[lastIdx];
+        // Position from the SCALE, not from pt.y. pt.y is the ANIMATED pixel,
+        // and (as the visibility-toggle comment below notes) point positions and
+        // y-axis bounds animate on separate tracks — so during the entry
+        // animation a label laid out from pt.y lands against a viewport that has
+        // not finished growing. That put low-value lines like Invested
+        // Compounded at the TOP of the stack on first paint, with a long leader
+        // line back down to the real point, until any interaction forced a
+        // settled redraw. getPixelForValue is the settled position at all times.
+        const ys = c.scales.y;
+        let y = pt.y;
+        if (ys && typeof ys.getPixelForValue === 'function' && typeof val === 'number' && isFinite(val)) {
+          // Log scales have no pixel for <= 0; keep the animated value there.
+          if (!(ys.type === 'logarithmic' && val <= 0)) {
+            const py = ys.getPixelForValue(val);
+            if (isFinite(py)) y = py;
+          }
+        }
         // Prefer the live dataset label + borderColor so dynamic names
         // ("15sig", "SMA 150"), colour overrides, and the shared 9sig-family
         // colour all show without a chart rebuild. Fall back to the init arrays.
-        const color = (typeof ds.borderColor === 'string' ? ds.borderColor : null) || lineColors[i] || '#94a3b8';
-        return { y: pt.y, i, color, name: ds.label || lineNames[i], val: ds.data[lastIdx] };
+        const color = (typeof ds.borderColor === 'string' ? ds.borderColor : null) || lineColors[i] || "#7a7aa6";
+        return { y, origY: y, i, color, name: ds.label || lineNames[i], val };
       }).filter(Boolean);
 
       // Sort by y position and de-overlap
@@ -2160,8 +2192,10 @@ function render() {
         cx.strokeStyle = it.color;
         cx.lineWidth = 1;
         cx.setLineDash([2, 2]);
-        const origMeta = c.getDatasetMeta(it.i);
-        const origY = origMeta.data[lastIdx].y;
+        // Anchor the connector to the same settled position the label was laid
+        // out from — reading the animated point here would draw the leader from
+        // somewhere the line isn't yet.
+        const origY = it.origY;
         cx.moveTo(area.right, origY);
         cx.lineTo(x - 2, it.y);
         cx.stroke();
@@ -2174,9 +2208,9 @@ function render() {
         cx.fill();
 
         // Label name
-        cx.font = '600 9px "DM Sans", sans-serif';
+        cx.font = '600 9px "Open Sans", sans-serif';
         cx.fillStyle = it.color;
-        cx.globalAlpha = 0.7;
+        cx.globalAlpha = 0.88;   // light theme: 0.7 washed labels out on white
         cx.textBaseline = 'bottom';
         cx.fillText(it.name.toUpperCase(), x, it.y - 1);
         cx.globalAlpha = 1;
@@ -2239,7 +2273,7 @@ function render() {
           cx.beginPath();
           cx.moveTo(pts[0].x, ys.getPixelForValue(pts[0].v));
           for (let k = 1; k < pts.length; k++) cx.lineTo(pts[k].x, ys.getPixelForValue(pts[k].v));
-          cx.strokeStyle = (typeof smaDs.borderColor === 'string' ? smaDs.borderColor : '#f472b6');
+          cx.strokeStyle = (typeof smaDs.borderColor === 'string' ? smaDs.borderColor : "#ff708b");
           // Coarse line is hidden (width 0 while this panel is open), so size the
           // overlay from the stored base width at the same 2× emphasis.
           cx.lineWidth = (smaDs._emphBaseW || 2) * 2;
@@ -2334,7 +2368,7 @@ function render() {
         cx.beginPath();
         cx.moveTo(pts[0].x, ys.getPixelForValue(pts[0].v));
         for (let k = 1; k < pts.length; k++) cx.lineTo(pts[k].x, ys.getPixelForValue(pts[k].v));
-        cx.strokeStyle = (typeof ds.borderColor === 'string' ? ds.borderColor : '#a78bfa');
+        cx.strokeStyle = (typeof ds.borderColor === 'string' ? ds.borderColor : "#c64eff");
         cx.lineWidth = (ds._emphBaseW || 2) * 2;
         cx.lineJoin = 'round';
         cx.stroke();
@@ -2369,7 +2403,7 @@ function render() {
         {
           label: LBL_9SIG,
           data: totalD,
-          borderColor: '#22d3ee',
+          borderColor: "#45818e",
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -2381,7 +2415,7 @@ function render() {
         {
           label: nineSigSubLabels().holding,
           data: tqqqValD,
-          borderColor: '#38bdf8',
+          borderColor: "#023aff",
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -2396,7 +2430,7 @@ function render() {
           // #select-bh-underlying. Default = TQQQ.
           label: bhPicked.label,
           data: bhActiveD,
-          borderColor: '#f87171',
+          borderColor: "#ff2d2e",
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -2408,7 +2442,7 @@ function render() {
         {
           label: 'B&H QQQ',
           data: [],
-          borderColor: '#4ade80',
+          borderColor: "#00b929",
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -2421,7 +2455,7 @@ function render() {
         {
           label: 'B&H SPY',
           data: [],
-          borderColor: '#f472b6',
+          borderColor: "#ff708b",
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -2434,7 +2468,7 @@ function render() {
         {
           label: nineSigSubLabels().target,
           data: targetD,
-          borderColor: '#fb923c',
+          borderColor: "#d9631a",
           backgroundColor: 'transparent',
           fill: false,
           tension: 0,
@@ -2447,8 +2481,8 @@ function render() {
         {
           label: nineSigSubLabels().cash,
           data: cashD,
-          borderColor: '#fbbf24',
-          backgroundColor: 'rgba(251,191,36,0.05)',
+          borderColor: "#b06000",
+          backgroundColor: "rgba(176,96,0,0.05)",
           fill: true,
           tension: 0.3,
           pointRadius: 0,
@@ -2459,7 +2493,7 @@ function render() {
         {
           label: LBL_INV,
           data: invD,
-          borderColor: 'rgba(226,232,240,0.25)',
+          borderColor: '#bf9000',
           backgroundColor: 'transparent',
           fill: false,
           tension: 0,
@@ -2471,7 +2505,7 @@ function render() {
         {
           label: LBL_SMA,
           data: smaD,
-          borderColor: '#a3e635',
+          borderColor: "#c64eff",
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -2539,12 +2573,29 @@ function render() {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // Snap rather than animate — the same reasoning as the visibility-toggle
+      // update('none') below. Chart.js animates point positions and y-axis
+      // bounds on separate tracks, so during any animated frame the lines, the
+      // viewport and the end-of-line labels all disagree about where a value
+      // sits. Every one of those frames is a chance to paint a line or label
+      // somewhere it doesn't belong, and it self-corrects on the next
+      // interaction — which is exactly the "crazy on refresh, fine once I touch
+      // it" behaviour. With animation off there is no intermediate state to get
+      // wrong: data, scale and labels are always mutually consistent.
+      animation: false,
       interaction: { mode: 'index', intersect: false },
       // Reserve space on the right edge for the end-of-line strategy labels.
       // On phone-width viewports the labels are hidden by the endLabels plugin
       // (legend chips above already convey the same info), so we reclaim that
       // space for the actual plot area.
-      layout: { padding: { right: window.innerWidth <= 600 ? 8 : 120 } },
+      // 140, not 120: "INVESTED COMPOUNDED" is the longest label and sat right
+      // on the old boundary, so it clipped against the canvas edge. The wider
+      // layout has pixels to spare.
+      // left/bottom clear the "log" pill, which CSS parks in the plot's
+      // bottom-left corner: padding.left pushes chartArea.left right so the
+      // first date label moves off it, padding.bottom lifts chartArea.bottom so
+      // the "$0" label rises above it.
+      layout: { padding: { right: window.innerWidth <= 600 ? 8 : 140, left: 26, bottom: 12 } },
       plugins: {
         legend: { display: false }, // replaced with custom #chart-legend chips
         tooltip: {
@@ -2555,7 +2606,7 @@ function render() {
       scales: {
         x: {
           ticks: {
-            color: '#64748b',
+            color: '#383874',
             font: { size: 10 },
             maxTicksLimit: 10,
             callback: function(val) {
@@ -2563,16 +2614,19 @@ function render() {
               return d ? d.substring(0, 7) : '';
             }
           },
-          grid: { color: 'rgba(30,42,63,0.5)' }
+          grid: { color: "rgba(197,193,236,0.3)" }, border: { color: "#c5c1ec" }
         },
         y: {
           type: logScale ? 'logarithmic' : 'linear',
           beginAtZero: !logScale,
           min: logScale ? undefined : 0, // linear anchored at 0; log auto-scales
           ticks: {
-            color: '#64748b',
+            color: '#383874',
             font: { family: 'JetBrains Mono', size: 10 },
-            callback: v => fmt(v)
+            // Four gridlines is enough to read a level off; eleven turned the
+            // axis into a ruler competing with the lines it's measuring.
+            maxTicksLimit: Y_TICKS,
+            callback: v => fmtAxis(v)
           },
           // On log scale, Chart.js generates a tick at every 1..9 × 10^n which
           // is way too dense. Keep only "nice" ticks (1, 2, 5 × 10^n) so the
@@ -2586,8 +2640,18 @@ function render() {
               const m = v / Math.pow(10, exp);
               return Math.abs(m - 1) < 0.05 || Math.abs(m - 2) < 0.05 || Math.abs(m - 5) < 0.05;
             });
+            // maxTicksLimit is applied while ticks are GENERATED, so the filter
+            // above can still leave more than Y_TICKS on a log axis. Thin what
+            // survives, evenly, always keeping the first and last.
+            if (scale.ticks.length > Y_TICKS) {
+              const src = scale.ticks, out = [];
+              for (let k = 0; k < Y_TICKS; k++) {
+                out.push(src[Math.round(k * (src.length - 1) / (Y_TICKS - 1))]);
+              }
+              scale.ticks = out.filter((t, k, a) => a.indexOf(t) === k);
+            }
           },
-          grid: { color: 'rgba(30,42,63,0.5)' }
+          grid: { color: "rgba(197,193,236,0.3)" }, border: { color: "#c5c1ec" }
         }
       }
     }

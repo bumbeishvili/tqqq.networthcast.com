@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#f5f6fb">
 <!-- Freeze pre-versioning ("v1") shared links. Those URLs predate the `v`
      stamp and carry params that no longer exist in the current app (tu/td/tw =
      the old Adaptive strategy, eo = envelope opacity). Redirect them to the
@@ -27,21 +28,21 @@
   gtag('js', new Date());
   gtag('config', 'G-XJ1P981CGQ');
 </script>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230a0e17'/><polyline points='4,24 10,18 16,20 22,10 28,6' fill='none' stroke='%2338bdf8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/><circle cx='28' cy='6' r='2' fill='%2338bdf8'/></svg>">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23ffffff'/><polyline points='4,24 10,18 16,20 22,10 28,6' fill='none' stroke='%238676ff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'/><circle cx='28' cy='6' r='2' fill='%238676ff'/></svg>">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=131">
+<link rel="stylesheet" href="styles.css?v=148">
 </head>
 <body>
 
 <div class="header">
   <h1>Strategies Simulator</h1>
-  <p>Backtesting &middot; synthetic TQQQ (3x QQQ) &middot; 1953&ndash;2026</p>
+  <p>Backtesting TQQQ &middot; 1953&ndash;2026</p>
   <button id="share-btn" onclick="shareConfig()" aria-label="Share current configuration" title="Share current configuration">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-    <span class="share-btn-label">Share current configuration</span>
+    <span class="share-btn-label">Share</span>
   </button>
   <button id="reset-version-btn" type="button" hidden onclick="resetStorageForNewVersion()" title="A newer version of the simulator is available. Click to clear saved settings and load defaults.">
     new version — reset saved data
@@ -52,7 +53,10 @@
 <div class="layout">
   <div class="panel">
     <div class="panel-head">
-      <h2>Investment</h2>
+      <!-- Heading text removed by request; the empty h2 stays as the flex
+           spacer that keeps `justify-content: space-between` pushing the
+           analytics button to the right edge. -->
+      <h2></h2>
       <button id="analytics-toggle" onclick="toggleAnalytics()">analytics grid</button>
     </div>
 
@@ -68,7 +72,7 @@
         <span class="value-display" id="disp-monthly">$500</span>
       </div>
       <label class="mc-raise" for="slider-raise" title="Grow the monthly contribution by this much each year">
-        increase <select id="slider-raise" class="inline-select raise-select">
+        <span class="mc-raise-txt">increase</span> <select id="slider-raise" class="inline-select raise-select">
           <option value="0" selected>0%</option>
           <option value="1">1%</option>
           <option value="2">2%</option>
@@ -84,7 +88,7 @@
           <option value="15">15%</option>
           <option value="20">20%</option>
           <option value="25">25%</option>
-        </select> /yr
+        </select> <span class="mc-raise-txt">/yr</span>
       </label>
       <!-- Logarithmic $0–$1M scale (see sliderToMonthly). Position 233 ≈ $500. -->
       <input type="range" id="slider-monthly" min="0" max="1000" step="1" value="233">
@@ -98,7 +102,7 @@
 
     <!-- Strategy Library: read-only catalog of the 25 best-known LETF strategies. -->
     <button id="strategy-library-btn" type="button" class="strategy-library-btn" onclick="toggleStrategyLibrary()">
-      📚 Strategy Library — 25 known LETF strategies
+      Strategy Library
     </button>
   </div>
 
@@ -708,8 +712,8 @@
       </select>
       when
       <select class="inline-select" id="select-sma-asset">
-        <option value="qqq">QQQ</option>
-        <option value="spy" selected>SPY</option>
+        <option value="qqq" selected>QQQ</option>
+        <option value="spy">SPY</option>
         <option value="tqqq">TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
@@ -752,7 +756,7 @@
     <div class="adaptive-line">
       Require at least
       <select class="inline-select" id="select-sma-entry-buf">
-        <option value="0">0%</option>
+        <option value="0" selected>0%</option>
         <option value="0.1">0.1%</option>
         <option value="0.2">0.2%</option>
         <option value="0.3">0.3%</option>
@@ -761,7 +765,7 @@
         <option value="0.6">0.6%</option>
         <option value="0.7">0.7%</option>
         <option value="0.8">0.8%</option>
-        <option value="0.9" selected>0.9%</option>
+        <option value="0.9">0.9%</option>
         <option value="1">1%</option>
         <option value="1.1">1.1%</option>
         <option value="1.2">1.2%</option>
@@ -827,7 +831,7 @@
       </select>
       above the average to buy, and
       <select class="inline-select" id="select-sma-exit-buf">
-        <option value="0">0%</option>
+        <option value="0" selected>0%</option>
         <option value="0.1">0.1%</option>
         <option value="0.2">0.2%</option>
         <option value="0.3">0.3%</option>
@@ -843,7 +847,7 @@
         <option value="1.3">1.3%</option>
         <option value="1.4">1.4%</option>
         <option value="1.5">1.5%</option>
-        <option value="1.6" selected>1.6%</option>
+        <option value="1.6">1.6%</option>
         <option value="1.7">1.7%</option>
         <option value="1.8">1.8%</option>
         <option value="1.9">1.9%</option>
@@ -1047,13 +1051,13 @@
     <div class="adaptive-line">
       When out of the market, hold
       <select class="inline-select" id="select-sma-out-asset">
-        <option value="cash">cash</option>
+        <option value="cash" selected>cash</option>
         <option value="qqq">QQQ</option>
         <option value="spy">SPY</option>
         <option value="tqqq">TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
-        <option value="spxl" selected>SPXL</option>
+        <option value="spxl">SPXL</option>
       </select>
       instead.
       <span class="info-icon" tabindex="0" data-tip="What you hold after a sell.&#10;&#10;• cash — just waits, earning the interest rate below&#10;• QQQ / SPY — keeps your money in the plain, non-leveraged market: much safer than the 3× fund, but still grows if the market drifts up&#10;&#10;Example: sell TQQQ → sit in QQQ → jump back to TQQQ when the buy signal returns.">ⓘ</span>
@@ -1259,18 +1263,18 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=131"></script>
-<script src="js/utils.js?v=131"></script>
-<script src="js/simulate.js?v=131"></script>
-<script src="js/metrics.js?v=131"></script>
-<script src="js/chart.js?v=131"></script>
-<script src="js/controls.js?v=131"></script>
-<script src="js/analytics.js?v=131"></script>
-<script src="js/preview-dropdown.js?v=131"></script>
-<script src="js/saved-configs.js?v=131"></script>
-<script src="js/strategy-library-code.js?v=131"></script>
-<script src="js/strategy-library.js?v=131"></script>
-<script src="js/init.js?v=131"></script>
+<script src="js/data.js?v=148"></script>
+<script src="js/utils.js?v=148"></script>
+<script src="js/simulate.js?v=148"></script>
+<script src="js/metrics.js?v=148"></script>
+<script src="js/chart.js?v=148"></script>
+<script src="js/controls.js?v=148"></script>
+<script src="js/analytics.js?v=148"></script>
+<script src="js/preview-dropdown.js?v=148"></script>
+<script src="js/saved-configs.js?v=148"></script>
+<script src="js/strategy-library-code.js?v=148"></script>
+<script src="js/strategy-library.js?v=148"></script>
+<script src="js/init.js?v=148"></script>
 
 </body>
 </html>

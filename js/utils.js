@@ -169,15 +169,15 @@ function makeLetterBadge(letter, color) {
   ctx.arc(size / 2, size / 2, size / 2 - 1, 0, Math.PI * 2);
   ctx.fill();
   // letter on top — chart-bg color for contrast
-  ctx.fillStyle = '#0a0e17';
-  ctx.font = 'bold 13px "DM Sans", sans-serif';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 13px "Open Sans", sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(letter, size / 2, size / 2 + 1);
   return c;
 }
-const switchIcon9sig = makeLetterBadge('9', '#22d3ee');
-const switchIconTqqq = makeLetterBadge('T', '#f87171');
+const switchIcon9sig = makeLetterBadge('9', '#45818e');
+const switchIconTqqq = makeLetterBadge('T', '#ff2d2e');
 
 
 // ---- share-link payload compression -----------------------------------

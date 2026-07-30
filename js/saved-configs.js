@@ -73,12 +73,12 @@ function getSavedConfigs() { return savedConfigs; }
 // Saved strategies store their colour on the config (cfg.color). Base
 // strategies are canonical, so their colour override is SESSION-ONLY — it's
 // kept in memory but never persisted, so a refresh restores the default hue.
-const DEFAULT_BASE_COLORS = { '9sig': '#22d3ee', 'bh': '#f87171', 'invested': '#e2e8f0', 'sma': '#a3e635' };
+const DEFAULT_BASE_COLORS = { '9sig': '#45818e', 'bh': '#ff2d2e', 'invested': '#bf9000', 'sma': '#c64eff' };
 const BASE_COLOR_DATASET_IDX = { '9sig': 0, 'bh': 2, 'invested': 7, 'sma': 8 };
 window._lineColorOverrides = {};
 function getBaseColor(type) {
   const ov = window._lineColorOverrides || {};
-  return ov[type] || DEFAULT_BASE_COLORS[type] || '#94a3b8';
+  return ov[type] || DEFAULT_BASE_COLORS[type] || '#7a7aa6';
 }
 function setBaseColor(type, color) {
   window._lineColorOverrides = window._lineColorOverrides || {};
@@ -190,7 +190,7 @@ function activeLineColor() {
     if (cfg) return cfg.color;
   }
   const type = (typeof getOpenPanelKey === 'function') ? getOpenPanelKey() : null;
-  return type ? getBaseColor(type) : '#94a3b8';
+  return type ? getBaseColor(type) : '#7a7aa6';
 }
 // The actual borderColor currently on the chart for the active line (so cancel
 // restores it exactly — e.g. Invested Compounded's faint default).
@@ -1924,7 +1924,6 @@ function renderSavedConfigPills() {
       <button type="button" class="ssb-save" id="save-shared-strategies">Save${transientN > 1 ? ' all' : ''}</button>
     </div>` : '';
   host.innerHTML = `
-    <div class="saved-configs-label">Saved strategies</div>
     ${banner}
     <div class="saved-configs-list">${savedConfigs.map(buildConfigPillHtml).join('')}</div>`;
   setupConfigDragReorder();
@@ -2408,6 +2407,12 @@ function renderCustomPanelBody(cfgId) {
   let html = '';
 
   html += `<div class="wip-note">⚠ Custom strategies are a work in progress — their results may still change.</div>`;
+  // Line-colour picker. The whole picker chain (currentLineColor / activeLineColor /
+  // currentDatasetBorderColor / commitLineColor) already keys off
+  // window._editingConfigId, which openCustomPanel sets — so a custom strategy
+  // needs nothing beyond rendering the control here, and its choice persists to
+  // cfg.color like any saved strategy's.
+  if (typeof buildColorPickerHtml === 'function') html += buildColorPickerHtml(cfg.type);
   html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qld</code>, <code>qqq</code>, <code>spy</code>, <code>sso</code>, <code>spxl</code> (daily closes). Base your rules on any of them.</div>`;
   html += `<button type="button" id="custom-edit-builder" class="custom-edit-btn">Edit strategy</button>`;
   if (cfg.desc) html += `<div class="custom-desc-readout">${_escHtml(cfg.desc)}</div>`;

@@ -487,7 +487,7 @@ async function downloadAnalytics() {
     const fullW = Math.max(target.scrollWidth, target.offsetWidth);
     const fullH = Math.max(target.scrollHeight, target.offsetHeight);
     const canvas = await html2canvas(target, {
-      backgroundColor: '#0a0e17',
+      backgroundColor: '#f5f6fb',
       scale: 2,
       logging: false,
       useCORS: true,
@@ -801,7 +801,7 @@ document.addEventListener('change', (e) => {
             + `<title>${decileLabels[i]} of start years: median ${fmtFull(Math.round(v))}</title>`
             + `</rect>`;
       // $ value pinned just past the bar's right edge.
-      rows += `<text x="${(barAreaX + barLen + 4).toFixed(1)}" y="${labelY}" text-anchor="start" font-family="JetBrains Mono" font-size="10" font-weight="600" fill="#e2e8f0">${fmtBarLabel(v)}</text>`;
+      rows += `<text x="${(barAreaX + barLen + 4).toFixed(1)}" y="${labelY}" text-anchor="start" font-family="JetBrains Mono" font-size="10" font-weight="600" fill="#383874">${fmtBarLabel(v)}</text>`;
     }
     const svg = `<svg class="tt-decile-svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">${rows}</svg>`;
 
@@ -1215,7 +1215,7 @@ function showSpiralTooltip(tooltip, e, d, threshold) {
   const stratLabel = analyticsKeyLabel(analyticsStrategy);
   const sign       = d.pct >= 0 ? '+' : '';
   const hit        = d.pct >= threshold;
-  const hitColor   = hit ? '#22c55e' : '#ef4444';
+  const hitColor   = hit ? '#00b929' : '#ff2d2e';
   const tag        = d.partial ? ' (YTD)' : '';
   const thrSign    = threshold >= 0 ? '+' : '';
   const thrTxt     = `${thrSign}${threshold}%`;
@@ -1785,7 +1785,7 @@ function buildTooltipLineChart(series, opts) {
     const bh       = mag * barScale;
     const positive = g.pct >= 0;
     const by       = positive ? baselineY - bh : baselineY;
-    const fill     = positive ? '#22c55e' : '#ef4444';
+    const fill     = positive ? '#00b929' : '#ff2d2e';
     bars += `<rect x="${xLeft.toFixed(1)}" y="${by.toFixed(1)}" width="${bw.toFixed(1)}" height="${bh.toFixed(1)}" fill="${fill}"/>`;
 
     if (bw > 22) {
@@ -1794,12 +1794,12 @@ function buildTooltipLineChart(series, opts) {
       const ly    = positive ? Math.max(9, by - 2)
                              : Math.min(barTop + barH - 1, by + bh + 9);
       const color = positive ? '#86efac' : '#fca5a5';
-      barLabels += `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" font-weight="600" fill="${color}" stroke="rgba(10,14,23,0.9)" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${lbl}</text>`;
+      barLabels += `<text x="${cx.toFixed(1)}" y="${ly.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" font-weight="600" fill="${color}" stroke="rgba(255,255,255,0.97)" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${lbl}</text>`;
     }
   }
 
   // 0% baseline through the bar strip.
-  const baseline = `<line x1="${padX}" y1="${baselineY.toFixed(1)}" x2="${(width - padX).toFixed(1)}" y2="${baselineY.toFixed(1)}" stroke="rgba(255,255,255,0.18)" stroke-width="0.5"/>`;
+  const baseline = `<line x1="${padX}" y1="${baselineY.toFixed(1)}" x2="${(width - padX).toFixed(1)}" y2="${baselineY.toFixed(1)}" stroke="rgba(56,56,116,0.14)" stroke-width="0.5"/>`;
 
   // Line chart of portfolio value across the same x-range. The y-scale
   // expands to include the baseline series too so both lines fit cleanly.
@@ -1860,7 +1860,7 @@ function buildTooltipLineChart(series, opts) {
       }
     }
     if (bPath) {
-      baselinePath = `<path d="${bPath}" fill="none" stroke="rgba(226,232,240,0.55)" stroke-width="1.2" stroke-dasharray="3,3"/>`;
+      baselinePath = `<path d="${bPath}" fill="none" stroke="rgba(56,56,116,0.55)" stroke-width="1.2" stroke-dasharray="3,3"/>`;
       // Dollar-value tag pinned at the right end of the dashed line — shows
       // the baseline's endpoint value so the user can compare it against the
       // strategy's end value at a glance. To avoid collision with the
@@ -1884,17 +1884,17 @@ function buildTooltipLineChart(series, opts) {
         // Also shift baseline label further left so its right edge ends before
         // the strategy label's right edge (strategy is anchored at xEnd-15).
         const xLbl = xEndB - 18;
-        baselineEndLabel = `<text x="${xLbl.toFixed(1)}" y="${yLbl.toFixed(1)}" text-anchor="end" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="rgba(226,232,240,0.85)" stroke="rgba(10,14,23,0.92)" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${fmtFull(Math.round(lastV))}</text>`;
+        baselineEndLabel = `<text x="${xLbl.toFixed(1)}" y="${yLbl.toFixed(1)}" text-anchor="end" font-family="JetBrains Mono" font-size="11" font-weight="600" fill="rgba(56,56,116,0.85)" stroke="rgba(255,255,255,0.98)" stroke-width="3" stroke-linejoin="round" paint-order="stroke">${fmtFull(Math.round(lastV))}</text>`;
       }
     }
   }
   const startTxt = fmtFull(Math.round(series[0].value));
   const endTxt   = fmtFull(Math.round(series[series.length - 1].value));
   const endpoints = `
-    <circle cx="${startX.toFixed(1)}" cy="${startY.toFixed(1)}" r="2.6" fill="#22d3ee"/>
-    <circle cx="${endX.toFixed(1)}"   cy="${endY.toFixed(1)}"   r="2.6" fill="#22d3ee"/>
-    <text x="${(startX + 4).toFixed(1)}" y="${startLabelY.toFixed(1)}" text-anchor="start" font-family="JetBrains Mono" font-size="12" font-weight="700" fill="#e2e8f0" stroke="rgba(10,14,23,0.92)" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">${startTxt}</text>
-    <text x="${(endX - 15).toFixed(1)}"  y="${endLabelY.toFixed(1)}"   text-anchor="end"   font-family="JetBrains Mono" font-size="12" font-weight="700" fill="#e2e8f0" stroke="rgba(10,14,23,0.92)" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">${endTxt}</text>
+    <circle cx="${startX.toFixed(1)}" cy="${startY.toFixed(1)}" r="2.6" fill="#8676ff"/>
+    <circle cx="${endX.toFixed(1)}"   cy="${endY.toFixed(1)}"   r="2.6" fill="#8676ff"/>
+    <text x="${(startX + 4).toFixed(1)}" y="${startLabelY.toFixed(1)}" text-anchor="start" font-family="JetBrains Mono" font-size="12" font-weight="700" fill="#383874" stroke="rgba(255,255,255,0.98)" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">${startTxt}</text>
+    <text x="${(endX - 15).toFixed(1)}"  y="${endLabelY.toFixed(1)}"   text-anchor="end"   font-family="JetBrains Mono" font-size="12" font-weight="700" fill="#383874" stroke="rgba(255,255,255,0.98)" stroke-width="3.5" stroke-linejoin="round" paint-order="stroke">${endTxt}</text>
   `;
 
   // X-axis: year labels under each bar. Show every label when there's room
@@ -1908,17 +1908,17 @@ function buildTooltipLineChart(series, opts) {
     const isLast = (i === renderableYears.length - 1);
     if (i % xAxisLabelStep !== 0 && !isLast) return;
     const cx = (xAt(g.startIdx) + xAt(g.endIdx)) / 2;
-    xAxis += `<text x="${cx.toFixed(1)}" y="${xAxisY.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="rgba(148,163,184,0.85)" stroke="rgba(10,14,23,0.85)" stroke-width="2.5" stroke-linejoin="round" paint-order="stroke">${g.year}</text>`;
+    xAxis += `<text x="${cx.toFixed(1)}" y="${xAxisY.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="9" fill="rgba(122,122,166,0.85)" stroke="rgba(255,255,255,0.96)" stroke-width="2.5" stroke-linejoin="round" paint-order="stroke">${g.year}</text>`;
   });
   // Subtle x-axis baseline.
-  const xAxisLine = `<line x1="${padX}" y1="${(lineBot + 1).toFixed(1)}" x2="${(width - padX).toFixed(1)}" y2="${(lineBot + 1).toFixed(1)}" stroke="rgba(148,163,184,0.18)" stroke-width="0.5"/>`;
+  const xAxisLine = `<line x1="${padX}" y1="${(lineBot + 1).toFixed(1)}" x2="${(width - padX).toFixed(1)}" y2="${(lineBot + 1).toFixed(1)}" stroke="rgba(122,122,166,0.18)" stroke-width="0.5"/>`;
 
   return `<svg class="tt-line-chart" width="${width}" height="${height}" style="display:block;margin:6px 0">
     ${bars}
     ${baseline}
-    <path d="${area}" fill="rgba(34,211,238,0.18)"/>
+    <path d="${area}" fill="rgba(134,118,255,0.18)"/>
     ${baselinePath}
-    <path d="${line}" fill="none" stroke="#22d3ee" stroke-width="1.5"/>
+    <path d="${line}" fill="none" stroke="#8676ff" stroke-width="1.5"/>
     ${barLabels}
     ${baselineEndLabel}
     ${endpoints}
@@ -1972,7 +1972,7 @@ function renderSpiralChart(sim, seriesOverride) {
   const stillMounted = grid.querySelector('.spiral-svg');
   if (renderKey === _spiralRenderKey && _spiralBarsSel && stillMounted) {
     const t = analyticsCustomGrowthPct;
-    _spiralBarsSel.style('fill', d => d.pct >= t ? '#22c55e' : '#ef4444');
+    _spiralBarsSel.style('fill', d => d.pct >= t ? '#00b929' : '#ff2d2e');
     return;
   }
 
@@ -2063,7 +2063,7 @@ function renderSpiralChart(sim, seriesOverride) {
     .attr('id', 'spiral-guide')
     .attr('d', spiralLine)
     .style('fill', 'none')
-    .style('stroke', 'rgba(100,116,139,0.18)')
+    .style('stroke', 'rgba(122,122,166,0.18)')
     .style('stroke-width', 1);
 
   const spiralLength = path.node().getTotalLength();
@@ -2151,7 +2151,7 @@ function renderSpiralChart(sim, seriesOverride) {
       for (let k = inner.length - 1; k >= 0; k--) pathD += ` L ${inner[k][0].toFixed(2)} ${inner[k][1].toFixed(2)}`;
       return pathD + ' Z';
     })
-    .style('fill', d => d.pct >= threshold ? '#22c55e' : '#ef4444')
+    .style('fill', d => d.pct >= threshold ? '#00b929' : '#ff2d2e')
     .style('stroke', 'none')
     .attr('data-year', d => d.year)
     .attr('data-pct',  d => d.pct.toFixed(2));
@@ -2210,7 +2210,7 @@ function renderSpiralChart(sim, seriesOverride) {
     .attr('text-anchor', 'middle')
     .attr('dominant-baseline', 'middle')
     .style('font', '8.4px "JetBrains Mono", monospace')
-    .style('fill', 'rgba(148,163,184,0.75)')
+    .style('fill', 'rgba(122,122,166,0.75)')
     .style('pointer-events', 'none')
     .attr('transform', d => {
       const flip = d.a > 90 || d.a < -90;
@@ -2224,6 +2224,15 @@ function renderSpiralChart(sim, seriesOverride) {
   _spiralBarsSel   = bars;
   _spiralPoints    = points;
 }
+
+// WCAG relative luminance / contrast ratio, used to pick and then dim the
+// heatmap's cell text. Module-level so the per-cell loop isn't rebuilding them
+// thousands of times.
+const _wcagLum = (c) => {
+  const s = c.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); });
+  return 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
+};
+const _wcagRatio = (a, b) => (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 
 async function buildHeatmap() {
   if (!quarterlyData) return;
@@ -2476,8 +2485,8 @@ async function buildHeatmap() {
       // Binary mode for "Custom Target": flat green if the cell hit the goal,
       // flat red if not. No gradient — the question is binary ("did I get
       // there?") so the color should be too.
-      if (c.value >= analyticsCustomTarget) { r = 34;  g = 197; b = 94;  } // #22c55e
-      else                                  { r = 239; g = 68;  b = 68;  } // #ef4444
+      if (c.value >= analyticsCustomTarget) { r = 34;  g = 197; b = 94;  } // #00b929
+      else                                  { r = 239; g = 68;  b = 68;  } // #ff2d2e
     } else if (analyticsBaseline === 'custom-pct') {
       // Year-over-year growth check: did this cell's value increase by ≥ X%
       // vs the same starting year's previous-period cell (one column to the
@@ -2490,8 +2499,8 @@ async function buildHeatmap() {
       if (prevValue > 0 && c.value >= threshold) { r = 34;  g = 197; b = 94;  } // green
       else                                       { r = 239; g = 68;  b = 68;  } // red
     } else {
-      // Diverging palette: red-500 (#ef4444) → slate-600 (#475569) → green-500
-      // (#22c55e). Pre-apply a sqrt-based curve so small deviations from the
+      // Diverging palette: red-500 (#ff2d2e) → slate-600 (#475569) → green-500
+      // (#00b929). Pre-apply a sqrt-based curve so small deviations from the
       // 0.5 midpoint produce strong visible color shifts — "slight red" and
       // "slight green" cells are clearly distinguishable from each other
       // and from the neutral midpoint.
@@ -2511,6 +2520,25 @@ async function buildHeatmap() {
       }
     }
     td.style.background = `rgb(${r},${g},${b})`;
+    // Every stop on these palettes (red 239,68,68 · slate 71,85,105 · green
+    // 34,197,94) is mid-to-dark, so the page's Night Blue body colour is
+    // unreadable on top of them. Pick the text colour from the cell's own
+    // relative luminance (WCAG formula) rather than assuming one or the other.
+    const L = _wcagLum([r, g, b]);
+    // Always white, by request — one ink across the whole grid reads as a
+    // single surface instead of flipping polarity partway down a column.
+    const ink = [255, 255, 255];
+    // Then dim toward the cell as far as 4.5:1 allows. At full strength the
+    // grid is a wall of shouting digits, but the mid-palette cells have no
+    // contrast to spare — so cells with headroom recede and cells without stay
+    // at full strength. Alpha rather than a flat hex keeps each cell's text
+    // tinted by the colour underneath it.
+    let alpha = 1;
+    for (let a = 0.72; a <= 1.001; a += 0.02) {
+      const mix = [0, 1, 2].map(k => ink[k] * a + [r, g, b][k] * (1 - a));
+      if (_wcagRatio(_wcagLum(mix), L) >= 4.5) { alpha = a; break; }
+    }
+    td.style.color = `rgba(${ink[0]},${ink[1]},${ink[2]},${alpha.toFixed(2)})`;
   }
 
   progEl.setAttribute('hidden', '');

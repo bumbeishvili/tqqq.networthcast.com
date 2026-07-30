@@ -8,7 +8,7 @@ const LS_KEY = '9sig-sliders';
 // nuking storage silently; the user clicks it when they're ready to load
 // the new defaults. If they've never visited before (no stored version),
 // we just record the current one without prompting.
-const APP_VERSION = 27; // bumped when 9sig spike reset target got its own dropdown (srp); old links pin to 100−cash%
+const APP_VERSION = 28; // bumped when SMA defaults moved to the canonical rule (QQQ signal, cash when out, no buffers); old links pin to the previous SPY/SPXL/0.9/1.6 set
 // NOTE: APP_VERSION drives shared-link migration + the localStorage reset
 // prompt; bump it only on a breaking param/data change that needs a migration.
 // Separately, when you change any js/*.js or styles.css, bump the ?v= cache-bust
@@ -101,6 +101,13 @@ const LINK_MIGRATIONS = [
         p.set('srp', String(stock));
       }
     } },
+  // v28 (SMA defaults → canonical rule) deliberately has NO migration. The top
+  // SMA pill is a canonical reference line built from the HTML defaults at load
+  // and frozen against the sidebar knobs (freezeBaseForEditing), so a shared
+  // link's sa/soa/seb/sxb never drove it — no old link ever rendered a custom
+  // base SMA to preserve. Pinning them would only leave the panel controls
+  // disagreeing with the chart. Base-strategy customisation lives in saved
+  // strategies, which carry their own params.
 ];
 
 // Upgrade a shared link's params from the version it was stamped with up to
@@ -414,8 +421,35 @@ if (inflPill) inflPill.addEventListener('click', () => {
   function getMax() { return maxVal; }
   function setMax(v) { maxVal = v; updateUI(); }
 
-  function valToPercent(v) { return (v / getMax()) * 100; }
-  function percentToVal(p) { return Math.round(Math.min(Math.max(p, 0), 100) / 100 * getMax()); }
+  // The quarter axis is warped so recent quarters get more of the track. Same
+  // idea as the monthly-contribution slider's log mapping, just anchored at the
+  // right edge instead of the left: it's distance-from-today (in quarters) that
+  // goes through the log, so the resolution piles up where you actually aim.
+  // On a linear bar one quarter is 0.93% of the track everywhere, and picking
+  // "last quarter" means hitting a 3px target.
+  //
+  // SOFT tames log's near-vertical slope at d=0. Straight log(1+d) would hand
+  // the single newest quarter ~15% of the track; dividing by a softening scale
+  // (~8 quarters over a 27-year range) brings that to 4.4% while still giving
+  // the last 5 years 47% of the bar. The oldest quarters keep 0.32% each —
+  // about a third of linear, still wide enough to grab.
+  const SOFT = 0.075;                                   // fraction of full range
+  function softScale() { return Math.max(1, getMax() * SOFT); }
+  function valToPercent(v) {
+    const max = getMax();
+    if (max <= 0) return 0;
+    const s = softScale();
+    const d = Math.min(Math.max(max - v, 0), max);      // quarters before today
+    return 100 * (1 - Math.log(1 + d / s) / Math.log(1 + max / s));
+  }
+  function percentToVal(p) {
+    const max = getMax();
+    if (max <= 0) return 0;
+    const s = softScale();
+    const q = Math.min(Math.max(p, 0), 100) / 100;
+    const d = s * (Math.exp((1 - q) * Math.log(1 + max / s)) - 1);
+    return Math.round(Math.min(Math.max(max - d, 0), max));
+  }
 
   function updateUI() {
     const e = +entryInput.value, x = +exitInput.value;
@@ -482,12 +516,19 @@ if (inflPill) inflPill.addEventListener('click', () => {
     const startExit = +exitInput.value;
     const span = startExit - startEntry;
 
+    // Track the drag in PERCENT, not in quarters. A pixel delta is only a fixed
+    // number of quarters on a linear axis; with the log warp above, converting
+    // pixels straight to quarters would slide the bar at a different rate than
+    // the thumbs move, so the fill would drift out from under the cursor. Going
+    // through percent keeps the grabbed edge pinned to the pointer, and the
+    // window keeps its span in quarters (what you expect when dragging a range).
+    const startEntryPct = valToPercent(startEntry);
     function onMove(ev) {
       const clientX = ev.touches ? ev.touches[0].clientX : ev.clientX;
       const dx = clientX - startX;
-      const dVal = Math.round((dx / rect.width) * getMax());
-      let newEntry = startEntry + dVal;
-      let newExit = startExit + dVal;
+      const dPct = (dx / rect.width) * 100;
+      let newEntry = percentToVal(startEntryPct + dPct);
+      let newExit = newEntry + span;
       if (newEntry < 0) { newEntry = 0; newExit = span; }
       if (newExit > getMax()) { newExit = getMax(); newEntry = getMax() - span; }
       entryInput.value = newEntry;

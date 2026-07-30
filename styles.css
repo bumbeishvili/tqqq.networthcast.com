@@ -1,42 +1,153 @@
-  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  /* Orion design system: Poppins for display/headings, Open Sans for UI text,
+     JetBrains Mono retained for figures (tabular numerals matter more here than
+     matching Orion's Roboto, which has no monospace variant in the library). */
+  @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Open+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  /* ── Orion light theme ───────────────────────────────────────────────────
+     Tokens lifted from the "Library - Orion Light theme" Figma file. Raw
+     palette first (the file's own swatch names), then the semantic tokens the
+     app actually consumes. Change a semantic token to re-skin; the raw ramp
+     stays as the source of truth.                                           */
   :root {
-    --bg: #0a0e17;
-    --surface: #111827;
-    --surface2: #1a2235;
-    --border: #1e2a3f;
-    --text: #e2e8f0;
-    --text-muted: #64748b;
-    --accent: #22d3ee;
-    --accent2: #a78bfa;
-    --green: #34d399;
-    --red: #f87171;
-    --orange: #fbbf24;
+    /* raw Orion palette */
+    --o-birches:      #023aff;   /* deep blue          */
+    --o-purple:       #8676ff;   /* Purple Heart — primary accent */
+    --o-purple-deep:  #c64eff;
+    --o-night-blue:   #383874;   /* body text          */
+    --o-lavender:     #dbdff1;   /* borders            */
+    --o-mist:         #eef0fa;   /* page background    */
+    --o-snow-alt:     #f6f7fb;   /* raised background  */
+    --o-snow:         #ffffff;   /* cards / surfaces   */
+    --o-red:          #ff2d2e;
+    --o-green:        #00b929;
+    --o-amber:        #ffba69;
+    --o-pink:         #ff708b;
+
+    /* semantic tokens — what the components use */
+    --bg: #f5f6fb;
+    --surface: var(--o-snow);
+    --surface2: var(--o-snow-alt);
+    --border: var(--o-lavender);
+    /* Slider groove. --surface2 (#f6f7fb) used to do this job, but it only
+       read as a groove against a white panel — once the chart panel went
+       transparent the quarter slider sat on the #f5f6fb page and the path
+       vanished. Same value as the chart's grid lines (Orion's own line
+       colour), so every hairline on the page agrees. */
+    --track: #c5c1ec;
+    /* Softer groove for the sidebar sliders. They sit on a white panel, where
+       full-strength --track reads as a drawn line competing with the thumb;
+       the quarter slider keeps the strong value because it sits on the page
+       background and needs it to stay visible at all. */
+    --track-soft: rgba(197, 193, 236, 0.45);
+    /* Text ramp lifted from how Orion's own dashboards colour type: Night Blue
+       carries 50.6% of all text (74% of headings), with #5a5a89/#8484a0 as the
+       muted steps. Purple is only ~3% of text there — an accent, never body
+       copy — so it is deliberately NOT part of this ramp. */
+    /* Three tiers, spaced to reproduce the DARK theme's visual hierarchy.
+       That theme ran #e2e8f0 primary (15.66:1) against #64748b muted (4.06:1)
+       — a 3.86x separation, which is why only values and names read as "loud"
+       there and every label sat back. A first pass at this light theme put
+       muted at #5a5a89, only 1.64x apart, so everything shouted at once.
+       These restore ~2.9x/3.6x separation using Orion's own ramp.            */
+    --text: var(--o-night-blue);    /* #383874 · 10.57:1 — names, values, headings  */
+    --text-muted: #8484a0;          /*           3.63:1 — field labels, CAGR/DD     */
+    --text-subtle: #9292c1;         /*           2.96:1 — date ranges, units, axis  */
+    --accent: var(--o-purple);
+    --accent2: var(--o-purple-deep);
+    --green: var(--o-green);
+    --red: var(--o-red);
+    --orange: #e8890b;              /* Orion amber darkened: #ffba69 fails contrast on white */
+
+    /* TWO-TIER SEMANTIC COLOUR.
+       Orion's palette is built for large dashboard graphics, where 3:1 is the
+       bar. This app prints gain/loss percentages at 11-12px all over the UI,
+       which needs 4.5:1. Measured on white: green 2.63, amber 2.62, pink 2.64 —
+       all fail as text while being perfectly good as chart lines.
+       So: the --* tokens above stay bright for STROKES, FILLS and CHART LINES;
+       the --*-text tokens below are the darkened, on-hue versions for anything
+       that renders as TYPE. Every one clears 4.5:1 on both --bg and --surface. */
+    --green-text:  #067d21;
+    --red-text:    #c81e1f;
+    --orange-text: #9c5c0b;
+    --pink-text:   #c2185b;
+    --accent-text: #5b4bd6;
+
+    /* accent as RGB triplets so alpha variants stay in one place */
+    --accent-rgb: 134, 118, 255;
+    --accent2-rgb: 198, 78, 255;
+    --green-rgb: 0, 185, 41;
+    --red-rgb: 255, 45, 46;
+    --text-rgb: 56, 56, 116;
+
+    /* Orion's five-layer purple-tinted elevation stack */
+    --shadow-sm: 0 3px 2px rgba(108,73,172,0.02), 0 7px 5px rgba(108,73,172,0.03);
+    --shadow-md: 0 3px 2px rgba(108,73,172,0.02), 0 7px 5px rgba(108,73,172,0.03),
+                 0 13px 10px rgba(108,73,172,0.04);
+    --shadow-lg: 0 3px 2px rgba(108,73,172,0.02), 0 7px 5px rgba(108,73,172,0.03),
+                 0 13px 10px rgba(108,73,172,0.04), 0 22px 18px rgba(108,73,172,0.04),
+                 0 42px 33px rgba(108,73,172,0.05);
+
+    /* ── Shared on/off language ──────────────────────────────────────────
+       One vocabulary for every two-state control (toggle buttons, pills,
+       chips), so "off" and "on" read identically wherever they appear.
+       Off = resting lavender tint; hover = same tint deepened with a purple
+       hairline; on = purple wash, purple border, accent type.              */
+    --state-off-bg:      rgba(219, 223, 241, 0.45);
+    --state-off-border:  var(--border);
+    --state-off-text:    var(--text-muted);
+    --state-hover-bg:    rgba(219, 223, 241, 0.85);
+    --state-hover-border: rgba(134, 118, 255, 0.40);
+    /* On = a clean white fill. The page ground is #f5f6fb, so white reads as
+       lifted rather than tinted, and the off state's lavender wash reads as
+       recessed against it — the two states separate by value without either
+       one having to shout. */
+    --state-on-bg:       var(--o-snow);
+    --state-on-border:   var(--border);
+    --state-on-text:     var(--text);
+    --state-hidden-opacity: 0.45;   /* "hidden" reading, shared by chips + pills */
+
+    /* Orion radii */
+    --r-sm: 8px;
+    --r-md: 10px;
+    --r-lg: 16px;
+    --r-xl: 20px;
+    --r-pill: 100px;
   }
 
   body {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Open Sans', sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
     padding: 24px;
   }
 
+  /* Title and subtitle share one left-aligned row. Centring them in a column
+     spent a whole line of vertical space on two short strings and pushed the
+     chart down; on one line the header is half the height.
+     #share-btn is absolutely positioned top-right so it isn't in this flex
+     flow — the padding-right is what stops a long title sliding under it.
+     Wrapping is kept so narrow viewports fall back to two lines. */
   .header {
-    text-align: center;
+    text-align: left;
     margin-bottom: 18px;
     position: relative;
     display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 2px;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: baseline;
+    column-gap: 14px;
+    row-gap: 2px;
+    padding-right: 140px;
   }
 
+  /* Orion uses Poppins for display type; Open Sans carries the UI text. */
   .header h1 {
+    font-family: 'Poppins', sans-serif;
     font-size: 20px;
-    font-weight: 700;
+    font-weight: 600;
     letter-spacing: -0.3px;
     margin: 0;
     line-height: 1.2;
@@ -44,6 +155,10 @@
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
   }
+  .panel h2,
+  .strategy-panel-section-label,
+  .sc-modal-title,
+  .strategy-stat-value { font-family: 'Poppins', sans-serif; }
 
   .header p {
     color: var(--text-muted);
@@ -51,12 +166,16 @@
     font-size: 12px;
   }
 
+  /* Orion's dashboard split: a narrow left rail of small cards against the page
+     background, and one large elevated container holding the visualisation.
+     Widening the frame and narrowing the rail hands ~180px straight to the
+     chart, which is the only thing here that benefits from more pixels. */
   .layout {
-    max-width: 1200px;
+    max-width: 1440px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: 320px 1fr;
-    gap: 24px;
+    grid-template-columns: 288px 1fr;
+    gap: 20px;
   }
 
   /* Layout collapses to single-column AND the share button + legend chips
@@ -124,6 +243,9 @@
     body { padding: 12px; }
     .header h1 { font-size: 17px; }
     .header p  { font-size: 11px; }
+    /* The share button loses its text label at this width, so it needs far
+       less clearance — reclaim it for the title. */
+    .header { padding-right: 56px; column-gap: 10px; }
     .panel { padding: 16px; }
     .panel h2 { font-size: 12px; margin-bottom: 12px; }
   }
@@ -142,12 +264,12 @@
   .site-footer a {
     color: var(--text-muted);
     text-decoration: none;
-    border-bottom: 1px dashed rgba(100, 116, 139, 0.4);
+    border-bottom: 1px dashed rgba(122, 122, 166, 0.4);
     padding-bottom: 1px;
     transition: color 0.15s, border-color 0.15s;
   }
   .site-footer a:hover {
-    color: var(--accent);
+    color: var(--accent-text);
     border-color: var(--accent);
   }
 
@@ -156,6 +278,19 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 24px;
+  }
+
+  /* The sidebar keeps its white panel; the chart loses its own. A card around
+     a chart is just a frame — the plot already has an axis and a legend to
+     bound it, so the surface adds no information and costs 2×24px of padding
+     plus a border on the one element that actually wants the pixels. The page
+     reads as a control surface beside an open canvas. */
+  .right-col > .panel {
+    background: none;
+    border: 0;
+    border-radius: 0;
+    padding: 0;
+    box-shadow: none;
   }
 
   .panel h2 {
@@ -179,11 +314,25 @@
     margin-bottom: 4px;
   }
 
+  /* Field labels and the header subtitle are chrome, not content — they name
+     the value but the value is what you read. Drop them to 70% so the numbers
+     beside them carry the eye, restoring the dark theme's hierarchy where only
+     some text said "I am here".
+     Opacity rather than a dimmer hex: these sit on two different grounds (the
+     white panel and the mist page background), and a single fixed colour would
+     only be correct on one of them.
+     `:not(.mc-raise)` because that label wraps the increase <select> — dimming
+     the label would dim the control with it, so its two text runs are wrapped
+     in .mc-raise-txt and dimmed individually instead. */
+  .header p,
+  .control-group > label:not(.mc-raise),
+  .mc-raise-txt { opacity: .7; }
+
   .control-group .value-display {
     font-family: 'JetBrains Mono', monospace;
     font-size: 18px;
     font-weight: 500;
-    color: var(--accent);
+    color: var(--text);
     margin-bottom: 6px;
   }
 
@@ -220,7 +369,7 @@
     width: 100%;
     height: 5px;
     border-radius: 3px;
-    background: var(--surface2);
+    background: var(--track-soft);
     outline: none;
   }
 
@@ -231,7 +380,7 @@
     border-radius: 50%;
     background: var(--accent);
     cursor: pointer;
-    box-shadow: 0 0 8px rgba(34, 211, 238, 0.4);
+    box-shadow: 0 0 8px rgba(134, 118, 255, 0.4);
   }
 
   input[type="range"]::-moz-range-thumb {
@@ -296,12 +445,12 @@
     line-height: 1.6;
   }
   .adaptive-line strong {
-    color: var(--accent2);
+    color: var(--text);
     font-weight: 600;
   }
   .inline-select {
     background: var(--surface2);
-    color: var(--accent);
+    color: var(--text);
     border: 1px solid var(--border);
     border-radius: 4px;
     padding: 2px 4px 2px 6px;
@@ -340,26 +489,26 @@
     background: var(--surface2);
     border: 1px solid var(--border);
     border-radius: 8px;
-    box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+    box-shadow: var(--shadow-lg);
     padding: 4px;
     overflow-y: auto;
     overflow-x: hidden;
     font-family: 'JetBrains Mono', monospace;
     /* Slim, on-theme scrollbar for the long (10–300 / RSI) option lists. */
     scrollbar-width: thin;
-    scrollbar-color: rgba(100,116,139,0.5) transparent;
+    scrollbar-color: rgba(122, 122, 166,0.5) transparent;
   }
   .pdrop-popup::-webkit-scrollbar { width: 8px; }
   .pdrop-popup::-webkit-scrollbar-track { background: transparent; margin: 4px 0; }
   .pdrop-popup::-webkit-scrollbar-thumb {
-    background: rgba(100,116,139,0.5);
+    background: rgba(122, 122, 166,0.5);
     border-radius: 8px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
-  .pdrop-popup::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.65); background-clip: padding-box; }
+  .pdrop-popup::-webkit-scrollbar-thumb:hover { background: rgba(134, 118, 255,0.65); background-clip: padding-box; }
   .pdrop-head {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Open Sans', sans-serif;
     font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;
     color: var(--text-muted); padding: 4px 8px 6px; white-space: nowrap;
   }
@@ -377,11 +526,11 @@
     cursor: pointer;
     transition: background 0.1s;
   }
-  .pdrop-row:hover { background: rgba(34,211,238,0.10); }
-  .pdrop-row.selected { background: rgba(34,211,238,0.16); }
-  .pdrop-rlabel { color: var(--accent); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pdrop-row:hover { background: rgba(134, 118, 255,0.10); }
+  .pdrop-row.selected { background: rgba(134, 118, 255,0.16); }
+  .pdrop-rlabel { color: var(--text); font-size: 12px; font-weight: 500; white-space: nowrap; }
   .pdrop-track {
-    height: 8px; border-radius: 4px; background: rgba(148,163,184,0.14);
+    height: 8px; border-radius: 4px; background: rgba(122, 122, 166,0.14);
     overflow: hidden;
     /* The popup is shrink-to-fit (min-width only), so this 1fr column would
        collapse to 0 when labels are long ("never too hot (off)") + the value
@@ -394,7 +543,7 @@
     background: var(--accent); border-radius: 4px;
     transition: width 0.25s ease;
   }
-  .pdrop-row.best .pdrop-fill { background: var(--green, #4ade80); }
+  .pdrop-row.best .pdrop-fill { background: var(--green, #00b929); }
   /* Plateau marker: a row whose value repeats the one directly above it — the
      setting has stopped changing the outcome (e.g. a bubble-insurance threshold
      too high to ever trigger in the viewed range). Dim the bar and prefix the
@@ -405,14 +554,14 @@
   .pdrop-rval {
     font-size: 11px; color: var(--text); white-space: nowrap; text-align: right;
   }
-  .pdrop-row.best .pdrop-rval { color: var(--green, #4ade80); font-weight: 600; }
+  .pdrop-row.best .pdrop-rval { color: var(--green, #00b929); font-weight: 600; }
 
   #advanced-toggle {
     width: 100%;
     background: none;
     border: 1px dashed var(--border);
     color: var(--text-muted);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Open Sans', sans-serif;
     font-size: 11px;
     font-weight: 500;
     padding: 6px 10px;
@@ -422,7 +571,7 @@
   }
   #advanced-toggle:hover {
     border-color: var(--accent);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .panel-head {
@@ -439,7 +588,7 @@
     background: none;
     border: 1px dashed var(--border);
     color: var(--text-muted);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Open Sans', sans-serif;
     font-size: 11px;
     font-weight: 500;
     padding: 6px 12px;
@@ -449,7 +598,7 @@
   }
   #analytics-toggle:hover {
     border-color: var(--accent);
-    color: var(--accent);
+    color: var(--accent-text);
   }
 
   .modal {
@@ -464,7 +613,7 @@
   .modal-backdrop {
     position: absolute;
     inset: 0;
-    background: rgba(2, 6, 18, 0.7);
+    background: rgba(56, 56, 116, 0.45);
     backdrop-filter: blur(2px);
   }
   .modal-content {
@@ -482,18 +631,18 @@
     align-items: center;
     gap: 6px;
     padding: 4px 10px;
-    background: rgba(34, 211, 238, 0.08);
-    border: 1px solid rgba(34, 211, 238, 0.3);
+    background: rgba(134, 118, 255, 0.08);
+    border: 1px solid rgba(134, 118, 255, 0.3);
     border-radius: 6px;
-    color: var(--accent);
-    font: 600 10px 'DM Sans', sans-serif;
+    color: var(--accent-text);
+    font: 600 10px 'Open Sans', sans-serif;
     letter-spacing: 0.3px;
     text-transform: uppercase;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
   }
   .modal-share:hover {
-    background: rgba(34, 211, 238, 0.16);
+    background: rgba(134, 118, 255, 0.16);
     border-color: var(--accent);
   }
   .analytics-actions-left {
@@ -507,15 +656,15 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background: rgba(34, 211, 238, 0.08);
-    border: 1px solid rgba(34, 211, 238, 0.3);
+    background: rgba(134, 118, 255, 0.08);
+    border: 1px solid rgba(134, 118, 255, 0.3);
     border-radius: 6px;
-    color: var(--accent);
+    color: var(--accent-text);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
   }
   .modal-icon-btn:hover {
-    background: rgba(34, 211, 238, 0.18);
+    background: rgba(134, 118, 255, 0.18);
     border-color: var(--accent);
   }
 
@@ -524,18 +673,18 @@
     width: 100%;
     margin-top: 16px;
     padding: 12px 14px;
-    background: linear-gradient(180deg, rgba(167, 139, 250, 0.10), rgba(34, 211, 238, 0.06));
+    background: linear-gradient(180deg, rgba(198, 78, 255, 0.10), rgba(134, 118, 255, 0.06));
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text);
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     letter-spacing: 0.3px;
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s, transform 0.05s;
   }
   .strategy-library-btn:hover {
     border-color: var(--accent2);
-    background: linear-gradient(180deg, rgba(167, 139, 250, 0.18), rgba(34, 211, 238, 0.10));
+    background: linear-gradient(180deg, rgba(198, 78, 255, 0.18), rgba(134, 118, 255, 0.10));
   }
   .strategy-library-btn:active { transform: translateY(1px); }
 
@@ -544,18 +693,18 @@
     display: block;
     margin: 0 0 14px;
     padding: 10px 12px;
-    background: linear-gradient(180deg, rgba(163, 230, 53, 0.10), rgba(56, 189, 248, 0.06));
+    background: linear-gradient(180deg, rgba(134, 118, 255, 0.10), rgba(134, 118, 255, 0.06));
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text);
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     letter-spacing: 0.2px;
     text-decoration: none;
     transition: border-color 0.15s, background 0.15s;
   }
   .sma-explorer-link:hover {
-    border-color: #a3e635;
-    background: linear-gradient(180deg, rgba(163, 230, 53, 0.18), rgba(56, 189, 248, 0.10));
+    border-color: #8676ff;
+    background: linear-gradient(180deg, rgba(134, 118, 255, 0.18), rgba(134, 118, 255, 0.10));
   }
 
   .strategy-library-modal-content {
@@ -599,7 +748,7 @@
   .sl-leg-strat { background: var(--accent2); }
   .sl-leg-spy { background: var(--text-muted); margin-left: 6px; }
   .sl-intro-note { color: var(--text-muted); }
-  .sl-intro-note b { color: var(--green); font-weight: 600; }
+  .sl-intro-note b { color: var(--green-text); font-weight: 600; }
 
   /* Card grid */
   .sl-cards {
@@ -617,7 +766,7 @@
     border-radius: 10px;
     transition: border-color 0.15s;
   }
-  .sl-card:hover { border-color: rgba(167, 139, 250, 0.4); }
+  .sl-card:hover { border-color: rgba(198, 78, 255, 0.4); }
   .sl-card-off { opacity: 0.6; }
   .sl-card-head {
     display: flex;
@@ -633,7 +782,7 @@
     text-decoration: none;
     min-width: 0;
   }
-  .sl-card-name:hover { color: var(--accent2); }
+  .sl-card-name:hover { color: var(--accent-text); }
   /* Sparkline */
   .sl-spark {
     position: relative;
@@ -662,7 +811,7 @@
     text-shadow: 0 0 3px var(--surface), 0 0 3px var(--surface), 0 0 2px var(--surface);
   }
   .sl-lbl-start { left: 4px; color: var(--text-muted); font-weight: 600; }
-  .sl-lbl-strat { right: 4px; color: var(--accent2); }
+  .sl-lbl-strat { right: 4px; color: var(--text); }
   .sl-lbl-spy { right: 4px; color: var(--text-muted); font-weight: 600; font-size: 9px; }
   .sl-grid { stroke: var(--border); stroke-width: 0.6; opacity: 0.55; }
   .sl-logtag {
@@ -705,7 +854,7 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     pointer-events: none;
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-md);
   }
   .sl-tooltip[hidden] { display: none; }
   .sl-tt-yr {
@@ -715,20 +864,20 @@
     font-weight: 600;
     margin-bottom: 2px;
   }
-  .sl-tt-mult { color: var(--accent2); font-weight: 700; }
+  .sl-tt-mult { color: var(--text); font-weight: 700; }
   .sl-tt-row { display: flex; align-items: center; gap: 7px; }
   .sl-tt-track {
     flex: 1 1 auto;
     height: 7px;
     min-width: 70px;
-    background: rgba(255, 255, 255, 0.07);
+    background: rgba(56, 56, 116, 0.10);
     border-radius: 3px;
     overflow: hidden;
   }
   .sl-tt-track i { display: block; height: 100%; border-radius: 3px; }
   .sl-tt-fill-strat { background: var(--accent2); }
   .sl-tt-fill-spy { background: var(--text-muted); }
-  .sl-tt-strat { color: var(--accent2); font-weight: 700; min-width: 46px; text-align: right; }
+  .sl-tt-strat { color: var(--text); font-weight: 700; min-width: 46px; text-align: right; }
   .sl-tt-spy { color: var(--text-muted); min-width: 46px; text-align: right; }
   /* Hover crosshair + point markers */
   .sl-cross {
@@ -736,7 +885,7 @@
     top: 0;
     height: 100%;
     width: 1px;
-    background: rgba(226, 232, 240, 0.28);
+    background: rgba(56, 56, 116, 0.30);
     display: none;
     pointer-events: none;
     transform: translateX(-0.5px);
@@ -757,10 +906,10 @@
   .sl-wip {
     margin: 0 0 12px;
     padding: 7px 12px;
-    background: rgba(251, 191, 36, 0.10);
-    border: 1px solid rgba(251, 191, 36, 0.35);
+    background: rgba(232, 137, 11, 0.10);
+    border: 1px solid rgba(232, 137, 11, 0.35);
     border-radius: 7px;
-    color: var(--orange);
+    color: var(--orange-text);
     font-size: 11px;
     line-height: 1.5;
   }
@@ -792,23 +941,23 @@
   .sl-era-empty { opacity: 0.45; }
   .sl-era-hd { font-size: 9px; color: var(--text-muted); }
   .sl-era-cagr { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
-  .sl-era-cagr.pos { color: var(--green); }
-  .sl-era-cagr.neg { color: var(--red); }
+  .sl-era-cagr.pos { color: var(--green-text); }
+  .sl-era-cagr.neg { color: var(--red-text); }
   .sl-era-dd { font-size: 9.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .sl-era-na { font-size: 14px; color: var(--text-muted); }
   .sl-add {
     flex: 0 0 auto;
     padding: 5px 11px;
-    background: rgba(52, 211, 153, 0.12);
-    border: 1px solid rgba(52, 211, 153, 0.35);
+    background: rgba(0, 185, 41, 0.12);
+    border: 1px solid rgba(0, 185, 41, 0.35);
     border-radius: 6px;
-    color: var(--green);
-    font: 600 11px 'DM Sans', sans-serif;
+    color: var(--green-text);
+    font: 600 11px 'Open Sans', sans-serif;
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s, border-color 0.15s;
   }
-  .sl-add:hover { background: rgba(52, 211, 153, 0.22); border-color: var(--green); }
+  .sl-add:hover { background: rgba(0, 185, 41, 0.22); border-color: var(--green-text); }
   .sl-add:active { transform: translateY(1px); }
   .sl-add-na { flex: 0 0 auto; font-size: 10px; color: var(--text-muted); opacity: 0.7; white-space: nowrap; }
   body.modal-open { overflow: hidden; }
@@ -830,7 +979,7 @@
   .modal-close:hover {
     color: var(--text);
     border-color: var(--accent);
-    background: rgba(34, 211, 238, 0.08);
+    background: rgba(134, 118, 255, 0.08);
   }
   .modal-body {
     padding: 8px 16px 14px;
@@ -872,7 +1021,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 5px 6px;
-    font: 600 11px 'DM Sans', sans-serif;
+    font: 600 11px 'Open Sans', sans-serif;
     color: var(--text-muted);
     line-height: 1.5;
   }
@@ -881,11 +1030,11 @@
   .analytics-sentence .analytics-baseline-select {
     max-width: 200px;
     padding: 3px 8px;
-    background: rgba(15, 23, 42, 0.6);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);
-    font: 700 11px 'DM Sans', sans-serif;
+    font: 700 11px 'Open Sans', sans-serif;
     letter-spacing: 0.2px;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
@@ -896,11 +1045,11 @@
   .analytics-sentence .as-slot { display: inline-flex; }
   .analytics-sentence .metric-select {
     padding: 3px 6px;
-    background: rgba(15, 23, 42, 0.6);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);
-    font: 700 11px 'DM Sans', sans-serif;
+    font: 700 11px 'Open Sans', sans-serif;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
   }
@@ -914,7 +1063,7 @@
     display: inline-flex;
     flex-direction: column;
     line-height: 1.1;
-    font: 600 8px 'DM Sans', sans-serif;
+    font: 600 8px 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted);
@@ -922,11 +1071,11 @@
   }
   .analytics-baseline-select {
     padding: 4px 8px;
-    background: rgba(15, 23, 42, 0.6);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 6px;
     color: var(--text-muted);
-    font: 600 10px 'DM Sans', sans-serif;
+    font: 600 10px 'Open Sans', sans-serif;
     letter-spacing: 0.3px;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
@@ -971,14 +1120,14 @@
     gap: 4px;
   }
   .analytics-metrics .ap-label {
-    font: 700 9px 'DM Sans', sans-serif;
+    font: 700 9px 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted);
     margin-right: 2px;
   }
   .analytics-metrics .ap-label b {
-    color: var(--accent);
+    color: var(--text);
     font-weight: 700;
     text-transform: none;
     letter-spacing: 0;
@@ -995,12 +1144,12 @@
     align-items: baseline;
     gap: 4px;
     padding: 1px 7px;
-    background: rgba(34, 211, 238, 0.06);
-    border: 1px solid rgba(34, 211, 238, 0.2);
+    background: rgba(134, 118, 255, 0.06);
+    border: 1px solid rgba(134, 118, 255, 0.2);
     border-radius: 4px;
     font-size: 10px;
     color: var(--text-muted);
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Open Sans', sans-serif;
     cursor: pointer; /* whole pill opens its dropdown */
   }
   .analytics-metrics .metric strong {
@@ -1013,8 +1162,8 @@
      Monthly = 0). The dropdown stays clickable so the user can adjust it. */
   .analytics-metrics .metric.metric--dim {
     opacity: 0.42;
-    background: rgba(100, 116, 139, 0.06);
-    border-color: rgba(100, 116, 139, 0.18);
+    background: rgba(122, 122, 166, 0.06);
+    border-color: rgba(122, 122, 166, 0.18);
   }
   .analytics-metrics .metric.metric--dim:hover { opacity: 0.75; }
   .analytics-metrics .metric .metric-select {
@@ -1037,8 +1186,8 @@
     background-repeat: no-repeat;
     padding-right: 10px;
   }
-  .analytics-metrics .metric .metric-select:hover { color: var(--accent); }
-  .analytics-metrics .metric .metric-select:focus { color: var(--accent); }
+  .analytics-metrics .metric .metric-select:hover { color: var(--accent-text); }
+  .analytics-metrics .metric .metric-select:focus { color: var(--accent-text); }
   .analytics-metrics .metric .metric-select option {
     background: var(--surface);
     color: var(--text);
@@ -1046,8 +1195,8 @@
   .analytics-baseline-custom {
     width: 90px;
     padding: 4px 8px;
-    background: rgba(15, 23, 42, 0.6);
-    border: 1px solid rgba(34, 211, 238, 0.4);
+    background: var(--surface);
+    border: 1px solid rgba(134, 118, 255, 0.4);
     border-radius: 6px;
     color: var(--text);
     font: 600 10px 'JetBrains Mono', monospace;
@@ -1071,12 +1220,12 @@
   .analytics-baseline-pct-slider[hidden] { display: none; }
   .analytics-baseline-pct-slider::-webkit-slider-runnable-track {
     height: 4px;
-    background: rgba(34, 211, 238, 0.18);
+    background: rgba(134, 118, 255, 0.18);
     border-radius: 2px;
   }
   .analytics-baseline-pct-slider::-moz-range-track {
     height: 4px;
-    background: rgba(34, 211, 238, 0.18);
+    background: rgba(134, 118, 255, 0.18);
     border-radius: 2px;
   }
   .analytics-baseline-pct-slider::-webkit-slider-thumb {
@@ -1088,7 +1237,7 @@
     border: 2px solid var(--surface);
     border-radius: 50%;
     margin-top: -5px;
-    box-shadow: 0 0 6px rgba(34, 211, 238, 0.6);
+    box-shadow: 0 0 6px rgba(134, 118, 255, 0.6);
   }
   .analytics-baseline-pct-slider::-moz-range-thumb {
     width: 12px;
@@ -1096,11 +1245,11 @@
     background: var(--accent);
     border: 2px solid var(--surface);
     border-radius: 50%;
-    box-shadow: 0 0 6px rgba(34, 211, 238, 0.6);
+    box-shadow: 0 0 6px rgba(134, 118, 255, 0.6);
   }
   .analytics-baseline-pct-display {
     font: 700 11px 'JetBrains Mono', monospace;
-    color: var(--accent);
+    color: var(--text);
     min-width: 42px;
     text-align: center;
   }
@@ -1124,7 +1273,7 @@
   .analytics-progress-track {
     flex: 1;
     height: 3px;
-    background: rgba(34, 211, 238, 0.1);
+    background: rgba(134, 118, 255, 0.1);
     border-radius: 2px;
     overflow: hidden;
   }
@@ -1144,15 +1293,15 @@
     border-radius: 6px;
     /* Custom scrollbar (WebKit) */
     scrollbar-width: thin;
-    scrollbar-color: rgba(100,116,139,0.5) transparent;
+    scrollbar-color: rgba(122, 122, 166,0.5) transparent;
   }
   .heatmap-wrap::-webkit-scrollbar { width: 8px; height: 8px; }
-  .heatmap-wrap::-webkit-scrollbar-track { background: rgba(15,23,42,0.4); }
+  .heatmap-wrap::-webkit-scrollbar-track { background: rgba(56, 56, 116,0.06); }
   .heatmap-wrap::-webkit-scrollbar-thumb {
-    background: rgba(100,116,139,0.45);
+    background: rgba(122, 122, 166,0.45);
     border-radius: 4px;
   }
-  .heatmap-wrap::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.6); }
+  .heatmap-wrap::-webkit-scrollbar-thumb:hover { background: rgba(134, 118, 255,0.6); }
   .heatmap-wrap::-webkit-scrollbar-corner { background: transparent; }
   .heatmap-wrap.loading { padding: 14px; color: var(--text-muted); font-size: 11px; }
   .heatmap-table {
@@ -1175,8 +1324,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    border-right: 1px solid rgba(30,42,63,0.4);
-    border-bottom: 1px solid rgba(30,42,63,0.4);
+    border-right: 1px solid rgba(219, 223, 241,0.4);
+    border-bottom: 1px solid rgba(219, 223, 241,0.4);
   }
   /* Force thead and tbody to be sibling stacking contexts. With position:
      relative and explicit z-index on the row groups themselves, everything
@@ -1230,7 +1379,7 @@
   }
   .heatmap-table td.heatmap-cell.empty {
     background: transparent;
-    color: rgba(100,116,139,0.4);
+    color: rgba(122, 122, 166,0.4);
   }
 
   /* Spiral visualization for "Custom Growth (% per year)" baseline. */
@@ -1269,7 +1418,9 @@
     right: 2px;
     font-size: 8px;
     line-height: 1;
-    opacity: 0.55;
+    /* inherits the per-cell colour JS picks from the cell luminance; 0.55 was
+       too faint to read once cells became saturated on a light page */
+    opacity: 0.72;
     pointer-events: none;
   }
   /* Hover cross-highlight: outline only on body cells (td). The position:relative
@@ -1280,19 +1431,19 @@
      covers it cleanly. */
   .heatmap-table td.row-hover,
   .heatmap-table td.col-hover {
-    outline: 1px solid rgba(34, 211, 238, 0.45);
+    outline: 1px solid rgba(134, 118, 255, 0.45);
     outline-offset: -1px;
     position: relative;
     z-index: 1;
   }
   .heatmap-table td.row-hover.col-hover {
-    outline-color: rgba(34, 211, 238, 0.95);
+    outline-color: rgba(134, 118, 255, 0.95);
     z-index: 2;
   }
   .heatmap-table tbody th.row-hover,
   .heatmap-table thead th.col-hover {
-    color: var(--accent);
-    background: rgba(34, 211, 238, 0.14);
+    color: var(--text);
+    background: rgba(134, 118, 255, 0.14);
   }
 
   /* Custom interactive tooltip (replaces native title) */
@@ -1304,11 +1455,11 @@
        tooltip itself, so allowing pointer events here doesn't interfere. */
     pointer-events: auto;
     background: var(--surface);
-    border: 1px solid rgba(34, 211, 238, 0.4);
+    border: 1px solid rgba(134, 118, 255, 0.4);
     border-radius: 6px;
     padding: 12px 14px;
-    box-shadow: 0 12px 28px rgba(0,0,0,0.6);
-    font-family: 'DM Sans', sans-serif;
+    box-shadow: var(--shadow-lg);
+    font-family: 'Open Sans', sans-serif;
     font-size: 13px;
     color: var(--text);
     line-height: 1.5;
@@ -1365,7 +1516,7 @@
   }
   .heatmap-tooltip .tt-strat {
     font-weight: 600;
-    color: var(--accent);
+    color: var(--text);
     font-size: 16px;
     margin-bottom: 6px;
   }
@@ -1402,19 +1553,19 @@
     text-overflow: ellipsis;
   }
   .heatmap-tooltip .tt-bar-row.tt-bar-primary .tt-bar-label {
-    color: var(--accent);
+    color: var(--text);
     font-weight: 600;
   }
   .heatmap-tooltip .tt-bar-track {
     height: 8px;
-    background: rgba(15, 23, 42, 0.7);
+    background: rgba(56, 56, 116, 0.10);
     border-radius: 2px;
     overflow: hidden;
   }
   .heatmap-tooltip .tt-bar-fill {
     height: 100%;
     border-radius: 2px;
-    background: rgba(100, 116, 139, 0.6);
+    background: rgba(122, 122, 166, 0.6);
     transition: width 0.15s;
   }
   .heatmap-tooltip .tt-bar-row.tt-bar-primary .tt-bar-fill {
@@ -1430,7 +1581,7 @@
   .heatmap-tooltip .tt-dd {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    color: var(--red);
+    color: var(--red-text);
     /* Reset the period-row's uppercase + letter-spacing so the
        drawdown number reads as a value, not a heading. */
     text-transform: none;
@@ -1471,7 +1622,7 @@
   .heatmap-tooltip .tt-hdr-stat-label {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    color: var(--accent);
+    color: var(--text);
     text-transform: uppercase;
     letter-spacing: 0.04em;
     font-size: 10px;
@@ -1481,7 +1632,7 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 1px;
-    background: rgba(15, 23, 42, 0.55);
+    background: rgba(56, 56, 116, 0.05);
     border-radius: 3px;
     padding: 3px 6px;
     min-width: 0;
@@ -1531,7 +1682,7 @@
     right: 0;
     height: 5px;
     border-radius: 3px;
-    background: var(--surface2);
+    background: var(--track);
   }
   .dual-range .fill {
     position: absolute;
@@ -1550,12 +1701,12 @@
     border-radius: 50%;
     background: var(--accent2);
     cursor: pointer;
-    box-shadow: 0 0 8px rgba(167, 139, 250, 0.4);
+    box-shadow: 0 0 8px rgba(198, 78, 255, 0.4);
     transform: translateX(-50%);
     z-index: 2;
   }
   .dual-range .thumb:hover {
-    box-shadow: 0 0 14px rgba(167, 139, 250, 0.6);
+    box-shadow: 0 0 14px rgba(198, 78, 255, 0.6);
   }
 
   .period-play {
@@ -1565,8 +1716,8 @@
     padding: 0;
     border: none;
     border-radius: 4px;
-    background: rgba(167, 139, 250, 0.12);
-    color: var(--accent2);
+    background: rgba(198, 78, 255, 0.12);
+    color: var(--text);
     font-size: 9px;
     line-height: 1;
     cursor: pointer;
@@ -1574,12 +1725,12 @@
     transition: background 0.15s, color 0.15s, box-shadow 0.15s;
   }
   .period-play:hover {
-    background: rgba(167, 139, 250, 0.25);
+    background: rgba(198, 78, 255, 0.25);
   }
   .period-play[aria-pressed="true"] {
     background: var(--accent2);
     color: #fff;
-    box-shadow: 0 0 8px rgba(167, 139, 250, 0.5);
+    box-shadow: 0 0 8px rgba(198, 78, 255, 0.5);
   }
   .period-play:disabled {
     opacity: 0.35;
@@ -1588,12 +1739,12 @@
 
   .period-slider input[type="range"]::-webkit-slider-thumb {
     background: var(--accent2);
-    box-shadow: 0 0 8px rgba(167, 139, 250, 0.4);
+    box-shadow: 0 0 8px rgba(198, 78, 255, 0.4);
   }
   .period-slider input[type="range"]::-moz-range-thumb {
     background: var(--accent2);
   }
-  .period-slider .value-display { color: var(--accent2); }
+  .period-slider .value-display { color: var(--text); }
 
   .stats-grid {
     display: grid;
@@ -1623,9 +1774,9 @@
     font-weight: 500;
   }
 
-  .positive { color: var(--green); }
-  .negative { color: var(--red); }
-  .neutral { color: var(--accent); }
+  .positive { color: var(--green-text); }
+  .negative { color: var(--red-text); }
+  .neutral { color: var(--text); }
 
   /* Compact strategy legend strip above the chart. Each chip combines
      visibility toggle (eye), color dot, name, and annualized CAGR. */
@@ -1650,10 +1801,10 @@
     align-items: center;
     gap: 6px;
     padding: 5px 10px;
-    background: rgba(30, 42, 63, 0.45);
+    background: rgba(219, 223, 241, 0.45);
     border: 1px solid var(--border);
     border-radius: 6px;
-    font: 500 11px 'DM Sans', sans-serif;
+    font: 500 11px 'Open Sans', sans-serif;
     color: var(--text);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, opacity 0.15s;
@@ -1670,8 +1821,8 @@
     min-width: 0;
   }
   .legend-chip:hover {
-    background: rgba(30, 42, 63, 0.85);
-    border-color: rgba(34, 211, 238, 0.4);
+    background: rgba(219, 223, 241, 0.85);
+    border-color: rgba(134, 118, 255, 0.4);
   }
   .legend-chip .legend-eye {
     width: 12px;
@@ -1679,7 +1830,7 @@
     color: var(--text-muted);
     flex-shrink: 0;
   }
-  .legend-chip:hover .legend-eye { color: var(--accent); }
+  .legend-chip:hover .legend-eye { color: var(--accent-text); }
   .legend-chip .legend-dot {
     width: 8px;
     height: 8px;
@@ -1720,8 +1871,8 @@
     font-weight: 600;
     font-size: 10px;
   }
-  .legend-chip .legend-metric-value.positive { color: var(--green); }
-  .legend-chip .legend-metric-value.negative { color: var(--red); }
+  .legend-chip .legend-metric-value.positive { color: var(--green-text); }
+  .legend-chip .legend-metric-value.negative { color: var(--red-text); }
   .legend-chip .legend-metric-range {
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
@@ -1729,16 +1880,30 @@
     margin-left: 2px;
     white-space: nowrap;
   }
+  /* Active chip = the white on-state, lifted off the #f5f6fb page by a soft
+     shadow. Only the ground changes — the type inside stays on its light-ground
+     colours, so the metrics keep the same green/red they have everywhere else.
+     Scoped with :not(.legend-hidden) so hidden chips keep the recessed wash. */
+  .legend-chip:not(.legend-hidden) {
+    background: var(--state-on-bg);
+    border-color: var(--state-on-border);
+    color: var(--state-on-text);
+    box-shadow: var(--shadow-sm);
+  }
+
+  /* Hidden = the same "off" reading as a hidden strategy pill. 0.15 was tuned
+     for the dark theme, where pale text on near-black still separated; on a
+     light ground it renders the chip invisible. */
   .legend-chip.legend-hidden {
-    opacity: 0.15;
-    background: rgba(30, 42, 63, 0.15);
+    opacity: var(--state-hidden-opacity);
+    background: var(--state-off-bg);
   }
   .legend-chip.legend-hidden:hover {
-    opacity: 0.45;
+    opacity: 0.75;
   }
   .legend-chip.legend-hidden .legend-name {
     text-decoration: line-through;
-    text-decoration-color: rgba(148, 163, 184, 0.6);
+    text-decoration-color: rgba(122, 122, 166, 0.6);
   }
   .legend-chip.legend-hidden .legend-metric-value {
     color: var(--text-muted) !important;
@@ -1758,8 +1923,8 @@
     transition: color 0.15s, background 0.15s;
   }
   .legend-chip .legend-more:hover {
-    background: rgba(34, 211, 238, 0.18);
-    color: var(--accent);
+    background: rgba(134, 118, 255, 0.18);
+    color: var(--accent-text);
   }
   .legend-chip.legend-hidden .legend-more { color: var(--text-muted); }
 
@@ -1786,10 +1951,10 @@
     gap: 8px;
     margin-bottom: 8px;
     padding: 7px 9px;
-    background: rgba(34, 211, 238, 0.08);
-    border: 1px solid rgba(34, 211, 238, 0.3);
+    background: rgba(134, 118, 255, 0.08);
+    border: 1px solid rgba(134, 118, 255, 0.3);
     border-radius: 6px;
-    font: 500 11px 'DM Sans', sans-serif;
+    font: 500 11px 'Open Sans', sans-serif;
     color: var(--text);
     line-height: 1.4;
   }
@@ -1798,26 +1963,26 @@
     flex: 0 0 auto;
     padding: 4px 12px;
     background: var(--accent);
-    color: #0a0e17;
+    color: #ffffff;
     border: none;
     border-radius: 4px;
-    font: 700 11px 'DM Sans', sans-serif;
+    font: 700 11px 'Open Sans', sans-serif;
     letter-spacing: 0.3px;
     cursor: pointer;
     transition: filter 0.15s;
   }
   .shared-strategies-banner .ssb-save:hover { filter: brightness(1.1); }
   .saved-config-pill {
-    background: rgba(30, 42, 63, 0.45);
-    border: 1px solid var(--border);
+    background: var(--state-off-bg);
+    border: 1px solid var(--state-off-border);
     border-radius: 6px;
     padding: 6px 8px;
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, opacity 0.15s;
   }
   .saved-config-pill:hover {
-    background: rgba(30, 42, 63, 0.85);
-    border-color: rgba(34, 211, 238, 0.4);
+    background: var(--state-hover-bg);
+    border-color: var(--state-hover-border);
   }
   .saved-config-pill .sc-top {
     display: flex;
@@ -1837,7 +2002,7 @@
     justify-content: center;
   }
   .saved-config-pill .sc-eye svg { width: 12px; height: 12px; }
-  .saved-config-pill:hover .sc-eye { color: var(--accent); }
+  .saved-config-pill:hover .sc-eye { color: var(--accent-text); }
   /* Eye + drag handle stacked in the left gutter (grip sits under the eye). */
   .saved-config-pill .sc-handle-col {
     display: inline-flex;
@@ -1855,16 +2020,16 @@
     opacity: 0.5;
     cursor: grab;
   }
-  .saved-config-pill .sc-drag:hover { opacity: 1; color: var(--accent); }
+  .saved-config-pill .sc-drag:hover { opacity: 1; color: var(--accent-text); }
   .saved-config-pill .sc-drag:active { cursor: grabbing; }
-  .saved-config-pill.dragging { opacity: 0.55; border-color: var(--accent); background: rgba(34, 211, 238, 0.08); }
+  .saved-config-pill.dragging { opacity: 0.55; border-color: var(--accent); background: rgba(134, 118, 255, 0.08); }
   .saved-config-pill .sc-dot {
     width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
   }
   .saved-config-pill .sc-name {
     flex: 1 1 auto;
     min-width: 0;
-    font: 500 11px 'DM Sans', sans-serif;
+    font: 500 11px 'Open Sans', sans-serif;
     color: var(--text);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -1889,12 +2054,12 @@
     transition: color 0.15s, background 0.15s;
   }
   .saved-config-pill .sc-edit:hover {
-    background: rgba(34, 211, 238, 0.18);
-    color: var(--accent);
+    background: rgba(134, 118, 255, 0.18);
+    color: var(--accent-text);
   }
   .saved-config-pill .sc-delete:hover {
-    background: rgba(248, 113, 113, 0.18);
-    color: var(--red);
+    background: rgba(255, 45, 46, 0.18);
+    color: var(--red-text);
   }
   .saved-config-pill .sc-metrics {
     display: flex;
@@ -1921,8 +2086,8 @@
     font-weight: 600;
     font-size: 10px;
   }
-  .saved-config-pill .sc-metric-value.positive { color: var(--green); }
-  .saved-config-pill .sc-metric-value.negative { color: var(--red); }
+  .saved-config-pill .sc-metric-value.positive { color: var(--green-text); }
+  .saved-config-pill .sc-metric-value.negative { color: var(--red-text); }
   .saved-config-pill .sc-metric-range {
     font-family: 'JetBrains Mono', monospace;
     font-size: 9px;
@@ -1931,10 +2096,10 @@
     flex-basis: 100%;
     margin-top: 1px;
   }
-  .saved-config-pill.is-hidden { opacity: 0.4; }
+  .saved-config-pill.is-hidden { opacity: var(--state-hidden-opacity); }
   .saved-config-pill.is-hidden .sc-name {
     text-decoration: line-through;
-    text-decoration-color: rgba(148, 163, 184, 0.6);
+    text-decoration-color: rgba(122, 122, 166, 0.6);
   }
 
   /* In-sidebar line-color picker (custom popup so the OK button lives inside
@@ -1967,7 +2132,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px;
-    box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--shadow-lg);
     width: max-content;
   }
   .lc-swatches {
@@ -1980,7 +2145,7 @@
     width: 18px;
     height: 18px;
     padding: 0;
-    border: 1px solid rgba(148, 163, 184, 0.35);
+    border: 1px solid rgba(122, 122, 166, 0.35);
     border-radius: 50%;
     cursor: pointer;
     transition: transform 0.1s;
@@ -2015,15 +2180,15 @@
   .lc-ok {
     margin-left: auto;
     padding: 5px 14px;
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     border-radius: 5px;
-    border: 1px solid rgba(34, 211, 238, 0.5);
-    background: rgba(34, 211, 238, 0.14);
-    color: var(--accent);
+    border: 1px solid rgba(134, 118, 255, 0.5);
+    background: rgba(134, 118, 255, 0.14);
+    color: var(--accent-text);
     cursor: pointer;
     transition: background 0.15s;
   }
-  .lc-ok:hover { background: rgba(34, 211, 238, 0.26); }
+  .lc-ok:hover { background: rgba(134, 118, 255, 0.26); }
 
   /* Styled confirm dialog (saved-strategy delete) */
   .sc-modal-overlay {
@@ -2033,7 +2198,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(2, 6, 18, 0.55);
+    background: rgba(56, 56, 116, 0.38);
   }
   .sc-modal {
     width: 320px;
@@ -2042,7 +2207,7 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 20px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--shadow-lg);
   }
   .sc-modal-title {
     font-size: 15px;
@@ -2064,7 +2229,7 @@
   }
   .sc-modal-btn {
     padding: 8px 16px;
-    font: 600 13px 'DM Sans', sans-serif;
+    font: 600 13px 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: var(--surface2);
@@ -2074,11 +2239,11 @@
   }
   .sc-modal-btn:hover { border-color: var(--accent); }
   .sc-modal-btn.danger {
-    border-color: rgba(248, 113, 113, 0.5);
-    background: rgba(248, 113, 113, 0.14);
-    color: var(--red);
+    border-color: rgba(255, 45, 46, 0.5);
+    background: rgba(255, 45, 46, 0.14);
+    color: var(--red-text);
   }
-  .sc-modal-btn.danger:hover { background: rgba(248, 113, 113, 0.26); }
+  .sc-modal-btn.danger:hover { background: rgba(255, 45, 46, 0.26); }
 
   /* Custom-strategy build modal */
   .builder-modal {
@@ -2090,7 +2255,7 @@
     border: 1px solid var(--border);
     border-radius: 12px;
     padding: 22px;
-    box-shadow: 0 24px 70px rgba(0, 0, 0, 0.6);
+    box-shadow: var(--shadow-lg);
   }
   .builder-modal .sc-modal-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
   .builder-help { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin-bottom: 14px; }
@@ -2103,7 +2268,7 @@
     width: 100%;
     min-height: 140px;
     resize: vertical;
-    font: 400 14px 'DM Sans', sans-serif;
+    font: 400 14px 'Open Sans', sans-serif;
     line-height: 1.55;
     background: var(--surface2);
     color: var(--text);
@@ -2118,8 +2283,8 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
     line-height: 1.5;
-    background: #0b1120;
-    color: #cbd5e1;
+    background: #f8f9fc;
+    color: #383874;
     white-space: pre;
     min-height: 220px;
     tab-size: 2;
@@ -2138,7 +2303,7 @@
     overflow: hidden;
     border: 1px solid var(--border);
     border-radius: 8px;
-    background: #0b1120;
+    background: #f8f9fc;
   }
   .code-editor:focus-within { border-color: var(--accent); }
   /* line-number gutter: its own column, so code can never slide under the numbers */
@@ -2151,7 +2316,7 @@
     font: 400 12px/1.5 'JetBrains Mono', ui-monospace, monospace;
     text-align: right;
     white-space: pre;
-    color: #313a4b;               /* faint — dimmer than comments, blends into the editor */
+    color: #a8a8c4;               /* faint — dimmer than comments, blends into the editor */
     overflow: hidden;
     pointer-events: none;
     user-select: none;
@@ -2180,7 +2345,7 @@
     z-index: 0;
     overflow: hidden;
     pointer-events: none;
-    color: #cbd5e1;
+    color: #383874;
     background: transparent;
   }
   .code-editor-hl code { font: inherit; color: inherit; }
@@ -2191,35 +2356,35 @@
     outline: none;
     color: transparent;
     background: transparent;
-    caret-color: #e2e8f0;
+    caret-color: #383874;
   }
   .code-editor-input::placeholder { color: var(--text-muted); }
   /* token colors */
-  .tk-kw  { color: #c792ea; }
-  .tk-str { color: #b7e07a; }
-  .tk-num { color: #f7c948; }
-  .tk-cmt { color: #5c6b82; font-style: italic; }
-  .tk-fn  { color: #56b6ff; }
-  .tk-cls { color: #7dd3fc; }
+  .tk-kw  { color: #a626a4; }
+  .tk-str { color: #0a7d33; }
+  .tk-num { color: #b06000; }
+  .tk-cmt { color: #8a8aa8; font-style: italic; }
+  .tk-fn  { color: #4078f2; }
+  .tk-cls { color: #b06000; }
   .tk-op,
-  .tk-pn  { color: #8b98ac; }
+  .tk-pn  { color: #7a7aa6; }
 
   /* Themed scrollbars — code editor + the modal itself (replaces the OS default). */
   .code-editor-input,
-  .builder-modal { scrollbar-width: thin; scrollbar-color: rgba(100, 116, 139, 0.55) transparent; }
+  .builder-modal { scrollbar-width: thin; scrollbar-color: rgba(122, 122, 166, 0.55) transparent; }
   .code-editor-input::-webkit-scrollbar,
   .builder-modal::-webkit-scrollbar { width: 11px; height: 11px; }
   .code-editor-input::-webkit-scrollbar-track,
   .builder-modal::-webkit-scrollbar-track { background: transparent; }
   .code-editor-input::-webkit-scrollbar-thumb,
   .builder-modal::-webkit-scrollbar-thumb {
-    background: rgba(100, 116, 139, 0.5);
+    background: rgba(122, 122, 166, 0.5);
     border-radius: 7px;
     border: 3px solid transparent;
     background-clip: padding-box;
   }
   .code-editor-input::-webkit-scrollbar-thumb:hover,
-  .builder-modal::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.7); background-clip: padding-box; }
+  .builder-modal::-webkit-scrollbar-thumb:hover { background: rgba(134, 118, 255, 0.7); background-clip: padding-box; }
   .code-editor-input::-webkit-scrollbar-corner,
   .builder-modal::-webkit-scrollbar-corner { background: transparent; }
 
@@ -2227,15 +2392,15 @@
   .custom-edit-btn {
     width: 100%;
     padding: 9px 12px;
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     border-radius: 6px;
-    border: 1px solid rgba(34, 211, 238, 0.5);
-    background: rgba(34, 211, 238, 0.14);
-    color: var(--accent);
+    border: 1px solid rgba(134, 118, 255, 0.5);
+    background: rgba(134, 118, 255, 0.14);
+    color: var(--accent-text);
     cursor: pointer;
     transition: background 0.15s;
   }
-  .custom-edit-btn:hover { background: rgba(34, 211, 238, 0.26); }
+  .custom-edit-btn:hover { background: rgba(134, 118, 255, 0.26); }
   .custom-desc-readout {
     margin-top: 10px;
     padding: 10px 12px;
@@ -2257,10 +2422,10 @@
     margin: 0 0 12px;
     padding: 7px 10px;
     border-radius: 6px;
-    background: rgba(251, 191, 36, 0.1);
-    border: 1px solid rgba(251, 191, 36, 0.3);
-    font: 600 11px 'DM Sans', sans-serif;
-    color: #fbbf24;
+    background: rgba(232, 137, 11, 0.1);
+    border: 1px solid rgba(232, 137, 11, 0.3);
+    font: 600 11px 'Open Sans', sans-serif;
+    color: var(--orange-text);
     line-height: 1.45;
   }
   /* Which tickers a custom strategy can read (TQQQ / QQQ / SPY / QQQ5). */
@@ -2284,7 +2449,7 @@
     margin-top: 12px;
     width: 100%;
     padding: 9px 10px;
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px dashed var(--border);
     background: transparent;
@@ -2292,7 +2457,7 @@
     cursor: pointer;
     transition: border-color 0.15s, color 0.15s, background 0.15s;
   }
-  .new-custom-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(34, 211, 238, 0.06); }
+  .new-custom-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.06); }
 
   /* Custom strategy pill badge */
   .saved-config-pill .sc-badge {
@@ -2300,19 +2465,19 @@
     font: 600 9px 'JetBrains Mono', monospace;
     padding: 1px 5px;
     border-radius: 4px;
-    background: rgba(34, 211, 238, 0.16);
-    color: var(--accent);
+    background: rgba(134, 118, 255, 0.16);
+    color: var(--text);
     text-transform: none;
   }
-  .saved-config-pill .sc-badge.warn { background: rgba(251, 191, 36, 0.18); color: #fbbf24; }
+  .saved-config-pill .sc-badge.warn { background: rgba(232, 137, 11, 0.18); color: var(--orange-text); }
 
   /* Custom strategy sidebar */
   .custom-warn {
     margin: 4px 0 12px;
     padding: 10px 12px;
     border-radius: 8px;
-    border: 1px solid rgba(251, 191, 36, 0.45);
-    background: rgba(251, 191, 36, 0.10);
+    border: 1px solid rgba(232, 137, 11, 0.45);
+    background: rgba(232, 137, 11, 0.10);
     color: var(--text);
     font-size: 12px;
     line-height: 1.5;
@@ -2321,14 +2486,14 @@
     display: block;
     margin-top: 8px;
     padding: 7px 12px;
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     border-radius: 6px;
-    border: 1px solid rgba(251, 191, 36, 0.6);
-    background: rgba(251, 191, 36, 0.16);
-    color: #fbbf24;
+    border: 1px solid rgba(232, 137, 11, 0.6);
+    background: rgba(232, 137, 11, 0.16);
+    color: var(--orange-text);
     cursor: pointer;
   }
-  .custom-run-btn:hover { background: rgba(251, 191, 36, 0.28); }
+  .custom-run-btn:hover { background: rgba(232, 137, 11, 0.28); }
   .custom-stats {
     display: flex;
     gap: 16px;
@@ -2338,12 +2503,12 @@
   .custom-stat { display: flex; flex-direction: column; gap: 2px; }
   .custom-stat span { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
   .custom-stat b { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text); }
-  .custom-stat b.positive { color: var(--green); }
-  .custom-stat b.negative { color: var(--red); }
+  .custom-stat b.positive { color: var(--green-text); }
+  .custom-stat b.negative { color: var(--red-text); }
   .custom-stat-range {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    color: var(--text-muted);
+    color: var(--text-subtle);
     margin-top: 1px;
     white-space: nowrap;
   }
@@ -2372,34 +2537,34 @@
     margin-top: 12px;
     padding: 10px 12px;
     border-radius: 8px;
-    border: 1px solid rgba(248, 113, 113, 0.5);
-    background: rgba(248, 113, 113, 0.10);
-    color: #fca5a5;
+    border: 1px solid rgba(255, 45, 46, 0.5);
+    background: rgba(255, 45, 46, 0.10);
+    color: #d92626;
     font-size: 12px;
     line-height: 1.5;
     word-break: break-word;
   }
-  .custom-error b { color: var(--red); }
+  .custom-error b { color: var(--red-text); }
   .custom-steps { margin: 2px 0 10px; display: flex; flex-direction: column; gap: 6px; }
   .custom-step { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
-  .custom-step b { color: var(--accent); margin-right: 3px; }
+  .custom-step b { color: var(--text); margin-right: 3px; }
   .custom-copy-btn {
     width: 100%;
     padding: 9px 12px;
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     border-radius: 6px;
-    border: 1px solid rgba(34, 211, 238, 0.5);
-    background: rgba(34, 211, 238, 0.14);
-    color: var(--accent);
+    border: 1px solid rgba(134, 118, 255, 0.5);
+    background: rgba(134, 118, 255, 0.14);
+    color: var(--accent-text);
     cursor: pointer;
     transition: background 0.15s;
   }
-  .custom-copy-btn:hover { background: rgba(34, 211, 238, 0.26); }
+  .custom-copy-btn:hover { background: rgba(134, 118, 255, 0.26); }
   .custom-desc {
     width: 100%;
     min-height: 90px;
     resize: vertical;
-    font: 400 13px 'DM Sans', sans-serif;
+    font: 400 13px 'Open Sans', sans-serif;
     line-height: 1.5;
     background: var(--surface2);
     color: var(--text);
@@ -2418,7 +2583,7 @@
     background: var(--surface2);
     padding: 1px 4px;
     border-radius: 3px;
-    color: var(--accent);
+    color: var(--text);
   }
   .custom-code {
     width: 100%;
@@ -2427,8 +2592,8 @@
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
     line-height: 1.5;
-    background: #0b1120;
-    color: #cbd5e1;
+    background: #f8f9fc;
+    color: #383874;
     border: 1px solid var(--border);
     border-radius: 8px;
     padding: 10px 12px;
@@ -2441,14 +2606,14 @@
   .custom-apply-btn {
     margin-top: 8px;
     padding: 8px 16px;
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     border-radius: 6px;
-    border: 1px solid rgba(34, 211, 238, 0.5);
-    background: rgba(34, 211, 238, 0.14);
-    color: var(--accent);
+    border: 1px solid rgba(134, 118, 255, 0.5);
+    background: rgba(134, 118, 255, 0.14);
+    color: var(--accent-text);
     cursor: pointer;
   }
-  .custom-apply-btn:hover { background: rgba(34, 211, 238, 0.26); }
+  .custom-apply-btn:hover { background: rgba(134, 118, 255, 0.26); }
   .custom-log-wrap { max-height: 420px; overflow: auto; margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; }
   table.custom-log { width: 100%; border-collapse: collapse; font-size: 11px; }
   table.custom-log th, table.custom-log td {
@@ -2475,16 +2640,16 @@
   .custom-log-wrap.hide-contrib tr.log-row-contrib { display: none; }
   .custom-log-wrap.hide-dca tr.log-row-dca { display: none; }
   table.custom-log tr.log-row-mk { cursor: pointer; }
-  table.custom-log tr.log-row-mk:hover td { background: rgba(56, 189, 248, 0.10); }
+  table.custom-log tr.log-row-mk:hover td { background: rgba(134, 118, 255, 0.10); }
   /* Action column: a short verb, colour-coded by what the row did. The nested
      spans are the (%) gain pills, which colour independently of the action. */
-  table.custom-log td.action-buy    { color: var(--green); }
-  table.custom-log td.action-sell   { color: var(--red); }
-  table.custom-log td.action-switch { color: var(--accent); }
-  table.custom-log td.action-rebal  { color: #fbbf24; }
+  table.custom-log td.action-buy    { color: var(--green-text); }
+  table.custom-log td.action-sell   { color: var(--red-text); }
+  table.custom-log td.action-switch { color: var(--text); }
+  table.custom-log td.action-rebal  { color: var(--orange-text); }
   table.custom-log td.action-hold   { color: var(--text-muted); }
-  table.custom-log td .action-buy   { color: var(--green); }
-  table.custom-log td .action-sell  { color: var(--red); }
+  table.custom-log td .action-buy   { color: var(--green-text); }
+  table.custom-log td .action-sell  { color: var(--red-text); }
   table.custom-log th .info-icon { margin-left: 2px; }
 
   /* In-sidebar "save as / update configuration" bar */
@@ -2496,7 +2661,7 @@
   .config-savebar-btn {
     flex: 1 1 auto;
     padding: 8px 10px;
-    font: 600 12px 'DM Sans', sans-serif;
+    font: 600 12px 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: var(--surface2);
@@ -2509,12 +2674,12 @@
   }
   .config-savebar-btn:hover { border-color: var(--accent); color: var(--accent); }
   .config-savebar-btn.primary {
-    background: rgba(34, 211, 238, 0.14);
-    border-color: rgba(34, 211, 238, 0.5);
-    color: var(--accent);
+    background: rgba(134, 118, 255, 0.14);
+    border-color: rgba(134, 118, 255, 0.5);
+    color: var(--accent-text);
     flex: 2 1 auto;
   }
-  .config-savebar-btn.primary:hover { background: rgba(34, 211, 238, 0.24); }
+  .config-savebar-btn.primary:hover { background: rgba(134, 118, 255, 0.24); }
   .config-savebar-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .config-savebar-btn:disabled:hover {
     background: var(--surface2);
@@ -2522,21 +2687,21 @@
     color: var(--text-muted);
   }
   .config-savebar-btn.primary:disabled:hover {
-    background: rgba(34, 211, 238, 0.14);
-    border-color: rgba(34, 211, 238, 0.5);
-    color: var(--accent);
+    background: rgba(134, 118, 255, 0.14);
+    border-color: rgba(134, 118, 255, 0.5);
+    color: var(--accent-text);
   }
   /* Success flash after a save / update. */
   .config-savebar-btn.flash-success,
   .config-savebar-btn.primary.flash-success {
-    background: rgba(52, 211, 153, 0.22);
-    border-color: rgba(52, 211, 153, 0.75);
-    color: var(--green);
+    background: rgba(0, 185, 41, 0.22);
+    border-color: rgba(0, 185, 41, 0.75);
+    color: var(--green-text);
   }
   .saved-config-pill.flash-success {
-    background: rgba(52, 211, 153, 0.14);
-    border-color: rgba(52, 211, 153, 0.75);
-    box-shadow: 0 0 0 1px rgba(52, 211, 153, 0.45);
+    background: rgba(0, 185, 41, 0.14);
+    border-color: rgba(0, 185, 41, 0.75);
+    box-shadow: 0 0 0 1px rgba(0, 185, 41, 0.45);
   }
 
   /* Strategy details side panel — slides in from the left when a chip's
@@ -2561,7 +2726,7 @@
     /* Stays light so the user can still see the chart respond to the
        controls in the open sidebar. Pointer-events:none ensures clicks
        fall through to whatever is underneath (chart, controls). */
-    background: rgba(2, 6, 18, 0.12);
+    background: rgba(56, 56, 116, 0.06);
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s;
@@ -2578,7 +2743,7 @@
     height: 100vh;
     background: var(--surface);
     border-right: 1px solid var(--border);
-    box-shadow: 4px 0 28px rgba(0, 0, 0, 0.55);
+    box-shadow: var(--shadow-lg);
     transform: translateX(-100%);
     transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
@@ -2664,11 +2829,11 @@
     min-width: 0;
     max-width: 100%;
     overflow-wrap: anywhere;
-    text-decoration: underline dashed rgba(148, 163, 184, 0.55);
+    text-decoration: underline dashed rgba(122, 122, 166, 0.55);
     text-underline-offset: 4px;
   }
   .strategy-panel-header h3[contenteditable]:hover {
-    background: rgba(148, 163, 184, 0.10);
+    background: rgba(122, 122, 166, 0.10);
   }
   .strategy-panel-header h3[contenteditable]:focus {
     background: var(--surface2);
@@ -2693,8 +2858,8 @@
     transition: color 0.15s, background 0.15s;
   }
   .strategy-panel-title-edit:hover {
-    background: rgba(34, 211, 238, 0.18);
-    color: var(--accent);
+    background: rgba(134, 118, 255, 0.18);
+    color: var(--accent-text);
   }
   .strategy-panel-close {
     width: 28px;
@@ -2714,7 +2879,7 @@
   .strategy-panel-close:hover {
     color: var(--text);
     border-color: var(--accent);
-    background: rgba(34, 211, 238, 0.08);
+    background: rgba(134, 118, 255, 0.08);
   }
   .strategy-panel-body {
     flex: 1;
@@ -2728,15 +2893,15 @@
     min-width: 0;
     /* Custom scrollbar — same accent treatment as the analytics heatmap. */
     scrollbar-width: thin;
-    scrollbar-color: rgba(100,116,139,0.5) transparent;
+    scrollbar-color: rgba(122, 122, 166,0.5) transparent;
   }
   .strategy-panel-body::-webkit-scrollbar { width: 8px; }
   .strategy-panel-body::-webkit-scrollbar-track { background: transparent; }
   .strategy-panel-body::-webkit-scrollbar-thumb {
-    background: rgba(100,116,139,0.4);
+    background: rgba(122, 122, 166,0.4);
     border-radius: 4px;
   }
-  .strategy-panel-body::-webkit-scrollbar-thumb:hover { background: rgba(34,211,238,0.6); }
+  .strategy-panel-body::-webkit-scrollbar-thumb:hover { background: rgba(134, 118, 255,0.6); }
   .strategy-panel-body::-webkit-scrollbar-corner { background: transparent; }
   .strategy-panel-section-label {
     font-size: 10px;
@@ -2782,12 +2947,12 @@
   .sd-hero-lead { font-size: 12px; color: var(--text-muted); }
   .sd-hero-action { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
   .sd-hero-note { flex-basis: 100%; font-size: 11px; color: var(--text-muted); }
-  .sd-hero.sd-buy  { border-color: rgba(52, 211, 153, 0.5);  background: rgba(52, 211, 153, 0.10); }
-  .sd-hero.sd-buy  .sd-hero-action { color: var(--green); }
-  .sd-hero.sd-hold { border-color: rgba(245, 181, 68, 0.45); background: rgba(245, 181, 68, 0.09); }
-  .sd-hero.sd-hold .sd-hero-action { color: #f5b544; }
-  .sd-hero.sd-cash { border-color: rgba(248, 113, 113, 0.5);  background: rgba(248, 113, 113, 0.10); }
-  .sd-hero.sd-cash .sd-hero-action { color: var(--red); }
+  .sd-hero.sd-buy  { border-color: rgba(0, 185, 41, 0.5);  background: rgba(0, 185, 41, 0.10); }
+  .sd-hero.sd-buy  .sd-hero-action { color: var(--green-text); }
+  .sd-hero.sd-hold { border-color: rgba(232, 137, 11, 0.45); background: rgba(232, 137, 11, 0.09); }
+  .sd-hero.sd-hold .sd-hero-action { color: var(--orange-text); }
+  .sd-hero.sd-cash { border-color: rgba(255, 45, 46, 0.5);  background: rgba(255, 45, 46, 0.10); }
+  .sd-hero.sd-cash .sd-hero-action { color: var(--red-text); }
 
   .sd-signals { display: flex; flex-direction: column; }
   .sd-sig {
@@ -2800,11 +2965,11 @@
   .sd-sig-val { color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .sd-sig-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.2px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
   .sd-lean-buy  .sd-dot { background: var(--green); }
-  .sd-lean-buy  .sd-sig-tag { color: var(--green); background: rgba(52, 211, 153, 0.14); }
-  .sd-lean-out  .sd-dot { background: #f5b544; }
-  .sd-lean-out  .sd-sig-tag { color: #f5b544; background: rgba(245, 181, 68, 0.15); }
+  .sd-lean-buy  .sd-sig-tag { color: var(--green-text); background: rgba(0, 185, 41, 0.14); }
+  .sd-lean-out  .sd-dot { background: #e8890b; }
+  .sd-lean-out  .sd-sig-tag { color: var(--orange-text); background: rgba(232, 137, 11, 0.15); }
   .sd-lean-cash .sd-dot { background: var(--red); }
-  .sd-lean-cash .sd-sig-tag { color: var(--red); background: rgba(248, 113, 113, 0.14); }
+  .sd-lean-cash .sd-sig-tag { color: var(--red-text); background: rgba(255, 45, 46, 0.14); }
   .strategy-stat {
     background: var(--surface2);
     border: 1px solid var(--border);
@@ -2828,12 +2993,12 @@
   .strategy-stat-range {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;
-    color: var(--text-muted);
+    color: var(--text-subtle);
     margin-top: 2px;
     white-space: nowrap;
   }
-  .strategy-stat-value.positive { color: var(--green); }
-  .strategy-stat-value.negative { color: var(--red); }
+  .strategy-stat-value.positive { color: var(--green-text); }
+  .strategy-stat-value.negative { color: var(--red-text); }
   /* Icon head for every metric card: label on the left, subtle icon on the right. */
   .strategy-stat-head {
     display: flex; align-items: center; justify-content: space-between; gap: 6px;
@@ -2900,8 +3065,8 @@
     height: 11px;
     margin: 0 3px;
     border-radius: 50%;
-    background: rgba(34,211,238,0.12);
-    color: var(--accent);
+    background: rgba(134, 118, 255,0.12);
+    color: var(--accent-text);
     font-size: 8px;
     line-height: 1;
     font-style: normal;
@@ -2950,7 +3115,7 @@
     text-align: left;
     z-index: 10000;
     pointer-events: none;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    box-shadow: var(--shadow-md);
   }
 
   .strategy-panel-body .quarter-table-wrap th {
@@ -2987,7 +3152,7 @@
     padding: 4px 8px;
     text-align: right;
     color: var(--text);
-    border-bottom: 1px solid rgba(30, 42, 63, 0.4);
+    border-bottom: 1px solid rgba(219, 223, 241, 0.4);
     white-space: nowrap;
   }
   .strategy-panel-body .quarter-table-wrap td:first-child {
@@ -3006,7 +3171,7 @@
   /* Last (current-period) row: not yet closed — subtly tinted, with an ⓘ
      tooltip explaining it's a same-day snapshot that refreshes daily. */
   .strategy-panel-body .quarter-table-wrap tr.log-latest td {
-    background: rgba(251, 191, 36, 0.07);
+    background: rgba(232, 137, 11, 0.07);
     font-style: italic;
   }
   /* "Hide monthly contributions" checkbox above the transaction log. */
@@ -3031,10 +3196,10 @@
      hovering also lights up the matching marker on the chart. */
   .strategy-panel-body .quarter-table-wrap tr.log-row-mk { cursor: pointer; }
   .strategy-panel-body .quarter-table-wrap tr.log-row-mk:hover td {
-    background: rgba(56, 189, 248, 0.10);
+    background: rgba(134, 118, 255, 0.10);
   }
-  .strategy-panel-body .quarter-table-wrap td.action-sell { color: var(--red); }
-  .strategy-panel-body .quarter-table-wrap td.action-buy  { color: var(--green); }
+  .strategy-panel-body .quarter-table-wrap td.action-sell { color: var(--red-text); }
+  .strategy-panel-body .quarter-table-wrap td.action-buy  { color: var(--green-text); }
   .strategy-panel-body .quarter-table-wrap td.action-hold { color: var(--text-muted); }
   /* Action column reads as a short verb ("SELL $X" / "BUY $Y" / "HOLD") —
      shrink the font + tighten padding so it takes roughly half the space
@@ -3054,26 +3219,47 @@
     height: 420px;
   }
 
+  /* LOG / DEINFLATED toggles: two-state controls, so they wear the shared
+     on/off language (same tints and borders as the strategy pills) rather than
+     each inventing its own. */
   .chart-log-toggle {
     position: absolute;
     left: -4px;
     bottom: 3px;
-    padding: 0;
-    font: 600 10px 'DM Sans', sans-serif;
+    padding: 3px 7px;
+    font: 600 10px 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #475569;
-    background: transparent;
-    border: none;
+    color: var(--state-off-text);
+    background: var(--state-off-bg);
+    border: 1px solid var(--state-off-border);
+    border-radius: 6px;
     cursor: pointer;
     user-select: none;
-    transition: color 0.15s;
+    transition: color 0.15s, background 0.15s, border-color 0.15s, opacity 0.15s;
   }
+  /* Off state recedes to 60%. These two pills sit inside the plot area, so at
+     full strength they compete with the lines for attention while telling you
+     about a mode that isn't even on. Hover and the pressed state below both
+     restore full opacity, so the control still announces itself the moment you
+     reach for it. Applied to the whole pill (text, fill and border together)
+     so it dims as one object rather than losing just its label. */
+  .chart-log-toggle:not([aria-pressed="true"]),
+  .chart-infl-toggle:not([aria-pressed="true"]) { opacity: .6; }
+  .chart-log-toggle:not([aria-pressed="true"]):hover,
+  .chart-infl-toggle:not([aria-pressed="true"]):hover,
+  .chart-log-toggle:not([aria-pressed="true"]):focus-visible,
+  .chart-infl-toggle:not([aria-pressed="true"]):focus-visible { opacity: 1; }
+
   .chart-log-toggle:hover {
-    color: #94a3b8;
+    color: var(--text);
+    background: var(--state-hover-bg);
+    border-color: var(--state-hover-border);
   }
   .chart-log-toggle[aria-pressed="true"] {
-    color: var(--accent);
+    color: var(--state-on-text);
+    background: var(--state-on-bg);
+    border-color: var(--state-on-border);
   }
 
   /* "deinflated $" toggle — JS parks it at the plot's top-left corner (endLabels
@@ -3083,24 +3269,24 @@
     left: 58px;
     top: 6px;
     padding: 3px 7px;
-    font: 600 10px 'DM Sans', sans-serif;
+    font: 600 10px 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: #475569;
-    background: rgba(148, 163, 184, 0.06);
-    border: 1px solid transparent;
+    color: var(--state-off-text);
+    background: var(--state-off-bg);
+    border: 1px solid var(--state-off-border);
     border-radius: 6px;
     cursor: pointer;
     user-select: none;
-    transition: color 0.15s, background 0.15s, border-color 0.15s;
+    transition: color 0.15s, background 0.15s, border-color 0.15s, opacity 0.15s;
     z-index: 3;
   }
-  .chart-infl-toggle:hover { color: #94a3b8; background: rgba(148, 163, 184, 0.12); }
+  .chart-infl-toggle:hover { color: var(--text); background: var(--state-hover-bg); border-color: var(--state-hover-border); }
   .chart-infl-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   .chart-infl-toggle[aria-pressed="true"] {
-    color: var(--accent);
-    border-color: color-mix(in srgb, var(--accent) 45%, transparent);
-    background: color-mix(in srgb, var(--accent) 14%, transparent);
+    color: var(--state-on-text);
+    background: var(--state-on-bg);
+    border-color: var(--state-on-border);
   }
 
   /* SMA action-marker hover tooltip. position:fixed (JS sets left/top from the
@@ -3109,13 +3295,13 @@
     display: none;
     position: fixed;
     pointer-events: none;
-    background: #141c2b;
-    border: 1px solid #2a3550;
+    background: #ffffff;
+    border: 1px solid #dbdff1;
     border-radius: 10px;
     padding: 0;
     overflow: hidden;
     z-index: 10050;
-    box-shadow: 0 8px 26px rgba(0,0,0,0.55);
+    box-shadow: var(--shadow-lg);
     font-size: 11.5px;
     line-height: 1.4;
     white-space: nowrap;
@@ -3126,8 +3312,8 @@
   #marker-tooltip .mt-head {
     display: flex; align-items: flex-start; gap: 8px;
     padding: 10px 12px 9px;
-    background: rgba(255,255,255,0.025);
-    border-bottom: 1px solid #263048;
+    background: rgba(56, 56, 116, 0.03);
+    border-bottom: 1px solid #dbdff1;
   }
   #marker-tooltip .mt-shape { flex-shrink: 0; margin-top: 1px; display: inline-flex; }
   #marker-tooltip .mt-htext { flex: 1; min-width: 0; }
@@ -3150,15 +3336,15 @@
   .signal-metrics { font-size: 12px; margin-top: 2px; }
   .signal-metrics .sm-row {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px;
-    padding: 6px 0; border-bottom: 1px solid rgba(148,163,184,0.09);
+    padding: 6px 0; border-bottom: 1px solid rgba(122, 122, 166,0.09);
   }
   .signal-metrics .sm-row:last-child { border-bottom: 0; }
   .signal-metrics .sm-k { color: var(--text-muted); flex: 1 1 auto; }
   .signal-metrics .sm-v { font-family: 'JetBrains Mono', monospace; font-weight: 600; white-space: nowrap; }
   .signal-metrics .sm-n { flex: 1 1 100%; text-align: right; font-size: 10.5px; }
   .signal-metrics .sm-muted { color: var(--text-muted); }
-  .signal-metrics .positive { color: var(--green, #4ade80); }
-  .signal-metrics .negative { color: #f87171; }
+  .signal-metrics .positive { color: var(--green, #00b929); }
+  .signal-metrics .negative { color: var(--red-text); }
 
   #custom-tooltip {
     display: none;
@@ -3168,13 +3354,13 @@
        (hiding the tooltip), then re-enter the canvas (showing it again), in a
        flicker loop. The close × re-enables pointer events on itself for touch. */
     pointer-events: none;
-    background: #141c2b;
-    border: 1px solid #2a3550;
+    background: #ffffff;
+    border: 1px solid #dbdff1;
     border-radius: 10px;
     padding: 14px 16px;
     z-index: 20;
     min-width: 220px;
-    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    box-shadow: var(--shadow-lg);
   }
   /* Close × inside the main-chart tooltip. Hidden on desktop (hover/leave
      handles dismissal automatically) and shown on touch / narrow viewports
@@ -3210,7 +3396,7 @@
   }
 
   .tt-date {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Open Sans', sans-serif;
     font-size: 11px;
     font-weight: 600;
     color: var(--text-muted);
@@ -3240,7 +3426,7 @@
   }
 
   .tt-name {
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Open Sans', sans-serif;
     font-size: 11px;
     color: var(--text-muted);
   }
@@ -3328,12 +3514,12 @@
 
   table td:first-child {
     text-align: left;
-    font-family: 'DM Sans', sans-serif;
+    font-family: 'Open Sans', sans-serif;
     color: var(--text-muted);
   }
 
-  .action-buy { color: var(--green); }
-  .action-sell { color: var(--red); }
+  .action-buy { color: var(--green-text); }
+  .action-sell { color: var(--red-text); }
   .action-hold { color: var(--text-muted); }
 
   .divider {
@@ -3364,10 +3550,10 @@
     gap: 8px;
     height: 34px;
     padding: 0 12px;
-    background: rgba(34, 211, 238, 0.12);
+    background: rgba(134, 118, 255, 0.12);
     border: 1px solid var(--accent);
     border-radius: 8px;
-    color: var(--accent);
+    color: var(--accent-text);
     cursor: pointer;
     font-size: 13px;
     font-weight: 500;
@@ -3388,17 +3574,20 @@
      otherwise override the HTML `hidden` attribute's default `display:none`. */
   #reset-version-btn[hidden] { display: none; }
   #reset-version-btn {
-    position: absolute;
-    top: 0;
-    left: 0;
+    /* Was absolute at top/left, which only cleared the title while the header
+       was a centred column. With the header left-aligned it landed straight on
+       top of the h1, so it now sits in the flex flow instead — it's `hidden`
+       until a version mismatch, so it costs nothing when absent, and the
+       header wraps if the row runs out of room. */
+    align-self: center;
     display: inline-flex;
     align-items: center;
     height: 34px;
     padding: 0 12px;
-    background: rgba(251, 146, 60, 0.12);
-    border: 1px solid #fb923c;
+    background: rgba(217, 99, 26, 0.12);
+    border: 1px solid #d9631a;
     border-radius: 8px;
-    color: #fb923c;
+    color: var(--orange-text);
     cursor: pointer;
     font-size: 12px;
     font-weight: 500;
@@ -3406,7 +3595,7 @@
     transition: all 0.2s;
   }
   #reset-version-btn:hover {
-    background: #fb923c;
+    background: #d9631a;
     color: var(--bg);
   }
   @media (max-width: 900px) {
@@ -3431,7 +3620,7 @@
     pointer-events: none;
     transition: opacity 0.25s;
     white-space: nowrap;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    box-shadow: var(--shadow-md);
   }
 
   #share-toast.show {
