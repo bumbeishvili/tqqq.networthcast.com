@@ -385,38 +385,45 @@ const CUSTOM_PROMPT = `You are writing ONE backtest strategy for a charting app.
   params:  [ ... ],   // the sidebar dropdowns — see PARAMS
   columns: [ ... ],   // labels + tooltips for your log's columns — see COLUMNS
   run(data, p) {
-    // build and return the portfolio value over time — see RETURN
+    // build the portfolio value over time — see RETURN — and report where the
+    // rules stand on the final day — see SIGNALS
+    return { log: log, signals: { cards: [ ... ], decision: { ... } } };
   }
 }
 
-=== PARAMS: every knob is a dropdown, and there must be MANY ===
+=== PARAMS: one dropdown per knob the DESCRIPTION actually specifies ===
 Each param becomes a dropdown in the sidebar; the chosen value arrives in run() as p.<id>.
 Shape:  { id, label, options: [...], default: <one of the options> }
 - "id" must be a valid JS identifier. Options may be numbers, strings, or { value, label } objects
-  ({ value: "tqqq", label: "TQQQ · 3x Nasdaq" } shows a friendly label but passes "tqqq").
+  ({ value: "tqqq", label: "TQQQ" } shows a label but passes "tqqq"). Keep labels PLAIN — the bare
+  ticker. Do not decorate them ("TQQQ · 3x Nasdaq" is noise; write "TQQQ").
 - For an on/off toggle use options: [true, false].
-- Opening a dropdown runs the whole strategy once per option and draws each option's final portfolio
-  value as a bar, so the user can scan the entire range at a glance. That only works if the range is
-  fine-grained: aim for 15–40 options per numeric knob (a spread like
-  [20,30,40,...,300,320,350,400] beats [100,200,300] every time). Never ship a 2–3 option numeric knob.
-- Sweep each number across a range that actually changes the outcome, spaced tighter near the useful
-  middle and looser at the extremes.
 
-MANDATORY dropdowns:
-1. The traded fund is ALWAYS a param — never a hardcoded ticker. Give it every ticker that makes
-   sense for the idea, normally all six:
-     tqqq (3x Nasdaq), qld (2x Nasdaq), spxl (3x S&P), sso (2x S&P), qqq (Nasdaq), spy (S&P).
-   In run(), index the data by the chosen id: const px = data[p.asset];  (NOT data.tqqq).
-2. If the strategy has any notion of being OUT of the main fund — a park / backup / defensive
-   holding, a "risk-off" leg, the other side of a switch — that is its own dropdown, and its options
-   MUST include "cash" alongside the funds, e.g.
-     options: ["cash", "qqq", "spy", "sso", "tqqq"], default: "cash".
-   "cash" means: hold dollars, buy nothing. Guard for it (data["cash"] does not exist).
-3. Every threshold, window, band, percentage, lookback and rebalance size the rules mention gets its
-   own dropdown with a fine spread — thresholds like "60% above the median" belong in a dropdown
-   (e.g. [10,15,20,...,120,140]), not baked into the code.
-4. If cash can sit idle, add a "Cash interest (%/yr)" dropdown (e.g. [0,0.5,1,...,6,7,8]) and accrue
-   it, so parked money isn't silently dead.
+*** THE TEST EVERY PARAM MUST PASS ***
+Point at the words in my description that this knob comes from. If you cannot, DO NOT ADD IT.
+A short description gets a short settings list. Five well-chosen knobs beat eleven.
+Never invent a mechanism just to have something to tune — every added knob is a rule I did not ask
+for, silently changing what my strategy does.
+
+Concretely, DO NOT add unless I mentioned it:
+- a re-entry / buy-back threshold  → if I gave one exit rule, re-entry is simply that rule going
+  false. Do not invent a separate level for it.
+- a cross buffer / dead-zone / confirmation days  → only if I said "buffer", "confirm", "wait N days".
+- a "signal read from" ticker  → read the signal off the traded fund. Only make this a param if I
+  explicitly said to measure one thing and trade another (e.g. "SPY's 200-day, trade TQQQ").
+- extra overlays, stops, filters, ease-in slices, min-hold periods  → only if named.
+
+WHAT DOES BECOME A PARAM:
+1. The traded fund. If I named one, it is the DEFAULT and the options are just the sensible
+   alternatives (tqqq, qld, spxl, sso, qqq, spy). In run() index by the chosen id:
+     const px = data[p.asset];   (NOT data.tqqq)
+2. What is held when OUT — only if the strategy has an out-state. Options must include "cash":
+     options: ["cash", "qqq", "spy", "sso", "qld"], default: "cash".
+   "cash" means hold dollars, buy nothing. Guard for it (data["cash"] does not exist).
+3. Every threshold, window, percentage and lookback I DID state — "55% above", "250-day median",
+   "300 SMA" each become a dropdown, never baked into the code as a literal.
+4. "Cash interest (%/yr)" ([0,0.5,1,...,6,7,8]) — only when cash can actually be held, so parked
+   money is not silently dead.
 5. ALWAYS include a trading-cost dropdown, exactly this one (it matches the app's other strategies):
      { id: "tradeCost", label: "Trading cost (%)", default: 0.02,
        options: [0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
@@ -424,6 +431,14 @@ MANDATORY dropdowns:
    each buy, both halves of a switch, and every ease-in slice — deduct it from the proceeds (or from
    the cash being deployed), and log it as "fee" on that row. A strategy that trades often has to pay
    for it, so never leave this out and never default it to 0.
+
+FEW KNOBS, BUT EACH ONE FINELY GRADED. Opening a dropdown re-runs the whole strategy once per option
+and draws each option's final value as a bar, so the user can scan the range at a glance. That only
+works if the spread is fine: aim for 15–40 options per numeric knob
+([20,30,40,...,300,320,350,400] beats [100,200,300] every time); never ship a 2–3 option numeric
+knob. Centre the range on the value I gave and sweep well past it in both directions, spaced tighter
+near the middle and looser at the extremes, so the bars show me whether my number was actually the
+right one.
 
 === INPUTS: data (every array has the SAME length and is aligned by index i) ===
 data.dates : array of ISO "YYYY-MM-DD" strings, ascending. TRADING days only, so they are NOT
@@ -498,6 +513,33 @@ code: what the number means, when it's blank, and how it relates to the other co
 has tips for the standard keys (date, value, action, held, price, shares, cash, invested, contributed,
 fee) — describe those only if your strategy uses them unusually, and always describe your own keys.
 
+=== SIGNALS: the live dashboard (do this — it is what users check first) ===
+Return a "signals" object alongside your log describing WHERE EVERY RULE STANDS ON THE FINAL DAY of
+the run, so the user can see what the strategy would do with fresh money today without reading the log.
+  return { log: log, signals: { cards: [...], decision: {...} } }
+Compute it from the values you already have on the last bar (p.endIdx) — no second pass.
+
+cards: 4–6 gauges, each { label, value, sub, tip, tone, icon }
+  label — short, e.g. "QQQ vs 200-day avg"
+  value — the headline number as a STRING you format: "▲ +6.42%", "77", "44.4"
+  sub   — the supporting line under it: "$740.86 vs $696.17 avg", "since QQQ last crossed"
+  tip   — plain-English explanation for the ⓘ: what it measures and which way it pushes the decision
+  tone  — "good" (green) / "bad" (red) / omit for neutral. Colour the STATE, not the sign: a gauge
+          sitting safely below its sell trigger is "good" even when the number is negative.
+  icon  — one of: trendUp trendDown clock sliders activity shield dollar flag
+  Give one card per rule your strategy actually uses (trend, each oscillator, each override, any
+  band/buffer), so every knob in your params has a visible live reading.
+
+decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...] }
+  action  — the verdict in 2–4 words: "Buy TQQQ", "Stay in cash", "Move to cash"
+  note    — why, in a short clause: "eased in over 15 trading days", "buy signal is off"
+  tone    — "good" if the action is to be invested, "bad" if it is to sit out/de-risk
+  reasons — one row per rule, each { name, val, tag, lean }:
+      name "Trend" · val "QQQ +6.42% vs 200d" · tag "in · TQQQ" · lean "buy"
+      lean is one of "buy" "out" "cash" "hold" and colours the row's dot.
+  The decision must AGREE with the rules you coded — derive it from the same variables, don't restate
+  the description.
+
 === HOW THE CHART USES THE LOG ===
 - Every "buy" / "sell" / "switch" / "rebalance" row is drawn as a symbol on your strategy's line at
   that date, and hovering it shows that row's detail. Rows tagged "contribution", "ease-in", "hold",
@@ -521,20 +563,24 @@ fee) — describe those only if your strategy uses them unusually, and always de
 === A COMPLETE, WORKING EXAMPLE (for reference — do NOT just copy it) ===
 {
   name: "Trend filter (fund vs park)",
+  // It implements this description: "hold TQQQ while QQQ is above its 200-day average with a 1%
+  // cross buffer, park in cash otherwise". Note every param traces to those words — the signal
+  // ticker is a param ONLY because the description measures QQQ but trades TQQQ, and the buffer
+  // is a param ONLY because the description asks for one. Nothing else was invented.
   params: [
-    { id: "asset", label: "Fund held in trend", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ · 3x Nasdaq" }, { value: "qld", label: "QLD · 2x Nasdaq" },
-      { value: "spxl", label: "SPXL · 3x S&P" },    { value: "sso", label: "SSO · 2x S&P" },
-      { value: "qqq",  label: "QQQ · Nasdaq" },     { value: "spy", label: "SPY · S&P" } ] },
-    { id: "park", label: "Held when out of trend", default: "cash", options: [
-      { value: "cash", label: "Cash" },             { value: "qqq", label: "QQQ · Nasdaq" },
-      { value: "spy",  label: "SPY · S&P" },        { value: "sso", label: "SSO · 2x S&P" } ] },
+    { id: "asset", label: "Fund traded", default: "tqqq", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" },
+      { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" },
+      { value: "qqq",  label: "QQQ" },  { value: "spy", label: "SPY" } ] },
+    { id: "park", label: "Held when out", default: "cash", options: [
+      { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
+      { value: "spy",  label: "SPY" },  { value: "sso", label: "SSO" } ] },
     { id: "signal", label: "Signal read from", default: "qqq", options: [
       { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }, { value: "tqqq", label: "TQQQ" } ] },
     { id: "window", label: "SMA window (days)", default: 200, options: [
       20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,
       210,220,230,240,250,260,270,280,300,320,350,400] },
-    { id: "band", label: "Cross buffer (%)", default: 0, options: [
+    { id: "band", label: "Cross buffer (%)", default: 1, options: [
       0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,3.5,4,4.5,5,6,7,8,10] },
     { id: "cashRate", label: "Cash interest (%/yr)", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
@@ -554,6 +600,7 @@ fee) — describe those only if your strategy uses them unusually, and always de
     const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
     const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : data[id][i];
     let cash = p.initial, shares = 0, held = "cash";
+    let sma = 0, above = 0;                                   // last bar's readings, for the signals block
     let invested = p.initial, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4), 10);
     // Rolling SMA: seed once from the warm-up window, then add/drop one day at a time.
@@ -573,8 +620,8 @@ fee) — describe those only if your strategy uses them unusually, and always de
         cash += amt; contributed = amt; invested += amt; action = "contribution";
       }
       prevMonth = month;
-      const sma = n > 0 ? sum / n : 0;
-      const above = sma > 0 ? sig[i] / sma - 1 : 0;
+      sma = n > 0 ? sum / n : 0;                              // hoisted: the signals block below reads the last bar's values
+      above = sma > 0 ? sig[i] / sma - 1 : 0;
       let want = held;
       if (sma > 0) {
         if (above > band) want = p.asset;
@@ -612,7 +659,34 @@ fee) — describe those only if your strategy uses them unusually, and always de
         });
       }
     }
-    return { log };
+    // Live dashboard for the last bar — same variables the loop just used.
+    const inTrend = above > band;
+    const pctStr = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(2) + "%";
+    const A = p.asset.toUpperCase(), K = p.park === "cash" ? "cash" : p.park.toUpperCase();
+    return {
+      log: log,
+      signals: {
+        cards: [
+          { label: p.signal.toUpperCase() + " vs " + p.window + "-day avg",
+            value: (inTrend ? "▲ " : "▼ ") + pctStr, tone: inTrend ? "good" : "bad",
+            icon: inTrend ? "trendUp" : "trendDown",
+            sub: sig[p.endIdx].toFixed(2) + " vs " + sma.toFixed(2) + " avg",
+            tip: "The signal fund's last close against its " + p.window + "-day moving average. Above the average means hold " + A + "; below means move to " + K + "." },
+          { label: "Cross buffer", value: "±" + (p.band || 0) + "%", icon: "sliders",
+            sub: p.band ? "dead zone around the average" : "no buffer — trades on any cross",
+            tip: "How far past the average the price must travel before the trade fires. A wider buffer means fewer whipsaw trades but a later entry and exit." }
+        ],
+        decision: {
+          action: inTrend ? "Buy " + A : (K === "cash" ? "Stay in cash" : "Buy " + K),
+          note: inTrend ? "price is above the average" : "trend signal is off",
+          tone: inTrend ? "good" : "bad",
+          reasons: [
+            { name: "Trend", val: p.signal.toUpperCase() + " " + pctStr + " vs " + p.window + "d",
+              tag: inTrend ? "in · " + A : "out · " + K, lean: inTrend ? "buy" : "out" }
+          ]
+        }
+      }
+    };
   }
 }
 
@@ -690,6 +764,37 @@ function customWorkerMain() {
     }
     return out.length ? out : null;
   }
+  // Live signal dashboard the strategy reports for its LAST evaluated day:
+  // { cards: [{ label, value, sub, tip, tone, icon }], decision: { action, note,
+  // tone, reasons: [{ name, val, tag, lean }] } }. Same sanitize-to-primitives
+  // rule as readColumns — only plain strings cross back out of the sandbox.
+  function readSignals(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    var S = function (v) { return v == null ? null : String(v); };
+    var cards = [], i, c;
+    if (Array.isArray(raw.cards)) {
+      for (i = 0; i < raw.cards.length && cards.length < 12; i++) {
+        c = raw.cards[i];
+        if (!c || c.label == null) continue;
+        cards.push({ label: S(c.label), value: S(c.value), sub: S(c.sub),
+                     tip: S(c.tip), tone: S(c.tone), icon: S(c.icon) });
+      }
+    }
+    var d = null, reasons = [], r;
+    if (raw.decision && typeof raw.decision === 'object') {
+      if (Array.isArray(raw.decision.reasons)) {
+        for (i = 0; i < raw.decision.reasons.length && reasons.length < 10; i++) {
+          r = raw.decision.reasons[i];
+          if (!r || r.name == null) continue;
+          reasons.push({ name: S(r.name), val: S(r.val), tag: S(r.tag), lean: S(r.lean) });
+        }
+      }
+      d = { action: S(raw.decision.action), note: S(raw.decision.note),
+            tone: S(raw.decision.tone), reasons: reasons };
+    }
+    if (!cards.length && !d) return null;
+    return { cards: cards, decision: d, asOf: S(raw.asOf) };
+  }
   function evalMod(code) {
     var base = sanitize(code), cands = [base], t = base, k;
     for (k = 0; k < 4 && /^\(/.test(t) && /\)$/.test(t); k++) { t = t.slice(1, -1).trim(); cands.push(t); }
@@ -742,6 +847,7 @@ function customWorkerMain() {
       }
       out = { reqId: msg.reqId, schema: schema, name: mod.name || null, log: log,
               columns: readColumns(res && res.columns) || readColumns(mod.columns),
+              signals: readSignals(res && res.signals),
               totalContributed: (res && typeof res.totalContributed === 'number') ? res.totalContributed : null };
     } catch (err) {
       out = { reqId: msg.reqId, error: (err && err.message) ? err.message : String(err) };
@@ -755,6 +861,7 @@ window._customLogs = window._customLogs || {};
 window._customErrors = window._customErrors || {};
 window._customSchemas = window._customSchemas || {};
 window._customColumns = window._customColumns || {}; // cfgId -> [{ key, label, tip }] the strategy declared
+window._customSignals = window._customSignals || {}; // cfgId -> { cards, decision } live signal dashboard
 window._customResults = window._customResults || {}; // cfgId -> { sig, log, schema, name, error, totalContributed }
 const CUSTOM_TIMEOUT_MS = 4000;
 let _customWorker = null, _customWorkerSeq = 0, _customDataSent = false;
@@ -871,12 +978,13 @@ function onCustomWorkerMessage(e) {
   if (pend.cb) { pend.cb(msg, msg.error); return; } // bar-preview run
   window._customResults[pend.cfgId] = {
     sig: pend.sig, log: msg.log || [], schema: msg.schema || [],
-    columns: msg.columns || null,
+    columns: msg.columns || null, signals: msg.signals || null,
     name: msg.name || null, error: msg.error || null,
     totalContributed: (typeof msg.totalContributed === 'number') ? msg.totalContributed : null,
   };
   window._customSchemas[pend.cfgId] = msg.schema || [];
   window._customColumns[pend.cfgId] = msg.columns || null;
+  window._customSignals[pend.cfgId] = msg.signals || null;
   if (typeof render === 'function') render(); // now a cache hit → no new run
 }
 
@@ -948,6 +1056,7 @@ function computeCustomSeries(cfg, ctx) {
     window._customLogs[cfg.id] = cached.log || [];
     window._customSchemas[cfg.id] = cached.schema || [];
     window._customColumns[cfg.id] = cached.columns || null;
+    window._customSignals[cfg.id] = cached.signals || null;
     return customSeriesResult(cached.log, ctx, cached.error, cached.totalContributed);
   }
   scheduleCustomRun(cfg, sig, computeCustomGlobals(cfg, ctx));
@@ -2197,6 +2306,69 @@ function buildCustomLogTableHtml(log, columns) {
 // Sidebar for a custom strategy — focuses on the RESULT (settings + an Edit
 // button that reopens the build modal). The describe/prompt/paste flow lives in
 // the modal, not here.
+// Live signal dashboard for a CUSTOM strategy — the same cards + "Right now"
+// block the SMA panel shows, but driven by whatever the strategy reported in
+// its run() return (`signals`). Reuses statCard/.signal-decision from chart.js
+// so both panels stay visually identical for free.
+// tone → colour class: 'good'/'positive' green, 'bad'/'negative' red, else neutral.
+function buildCustomSignalMetricsHtml(signals, asOfDate) {
+  if (!signals) return '';
+  const esc = (s) => String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const toneCls = (t) => {
+    const v = String(t || '').toLowerCase();
+    if (v === 'good' || v === 'positive' || v === 'up') return 'positive';
+    if (v === 'bad' || v === 'negative' || v === 'down' || v === 'warn') return 'negative';
+    return '';
+  };
+  const ICONS = { trendUp: 1, trendDown: 1, dollar: 1, flag: 1, clock: 1, sliders: 1, activity: 1, shield: 1 };
+  let html = '';
+
+  const cards = (signals.cards || []).filter(c => c && c.label);
+  if (cards.length && typeof statCard === 'function') {
+    const asOf = signals.asOf || asOfDate;
+    const stamp = asOf
+      ? ` <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">· as of ${esc(
+          (typeof fmtLogDate === 'function') ? fmtLogDate(asOf) : asOf)}</span>`
+      : '';
+    const body = cards.map(c => statCard(
+      esc(c.label),
+      ICONS[c.icon] ? c.icon : 'activity',
+      esc(c.value != null ? c.value : '—'),
+      toneCls(c.tone),
+      c.sub ? esc(c.sub) : '',
+      c.tip ? esc(c.tip) : ''
+    )).join('');
+    html += `<div class="strategy-panel-section-label" style="margin-top:24px">Signal metrics${stamp}</div>
+      <div class="strategy-stats">${body}</div>`;
+  }
+
+  const d = signals.decision;
+  if (d && (d.action || (d.reasons && d.reasons.length))) {
+    const cls = toneCls(d.tone) === 'positive' ? 'buy'
+              : toneCls(d.tone) === 'negative' ? 'cash' : 'hold';
+    const rows = (d.reasons || []).filter(r => r && r.name).map(r => {
+      const lean = ['buy', 'out', 'cash', 'hold'].includes(String(r.lean || '').toLowerCase())
+        ? String(r.lean).toLowerCase() : 'hold';
+      return `<div class="sd-sig sd-lean-${lean}"><span class="sd-dot"></span>` +
+             `<span class="sd-sig-name">${esc(r.name)}</span>` +
+             `<span class="sd-sig-val">${esc(r.val || '')}</span>` +
+             `<span class="sd-sig-tag">${esc(r.tag || '')}</span></div>`;
+    }).join('');
+    html += `
+      <div class="strategy-panel-section-label" style="margin-top:22px">Right now</div>
+      <div class="signal-decision">
+        <div class="sd-hero sd-${cls}">
+          <span class="sd-hero-lead">Lump sum today</span>
+          <span class="sd-hero-action">${esc(d.action || '—')}</span>
+          ${d.note ? `<span class="sd-hero-note">${esc(d.note)}</span>` : ''}
+        </div>
+        ${rows ? `<div class="sd-signals">${rows}</div>` : ''}
+      </div>`;
+  }
+  return html;
+}
+
 function renderCustomPanelBody(cfgId) {
   const body = document.getElementById('strategy-panel-body');
   if (!body) return;
@@ -2238,10 +2410,12 @@ function renderCustomPanelBody(cfgId) {
   const controls = buildCustomControlsHtml(cfg, getCustomSchema(cfg));
   if (controls) html += `<div class="strategy-panel-section-label" style="margin-top:14px">Settings</div>${controls}`;
 
-  // The strategy's own log (whatever its run() returned), as a table — with the
-  // column labels/tooltips it declared in `columns`.
-  html += buildCustomLogTableHtml((window._customLogs || {})[cfgId] || [],
-                                  (window._customColumns || {})[cfgId] || null);
+  // Live signal dashboard (whatever the strategy reported in `signals`), then
+  // its own log — with the column labels/tooltips it declared in `columns`.
+  const _cLog = (window._customLogs || {})[cfgId] || [];
+  html += buildCustomSignalMetricsHtml((window._customSignals || {})[cfgId] || null,
+                                       _cLog.length ? _cLog[_cLog.length - 1].date : null);
+  html += buildCustomLogTableHtml(_cLog, (window._customColumns || {})[cfgId] || null);
 
   body.innerHTML = html;
   body.scrollTop = _scrollTop;
