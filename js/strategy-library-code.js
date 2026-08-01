@@ -628,6 +628,290 @@ CODE[25] = `{
   }
 }`;
 
+// #26 Rolling median 250 (hand-picked): sell when price runs >55% above its
+// 250-day rolling median, hold otherwise. An overextension filter, NOT a trend
+// filter — it only ever exits on strength, so it rides every crash to the bottom.
+CODE[26] = `{
+  name: "Rolling median 250",
+  params: [
+    { id: "asset", label: "Fund traded", default: "tqqq", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" },
+      { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" },
+      { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "park", label: "Held when out", default: "cash", options: [
+      { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
+      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" },
+      { value: "qld", label: "QLD" } ] },
+    { id: "threshold", label: "Sell when above median (%)", default: 55, options: [
+      10,15,20,25,30,35,40,42,44,46,48,50,52,54,55,56,58,60,62,64,66,68,70,75,80,85,90,100,110,125,150,175,200] },
+    { id: "window", label: "Median window (days)", default: 250, options: [
+      40,60,80,100,120,140,160,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,340,360,380,400,450,500] },
+    { id: "cashRate", label: "Cash interest (%/yr)", default: 4, options: [
+      0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
+    { id: "tradeCost", label: "Trading cost (%)", default: 0.02, options: [
+      0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
+  ],
+  columns: [
+    { key: "assetPrice", label: "Price", tip: "Closing price of the traded fund that day. The sell rule compares this against the rolling median." },
+    { key: "medianPrice", label: "Median", tip: "The median closing price of the traded fund over your chosen window of trading days. Half the days in the window closed above this level, half below." },
+    { key: "overPct", label: "Over median", tip: "How far the price sits above (+) or below (−) the rolling median, in percent. The strategy sells once this exceeds your sell threshold and buys back as soon as it drops below it again. Blank while the median is still warming up." }
+  ],
+  run(data, p) {
+    const log = [];
+    const px = data[p.asset] || data.tqqq;
+    const W = p.window || 250;
+    const thr = (p.threshold || 0) / 100;
+    const cost = (p.tradeCost || 0) / 100;
+    const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
+    const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
+    // Rolling sorted window: binary insert/remove, one in one out per day — never re-sorted.
+    const win = [];
+    const lowerBound = v => {
+      let lo = 0, hi = win.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (win[m] < v) lo = m + 1; else hi = m; }
+      return lo;
+    };
+    const ins = v => { win.splice(lowerBound(v), 0, v); };
+    const rem = v => { const j = lowerBound(v); if (j < win.length && win[j] === v) win.splice(j, 1); };
+    for (let k = Math.max(0, p.startIdx - W + 1); k < p.startIdx; k++) if (px[k] > 0) ins(px[k]);
+    let cash = p.initial, shares = 0, held = "cash";
+    let invested = p.initial, prevMonth = null;
+    let median = 0, over = 0;
+    const y0 = parseInt(data.dates[p.startIdx].slice(0, 4), 10);
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      if (px[i] > 0) ins(px[i]);
+      const out = i - W;
+      if (out >= 0 && px[out] > 0) rem(px[out]);
+      const m = win.length;
+      median = m === 0 ? 0 : (m % 2 ? win[(m - 1) >> 1] : (win[m / 2 - 1] + win[m / 2]) / 2);
+      over = median > 0 && px[i] > 0 ? px[i] / median - 1 : 0;
+      const month = data.dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "", fee = 0;
+      cash *= 1 + dayRate;
+      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
+        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4), 10) - y0);
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+      }
+      prevMonth = month;
+      let want = held;
+      if (median > 0 && px[i] > 0) want = over > thr ? p.park : p.asset;
+      if (want !== held) {
+        const oldPx = priceOf(held, i);
+        if (held !== "cash" && oldPx > 0) {
+          const gross = shares * oldPx, f = gross * cost;
+          cash += gross - f; fee += f; shares = 0;
+        }
+        const newPx = priceOf(want, i);
+        if (want !== "cash" && newPx > 0) {
+          const f = cash * cost;
+          shares = (cash - f) / newPx; fee += f; cash = 0;
+        }
+        action = held === "cash" ? "buy" : want === "cash" ? "sell" : "switch";
+        note = "price " + (over >= 0 ? "+" : "−") + Math.abs(over * 100).toFixed(1) + "% vs " + W + "d median";
+        held = want;
+      } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
+        const f = cash * cost;
+        shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
+      }
+      const hp = priceOf(held, i);
+      const stockVal = shares * hp;
+      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+      if (i === p.startIdx) action = "start";
+      if (i === p.endIdx) action = "end";
+      if (contributed > 0 || monthEnd || action !== "hold") {
+        log.push({
+          date: data.dates[i], value: stockVal + cash, action: action, note: note,
+          held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
+          cash: cash, contributed: contributed, invested: invested, fee: fee,
+          assetPrice: px[i], medianPrice: median, overPct: over * 100
+        });
+      }
+    }
+    const stretched = over > thr;
+    const pctStr = (over >= 0 ? "+" : "−") + Math.abs(over * 100).toFixed(2) + "%";
+    const A = p.asset.toUpperCase(), K = p.park === "cash" ? "cash" : p.park.toUpperCase();
+    return {
+      log: log,
+      signals: {
+        cards: [
+          { label: A + " vs " + W + "-day median",
+            value: (stretched ? "▲ " : "") + pctStr,
+            tone: stretched ? "bad" : "good",
+            icon: stretched ? "trendUp" : "activity",
+            sub: (px[p.endIdx] || 0).toFixed(2) + " vs " + median.toFixed(2) + " median",
+            tip: "How far " + A + "'s last close sits above or below its " + W + "-day rolling median. Below the sell threshold means stay invested; above it means the price is stretched and the strategy steps aside." },
+          { label: "Sell trigger",
+            value: "+" + (p.threshold || 0) + "%",
+            icon: "flag",
+            sub: stretched ? "exceeded — out of " + A : (Math.max(0, thr - over) * 100).toFixed(1) + " pts of headroom left",
+            tip: "The overshoot level that triggers the exit: once the price runs this far above the median, the strategy sells to " + K + ". As soon as the reading drops back below this level it buys " + A + " again." },
+          { label: "Held when out",
+            value: K,
+            icon: "shield",
+            sub: p.park === "cash" ? "earning " + (p.cashRate || 0) + "%/yr" : "stays in the market while out",
+            tip: "Where money sits while the sell signal is active. Cash earns the interest rate you set; a fund keeps market exposure at lower octane." }
+        ],
+        decision: {
+          action: stretched ? (K === "cash" ? "Stay in cash" : "Buy " + K) : "Buy " + A,
+          note: stretched ? "price is more than " + (p.threshold || 0) + "% above its median" : "price is within the normal band",
+          tone: stretched ? "bad" : "good",
+          reasons: [{
+            name: "Median overshoot",
+            val: A + " " + pctStr + " vs " + W + "d median",
+            tag: stretched ? "out · " + K : "in · " + A,
+            lean: stretched ? (K === "cash" ? "cash" : "out") : "buy"
+          }]
+        }
+      }
+    };
+  }
+}`;
+
+// #39 Overheat exit (hand-picked): sell when the SIGNAL fund (SSO by default)
+// closes >20% above its 150-day SMA, hold otherwise. Like #26 it only exits on
+// strength, so it has no downside rule and rides every crash to the bottom.
+CODE[39] = `{
+  name: "Overheat exit (sell when stretched)",
+  params: [
+    { id: "asset", label: "Fund traded", default: "tqqq", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" },
+      { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" },
+      { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "signal", label: "Signal read from", default: "sso", options: [
+      { value: "sso", label: "SSO" }, { value: "spy", label: "SPY" },
+      { value: "qqq", label: "QQQ" }, { value: "tqqq", label: "TQQQ" } ] },
+    { id: "window", label: "SMA window (days)", default: 150, options: [
+      20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,
+      210,220,230,240,250,260,270,280,300,320,350,400] },
+    { id: "stretch", label: "Sell when above SMA (%)", default: 20, options: [
+      5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,28,30,32,35,40,45,50] },
+    { id: "park", label: "Held when out", default: "cash", options: [
+      { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
+      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" } ] },
+    { id: "cashRate", label: "Cash interest (%/yr)", default: 4, options: [
+      0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
+    { id: "tradeCost", label: "Trading cost (%)", default: 0.02, options: [
+      0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
+  ],
+  columns: [
+    { key: "signalPrice", label: "Signal", tip: "Closing price of the fund the overheat signal is read from (SSO by default) — not necessarily the fund you trade." },
+    { key: "signalSma", label: "SMA", tip: "The signal fund's moving average over your chosen window. The strategy compares the signal price against this line." },
+    { key: "abovePct", label: "Above SMA", tip: "How far the signal price sits above (+) or below (−) its moving average. When this exceeds your sell threshold, the strategy sells; while it is at or below the threshold, it holds the traded fund." },
+    { key: "assetPrice", label: "Fund price", tip: "Closing price of the traded fund that day, shown even on days you are parked, so you can see what you are in or out of." }
+  ],
+  run(data, p) {
+    const log = [];
+    const sig = data[p.signal] || data.sso;
+    const px0 = data[p.asset] || data.tqqq;
+    const W = p.window, thr = (p.stretch || 0) / 100;
+    const cost = (p.tradeCost || 0) / 100;
+    const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
+    const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : data[id][i];
+    let cash = p.initial, shares = 0, held = "cash";
+    let sma = 0, above = 0;
+    let invested = p.initial, prevMonth = null;
+    const y0 = parseInt(data.dates[p.startIdx].slice(0, 4), 10);
+    let sum = 0, n = 0;
+    for (let k = Math.max(0, p.startIdx - W + 1); k <= p.startIdx; k++)
+      if (sig[k] > 0) { sum += sig[k]; n++; }
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      if (i > p.startIdx) {
+        if (sig[i] > 0) { sum += sig[i]; n++; }
+        const out = i - W;
+        if (out >= 0 && sig[out] > 0) { sum -= sig[out]; n--; }
+      }
+      const month = data.dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "", fee = 0;
+      cash *= 1 + dayRate;
+      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
+        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4), 10) - y0);
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+      }
+      prevMonth = month;
+      sma = n > 0 ? sum / n : 0;
+      above = sma > 0 ? sig[i] / sma - 1 : 0;
+      let want = held;
+      if (sma > 0) { want = above > thr ? p.park : p.asset; }
+      if (want !== held) {
+        const oldPx = priceOf(held, i);
+        if (held !== "cash" && oldPx > 0) {
+          const gross = shares * oldPx, f = gross * cost;
+          cash += gross - f; fee += f; shares = 0;
+        }
+        const newPx = priceOf(want, i);
+        if (want !== "cash" && newPx > 0) {
+          const f = cash * cost;
+          shares = (cash - f) / newPx; fee += f; cash = 0;
+        }
+        action = held === "cash" ? "buy" : want === "cash" ? "sell" : "switch";
+        note = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs SMA (trigger " + (thr * 100).toFixed(0) + "%)";
+        held = want;
+      } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
+        const f = cash * cost;
+        shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
+      }
+      const px = priceOf(held, i);
+      const stockVal = shares * px;
+      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+      if (i === p.startIdx) action = "start";
+      if (i === p.endIdx) action = "end";
+      if (contributed > 0 || monthEnd || action !== "hold") {
+        log.push({
+          date: data.dates[i], value: stockVal + cash, action: action, note: note,
+          held: held.toUpperCase(), price: px, shares: shares, holdingsValue: stockVal,
+          cash: cash, contributed: contributed, invested: invested, fee: fee,
+          signalPrice: sig[i], signalSma: sma, abovePct: above * 100, assetPrice: px0[i]
+        });
+      }
+    }
+    const stretched = above > thr;
+    const pctStr = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(2) + "%";
+    const gap = thr * 100 - above * 100;
+    const A = p.asset.toUpperCase(), S = p.signal.toUpperCase();
+    const K = p.park === "cash" ? "cash" : p.park.toUpperCase();
+    return {
+      log: log,
+      signals: {
+        cards: [
+          { label: S + " vs " + p.window + "-day avg",
+            value: (above >= 0 ? "▲ " : "▼ ") + pctStr,
+            tone: stretched ? "bad" : "good",
+            icon: stretched ? "trendDown" : "trendUp",
+            sub: (sig[p.endIdx] || 0).toFixed(2) + " vs " + sma.toFixed(2) + " avg",
+            tip: "How far " + S + " sits above its " + p.window + "-day moving average. At or below +" + (thr * 100).toFixed(0) + "% the strategy holds " + A + "; beyond it, it sells." },
+          { label: "Sell trigger",
+            value: "+" + (thr * 100).toFixed(0) + "%",
+            icon: "flag",
+            sub: stretched ? "trigger is active — stretched past it" : "fires if " + S + " stretches past this",
+            tip: "The overheat level: when " + S + " closes more than this far above its moving average, " + A + " is sold and the money moves to " + K + "." },
+          { label: "Distance to trigger",
+            value: (gap >= 0 ? gap.toFixed(2) + "% room" : Math.abs(gap).toFixed(2) + "% past"),
+            tone: stretched ? "bad" : "good",
+            icon: "activity",
+            sub: stretched ? "must fall back below +" + (thr * 100).toFixed(0) + "% to re-buy" : "how much further " + S + " can stretch before selling",
+            tip: "Gap between the current stretch and the sell trigger. Positive means room left while holding; negative means the market is past the trigger and the strategy is out." },
+          { label: "Held when out",
+            value: K === "cash" ? "Cash" : K,
+            icon: K === "cash" ? "dollar" : "shield",
+            sub: K === "cash" ? (p.cashRate || 0) + "%/yr interest on parked money" : "parked in " + K + " while out of " + A,
+            tip: "Where money sits after an overheat sell. It moves back into " + A + " as soon as " + S + " drops back to or below the trigger." }
+        ],
+        decision: {
+          action: stretched ? (K === "cash" ? "Stay in cash" : "Buy " + K) : "Buy " + A,
+          note: stretched ? S + " is stretched " + pctStr + " above its average" : "market is not overheated (" + pctStr + " vs +" + (thr * 100).toFixed(0) + "% trigger)",
+          tone: stretched ? "bad" : "good",
+          reasons: [{
+            name: "Overheat",
+            val: S + " " + pctStr + " vs " + p.window + "d (trigger +" + (thr * 100).toFixed(0) + "%)",
+            tag: stretched ? "out · " + K : "in · " + A,
+            lean: stretched ? (K === "cash" ? "cash" : "out") : "buy"
+          }]
+        }
+      }
+    };
+  }
+}`;
+
 // Browser global + Node export.
 if (typeof window !== 'undefined') window.STRATEGY_CODE = CODE;
 if (typeof module !== 'undefined' && module.exports) module.exports = CODE;

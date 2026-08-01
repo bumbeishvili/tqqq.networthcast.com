@@ -321,7 +321,8 @@ function positionInfoTip(e) {
   const icon = e.target.closest && e.target.closest('.info-icon[data-tip]');
   if (!icon) return;
   const r = icon.getBoundingClientRect();
-  const HALF_W = 130; // half of the tooltip's CSS max-width (260px)
+  // Half the tooltip's CSS max-width — wider for [data-tip-wide] (380px).
+  const HALF_W = icon.hasAttribute('data-tip-wide') ? 190 : 130;
   const PAD    = 8;
   const minCx  = HALF_W + PAD;
   const maxCx  = window.innerWidth - HALF_W - PAD;

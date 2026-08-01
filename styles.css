@@ -26,7 +26,7 @@
     --o-pink:         #ff708b;
 
     /* semantic tokens — what the components use */
-    --bg: #f5f6fb;
+    --bg: #fafafd;   /* page background — halfway from #f5f6fb to white */
     --surface: var(--o-snow);
     --surface2: var(--o-snow-alt);
     --border: var(--o-lavender);
@@ -751,11 +751,69 @@
   .sl-intro-note b { color: var(--green-text); font-weight: 600; }
 
   /* Card grid */
+  .sl-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .sl-page-info { font-size: 11px; color: var(--text-muted); }
+  .sl-page-btns { display: flex; gap: 4px; flex-wrap: wrap; }
+  .sl-page {
+    min-width: 26px;
+    padding: 4px 7px;
+    font-family: inherit;
+    font-size: 11px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  .sl-page:hover:not(:disabled) { background: var(--surface2); }
+  /* Scoped to .sl-pager so a later generic button rule can't win. */
+  .sl-pager .sl-page.on {
+    background: var(--accent2);
+    border-color: var(--accent2);
+    color: #fff;
+    font-weight: 600;
+  }
+  .sl-page:disabled { opacity: 0.35; cursor: default; }
+
+  .sl-search {
+    width: 100%;
+    margin: 0 0 10px;
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: 12px;
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+  }
+  .sl-search::placeholder { color: var(--text-muted); }
+  .sl-search:focus {
+    outline: none;
+    border-color: var(--accent2);
+  }
+  .sl-noresults {
+    padding: 18px 4px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+  /* Two cards per row — wide enough to fit all four era blocks on one line. */
   .sl-cards {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 10px;
   }
+  @media (max-width: 780px) {
+    .sl-cards { grid-template-columns: 1fr; }
+  }
+  .sl-card[hidden] { display: none; }
   .sl-card {
     display: flex;
     flex-direction: column;
@@ -786,7 +844,7 @@
   /* Sparkline */
   .sl-spark {
     position: relative;
-    height: 56px;
+    height: 112px;
     background: var(--surface);
     border-radius: 6px;
     overflow: hidden;
@@ -924,20 +982,37 @@
     background: var(--surface);
     border-radius: 6px;
   }
-  /* Three-era metric strip */
-  .sl-eras {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 6px;
-  }
-  .sl-era {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 6px 4px;
+  /* Era metrics: one row per measure, one column per window */
+  .sl-era-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
     background: var(--surface);
     border-radius: 6px;
+    overflow: hidden;
   }
+  .sl-era-table th,
+  .sl-era-table td {
+    padding: 5px 6px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+  }
+  .sl-era-table th[scope="row"] {
+    width: 84px;
+    text-align: left;
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .sl-era-table .sl-row-date td { font-size: 9px; color: var(--text-muted); }
+  /* The global `table td` rule adds a border-bottom that the row-label <th>
+     never gets, leaving separators short. Drop it and draw our own across both. */
+  .sl-era-table td { border-bottom: 0; }
+  .sl-era-table tr + tr th,
+  .sl-era-table tr + tr td { border-top: 1px solid var(--border, rgba(127, 127, 127, 0.18)); }
+  .sl-era-table tr:last-child th,
+  .sl-era-table tr:last-child td { border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.18)); }
   .sl-era-empty { opacity: 0.45; }
   .sl-era-hd { font-size: 9px; color: var(--text-muted); }
   .sl-era-cagr { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
@@ -945,6 +1020,7 @@
   .sl-era-cagr.neg { color: var(--red-text); }
   .sl-era-dd { font-size: 9.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
   .sl-era-na { font-size: 14px; color: var(--text-muted); }
+  .sl-add-ico { font-size: 11px; line-height: 1; }
   .sl-add {
     flex: 0 0 auto;
     padding: 5px 11px;
@@ -3117,6 +3193,15 @@
     pointer-events: none;
     box-shadow: var(--shadow-md);
   }
+
+  /* Strategy-library ⓘ: more room, since a full rule set is several lines. */
+  .info-icon[data-tip-wide][data-tip]:hover::after,
+  .info-icon[data-tip-wide][data-tip]:focus::after {
+    max-width: 380px;
+    font-size: 11.5px;
+    padding: 8px 11px;
+  }
+  .sl-info { flex: 0 0 auto; margin-left: 6px; }
 
   .strategy-panel-body .quarter-table-wrap th {
     position: sticky;

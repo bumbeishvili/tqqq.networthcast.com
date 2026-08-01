@@ -1,7 +1,7 @@
-// Strategy Library — a read-only catalog of the 25 best-known LETF timing /
-// rotation strategies, shown in a modal table. Reference only for now (no chart
-// integration); the `runnable` flag is here so a later pass can wire the
-// engine-supported ones up to one-click "Add".
+// Strategy Library — a catalog of the best-known LETF timing / rotation
+// strategies plus hand-picked ones (tag 'picked'), shown in a modal table.
+// Entries with code in window.STRATEGY_CODE get a "+ Add" button that drops
+// them onto the chart as a real custom strategy (see addStrategyFromLibrary).
 //
 // `here` = CAGR / maxDD computed from THIS app's own daily TSVs over the TQQQ
 // era (2010-02-11 → 2026-07-10), apples-to-apples — see backtest_strategies.py.
@@ -83,6 +83,67 @@ const STRATEGY_LIBRARY = [
   { n: 25, name: 'Always-invested park + DCA-back-in', tag: 'app', runnable: true,
     rules: 'On SELL, hold QQQ/SPY (1×) instead of cash. On BUY, DCA into QQQ over 6–12 mo or until SPY reclaims +4% above 200SMA, then rotate fully to TQQQ.',
     here: '39.5% / −58.7%', reported: '+6.91% avg holding QQQ vs bonds in downturns; app-implemented', src: 'HW' },
+  // --- hand-picked (tag 'picked'): my own, not from a published write-up. No
+  // `src`, so the card title renders as plain text instead of a dead link. ---
+  { n: 26, name: 'Rolling median 250', tag: 'picked', runnable: true,
+    rules: 'Signal: traded fund vs the MEDIAN of its own last 250 closes. Exit: price > 55% above the median → park (cash by default). Enter: any time it is not. Freq: daily. Overextension filter only — there is no downside rule, so it holds all the way through every crash.',
+    here: '62.4% / −79.1%', reported: 'Hand-picked; numbers are this app’s own backtest, not an external claim' },
+  { n: 39, name: 'Overheat exit \u2014 SSO signal (sell when stretched)', tag: 'picked', runnable: true,
+    rules: 'Signal: SSO vs its own 150-day SMA. Exit: signal closes >20% above the SMA \u2192 park (cash by default). Enter: any time it is not. Freq: daily. Signal and traded fund are separate knobs. Overextension filter only \u2014 like Rolling median 250 it has no downside rule, so it holds through every crash.',
+    here: '\u2014', reported: 'Hand-picked; numbers are this app\u2019s own backtest, not an external claim' },
+  // --- optimizer winners (tag 'overfit'): the single top-ranked row from each
+  // tab of the 9sig and SMA overfit explorers. These are the BEST-FITTING
+  // parameter sets found by sweeping thousands of combinations against a fixed
+  // window, so their headline numbers are the peak of a search, not a forecast —
+  // shown here to make that gap visible, not as recommendations.
+  { n: 27, name: '9sig · max return 2010–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked max return row from the 9sig overfit explorer, tuned on 2010–2025 (in-sample CAGR 55.33%, drawdown 69.91%). Runs as a native 9sig config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 2010–2025: 55.33% CAGR / −69.91% DD',
+    preset: { type: "9sig", params: {"select-9sig-underlying":"tqqq","select-9sig-growth":"130","select-9sig-crashdrop":"5","select-9sig-crashwin":"24","select-9sig-spike":"25","select-9sig-period":"monthly","select-9sig-cash":"90","select-9sig-cashrate":"4","select-9sig-buypower":"100","select-9sig-deploy":"75","select-9sig-target-compound":"holding","select-9sig-park-asset":"cash","select-9sig-rebalance-point":"10","select-9sig-spike-target":"0","select-9sig-cost":"0.02"} } },
+  { n: 28, name: '9sig · min drawdown 2010–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked min drawdown row from the 9sig overfit explorer, tuned on 2010–2025 (in-sample CAGR 30.01%, drawdown 19.41%). Runs as a native 9sig config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 2010–2025: 30.01% CAGR / −19.41% DD',
+    preset: { type: "9sig", params: {"select-9sig-underlying":"tqqq","select-9sig-growth":"12","select-9sig-crashdrop":"25","select-9sig-crashwin":"21","select-9sig-spike":"100","select-9sig-period":"yearly","select-9sig-cash":"70","select-9sig-cashrate":"4","select-9sig-buypower":"70","select-9sig-deploy":"0","select-9sig-target-compound":"holding","select-9sig-park-asset":"qld","select-9sig-rebalance-point":"10","select-9sig-spike-target":"0","select-9sig-cost":"0.02"} } },
+  { n: 29, name: '9sig · max return 1990–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked max return row from the 9sig overfit explorer, tuned on 1990–2025 (in-sample CAGR 42.24%, drawdown 81.66%). Runs as a native 9sig config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 1990–2025: 42.24% CAGR / −81.66% DD',
+    preset: { type: "9sig", params: {"select-9sig-underlying":"tqqq","select-9sig-growth":"150","select-9sig-crashdrop":"5","select-9sig-crashwin":"36","select-9sig-spike":"200","select-9sig-period":"yearly","select-9sig-cash":"0","select-9sig-cashrate":"4","select-9sig-buypower":"100","select-9sig-deploy":"100","select-9sig-target-compound":"holding","select-9sig-park-asset":"cash","select-9sig-rebalance-point":"0","select-9sig-spike-target":"0","select-9sig-cost":"0.02"} } },
+  { n: 30, name: '9sig · min drawdown 1990–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked min drawdown row from the 9sig overfit explorer, tuned on 1990–2025 (in-sample CAGR 18.12%, drawdown 22.67%). Runs as a native 9sig config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 1990–2025: 18.12% CAGR / −22.67% DD',
+    preset: { type: "9sig", params: {"select-9sig-underlying":"tqqq","select-9sig-growth":"0.5","select-9sig-crashdrop":"5","select-9sig-crashwin":"60","select-9sig-spike":"250","select-9sig-period":"quarterly","select-9sig-cash":"70","select-9sig-cashrate":"4","select-9sig-buypower":"70","select-9sig-deploy":"50","select-9sig-target-compound":"holding","select-9sig-park-asset":"cash","select-9sig-rebalance-point":"30","select-9sig-spike-target":"0","select-9sig-cost":"0.02"} } },
+  { n: 31, name: '9sig · max return 1953–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked max return row from the 9sig overfit explorer, tuned on 1953–2025 (in-sample CAGR 19.96%, drawdown 96.58%). Runs as a native 9sig config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 1953–2025: 19.96% CAGR / −96.58% DD',
+    preset: { type: "9sig", params: {"select-9sig-underlying":"tqqq","select-9sig-growth":"40","select-9sig-crashdrop":"25","select-9sig-crashwin":"24","select-9sig-spike":"160","select-9sig-period":"quarterly","select-9sig-cash":"40","select-9sig-cashrate":"4","select-9sig-buypower":"85","select-9sig-deploy":"100","select-9sig-target-compound":"target","select-9sig-park-asset":"cash","select-9sig-rebalance-point":"30","select-9sig-spike-target":"0","select-9sig-cost":"0.02"} } },
+  { n: 32, name: '9sig · min drawdown 1953–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked min drawdown row from the 9sig overfit explorer, tuned on 1953–2025 (in-sample CAGR 12.01%, drawdown 45.8%). Runs as a native 9sig config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 1953–2025: 12.01% CAGR / −45.8% DD',
+    preset: { type: "9sig", params: {"select-9sig-underlying":"tqqq","select-9sig-growth":"15","select-9sig-crashdrop":"20","select-9sig-crashwin":"48","select-9sig-spike":"50","select-9sig-period":"yearly","select-9sig-cash":"60","select-9sig-cashrate":"4","select-9sig-buypower":"50","select-9sig-deploy":"0","select-9sig-target-compound":"holding","select-9sig-park-asset":"cash","select-9sig-rebalance-point":"15","select-9sig-spike-target":"25","select-9sig-cost":"0.02"} } },
+  { n: 33, name: 'SMA · max return 2010–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked max return row from the SMA overfit explorer, tuned on 2010–2025 (in-sample CAGR 79.79%, drawdown 74.03%). Runs as a native SMA config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 2010–2025: 79.79% CAGR / −74.03% DD',
+    preset: { type: "sma", params: {"select-sma-asset":"spy","select-sma-window":"280","select-sma-underlying":"sso","select-sma-cashrate":"0","select-sma-entry-buf":"5","select-sma-exit-buf":"1.9","select-sma-rsi-oh":"20","select-sma-rsi-cool":"55","select-sma-rsi-oh-window":"3","select-sma-rsi-cool-window":"22","select-sma-confirm-buy":"3","select-sma-confirm-sell":"10","select-sma-settle":"5","select-sma-out-asset":"tqqq","select-sma-dca-in":"10","select-sma-dca-to-out":"5","select-sma-bg-gtfo":"55","select-sma-bg-asset":"tqqq","select-sma-bg-window":"250","select-sma-cost":"0.02"} } },
+  { n: 34, name: 'SMA · min drawdown 2010–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked min drawdown row from the SMA overfit explorer, tuned on 2010–2025 (in-sample CAGR 61.01%, drawdown 44.5%). Runs as a native SMA config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 2010–2025: 61.01% CAGR / −44.5% DD',
+    preset: { type: "sma", params: {"select-sma-asset":"qqq","select-sma-window":"30","select-sma-underlying":"tqqq","select-sma-cashrate":"0","select-sma-entry-buf":"0.1","select-sma-exit-buf":"3.5","select-sma-rsi-oh":"65","select-sma-rsi-cool":"65","select-sma-rsi-oh-window":"4","select-sma-rsi-cool-window":"17","select-sma-confirm-buy":"3","select-sma-confirm-sell":"10","select-sma-settle":"1","select-sma-out-asset":"sso","select-sma-dca-in":"7","select-sma-dca-to-out":"42","select-sma-bg-gtfo":"35","select-sma-bg-asset":"sso","select-sma-bg-window":"270","select-sma-cost":"0.02"} } },
+  { n: 35, name: 'SMA · max return 1990–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked max return row from the SMA overfit explorer, tuned on 1990–2025 (in-sample CAGR 54.13%, drawdown 81.66%). Runs as a native SMA config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 1990–2025: 54.13% CAGR / −81.66% DD',
+    preset: { type: "sma", params: {"select-sma-asset":"qqq","select-sma-window":"30","select-sma-underlying":"spy","select-sma-cashrate":"0","select-sma-entry-buf":"13","select-sma-exit-buf":"12","select-sma-rsi-oh":"80","select-sma-rsi-cool":"70","select-sma-rsi-oh-window":"6","select-sma-rsi-cool-window":"16","select-sma-confirm-buy":"0","select-sma-confirm-sell":"10","select-sma-settle":"5","select-sma-out-asset":"tqqq","select-sma-dca-in":"7","select-sma-dca-to-out":"25","select-sma-bg-gtfo":"30","select-sma-bg-asset":"sso","select-sma-bg-window":"270","select-sma-cost":"0.02"} } },
+  { n: 36, name: 'SMA · min drawdown 1990–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked min drawdown row from the SMA overfit explorer, tuned on 1990–2025 (in-sample CAGR 31.28%, drawdown 39.46%). Runs as a native SMA config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 1990–2025: 31.28% CAGR / −39.46% DD',
+    preset: { type: "sma", params: {"select-sma-asset":"spxl","select-sma-window":"220","select-sma-underlying":"tqqq","select-sma-cashrate":"0","select-sma-entry-buf":"0","select-sma-exit-buf":"5","select-sma-rsi-oh":"15","select-sma-rsi-cool":"45","select-sma-rsi-oh-window":"2","select-sma-rsi-cool-window":"8","select-sma-confirm-buy":"0","select-sma-confirm-sell":"10","select-sma-settle":"0","select-sma-out-asset":"cash","select-sma-dca-in":"4","select-sma-dca-to-out":"12","select-sma-bg-gtfo":"30","select-sma-bg-asset":"sso","select-sma-bg-window":"270","select-sma-cost":"0.02"} } },
+  { n: 37, name: 'SMA · max return 1953–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked max return row from the SMA overfit explorer, tuned on 1953–2025 (in-sample CAGR 29.97%, drawdown 83.6%). Runs as a native SMA config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 1953–2025: 29.97% CAGR / −83.6% DD',
+    preset: { type: "sma", params: {"select-sma-asset":"spxl","select-sma-window":"20","select-sma-underlying":"tqqq","select-sma-cashrate":"0","select-sma-entry-buf":"0.4","select-sma-exit-buf":"0.4","select-sma-rsi-oh":"80","select-sma-rsi-cool":"0","select-sma-rsi-oh-window":"12","select-sma-rsi-cool-window":"17","select-sma-confirm-buy":"0","select-sma-confirm-sell":"0","select-sma-settle":"0","select-sma-out-asset":"spy","select-sma-dca-in":"1","select-sma-dca-to-out":"6","select-sma-bg-gtfo":"35","select-sma-bg-asset":"qld","select-sma-bg-window":"300","select-sma-cost":"0.02"} } },
+  { n: 38, name: 'SMA · min drawdown 1953–2025', tag: 'overfit', runnable: true,
+    rules: 'Top-ranked min drawdown row from the SMA overfit explorer, tuned on 1953–2025 (in-sample CAGR 18%, drawdown 51.79%). Runs as a native SMA config, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
+    here: '—', reported: 'In-sample optimum over 1953–2025: 18% CAGR / −51.79% DD',
+    preset: { type: "sma", params: {"select-sma-asset":"spxl","select-sma-window":"20","select-sma-underlying":"qld","select-sma-cashrate":"0","select-sma-entry-buf":"0.5","select-sma-exit-buf":"0.3","select-sma-rsi-oh":"85","select-sma-rsi-cool":"75","select-sma-rsi-oh-window":"8","select-sma-rsi-cool-window":"25","select-sma-confirm-buy":"0","select-sma-confirm-sell":"0","select-sma-settle":"1","select-sma-out-asset":"cash","select-sma-dca-in":"0","select-sma-dca-to-out":"5","select-sma-bg-gtfo":"20","select-sma-bg-asset":"qqq","select-sma-bg-window":"250","select-sma-cost":"0.02"} } },
 ];
 
 const STRATEGY_SRC_LINKS = {
@@ -108,23 +169,321 @@ function esc(s) {
   return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 }
 
-// CAGR / max-drawdown per strategy over three eras, computed from this app's own
-// daily data (lump-sum $10k, no contributions, cash=0%) — see verify3.js.
-const SL_METRICS = {"1":{1990:{cagr:23.1,dd:86},2000:{cagr:-15.1,dd:86},2010:{cagr:33.7,dd:50.6}},"2":{1990:{cagr:16.4,dd:64},2000:{cagr:-7.5,dd:61},2010:{cagr:21.2,dd:48.7}},"3":{1990:{cagr:13,dd:45.9},2000:{cagr:-3.3,dd:45},2010:{cagr:15.7,dd:35.2}},"8":{1990:{cagr:26.7,dd:82.9},2000:{cagr:-9.8,dd:82.9},2010:{cagr:26.8,dd:60.5}},"9":{1990:{cagr:25.5,dd:93.6},2000:{cagr:-22.4,dd:93.6},2010:{cagr:33.8,dd:56.8}},"10":{1990:{cagr:20,dd:94},2000:{cagr:-22.9,dd:94},2010:{cagr:28.4,dd:55.8}},"11":{1990:{cagr:16.4,dd:64},2000:{cagr:-7.5,dd:61},2010:{cagr:21.2,dd:48.7}},"12":{1990:{cagr:11.7,dd:44.2},2000:{cagr:-3.1,dd:42.6},2010:{cagr:13.5,dd:39}},"13":{1990:{cagr:26.9,dd:93.8},2000:{cagr:-19.8,dd:93.8},2010:{cagr:36.4,dd:66.6}},"15":{1990:{cagr:21.4,dd:94},2000:{cagr:-22.9,dd:94},2010:{cagr:31.9,dd:55.4}},"17":{1990:{cagr:6.4,dd:91.7},2000:{cagr:-22.7,dd:90.9},2010:{cagr:18,dd:37.1}},"18":{1990:{cagr:25,dd:89.5},2000:{cagr:-13.5,dd:89.5},2010:{cagr:30.3,dd:60.6}},"19":{1990:{cagr:24.5,dd:68.9},2000:{cagr:-8.9,dd:68.9},2010:{cagr:31.8,dd:52.2}},"20":{1990:{cagr:17.2,dd:66.6},2000:{cagr:-9.6,dd:66.6},2010:{cagr:25.7,dd:32.9}},"22":{1990:{cagr:15.5,dd:47},2000:{cagr:13.7,dd:20.5},2010:{cagr:11.4,dd:39}},"23":{1990:{cagr:21.6,dd:92},2000:{cagr:-15.5,dd:92},2010:{cagr:33.8,dd:53.1}},"24":{1990:{cagr:20.2,dd:91.8},2000:{cagr:-20.6,dd:91.8},2010:{cagr:28.9,dd:55.8}},"25":{1990:{cagr:22.6,dd:96.9},2000:{cagr:-29.6,dd:96.9},2010:{cagr:35.2,dd:56.8}}};
+// === Card stats: computed at runtime, nothing precomputed ================
+// Era metrics AND sparklines are derived from the app's own daily series the
+// first time the library opens, so editing a strategy's code — or a data
+// refresh — changes its card with no rebuild step. (This replaced hard-coded
+// SL_METRICS / SL_CURVES blobs that silently went stale whenever either moved.)
+//
+// Strategy code here is FIRST-PARTY: it ships in this repo, same trust level as
+// the rest of the app's JS, so it runs on the main thread rather than through
+// the custom-strategy worker. That sandbox exists to contain code a *user*
+// pastes in; pushing ~80 sims through it one postMessage at a time would be
+// slower and buy nothing.
 
-// Quarterly equity curves 1995–2025 (lump-sum $10k): SPY B&H + each strategy,
-// for the per-card log sparkline. Computed via scratchpad/curves.js.
-const SL_CURVES = {"d":["1995-03","1995-06","1995-09","1995-12","1996-03","1996-06","1996-09","1996-12","1997-03","1997-06","1997-09","1997-12","1998-03","1998-06","1998-09","1998-12","1999-03","1999-06","1999-09","1999-12","2000-03","2000-06","2000-09","2000-12","2001-03","2001-06","2001-09","2001-12","2002-03","2002-06","2002-09","2002-12","2003-03","2003-06","2003-09","2003-12","2004-03","2004-06","2004-09","2004-12","2005-03","2005-06","2005-09","2005-12","2006-03","2006-06","2006-09","2006-12","2007-03","2007-06","2007-09","2007-12","2008-03","2008-06","2008-09","2008-12","2009-03","2009-06","2009-09","2009-12","2010-03","2010-06","2010-09","2010-12","2011-03","2011-06","2011-09","2011-12","2012-03","2012-06","2012-09","2012-12","2013-03","2013-06","2013-09","2013-12","2014-03","2014-06","2014-09","2014-12","2015-03","2015-06","2015-09","2015-12","2016-03","2016-06","2016-09","2016-12","2017-03","2017-06","2017-09","2017-12","2018-03","2018-06","2018-09","2018-12","2019-03","2019-06","2019-09","2019-12","2020-03","2020-06","2020-09","2020-12","2021-03","2021-06","2021-09","2021-12","2022-03","2022-06","2022-09","2022-12","2023-03","2023-06","2023-09","2023-12","2024-03","2024-06","2024-09","2024-12","2025-03","2025-06","2025-09","2025-12"],"spy":[11000,12000,13000,13700,14500,15100,15600,16800,17200,20300,21800,22500,25500,26400,23800,28900,30200,32300,30400,34800,35700,34600,34300,31400,28000,29500,25200,27700,27900,24200,20100,21700,21000,24200,24900,27900,28400,28900,28300,30800,30200,30700,31800,32300,33800,33300,35100,37500,37700,40100,40900,39400,35700,34800,31700,24900,22100,25700,29600,31500,33200,29400,32700,36200,38300,38300,33000,36900,41600,40400,42900,42800,47300,48600,51200,56600,57500,60500,61200,64200,64800,64900,60700,65000,65900,67500,70000,72800,77100,79500,83000,88600,87700,90800,97800,84500,96000,100000,102000,111000,89400,107000,117000,131000,140000,151000,152000,169000,161000,135000,129000,138000,149000,161000,156000,174000,193000,201000,213000,218000,209000,231000,250000,257000],"s":{"1":[13000,21400,25300,21900,23800,31000,36800,47700,40300,64400,90000,58800,82800,101000,56500,125000,166000,188000,196000,651000,878000,277000,146000,146000,146000,146000,146000,146000,146000,146000,146000,146000,145000,224000,272000,372000,337000,336000,260000,341000,252000,196000,190000,200000,213000,165000,165000,190000,185000,232000,276000,255000,170000,123000,123000,123000,123000,142000,218000,270000,308000,205000,174000,235000,271000,262000,220000,192000,266000,222000,270000,230000,271000,295000,401000,552000,547000,666000,770000,868000,917000,947000,845000,807000,636000,530000,708000,701000,971000,1080000,1260000,1530000,1580000,1890000,2350000,1720000,1920000,2090000,2080000,2930000,1610000,2260000,3020000,4200000,4210000,5660000,5750000,7680000,5710000,5710000,5710000,5710000,7090000,10300000,8990000,12900000,15700000,18900000,18600000,20300000,14800000,17600000,21900000,22400000],"2":[12700,16100,19500,22300,25000,27400,27800,33900,35100,53900,63400,63900,90300,95100,66600,94800,104000,120000,93900,114000,111000,71000,61800,61800,61800,61800,61800,61800,57900,50400,50400,50400,45000,56900,60000,83100,85600,88400,75600,90900,83100,74700,80700,73000,79900,69600,74100,86800,84900,98000,82500,62600,62600,55200,55200,55200,55200,54800,82500,96300,112000,70300,67000,90900,107000,105000,88600,64300,91000,80500,95300,86900,115000,123000,143000,190000,197000,226000,231000,249000,251000,250000,240000,208000,219000,219000,242000,269000,315000,341000,382000,460000,428000,462000,565000,402000,432000,453000,461000,585000,371000,401000,506000,695000,817000,1030000,1030000,1380000,999000,920000,901000,832000,785000,968000,843000,1090000,1410000,1540000,1730000,1780000,1460000,1720000,2110000,2200000],"3":[11800,13900,15900,17500,19000,20400,20800,23900,24700,33200,37400,38300,48700,50900,40600,51800,55600,62300,53300,61300,61300,46300,42600,42600,42600,42600,42600,42600,40800,37200,37200,37200,34600,40700,42400,52900,54200,55600,50200,56900,53900,50400,53300,50100,53500,49300,51900,58000,57600,63900,58400,48300,48300,44500,44500,44500,44500,44200,58200,64900,71600,52800,51200,62500,69400,69000,62100,50300,63400,59300,66700,63000,76200,80200,88600,107000,110000,121000,123000,131000,132000,132000,129000,117000,122000,122000,131000,140000,157000,165000,179000,203000,196000,207000,237000,191000,200000,207000,211000,248000,185000,196000,231000,287000,322000,376000,377000,461000,374000,354000,350000,331000,321000,372000,341000,407000,487000,520000,568000,585000,517000,579000,665000,688000],"8":[13500,22300,26300,22800,24800,32300,38300,49700,42000,67100,93700,61200,106000,130000,106000,244000,324000,368000,382000,1010000,1350000,444000,374000,374000,374000,374000,374000,374000,296000,232000,232000,232000,232000,334000,404000,553000,501000,567000,426000,608000,449000,443000,529000,505000,537000,360000,375000,432000,422000,527000,599000,424000,424000,424000,424000,424000,424000,422000,646000,800000,914000,645000,669000,905000,1040000,1010000,958000,745000,1310000,1100000,1330000,1060000,1240000,1350000,1840000,2530000,2510000,3050000,3530000,3460000,3650000,3770000,3730000,2690000,2740000,2580000,3440000,3400000,4720000,5220000,6110000,7420000,7700000,9160000,11400000,5790000,6660000,7260000,7250000,10200000,7830000,9560000,12800000,17800000,17900000,24000000,24400000,32600000,18300000,15100000,15100000,13400000,14700000,21300000,18600000,22600000,27500000,33100000,32700000,35800000,23100000,29100000,36300000,37000000],"9":[13500,22300,26300,22800,24800,32300,31800,41200,34900,55600,77700,50800,88100,108000,87800,229000,304000,346000,359000,1020000,1280000,247000,153000,153000,153000,153000,153000,153000,131000,102000,102000,102000,89500,121000,147000,201000,182000,206000,149000,199000,147000,127000,152000,140000,149000,104000,109000,125000,122000,153000,158000,133000,133000,112000,112000,112000,112000,121000,185000,229000,262000,179000,186000,251000,289000,279000,266000,206000,363000,303000,368000,292000,344000,375000,509000,701000,694000,845000,977000,1050000,1110000,1150000,1130000,1100000,1200000,1060000,1410000,1400000,1940000,2150000,2510000,3050000,3160000,3770000,4690000,2970000,3340000,3600000,3590000,5040000,3650000,4520000,6060000,8410000,8450000,11300000,11500000,15400000,9160000,7580000,7320000,6740000,7880000,11500000,10000000,13600000,16600000,19900000,19600000,21500000,15600000,19700000,24500000,25100000],"10":[13500,22300,26300,22800,20000,26000,23700,30700,26000,41400,57900,34300,51200,62700,45200,87400,116000,132000,137000,455000,614000,183000,117000,117000,117000,117000,117000,73000,58300,58300,58300,53300,36800,57200,69200,94700,83800,84000,70200,91600,64200,56200,62100,63700,67800,58900,55400,63700,62300,77800,92700,85600,70900,55900,47100,47100,47100,48700,74600,92500,106000,62700,67500,91300,105000,91600,74400,60500,101000,84200,102000,77400,91100,99200,135000,185000,184000,224000,259000,291000,308000,318000,264000,289000,263000,205000,274000,271000,376000,416000,487000,591000,614000,731000,910000,458000,493000,497000,496000,697000,429000,770000,1030000,1430000,1440000,1930000,1960000,2620000,1530000,1420000,1420000,1420000,1630000,2370000,2060000,2950000,3600000,4330000,4260000,4670000,3270000,4110000,5130000,5240000],"11":[12700,16100,19500,22300,25000,27400,27800,33900,35100,53900,63400,63900,90300,95100,66600,94800,104000,120000,93900,114000,111000,71000,61800,61800,61800,61800,61800,61800,57900,50400,50400,50400,45000,56900,60000,83100,85600,88400,75600,90900,83100,74700,80700,73000,79900,69600,74100,86800,84900,98000,82500,62600,62600,55200,55200,55200,55200,54800,82500,96300,112000,70300,67000,90900,107000,105000,88600,64300,91000,80500,95300,86900,115000,123000,143000,190000,197000,226000,231000,249000,251000,250000,240000,208000,219000,219000,242000,269000,315000,341000,382000,460000,428000,462000,565000,402000,432000,453000,461000,585000,371000,401000,506000,695000,817000,1030000,1030000,1380000,999000,920000,901000,832000,785000,968000,843000,1090000,1410000,1540000,1730000,1780000,1460000,1720000,2110000,2200000],"12":[11800,13900,15900,17500,19000,20400,19400,22300,23000,30900,34900,35700,45400,47400,38100,47200,50700,56800,49200,56300,46000,34100,33000,33000,33000,33000,33000,33000,31700,31700,31700,31700,31700,37500,39100,48800,49900,51200,45400,51000,48300,45400,48000,47600,50800,46300,49300,55100,54700,60700,47500,41400,41400,41400,41400,41400,41400,40800,52600,58600,64600,53900,52400,63900,71000,70600,63600,63600,77800,68600,77200,74800,90500,95200,105000,127000,131000,144000,146000,155000,157000,157000,149000,128000,132000,132000,142000,152000,170000,179000,194000,220000,201000,205000,236000,176000,179000,189000,193000,227000,169000,149000,166000,206000,231000,270000,271000,331000,253000,247000,247000,247000,221000,256000,235000,271000,324000,346000,378000,389000,359000,383000,440000,456000],"13":[12900,21200,25000,21700,23600,30700,36500,47300,40000,63800,89200,58300,101000,124000,81400,174000,231000,262000,273000,768000,1040000,442000,324000,181000,121000,142000,89900,121000,112000,81000,64300,75600,78300,106000,128000,175000,159000,180000,123000,163000,120000,119000,142000,149000,159000,119000,131000,151000,148000,184000,220000,192000,164000,170000,146000,112000,114000,132000,202000,251000,286000,214000,247000,327000,376000,364000,298000,318000,495000,414000,502000,428000,504000,549000,745000,1030000,1020000,1240000,1430000,1610000,1700000,1760000,1520000,1670000,1640000,1500000,2000000,1980000,2740000,3030000,3550000,4310000,4470000,5320000,6630000,4270000,4800000,5240000,5230000,7340000,5120000,7170000,9620000,13400000,13400000,18000000,18300000,24400000,13900000,8570000,8190000,8170000,10800000,15700000,13700000,19500000,23800000,28600000,28200000,30900000,22600000,29300000,36500000,37300000],"15":[13500,22800,26900,23300,20400,26600,24200,31400,26600,42400,60700,36000,53700,65800,50800,113000,165000,187000,195000,649000,875000,260000,167000,167000,167000,167000,167000,104000,83100,83100,83100,76000,52500,81500,98600,135000,119000,120000,100000,130000,91500,80000,88500,90800,96600,83900,78900,90800,88800,111000,132000,122000,101000,79600,67100,67100,67100,69400,106000,132000,150000,91400,98400,135000,159000,139000,113000,91700,154000,129000,156000,118000,139000,151000,206000,283000,280000,341000,390000,439000,464000,479000,398000,436000,397000,309000,413000,409000,561000,672000,786000,955000,999000,1190000,1480000,745000,802000,817000,815000,1150000,727000,1300000,2060000,2870000,2880000,3860000,3930000,5240000,3050000,2850000,2850000,2850000,3250000,4730000,4130000,5900000,7190000,8860000,9340000,10200000,7150000,9010000,11200000,11500000],"17":[11300,13200,11700,10100,11700,13200,15200,17200,16600,21100,24900,19800,29300,28400,23500,34100,26300,19700,21900,42000,27100,25400,22300,22300,16100,11400,11400,14900,9940,9940,7360,6850,5820,6800,6950,6370,7180,5830,5380,5560,5560,6050,6360,6400,5760,5380,5720,5710,4560,4730,5850,4280,4100,4730,4440,4440,3720,4720,6060,6220,7850,7330,8420,9710,9530,9410,8370,7380,10600,8630,8570,8110,7440,7780,9700,11000,10600,12100,12500,13700,12900,11900,11800,13200,13700,12800,15400,13400,15900,16100,17100,17200,20500,24100,22400,21200,25300,29500,29700,36100,39500,42500,42500,47000,43800,60500,60900,70100,64300,57300,67700,63900,88500,114000,104000,114000,93000,110000,107000,93800,85300,107000,112000,91400],"18":[13200,21700,25700,22200,24200,31500,37400,48400,41000,65400,91400,58400,79000,96800,83500,149000,198000,225000,234000,777000,1050000,317000,205000,205000,205000,205000,205000,165000,153000,153000,153000,153000,110000,170000,206000,282000,256000,255000,217000,270000,201000,160000,177000,186000,198000,172000,168000,193000,189000,236000,282000,260000,215000,193000,176000,176000,176000,200000,307000,380000,434000,288000,313000,424000,488000,398000,274000,209000,332000,277000,336000,235000,260000,283000,384000,529000,524000,637000,737000,831000,878000,907000,784000,897000,753000,620000,816000,808000,1120000,1240000,1450000,1760000,1830000,2180000,2710000,1900000,1910000,2080000,2070000,2910000,1910000,3420000,4580000,6370000,6390000,8580000,8720000,11600000,7940000,7940000,7940000,7940000,8220000,12000000,10400000,14900000,18200000,21900000,21500000,23600000,18500000,21500000,26800000,27400000],"19":[13500,22300,26300,22800,24800,32300,38300,49700,42000,67100,93700,61200,61400,75200,64900,143000,190000,216000,225000,747000,1010000,430000,357000,357000,357000,357000,357000,357000,357000,357000,357000,357000,330000,512000,620000,848000,769000,870000,658000,796000,588000,509000,538000,565000,602000,454000,454000,465000,455000,568000,677000,625000,409000,364000,346000,346000,346000,343000,526000,652000,744000,494000,611000,826000,951000,919000,585000,544000,958000,801000,971000,871000,939000,1020000,1390000,1910000,1890000,2300000,2670000,3000000,3170000,3280000,2690000,2840000,1770000,1850000,2470000,2440000,3380000,3750000,4380000,5320000,5520000,6570000,8190000,5460000,5460000,5730000,5710000,8030000,4420000,7520000,10100000,14000000,14000000,18900000,19200000,25600000,16100000,16100000,16100000,16100000,22000000,32000000,27900000,39900000,48600000,58500000,57600000,63100000,45800000,44400000,55300000,56500000],"20":[12200,16200,17400,16600,17000,18600,20500,23200,22200,26400,31900,27700,33400,37600,35500,44300,49100,51600,52600,79300,82700,73800,65300,52800,44400,46600,36600,43300,40000,32000,27700,30500,30400,35100,37300,41500,39600,42500,37800,45900,38000,35400,41500,40900,43100,36300,39100,42600,42400,49200,53300,52400,44200,43100,36400,32900,33300,37700,46400,51700,53700,47900,56700,68900,77100,73600,66000,70600,105000,97000,108000,98700,107000,110000,133000,172000,163000,182000,199000,203000,198000,200000,181000,201000,188000,177000,209000,205000,276000,313000,345000,409000,447000,478000,549000,408000,488000,438000,424000,559000,525000,627000,695000,807000,838000,933000,953000,1130000,1000000,833000,771000,765000,935000,1140000,1080000,1300000,1470000,1650000,1560000,1650000,1450000,1610000,1880000,2040000],"22":[10700,13300,18400,22100,22100,24100,20900,23800,26500,34000,45000,34600,37700,44200,31700,26700,31800,42300,43800,49500,75300,71100,61100,61100,61100,61100,61100,61100,61100,61100,61100,61100,61100,80600,83600,108000,120000,124000,120000,125000,121000,119000,120000,120000,131000,131000,131000,145000,152000,166000,165000,170000,149000,157000,157000,157000,157000,162000,196000,218000,214000,190000,190000,203000,211000,231000,189000,189000,200000,223000,269000,276000,286000,306000,318000,374000,388000,406000,426000,439000,523000,552000,502000,544000,524000,457000,497000,521000,565000,577000,637000,706000,577000,606000,662000,526000,526000,482000,505000,529000,514000,514000,611000,620000,574000,646000,733000,824000,801000,801000,801000,801000,841000,868000,772000,708000,780000,846000,956000,1110000,986000,1030000,1120000,1210000],"23":[14700,24700,33300,28900,25300,30900,28200,34300,29100,46400,59000,35000,42700,52300,39300,72400,106000,120000,125000,306000,480000,143000,91800,91800,91800,91800,91800,65600,52400,52400,52400,52400,38300,59500,77200,106000,96200,97100,81200,109000,76700,62300,61000,63100,67200,58300,58300,75400,73700,94800,113000,111000,92100,77700,67500,67500,67500,70800,118000,146000,156000,86700,94400,135000,159000,139000,117000,92900,135000,114000,142000,112000,131000,148000,201000,276000,274000,319000,375000,434000,458000,473000,393000,437000,396000,306000,400000,395000,494000,605000,707000,892000,872000,1040000,1290000,731000,743000,777000,776000,1070000,617000,1300000,1840000,2560000,2570000,3450000,3540000,4870000,3050000,3050000,3050000,3050000,3490000,5620000,5270000,7290000,9360000,11300000,11500000,12600000,8830000,11100000,14000000,15200000],"24":[13500,22300,27500,23900,20900,27200,24800,32100,27200,43400,60600,36000,53600,65600,47300,82500,123000,155000,162000,367000,437000,180000,115000,115000,115000,115000,115000,71800,57300,57300,57300,52500,36200,56200,68100,93200,82400,82600,69100,90000,63200,55200,61100,62700,66700,57900,54500,62600,61300,76500,91200,84200,69700,54900,46300,46300,46300,47900,73400,91000,104000,61700,66400,89800,103000,90000,73100,59500,99000,82800,100000,76100,89600,97600,132000,182000,181000,220000,254000,287000,303000,313000,260000,285000,259000,202000,270000,267000,370000,410000,479000,582000,604000,719000,895000,450000,485000,489000,488000,685000,422000,757000,1080000,1500000,1510000,2020000,2060000,2750000,1600000,1490000,1490000,1490000,1700000,2480000,2160000,3090000,3760000,4530000,4460000,4890000,3420000,4300000,5370000,5480000],"25":[13500,22300,26300,22800,21500,28000,28000,36200,30600,48900,68300,42100,66400,81300,62500,127000,169000,192000,200000,663000,895000,311000,210000,138000,92700,108000,68600,67300,53800,38900,30900,34300,27600,42800,51800,70900,63400,66300,54600,74300,53100,48400,55000,56800,60500,50700,51000,58600,57300,71600,85300,78800,59000,51500,39400,30200,30800,37400,57300,71000,81000,50600,61300,83000,95500,86200,68800,63500,108000,90100,109000,86300,102000,111000,150000,207000,205000,249000,289000,325000,344000,355000,298000,346000,318000,265000,354000,351000,486000,538000,630000,764000,793000,944000,1180000,615000,751000,779000,777000,1090000,694000,1310000,1760000,2440000,2450000,3290000,3340000,4460000,2820000,2090000,1990000,1990000,2590000,3760000,3280000,4690000,5720000,6880000,6780000,7430000,5290000,7220000,9000000,9190000]}};
+const SL_SPARK_START = '1995-01-01';  // left edge of every sparkline
+const SL_START_CAPITAL = 10000;       // opening lump sum
+const SL_MONTHLY = 1000;              // added at the start of each new month
 
+// Bounds for the four card windows. `null` end → last available bar.
+const SL_ERA_BOUNDS = {
+  '1980': ['1980-01-01', '2000-03-31'],
+  '2000': ['2000-03-31', '2009-03-31'],
+  '2009': ['2009-03-31', '2025-12-31'],
+  '2026': ['2025-12-31', null],   // shares the 2009-era boundary, like the others
+};
+
+let SL_STATS = null;  // { quarters, spy, byN } — built by computeLibraryStats()
+
+function slIdxOnOrAfter(dates, s) {
+  for (let i = 0; i < dates.length; i++) if (dates[i] >= s) return i;
+  return -1;
+}
+function slIdxOnOrBefore(dates, s) {
+  if (!s) return dates.length - 1;
+  for (let i = dates.length - 1; i >= 0; i--) if (dates[i] <= s) return i;
+  return -1;
+}
+
+// Money-weighted CAGR (IRR) + deepest peak-to-trough dip over a log. Because
+// every run takes SL_MONTHLY of new cash each month, a plain end/start rate
+// would credit the deposits as growth — so this uses the same IRR the app's
+// pills and the overfit explorers report. `total` is profit over everything
+// paid in, which is the honest "total return" once contributions exist.
+function slCagrDD(res) {
+  const log = Array.isArray(res) ? res : (res && res.points);
+  if (!log || log.length < 2) return null;
+  const v0 = log[0].value, v1 = log[log.length - 1].value;
+  if (!(v0 > 0)) return null;
+  // A preset's sample points can stop short of the window edge (9sig emits at
+  // rebalance dates), so annualise over the WINDOW the app uses, not the log's
+  // own span — otherwise `years` and the contribution schedule both drift.
+  const startDate = (!Array.isArray(res) && res.startDate) || log[0].date;
+  const endDate = (!Array.isArray(res) && res.endDate) || log[log.length - 1].date;
+  const yrs = (new Date(endDate) - new Date(startDate)) / (365.25 * 864e5);
+  // Match the app: revalue holdings at every daily close when the engine gave
+  // us control points; only custom strategies (no control points) fall back to
+  // scanning the rebalance-grain series.
+  const rows = (typeof daily !== 'undefined' && daily) ? daily : null;
+  const mult = !Array.isArray(res) && res.ddMulti;
+  const ctrl = !Array.isArray(res) && res.ddControls;
+  let dd = null;
+  if (mult && mult.length && rows && typeof computeDailyMaxDrawdownMulti === 'function') {
+    dd = computeDailyMaxDrawdownMulti(mult, rows).pct;
+  } else if (ctrl && ctrl.length && rows && typeof computeDailyMaxDrawdown === 'function') {
+    dd = computeDailyMaxDrawdown(ctrl, rows, res.ddKey || 'tqqq').pct;
+  }
+  if (dd == null) {
+    let peak = -Infinity; dd = 0;
+    for (const r of log) {
+      if (r.value > peak) peak = r.value;
+      if (peak > 0) dd = Math.max(dd, 1 - r.value / peak);
+    }
+  }
+  const months = Math.max(0, Math.round(yrs * 12));
+  const paidIn = SL_START_CAPITAL + SL_MONTHLY * months;
+  let cagr = 0;
+  if (yrs > 0 && typeof moneyWeightedCAGR === 'function') {
+    cagr = moneyWeightedCAGR(SL_START_CAPITAL, SL_MONTHLY, 0, startDate, endDate, yrs, v1,
+      (typeof monthlyData !== 'undefined' ? monthlyData : null), paidIn);
+  } else if (yrs > 0) {
+    cagr = (Math.pow(v1 / paidIn, 1 / yrs) - 1) * 100;
+  }
+  return { total: (v1 / paidIn - 1) * 100, cagr, dd: dd * 100, paidIn };
+}
+
+// Quarter-end sampling points from SL_SPARK_START to the last bar:
+// [{ key: '1995-03', date: <last trading day in that quarter> }]
+function slQuarterEnds(dates) {
+  const out = [], seen = {};
+  const from = slIdxOnOrAfter(dates, SL_SPARK_START);
+  if (from < 0) return out;
+  for (let i = from; i < dates.length; i++) {
+    const d = dates[i];
+    // Bucket by quarter, but LABEL with the bucket's actual last trading month.
+    // Naming the quarter-end month made the current, incomplete quarter read as
+    // a future date (July data showing as 2026-09).
+    const q = d.slice(0, 4) + 'Q' + Math.ceil(+d.slice(5, 7) / 3);
+    if (!(q in seen)) { seen[q] = out.length; out.push({ key: d.slice(0, 7), date: d }); }
+    else { const o = out[seen[q]]; o.date = d; o.key = d.slice(0, 7); }
+  }
+  return out;
+}
+
+// Forward-fill a strategy log onto the quarter grid.
+function slCurveFromLog(log, quarters) {
+  const out = new Array(quarters.length);
+  let li = 0, last = SL_START_CAPITAL;
+  for (let q = 0; q < quarters.length; q++) {
+    while (li < log.length && log[li].date <= quarters[q].date) { last = log[li].value; li++; }
+    out[q] = last;
+  }
+  return out;
+}
+
+// Evaluate a library strategy's code and run it over [si, ei] at its defaults.
+function slRunCode(code, data, si, ei) {
+  const mod = new Function('"use strict"; return (' + code + '\n);')();
+  const p = {
+    initial: SL_START_CAPITAL, monthly: SL_MONTHLY, annualRaise: 0,
+    startIdx: si, endIdx: ei, entryDate: data.dates[si], exitDate: data.dates[ei],
+  };
+  for (const sp of (mod.params || [])) {
+    let v = sp.default;
+    if (v && typeof v === 'object' && 'value' in v) v = v.value;
+    p[sp.id] = v;
+  }
+  const res = mod.run(data, p);
+  return Array.isArray(res) ? res : (res && res.log);
+}
+
+// --- preset entries (native 9sig / SMA configs) -------------------------
+// These carry sidebar control values rather than code, so they run through the
+// app's real engines. The opts mapping below mirrors computeConfigSeries() in
+// saved-configs.js — keep the two in step when a knob is added.
+function slQIdx(dateStr, before) {
+  if (typeof quarterlyData === 'undefined' || !quarterlyData) return -1;
+  if (before) {
+    if (!dateStr) return quarterlyData.length - 1;
+    for (let i = quarterlyData.length - 1; i >= 0; i--) if (quarterlyData[i][0] <= dateStr) return i;
+    return -1;
+  }
+  for (let i = 0; i < quarterlyData.length; i++) if (quarterlyData[i][0] >= dateStr) return i;
+  return -1;
+}
+
+function slRunPreset(preset, si, ei) {
+  const p = preset.params || {};
+  const g = (id, d) => (id in p ? p[id] : d);
+  if (preset.type === '9sig') {
+    const cd = +g('select-9sig-crashdrop', 30), sp = +g('select-9sig-spike', 100);
+    const dep = g('select-9sig-deploy', '0');
+    const opts = {
+      qGrowth: (+g('select-9sig-growth', 9)) / 100 || 0.09,
+      underlyingCol: ulColFromVal(g('select-9sig-underlying', 'tqqq')),
+      crashDropPct: Number.isFinite(cd) ? cd : 30,
+      crashLookbackMonths: +g('select-9sig-crashwin', 24) || 24,
+      spikeTriggerPct: Number.isFinite(sp) ? sp : 100,
+      rebalancePeriod: g('select-9sig-period', 'quarterly') || 'quarterly',
+      cashPct: (+g('select-9sig-cash', 40) || 0) / 100,
+      contribDeployPct: dep === '1' ? 0.5 : (+dep || 0) / 100,
+      targetFromPrevTarget: ['target', '1'].includes(g('select-9sig-target-compound', 'holding')),
+      parkAsset: g('select-9sig-park-asset', 'cash') || 'cash',
+      buyThrottlePct: +g('select-9sig-buypower', 90) || 90,
+      spikeResetPct: g('select-9sig-spike-target', 'auto') || 'auto',
+      tradeCostPct: +g('select-9sig-cost', 0) || 0,
+    };
+    const rp = +g('select-9sig-rebalance-point', 0) || 0;
+    if (rp > 0 && typeof buildEnvelopeQData === 'function' && typeof PERIOD_DAYS !== 'undefined') {
+      const off = Math.round(rp / 100 * ((PERIOD_DAYS[opts.rebalancePeriod] || 63) - 1));
+      const q = buildEnvelopeQData(opts.rebalancePeriod, off, quarterlyData[si] && quarterlyData[si][0], quarterlyData[ei] && quarterlyData[ei][0]);
+      if (q && q.length >= 2) opts.qData = q;
+    }
+    opts.sampleQuarterly = (opts.rebalancePeriod === 'yearly');
+    const r = simulate(SL_START_CAPITAL, SL_MONTHLY, (+g('select-9sig-cashrate', 4) || 0) / 100, si, ei, 0, opts);
+    const rows = (r.samplePoints && r.samplePoints.length) ? r.samplePoints : (r.log || []);
+    const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl' };
+    return {
+      points: rows.map(l => ({ date: l.date, value: l.total != null ? l.total : l.value })),
+      ddControls: (r.log || []).map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: l.cash })),
+      ddKey: UL_KEY[opts.underlyingCol] || 'tqqq',
+      startDate: quarterlyData[si] && quarterlyData[si][0],
+      endDate: quarterlyData[ei] && quarterlyData[ei][0],
+    };
+  }
+  if (preset.type === 'sma') {
+    const opts = {
+      smaAsset: g('select-sma-asset', 'qqq') || 'qqq',
+      smaWindow: +g('select-sma-window', 200) || 200,
+      underlyingCol: ulColFromVal(g('select-sma-underlying', 'tqqq')),
+      entryBufferPct: +g('select-sma-entry-buf', 0) || 0,
+      exitBufferPct: +g('select-sma-exit-buf', 0) || 0,
+      rsiOverheatThreshold: +g('select-sma-rsi-oh', 0) || 0,
+      rsiCoolThreshold: +g('select-sma-rsi-cool', 0) || 0,
+      outAsset: g('select-sma-out-asset', 'cash') || 'cash',
+      dcaInMonths: +g('select-sma-dca-in', 0) || 0,
+      dcaToOutMonths: +g('select-sma-dca-to-out', 0) || 0,
+      bgGtfoPct: +g('select-sma-bg-gtfo', 0) || 0,
+      bgAsset: g('select-sma-bg-asset', 'qqq') || 'qqq',
+      bgWindow: +g('select-sma-bg-window', 0) || 0,
+      tradeCostPct: +g('select-sma-cost', 0) || 0,
+      rsiOhWindow: +g('select-sma-rsi-oh-window', 10) || 10,
+      rsiCoolWindow: +g('select-sma-rsi-cool-window', 10) || 10,
+      rebalanceCheck: 'daily',
+      confirmBuySteps: +g('select-sma-confirm-buy', 0) || 0,
+      confirmSellSteps: +g('select-sma-confirm-sell', 0) || 0,
+      settleDays: +g('select-sma-settle', 0) || 0,
+      emitDD: true,
+    };
+    const r = simulateSMA(SL_START_CAPITAL, SL_MONTHLY, (+g('select-sma-cashrate', 4) || 0) / 100, si, ei, 0, opts);
+    return {
+      points: (r.smaPoints || []).map(pt => ({ date: pt.date, value: pt.value })),
+      ddMulti: r.ddControls || null,
+      startDate: quarterlyData[si] && quarterlyData[si][0],
+      endDate: quarterlyData[ei] && quarterlyData[ei][0],
+    };
+  }
+  return null;
+}
+
+// An entry is runnable if it has code OR a native preset.
+function strategyRunnable(s) { return !!(s.preset || strategyHasCode(s.n)); }
+
+// Buy & hold baseline (SPY, same lump sum) on the quarter grid.
+// Buys SL_MONTHLY of SPY at the first close of each new month, so the baseline
+// is fed on the same schedule as the strategies it is drawn against.
+function slBuyHoldCurve(prices, dates, quarters) {
+  const si = slIdxOnOrAfter(dates, SL_SPARK_START);
+  const out = new Array(quarters.length);
+  if (si < 0 || !(prices[si] > 0)) return out.fill(SL_START_CAPITAL);
+  let shares = SL_START_CAPITAL / prices[si];
+  let month = dates[si].slice(0, 7);
+  let di = si;
+  for (let q = 0; q < quarters.length; q++) {
+    while (di < dates.length - 1 && dates[di] < quarters[q].date) {
+      di++;
+      const m = dates[di].slice(0, 7);
+      if (m !== month) {
+        month = m;
+        if (prices[di] > 0) shares += SL_MONTHLY / prices[di];
+      }
+    }
+    out[q] = shares * prices[di];
+  }
+  return out;
+}
+
+// Run every coded strategy once per era plus once for the sparkline. Cached
+// until slInvalidateStats(). A strategy that throws is isolated: its card
+// degrades to "—" instead of taking the whole library down.
+// Base scaffolding only — quarter grid + SPY baseline. Cheap, runs once.
+function computeLibraryStats() {
+  if (SL_STATS) return SL_STATS;
+  if (typeof buildCustomData !== 'function') return null;
+  const data = buildCustomData();
+  if (!data || !data.dates || !data.dates.length) return null;
+  const dates = data.dates;
+  const quarters = slQuarterEnds(dates);
+  SL_STATS = { quarters, spy: slBuyHoldCurve(data.spy, dates, quarters), byN: {}, data, dates };
+  return SL_STATS;
+}
+
+// Simulate ONE strategy and memoize it. Called per rendered card, so a page of
+// 8 costs 8 strategies instead of all 39 — the sims are the expensive part.
+function slStatsFor(n) {
+  const st = computeLibraryStats();
+  if (!st) return null;
+  if (n in st.byN) return st.byN[n];
+  const s = STRATEGY_LIBRARY.find(x => x.n === n);
+  if (!s) return null;
+  const code = strategyHasCode(n);
+  if (!code && !s.preset) return (st.byN[n] = null);
+  const { data, dates, quarters } = st;
+  const sparkEi = dates.length - 1;
+  // Code entries index the daily series; presets index quarterlyData.
+  const run = code
+    ? (from, to) => slRunCode(code, data, slIdxOnOrAfter(dates, from), to === null ? sparkEi : slIdxOnOrBefore(dates, to))
+    : (from, to) => slRunPreset(s.preset, slQIdx(from, false), slQIdx(to, true));
+  try {
+    const metrics = {};
+    for (const era of STRATEGY_ERAS) {
+      const b = SL_ERA_BOUNDS[era.key];
+      if (!b) continue;
+      const m = slCagrDD(run(b[0], b[1]));
+      if (m) metrics[era.key] = { cagr: m.cagr, dd: m.dd };
+    }
+    const sp = run(SL_SPARK_START, null);
+    st.byN[n] = { metrics, curve: slCurveFromLog((Array.isArray(sp) ? sp : (sp && sp.points)) || [], quarters) };
+  } catch (e) {
+    console.warn('Strategy library: #' + n + ' failed to run —', (e && e.message) || e);
+    st.byN[n] = { metrics: {}, curve: null };
+  }
+  return st.byN[n];
+}
+
+// Drop the cache so the next open recomputes (data refresh, edited code).
+function slInvalidateStats() { SL_STATS = null; _strategyLibraryBuilt = false; _slPage = 1; }
+
+
+// Four contiguous windows, cut at the two turning points that matter for a
+// leveraged fund: the dot-com peak (2000 Q1) and the GFC bottom (2009 Q1). So
+// era 2 is peak-to-trough and era 3 is trough-to-now — the best and worst cases
+// a 3× product can hand you, rather than an average that hides both.
+//
+// Every window reports the same metric — money-weighted CAGR — so the row reads
+// consistently. The 2026 stub is under a year, so its annualised rate swings
+// hard on small moves; that is what an annual rate means, and it matches what
+// the app's own strategy pills show for the same span.
 const STRATEGY_ERAS = [
-  { key: '1990', label: '1990–2025', sub: 'long run' },
-  { key: '2000', label: '2000–2008', sub: 'dot-com + GFC' },
-  { key: '2010', label: '2010–2025', sub: 'TQQQ bull' },
+  { key: '1980', label: '1980–2000 Q1', sub: 'pre-bubble run-up' },
+  { key: '2000', label: '2000 Q1–2009 Q1', sub: 'dot-com peak → GFC bottom' },
+  { key: '2009', label: '2009 Q1–2025 Q4', sub: 'post-GFC bull' },
+  { key: '2026', label: '2026–today', sub: 'year to date' },
 ];
 
-// Adding a library strategy to the chart is disabled for now. Flip to true to
-// re-enable the "+ Add" buttons and the #add-<n> deep-link.
-const SL_ADD_ENABLED = false;
+// Adding a library strategy to the chart: renders the "+ Add" buttons and
+// enables the #add-<n> deep-link. Flip to false to hide both again.
+const SL_ADD_ENABLED = true;
 
 // Which strategies have verified runnable custom-strategy code (window.STRATEGY_CODE).
 function strategyHasCode(n) {
@@ -136,16 +495,29 @@ function fmtPct(v) {
   return (v > 0 ? '+' : '') + v.toFixed(1) + '%';
 }
 
-// One era metric block: label · CAGR (green/red) · max drawdown.
-function eraBlockHtml(m, era) {
-  const cell = m && m[era.key];
-  if (!cell) return `<div class="sl-era sl-era-empty"><span class="sl-era-hd">${era.label}</span><span class="sl-era-na">—</span></div>`;
-  const cagrCls = cell.cagr >= 0 ? 'pos' : 'neg';
-  return `<div class="sl-era">
-    <span class="sl-era-hd">${era.label}</span>
-    <span class="sl-era-cagr ${cagrCls}">${fmtPct(cell.cagr)}</span>
-    <span class="sl-era-dd">−${Math.round(cell.dd)}%</span>
-  </div>`;
+// One row per measure, one column per window, with a labelled first column.
+function eraTableHtml(m) {
+  const tipFor = (era, cell) => {
+    if (!cell) return era.label + (era.sub ? ' · ' + era.sub : '');
+    const kind = 'annualised return (money-weighted CAGR)';
+    return `${era.label}${era.sub ? ' · ' + era.sub : ''}\n${fmtPct(cell.cagr)} ${kind}\n−${Math.round(cell.dd)}% deepest drawdown inside the window`;
+  };
+  const dateCells = STRATEGY_ERAS.map(era =>
+    `<td title="${esc(tipFor(era, m && m[era.key]))}">${era.label}</td>`).join('');
+  const cagrCells = STRATEGY_ERAS.map(era => {
+    const c = m && m[era.key];
+    if (!c) return '<td class="sl-era-na">—</td>';
+    return `<td class="sl-era-cagr ${c.cagr >= 0 ? 'pos' : 'neg'}">${fmtPct(c.cagr)}</td>`;
+  }).join('');
+  const ddCells = STRATEGY_ERAS.map(era => {
+    const c = m && m[era.key];
+    return c ? `<td class="sl-era-dd">−${Math.round(c.dd)}%</td>` : '<td class="sl-era-dd">—</td>';
+  }).join('');
+  return `<table class="sl-era-table">
+    <tr class="sl-row-date"><th scope="row">date</th>${dateCells}</tr>
+    <tr class="sl-row-cagr"><th scope="row">cagr</th>${cagrCells}</tr>
+    <tr class="sl-row-dd"><th scope="row">max drawdown</th>${ddCells}</tr>
+  </table>`;
 }
 
 // Compact money: $10k, $257k, $22M, $1.3B.
@@ -157,18 +529,27 @@ function fmtMoney(v) {
   return '$' + Math.round(v);
 }
 
-// Log-scaled SVG sparkline: SPY (muted) vs this strategy, 1995→2025, with the
-// start value (at the line's origin) and end values (at each line's tip) drawn
-// inside the graph.
+// Four evenly-spaced year labels under a sparkline, derived from the actual
+// quarter grid so they track the data instead of being pinned to 1995–2025.
+function slYearTicks() {
+  const q = (SL_STATS && SL_STATS.quarters) || [];
+  if (!q.length) return [];
+  return [0, 1, 2, 3].map(i => q[Math.round((i / 3) * (q.length - 1))].key.slice(0, 4));
+}
+
+// Log-scaled SVG sparkline: SPY (muted) vs this strategy over the full computed
+// span, with the start value (at the line's origin) and end values (at each
+// line's tip) drawn inside the graph.
 function sparklineHtml(n) {
-  const curve = SL_CURVES.s && SL_CURVES.s[n], spy = SL_CURVES.spy;
-  if (!curve || !spy) return '<div class="sl-spark sl-spark-empty">no data series</div>';
-  const W = 300, H = 60, PAD = 3;
+  const st = slStatsFor(n);
+  const curve = st && st.curve, spy = SL_STATS && SL_STATS.spy;
+  if (!curve || !spy || !spy.length) return '<div class="sl-spark sl-spark-empty">no data series</div>';
+  const W = 300, H = 120, PAD = 3;
   const both = curve.concat(spy).filter(v => v > 0);
   const lo = Math.log10(Math.min.apply(null, both)), hi = Math.log10(Math.max.apply(null, both));
   const span = (hi - lo) || 1, N = curve.length;
   const yAt = (v) => v > 0 ? H - PAD - ((Math.log10(v) - lo) / span) * (H - 2 * PAD) : H - PAD;
-  const yPct = (v) => Math.max(9, Math.min(72, (yAt(v) / H) * 100)); // keep value labels clear of the year row
+  const yPct = (v) => Math.max(6, Math.min(82, (yAt(v) / H) * 100)); // keep value labels clear of the year row
   const path = (arr) => arr.map((v, i) => {
     const x = PAD + (i / (N - 1)) * (W - 2 * PAD);
     return (i ? 'L' : 'M') + x.toFixed(1) + ' ' + yAt(v).toFixed(1);
@@ -190,30 +571,70 @@ function sparklineHtml(n) {
     <span class="sl-lbl sl-lbl-start" style="top:${yPct(start).toFixed(0)}%">${fmtMoney(start)}</span>
     <span class="sl-lbl sl-lbl-strat" style="top:${yPct(curve[N - 1]).toFixed(0)}%">${fmtMoney(curve[N - 1])}</span>
     <span class="sl-lbl sl-lbl-spy" style="top:${yPct(spy[spy.length - 1]).toFixed(0)}%">${fmtMoney(spy[spy.length - 1])}</span>
-    <span class="sl-years"><b>1995</b><b>2005</b><b>2015</b><b>2025</b></span>
+    <span class="sl-years">${slYearTicks().map(y => `<b>${y}</b>`).join('')}</span>
     <span class="sl-cross"></span>
     <span class="sl-dot sl-dot-spy"></span>
     <span class="sl-dot sl-dot-strat"></span>
   </div>`;
 }
 
-function buildStrategyCards() {
-  return STRATEGY_LIBRARY.map(s => {
-    const link = STRATEGY_SRC_LINKS[s.src] || '#';
-    const m = SL_METRICS[s.n];
-    const has = strategyHasCode(s.n);
+// Turn a run-on rules string into one labelled clause per line. The source is
+// written as "Signal: … . Enter: … . Freq: …", which reads as a wall of text in
+// a tooltip; splitting on the "Label:" boundaries makes it scannable.
+function slFormatRules(text) {
+  const t = String(text || '').trim();
+  if (!t) return '';
+  const re = /(^|[\s.;])([A-Z][A-Za-z0-9 +/&-]{0,20}):\s/g;
+  const cuts = [];
+  let m;
+  while ((m = re.exec(t))) cuts.push({ at: m.index + m[1].length, label: m[2] });
+  if (!cuts.length) return t;
+  const rows = [];
+  const lead = t.slice(0, cuts[0].at).trim().replace(/[.;]$/, '');
+  if (lead) rows.push(lead);
+  for (let i = 0; i < cuts.length; i++) {
+    const from = cuts[i].at + cuts[i].label.length + 1;
+    const to = i + 1 < cuts.length ? cuts[i + 1].at : t.length;
+    const body = t.slice(from, to).trim().replace(/[.;]\s*$/, '');
+    if (body) rows.push(cuts[i].label + ': ' + body);
+  }
+  return rows.join('\n');
+}
+
+// Full detail for a card's ⓘ. Newlines become &#10; so the shared
+// .info-icon[data-tip] tooltip (white-space: pre-line) renders them as breaks.
+function slInfoTip(s) {
+  const parts = [s.name, '', slFormatRules(s.rules)];
+  if (s.needs) parts.push('', 'Needs data this app does not carry: ' + s.needs);
+  if (s.reported && s.reported !== '\u2014') parts.push('', 'Source note: ' + s.reported);
+  return esc(parts.join('\n')).replace(/\n/g, '&#10;');
+}
+
+function buildStrategyCards(list) {
+  return (list || STRATEGY_LIBRARY).map(s => {
+    // Hand-picked entries have no published write-up behind them, so they carry
+    // no `src` — render the title as plain text rather than a link to nowhere.
+    const link = STRATEGY_SRC_LINKS[s.src];
+    const st = slStatsFor(s.n);
+    const m = st && st.metrics;
+    const has = strategyRunnable(s);
     let add = '';
-    if (has && SL_ADD_ENABLED) add = `<button type="button" class="sl-add" data-sl-add="${s.n}">+ Add</button>`;
+    if (has && SL_ADD_ENABLED) add = `<button type="button" class="sl-add" data-sl-add="${s.n}"><span class="sl-add-ico" aria-hidden="true">▸</span> Try</button>`;
     else if (!has && s.needs) add = `<span class="sl-add-na" title="Needs data this app doesn't carry">needs ${esc(s.needs)}</span>`;
     else if (!has) add = `<span class="sl-add-na">soon</span>`;
-    const eras = STRATEGY_ERAS.map(era => eraBlockHtml(m, era)).join('');
-    return `<div class="sl-card${has ? '' : ' sl-card-off'}">
+    const eras = eraTableHtml(m);
+    // data-sl-search: everything the search box matches against.
+    const hay = esc([s.name, s.tag, s.needs, s.rules].filter(Boolean).join(' ').toLowerCase());
+    return `<div class="sl-card${has ? '' : ' sl-card-off'}" data-sl-search="${hay}">
       <div class="sl-card-head">
-        <a class="sl-card-name" href="${link}" target="_blank" rel="noopener" title="${esc(s.rules)}">${esc(s.name)}</a>
+        ${link
+          ? `<a class="sl-card-name" href="${link}" target="_blank" rel="noopener" title="${esc(s.rules)}">${esc(s.name)}</a>`
+          : `<span class="sl-card-name" title="${esc(s.rules)}">${esc(s.name)}</span>`}
         ${add}
+        <span class="info-icon sl-info" tabindex="0" data-tip-wide data-tip="${slInfoTip(s)}">\u24d8</span>
       </div>
       ${has ? sparklineHtml(s.n) : '<div class="sl-spark sl-spark-empty">no data series</div>'}
-      <div class="sl-eras">${eras}</div>
+      ${eras}
     </div>`;
   }).join('');
 }
@@ -225,20 +646,26 @@ function addStrategyFromLibrary(n) {
   if (!SL_ADD_ENABLED) return; // disabled for now
   const entry = STRATEGY_LIBRARY.find(s => s.n === n);
   const code = strategyHasCode(n);
-  if (!entry || !code) return;
+  if (!entry || (!code && !entry.preset)) return;
   if (typeof savedConfigs === 'undefined' || typeof persistSavedConfigs !== 'function') return;
   const name = (typeof uniqueName === 'function') ? uniqueName(entry.name) : entry.name;
+  // A preset becomes a NATIVE 9sig/SMA config (real engine, real sidebar knobs,
+  // shareable); everything else becomes a custom config carrying its code.
   const cfg = {
     id: 'cfg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    type: 'custom',
+    type: entry.preset ? entry.preset.type : 'custom',
     name: name,
-    code: code,
     desc: entry.rules,
-    params: {},
+    params: entry.preset ? Object.assign({}, entry.preset.params) : {},
     color: (typeof nextConfigColor === 'function') ? nextConfigColor() : '#e879f9',
     hidden: false,
   };
+  if (!entry.preset) cfg.code = code;
   savedConfigs.push(cfg);
+  // Push a preset's values INTO the sidebar controls before it becomes the
+  // edited config — otherwise the sidebar's current values sync back over
+  // cfg.params and the strategy silently reverts to defaults.
+  if (entry.preset && typeof applyParams === 'function') applyParams(cfg.type, cfg.params);
   window._editingConfigId = cfg.id;
   persistSavedConfigs();
   if (typeof renderSavedConfigPills === 'function') renderSavedConfigPills();
@@ -248,25 +675,91 @@ function addStrategyFromLibrary(n) {
 }
 
 let _strategyLibraryBuilt = false;
+const SL_PAGE_SIZE = 8;   // cards per page — each one costs a full set of sims
+let _slPage = 1, _slQuery = '';
 function buildStrategyLibrary() {
   if (_strategyLibraryBuilt) return;
   const body = document.getElementById('strategy-library-body');
   if (!body) return;
-  const ready = STRATEGY_LIBRARY.filter(s => strategyHasCode(s.n)).length;
+  computeLibraryStats();   // quarter grid + SPY baseline only; sims are per-card
+  const ready = STRATEGY_LIBRARY.filter(strategyRunnable).length;
+  const span = SL_STATS && SL_STATS.quarters.length
+    ? SL_STATS.quarters[0].key.slice(0, 4) + '–' + SL_STATS.quarters[SL_STATS.quarters.length - 1].key.slice(0, 4)
+    : '';
   body.innerHTML = `
-    <div class="sl-wip">⚠ Work in progress. These are my own reimplementations from public write-ups, backtested on synthetic data with a $10k lump sum and zero fees or taxes. Real-world results would be worse: taxes and slippage eat the high-churn ones alive, and every 3× line here still lived through an 80–97% drawdown somewhere. Rough comparisons only — the numbers will change as I fix bugs and add the missing strategies.</div>
+    <div class="sl-wip">⚠ Work in progress. These are my own reimplementations from public write-ups, backtested on synthetic data with a $10k opening balance plus $1,000/month, and zero taxes. Real-world results would be worse: taxes and slippage eat the high-churn ones alive, and every 3× line here still lived through an 80–97% drawdown somewhere. Rough comparisons only — the numbers will change as I fix bugs and add the missing strategies.</div>
     <div class="sl-intro">
-      <span class="sl-legend"><i class="sl-leg-strat"></i>strategy <i class="sl-leg-spy"></i>SPY · log · 1995–2025</span>
-      <span class="sl-intro-note">${ready}/25 backtested · hover a name for rules</span>
+      <span class="sl-legend"><i class="sl-leg-strat"></i>strategy <i class="sl-leg-spy"></i>SPY · log · ${span}</span>
+      <span class="sl-intro-note">${ready}/${STRATEGY_LIBRARY.length} backtested · hover a name for rules</span>
     </div>
-    <div class="sl-cards">${buildStrategyCards()}</div>`;
-  // Delegate "+ Add" clicks.
+    <input id="sl-search" class="sl-search" type="search" autocomplete="off" spellcheck="false"
+           placeholder="Search strategies — name, tag, or rule text…" aria-label="Search strategies">
+    <div class="sl-noresults" hidden>No strategy matches that.</div>
+    <div class="sl-cards"></div>
+    <div class="sl-pager"></div>`;
   body.onclick = (e) => {
-    const btn = e.target.closest('[data-sl-add]');
-    if (btn) addStrategyFromLibrary(+btn.getAttribute('data-sl-add'));
+    const add = e.target.closest('[data-sl-add]');
+    if (add) { addStrategyFromLibrary(+add.getAttribute('data-sl-add')); return; }
+    const pg = e.target.closest('[data-sl-page]');
+    if (pg) { _slPage = +pg.getAttribute('data-sl-page'); renderLibraryPage(body); }
   };
   setupSparkTooltip(body);
+  setupLibrarySearch(body);
+  renderLibraryPage(body);
   _strategyLibraryBuilt = true;
+}
+
+// Entries matching the current query. Text-only, so filtering costs no sims.
+function slFilteredEntries() {
+  const terms = (_slQuery || '').toLowerCase().split(/\s+/).filter(Boolean);
+  if (!terms.length) return STRATEGY_LIBRARY.slice();
+  return STRATEGY_LIBRARY.filter(s => {
+    const hay = [s.name, s.tag, s.needs, s.rules].filter(Boolean).join(' ').toLowerCase();
+    return terms.every(t => hay.includes(t));
+  });
+}
+
+// Render just the current page. Each card pulls its own stats, so only the
+// strategies actually on screen get simulated.
+function renderLibraryPage(body) {
+  body = body || document.getElementById('strategy-library-body');
+  if (!body) return;
+  const list = slFilteredEntries();
+  const pages = Math.max(1, Math.ceil(list.length / SL_PAGE_SIZE));
+  if (_slPage > pages) _slPage = pages;
+  if (_slPage < 1) _slPage = 1;
+  const from = (_slPage - 1) * SL_PAGE_SIZE;
+  const slice = list.slice(from, from + SL_PAGE_SIZE);
+  const cards = body.querySelector('.sl-cards');
+  const empty = body.querySelector('.sl-noresults');
+  const pager = body.querySelector('.sl-pager');
+  if (cards) cards.innerHTML = buildStrategyCards(slice);
+  if (empty) empty.hidden = list.length > 0;
+  if (pager) pager.innerHTML = slPagerHtml(list.length, pages, from, slice.length);
+  if (cards) cards.scrollIntoView({ block: 'nearest' });
+}
+
+function slPagerHtml(total, pages, from, shown) {
+  if (!total) return '';
+  const btn = (page, label, disabled, current) =>
+    `<button type="button" class="sl-page${current ? ' on' : ''}" data-sl-page="${page}"${disabled ? ' disabled' : ''}>${label}</button>`;
+  let nums = '';
+  for (let i = 1; i <= pages; i++) nums += btn(i, i, false, i === _slPage);
+  return `<span class="sl-page-info">${from + 1}–${from + shown} of ${total}</span>
+    <span class="sl-page-btns">
+      ${btn(_slPage - 1, '‹', _slPage <= 1, false)}${nums}${btn(_slPage + 1, '›', _slPage >= pages, false)}
+    </span>`;
+}
+
+function setupLibrarySearch(body) {
+  const input = body.querySelector('#sl-search');
+  if (!input) return;
+  const apply = () => { _slQuery = input.value; _slPage = 1; renderLibraryPage(body); };
+  input.addEventListener('input', apply);
+  // Esc clears rather than closing the modal out from under a half-typed query.
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && input.value) { e.stopPropagation(); input.value = ''; apply(); }
+  });
 }
 
 // Hover tooltip over any sparkline: shows the year + strategy $ + SPY $ at the
@@ -280,7 +773,7 @@ function setupSparkTooltip(body) {
     tip.hidden = true;
     document.body.appendChild(tip);
   }
-  const W = 300, H = 60, PAD = 3;
+  const W = 300, H = 120, PAD = 3;
   let active = null;
   const hideMarks = (spark) => {
     if (!spark) return;
@@ -292,8 +785,10 @@ function setupSparkTooltip(body) {
     if (active && active !== spark) hideMarks(active);
     active = spark;
     const n = spark.getAttribute('data-sl-n');
-    const curve = SL_CURVES.s && SL_CURVES.s[n], spy = SL_CURVES.spy, ds = SL_CURVES.d;
-    if (!curve) { tip.hidden = true; return; }
+    const stt = slStatsFor(+n);
+    const curve = stt && stt.curve, spy = SL_STATS && SL_STATS.spy;
+    const ds = (SL_STATS ? SL_STATS.quarters : []).map(q => q.key);
+    if (!curve || !spy) { tip.hidden = true; return; }
     const rect = spark.getBoundingClientRect();
     const N = curve.length;
     const frac = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
