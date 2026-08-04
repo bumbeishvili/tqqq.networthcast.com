@@ -147,7 +147,35 @@ function computeDailyMaxDrawdownMulti(controls, dailyRows) {
   return { pct: maxDD, peakDate: bestPeakDate, troughDate: bestTroughDate };
 }
 
+// Turn a custom strategy's log into daily-revaluation control points, so its
+// drawdown can be measured at every daily close like the built-in engines'
+// instead of only on the rows it chose to emit. A strategy that logs just
+// trades and month ends steps straight over intra-month troughs — worth up to
+// 3.4pp on the library's buy-and-hold-through-crashes entries.
+//
+// Only usable when EVERY row carries held/shares/cash (the custom-strategy
+// contract requires just date+value), so this returns null when it can't.
+const DD_ASSET_KEYS = { tqqq: 1, qqq: 1, spy: 1, qld: 1, sso: 1, spxl: 1, sqqq: 1 };
+function buildCustomDDControls(log) {
+  if (!log || !log.length) return null;
+  const out = [];
+  for (const r of log) {
+    if (!r || typeof r.date !== 'string') return null;
+    if (typeof r.cash !== 'number' || !Number.isFinite(r.cash)) return null;
+    const held = typeof r.held === 'string' ? r.held.toLowerCase() : null;
+    if (!held) return null;
+    const c = { date: r.date, cash: r.cash, h: {} };
+    if (held !== 'cash') {
+      if (!DD_ASSET_KEYS[held]) return null;           // unknown ticker — can't revalue
+      if (typeof r.shares !== 'number' || !Number.isFinite(r.shares)) return null;
+      c.h[held] = r.shares;
+    }
+    out.push(c);
+  }
+  return out.length ? out : null;
+}
+
 // Node test harness export (no-op in the browser).
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, computeDailyMaxDrawdown, computeDailyMaxDrawdownMulti };
+  module.exports = { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, computeDailyMaxDrawdown, computeDailyMaxDrawdownMulti, buildCustomDDControls };
 }

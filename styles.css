@@ -1004,6 +1004,9 @@
     font-weight: 500;
     color: var(--text-muted);
     white-space: nowrap;
+    /* The global `table th` rule paints --surface2, which left the label column
+       a shade darker than the white table beside it. */
+    background: transparent;
   }
   .sl-era-table .sl-row-date td { font-size: 9px; color: var(--text-muted); }
   /* The global `table td` rule adds a border-bottom that the row-label <th>

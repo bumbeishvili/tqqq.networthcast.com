@@ -117,6 +117,18 @@ SSO_SWAP_SPREAD   = 0.005
 TQQQ_SWAP_SPREAD  = 0.0065
 SPXL_SWAP_SPREAD  = 0.005
 
+# === Inverse (-3x) model, calibrated ======================================
+# A -3x fund is short 3 units of index and therefore sits on (1+L)=4 units of
+# cash earning the short rate. Regressing (real SQQQ daily + 3 x NDX-TR daily)
+# on the daily short rate over 2010-02-11..2026-07-31 gives a slope of 4.028 --
+# theory predicts exactly 4.0 -- and an intercept of -1.537 %/yr covering the
+# 0.95 % management fee plus swap spread and rebalancing slippage.
+# Replaying the fitted model forward from SQQQ's first real close tracks the
+# real fund to within -6.4 % / +1.9 % cumulative over 16.5 years.
+SQQQ_INVERSE_LEVERAGE = 3
+SQQQ_CASH_MULTIPLE    = 4.028      # fitted; theory = L + 1
+SQQQ_DRAG_DAILY       = -6.099e-05 # fitted intercept (~ -1.537 %/yr)
+
 # === Financing-cost model =================================================
 # A leveraged ETF holding $1 of investor NAV achieves $L of index exposure by
 # borrowing the extra $(L-1) of synthetic exposure via total-return swap. The
@@ -139,6 +151,7 @@ tickers = [
     ('SPY',    'spy.tsv'),
     ('SSO',    'synthetic-sso.tsv'),
     ('SPXL',   'synthetic-spxl.tsv'),
+    ('SQQQ',   'synthetic-sqqq.tsv'),
 ]
 
 
@@ -431,16 +444,49 @@ def read_price_tsv(path):
     return out
 
 
+# Yahoo serves adjusted closes as float32, so two fetches minutes apart disagree
+# from about the 8th significant digit. Written at %.12g that turned every run
+# into a ~16k-line rewrite of prices that had not moved — measured across two
+# back-to-back runs, the largest such wobble was 1.4e-06 relative. Anything at or
+# under NOISE_REL is treated as the same price and the existing line is reused
+# byte-for-byte, so a commit only appears when a price really changed. A genuine
+# move is orders of magnitude larger: one cent on a $24 close is 4e-04, and a
+# dividend re-adjustment rescales history by ~1e-03.
+NOISE_REL = 5e-6
+
+
 def write_price_tsv(path, prefix_pairs, real_df):
     """Write Date\\tClose with synthesized prefix rows first, then real
     yfinance bars. Shared by both rebuild and incremental modes."""
+    prior = {}
+    if os.path.exists(path):
+        with open(path) as f:
+            next(f, None)  # header
+            for line in f:
+                parts = line.rstrip('\n').split('\t')
+                if len(parts) == 2:
+                    prior[parts[0]] = parts[1]
+
+    def render(date_str, value):
+        """The previous line verbatim when the price is unchanged within noise."""
+        old = prior.get(date_str)
+        if old is not None:
+            try:
+                old_val = float(old)
+            except ValueError:
+                return fmt_close(value)
+            if old_val == value or abs(value - old_val) <= NOISE_REL * abs(old_val):
+                return old
+        return fmt_close(value)
+
     with open(path, 'w') as f:
         f.write('Date\tClose\n')
         for d, c in prefix_pairs:
-            f.write(f'{d.month}/{d.day}/{d.year} 16:00:00\t{fmt_close(c)}\n')
+            date_str = f'{d.month}/{d.day}/{d.year} 16:00:00'
+            f.write(f'{date_str}\t{render(date_str, c)}\n')
         for date, row in real_df.iterrows():
             date_str = date.strftime('%-m/%-d/%Y 16:00:00')
-            f.write(f'{date_str}\t{fmt_close(cell(row["Close"]))}\n')
+            f.write(f'{date_str}\t{render(date_str, cell(row["Close"]))}\n')
 
 
 def incremental_refresh():
@@ -676,11 +722,45 @@ else:
     spxl_prefix_rows = spxl_phase1_rows
 
 
+# ---- SQQQ: real ProShares UltraPro Short QQQ (-3x) from 2010-02-11 ----
+# Inverse funds don't fit walk_backward's long formula: instead of paying
+# financing on a borrowed leg, a -3x fund sits on (1+L) units of cash EARNING
+# the short rate. Both coefficients below were fitted against real SQQQ.
+def walk_backward_inverse(source_pairs, anchor_date, anchor_price, rate_map):
+    pre = [(d, c) for d, c in source_pairs if d <= anchor_date]
+    n = len(pre)
+    if n < 2:
+        return [], []
+    synth = [0.0] * n
+    synth[-1] = anchor_price
+    for i in range(n - 1, 0, -1):
+        ret = (pre[i][1] - pre[i - 1][1]) / pre[i - 1][1]
+        r_daily = (rate_lookup(rate_map, pre[i - 1][0]) / 100.0) / 252.0
+        step = (-SQQQ_INVERSE_LEVERAGE * ret) + SQQQ_CASH_MULTIPLE * r_daily + SQQQ_DRAG_DAILY
+        synth[i - 1] = max(synth[i] / (1 + step), 0) if (1 + step) > 0 else 0
+    exact = pre[-1][0] == anchor_date
+    output_n = n - 1 if exact else n
+    pairs = [(pre[i][0], synth[i]) for i in range(output_n)]
+    rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in pairs]
+    return rows, pairs
+
+
+sqqq_p1_rows, sqqq_p1_pairs = walk_backward_inverse(
+    ndx_tr_pairs, sqqq_df.index[0], cell(sqqq_df['Close'].iloc[0]), rate_map)
+if sqqq_p1_pairs:
+    sq_d, sq_p = sqqq_p1_pairs[0]
+    sqqq_p2_rows, _ = walk_backward_inverse(ndx_pairs, sq_d, sq_p, rate_map)
+    sqqq_prefix_rows = sqqq_p2_rows + sqqq_p1_rows
+else:
+    sqqq_prefix_rows = sqqq_p1_rows
+
+
 prefix_by_ticker = {'QQQ': qqq_prefix_rows, 'QLD': qld_prefix_rows,
                     'TQQQ': tqqq_prefix_rows, 'SPY': spy_prefix_rows,
-                    'SSO': sso_prefix_rows, 'SPXL': spxl_prefix_rows}
+                    'SSO': sso_prefix_rows, 'SPXL': spxl_prefix_rows,
+                    'SQQQ': sqqq_prefix_rows}
 real_by_ticker   = {'QQQ': qqq_df, 'QLD': qld_df, 'TQQQ': tqqq_df, 'SPY': spy_df,
-                    'SSO': sso_df, 'SPXL': spxl_df}
+                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df}
 
 data_dir = os.path.join(basedir, DATA_DIR)
 os.makedirs(data_dir, exist_ok=True)

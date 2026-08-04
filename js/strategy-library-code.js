@@ -628,11 +628,11 @@ CODE[25] = `{
   }
 }`;
 
-// #26 Rolling median 250 (hand-picked): sell when price runs >55% above its
+// #26 Median overextension 250d (hand-picked): sell when price runs >55% above its
 // 250-day rolling median, hold otherwise. An overextension filter, NOT a trend
 // filter — it only ever exits on strength, so it rides every crash to the bottom.
 CODE[26] = `{
-  name: "Rolling median 250",
+  name: "Median overextension 250d",
   params: [
     { id: "asset", label: "Fund traded", default: "tqqq", options: [
       { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" },
@@ -906,6 +906,227 @@ CODE[39] = `{
             tag: stretched ? "out · " + K : "in · " + A,
             lean: stretched ? (K === "cash" ? "cash" : "out") : "buy"
           }]
+        }
+      }
+    };
+  }
+}`;
+
+// #40 Median overextension (250d) — the SQQQ-park evolution of #26. Same signal
+// (price vs its own 250-day rolling median, exit above +55%), three additions:
+// SQQQ (−3×) as a park option and the default, a one-trade-per-day execution
+// mode that splits a fund-to-fund switch across two bars, and per-leg fee
+// accounting. Still an overextension filter with NO downside rule.
+//
+// The failure mode is structural. +55% over the median is a melt-up detector,
+// and in a real melt-up it stays true for months while you sit −3× short — 138
+// days into June 1999, against a longest post-2010 park stint of 62 days. Only
+// the post-GFC era beats holding. (250, 55) is the peak cell of a 16×17
+// window/threshold sweep tuned on 2010–2026. The card computes its era columns
+// live, so read those rather than any figure pinned here.
+CODE[40] = `{
+  name: "Median overextension (250d)",
+  params: [
+    { id: "asset", label: "Fund traded", default: "tqqq", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" },
+      { value: "sso", label: "SSO" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "park", label: "Held when out", default: "sqqq", options: [
+      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
+      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
+    { id: "window", label: "Median window (days)", default: 250, options: [
+      20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { id: "overPct", label: "Exit when above median (%)", default: 55, options: [
+      10,15,20,25,30,35,40,42.5,45,47.5,50,52.5,55,57.5,60,62.5,65,67.5,70,75,80,85,90,95,100,110,125,150,175,200] },
+    // type:"bool" is required — without it the sandbox coerces the pick to the
+    // STRING "false", which is truthy, and the toggle silently does nothing.
+    { id: "splitDays", label: "One trade per day", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "cashRate", label: "Cash interest (%/yr)", default: 4, options: [
+      0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
+    { id: "tradeCost", label: "Trading cost (%)", default: 0.02, options: [
+      0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
+  ],
+  columns: [
+    { key: "assetPrice", label: "Fund", tip: "Closing price of the fund you trade — the signal is read off it, not off an index." },
+    { key: "medianPrice", label: "Median", tip: "Middle value of the fund's last N closes. Half the window sits above it, half below; it ignores spikes, so it drifts slower than an average." },
+    { key: "abovePct", label: "Above median", tip: "How far today's close sits above (+) or below (−) the median. This is the only number the strategy acts on." },
+    { key: "triggerPrice", label: "Trigger", tip: "Price sitting exactly your chosen percentage over the median. Close above it and it parks; back below and it buys again — same line both ways, no separate re-entry level." },
+    { key: "parkPrice", label: "Park px", tip: "Closing price of whatever is held when out. Zero when the park is cash." },
+    { key: "leg", label: "Leg", tip: "Which half of a fund-to-fund conversion this row is. Blank on single-leg trades (buy from cash, sell to cash) and on non-trade rows." },
+    { key: "traded", label: "Traded", tip: "Gross dollars that changed hands on this row — what the fee is charged against. A split switch shows the sell and the buy on separate rows, each with its own amount." },
+    { key: "fee", label: "Fee", tip: "Cost paid on this row as a percentage of dollars traded. A fund-to-fund move is two legs and pays twice; with one-trade-per-day on, those two fees land on two rows a day apart." },
+    { key: "feesPaid", label: "Fees to date", tip: "Every trading cost paid since the start, running total. Compare against value to see what the switching has actually cost." },
+    { key: "holdingsValue", label: "Holdings", tip: "Dollar value of the fund held. Add cash for the total." }
+  ],
+  run(data, p) {
+    const log = [];
+    const px = data[p.asset] || data.tqqq;
+    const W = Math.max(2, p.window || 250);
+    const over = (p.overPct || 0) / 100;
+    const cost = (p.tradeCost || 0) / 100;
+    const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
+    const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
+
+    // Rolling median: sorted window, one insert + one delete per day.
+    const win = [];
+    const lb = (v) => {
+      let lo = 0, hi = win.length;
+      while (lo < hi) { const m = (lo + hi) >> 1; if (win[m] < v) lo = m + 1; else hi = m; }
+      return lo;
+    };
+    const ins = (v) => { win.splice(lb(v), 0, v); };
+    const rem = (v) => { const k = lb(v); if (k < win.length && win[k] === v) win.splice(k, 1); };
+    const warmFrom = Math.max(0, p.startIdx - W + 1);
+    for (let k = warmFrom; k < p.startIdx; k++) if (px[k] > 0) ins(px[k]);
+
+    let cash = p.initial, shares = 0, held = "cash";
+    let invested = p.initial, prevMonth = null, awaitingLeg2 = false, feesPaid = 0;
+    let med = 0, above = 0, trigger = 0, stretched = false, want = "cash";
+    const y0 = parseInt(data.dates[p.startIdx].slice(0, 4), 10);
+
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      if (px[i] > 0) ins(px[i]);
+      // Drop the bar that just fell out of the window. Skip it on the very first
+      // iteration when the warm-up loop never inserted px[startIdx - W] — without
+      // this guard rem() can match an equal price still inside the window and
+      // shrink it to W-1 for the rest of the run.
+      const drop = i - W;
+      if (drop >= warmFrom && px[drop] > 0) rem(px[drop]);
+
+      const n = win.length;
+      med = n === 0 ? 0 : (n % 2 ? win[(n - 1) >> 1] : (win[n / 2 - 1] + win[n / 2]) / 2);
+      above = med > 0 && px[i] > 0 ? px[i] / med - 1 : 0;
+      trigger = med * (1 + over);
+      stretched = med > 0 && px[i] > 0 && px[i] > trigger;
+
+      const month = data.dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "", fee = 0, traded = 0, leg = "";
+      cash *= 1 + dayRate;
+      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
+        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4), 10) - y0);
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+      }
+      prevMonth = month;
+
+      want = held;
+      if (med > 0 && px[i] > 0) want = stretched ? p.park : p.asset;
+      const pctTxt = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs median";
+
+      let didTrade = false;
+      if (want !== held) {
+        const twoLeg = held !== "cash" && want !== "cash";
+        const wasLeg2 = awaitingLeg2 && held === "cash";
+        const oldPx = priceOf(held, i);
+        if (p.splitDays && twoLeg) {
+          // Leg 1 only: out to cash today, the buy waits a bar and re-checks the signal.
+          if (oldPx > 0) {
+            const gross = shares * oldPx, f = gross * cost;
+            cash += gross - f; fee += f; traded += gross; shares = 0;
+            action = "sell"; leg = "1 of 2";
+            note = pctTxt + " — leg 1 of 2, into " + want.toUpperCase() + " next bar";
+            held = "cash"; awaitingLeg2 = true; didTrade = true;
+          }
+        } else {
+          const newPx = priceOf(want, i);
+          // Only commit the switch if the destination is actually priceable —
+          // otherwise a data gap would flag us as holding the park with zero shares.
+          if (want === "cash" || newPx > 0) {
+            if (held !== "cash" && oldPx > 0) {
+              const gross = shares * oldPx, f = gross * cost;
+              cash += gross - f; fee += f; traded += gross; shares = 0;
+            }
+            if (want !== "cash") {
+              const f = cash * cost;
+              traded += cash; shares = (cash - f) / newPx; fee += f; cash = 0;
+            }
+            action = held === "cash" ? "buy" : (want === "cash" ? "sell" : "switch");
+            leg = wasLeg2 ? "2 of 2" : (twoLeg ? "1+2 same day" : "");
+            note = pctTxt + (wasLeg2 ? " — leg 2 of 2" : " (trigger +" + (over * 100).toFixed(1) + "%)");
+            held = want; awaitingLeg2 = false; didTrade = true;
+          }
+        }
+      } else if (awaitingLeg2) {
+        awaitingLeg2 = false;
+      }
+
+      // New cash only deploys on a day that hasn't already traded.
+      if (!didTrade && held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
+        const f = cash * cost;
+        traded += cash; shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
+        if (action === "contribution") note = "contribution deployed";
+      }
+
+      const hp = priceOf(held, i);
+      const stockVal = shares * hp;
+      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+      if (i === p.startIdx) action = "start";
+      if (i === p.endIdx) action = "end";
+      feesPaid += fee;
+      if (contributed > 0 || monthEnd || action !== "hold") {
+        log.push({
+          date: data.dates[i], value: stockVal + cash, action: action, note: note,
+          held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
+          cash: cash, contributed: contributed, invested: invested, leg: leg,
+          traded: traded, fee: fee, feesPaid: feesPaid,
+          assetPrice: px[i] || 0, medianPrice: med, abovePct: above * 100,
+          triggerPrice: trigger, parkPrice: priceOf(p.park, i)
+        });
+      }
+    }
+
+    const A = p.asset.toUpperCase();
+    const K = p.park === "cash" ? "cash" : p.park.toUpperCase();
+    const WANT = want === "cash" ? "cash" : want.toUpperCase();
+    const last = px[p.endIdx] || 0;
+    const pctStr = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(2) + "%";
+    const room = trigger > 0 && last > 0 ? trigger / last - 1 : 0;
+    const roomStr = (room >= 0 ? "+" : "−") + Math.abs(room * 100).toFixed(2) + "%";
+    const pending = want !== held;
+    const twoDay = p.splitDays && p.park !== "cash";
+
+    return {
+      log: log,
+      signals: {
+        cards: [
+          { label: A + " vs " + W + "-day median",
+            value: (stretched ? "▲ " : "▼ ") + pctStr,
+            tone: stretched ? "bad" : "good",
+            icon: stretched ? "trendUp" : "trendDown",
+            sub: last.toFixed(2) + " vs " + med.toFixed(2) + " median",
+            tip: "Last close against the middle value of the last " + W + " closes. Stretched too far above it means park; anything else means hold " + A + "." },
+          { label: "Exit trigger",
+            value: "+" + (over * 100).toFixed(1) + "%",
+            icon: "sliders",
+            sub: "fires above " + trigger.toFixed(2),
+            tip: "How far over the median the fund must close before parking. Raise it to sit through more froth, lower it to step aside earlier and more often. The +55% default is the peak of a window/threshold sweep run on 2010–2026 — the cells either side of it score 5–11pp lower, so treat it as a fitted number." },
+          { label: stretched ? "Below trigger by" : "Headroom to trigger",
+            value: roomStr,
+            tone: stretched ? "bad" : "good",
+            icon: "activity",
+            sub: stretched ? "needs to fall under " + trigger.toFixed(2) : last.toFixed(2) + " → " + trigger.toFixed(2),
+            tip: "How much further the fund can run before the exit fires, or how far it must fall to get back in." },
+          { label: "Conversion path",
+            value: twoDay ? "2 days · 2 fees" : "1 day · " + (p.park === "cash" ? "1 fee" : "2 fees"),
+            icon: "clock",
+            sub: pending ? "pending: buy " + WANT + " next bar" : "$" + feesPaid.toFixed(0) + " in fees so far",
+            tip: twoDay ? "Fund-to-fund moves are two transactions, one per day: sell to cash, then buy " + K + " the next bar. Both legs pay the cost, and the signal is re-checked before the second, so a one-day whipsaw leaves you in cash." : "Both legs execute at the same close and each pays the cost. Turn on one-trade-per-day to split them across two bars." },
+          { label: "Currently held",
+            value: held.toUpperCase() + (pending ? " → " + WANT : ""),
+            tone: held === p.asset ? "good" : "bad",
+            icon: held === p.asset ? "trendUp" : "flag",
+            sub: held === "cash" ? "earning " + (p.cashRate || 0) + "%/yr" : "at " + priceOf(held, p.endIdx).toFixed(2),
+            tip: "What is owned on the last day, plus any leg queued for the next bar. No stop, no trend filter, no crash rule — it only reacts to overextension, so it rides declines all the way down." + (p.park === "sqqq" ? " SQQQ is −3x inverse and bleeds in any rising or flat market." : "") }
+        ],
+        decision: {
+          action: pending ? (WANT === "cash" ? "Move to cash" : "Buy " + WANT) : (stretched ? (K === "cash" ? "Stay in cash" : "Hold " + K) : "Buy " + A),
+          note: pending ? "leg 2 — sold to cash last bar, " + WANT + " buys next" : (stretched ? "price is " + pctStr + " over its " + W + "-day median, past the +" + (over * 100).toFixed(1) + "% line" : "price is " + pctStr + " vs median, under the +" + (over * 100).toFixed(1) + "% line"),
+          tone: stretched ? "bad" : "good",
+          reasons: [
+            { name: "Overextension", val: A + " " + pctStr + " vs " + W + "d median", tag: stretched ? "out · " + K : "in · " + A, lean: stretched ? (p.park === "cash" ? "cash" : "out") : "buy" },
+            { name: "Trigger level", val: "+" + (over * 100).toFixed(1) + "% = " + trigger.toFixed(2), tag: stretched ? "breached" : roomStr + " away", lean: stretched ? "out" : "hold" },
+            { name: "Execution", val: twoDay ? "one trade per day, 2 fees per switch" : "both legs same day, 2 fees per switch", tag: pending ? "leg 2 pending" : "$" + feesPaid.toFixed(0) + " paid", lean: "hold" },
+            { name: "Downside rule", val: "none — no stop, no trend filter", tag: "holds through crashes", lean: "hold" }
+          ]
         }
       }
     };

@@ -2,38 +2,64 @@ name: Update market data
 
 on:
   schedule:
-    # GitHub cron is fixed UTC (no daylight-saving), so each entry drifts an
-    # hour between EST and EDT — both times below stay safely inside their
-    # intended window either way.
-    #
-    # Morning run — early intraday snapshot, ~1-2h after the 9:30 AM ET open:
-    #   15:30 UTC = 10:30 AM ET (EST) / 11:30 AM ET (EDT)
-    - cron: '30 15 * * 1-5'
-    # Evening run — captures the (near-)final close, ~1-2h after the 4:00 PM
-    #   ET close: 22:00 UTC = 5:00 PM ET (EST) / 6:00 PM ET (EDT)
-    - cron: '0 22 * * 1-5'
+    # Ten fires, nine runs. GitHub cron is fixed UTC with no daylight-saving, so
+    # 13:30-22:30 UTC covers 09:30-18:30 ET in summer and 08:30-17:30 ET in
+    # winter. The gate step below keeps only 09:00-17:30 ET, which trims the
+    # one out-of-hours fire at whichever end the current offset pushes it to:
+    #   EDT (UTC-4): drops 22:30 UTC (18:30 ET) → runs 09:30 … 17:30 ET
+    #   EST (UTC-5): drops 13:30 UTC (08:30 ET) → runs 09:30 … 17:30 ET
+    # Either way: open, seven hourly, and one after the close.
+    - cron: '30 13-22 * * 1-5'
   workflow_dispatch: {}
 
 permissions:
   contents: write
 
+# A delayed run must never overlap the next one — two jobs pushing data/*.tsv
+# race each other. Queue instead of cancelling so a late run still lands.
+concurrency:
+  group: update-market-data
+  cancel-in-progress: false
+
 jobs:
   update:
     runs-on: ubuntu-latest
     steps:
+      - name: Only run during market hours (ET)
+        id: gate
+        run: |
+          now=$(TZ=America/New_York date +%H%M)
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run — skipping the clock gate."
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [ "$now" -ge 900 ] && [ "$now" -le 1730 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "$(TZ=America/New_York date '+%H:%M %Z') is outside 09:00-17:30 ET — skipping."
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
 
       - uses: actions/setup-python@v5
+        if: steps.gate.outputs.run == 'true'
         with:
           python-version: '3.12'
 
       - name: Install yfinance
+        if: steps.gate.outputs.run == 'true'
         run: pip install yfinance
 
+      # yfinance is an unofficial endpoint that rate-limits shared CI IPs, and
+      # nine runs a day each pull period="max" for ~10 tickers. One retry turns
+      # a transient 429 into a slightly later refresh instead of a failed run.
       - name: Refresh QQQ / TQQQ / SPY
-        run: python3 update_data.py
+        if: steps.gate.outputs.run == 'true'
+        run: python3 update_data.py || (sleep 120 && python3 update_data.py)
 
       - name: Commit and push if data changed
+        if: steps.gate.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -42,5 +68,8 @@ jobs:
             exit 0
           fi
           git add 'data/*.tsv'
-          git commit -m "Refresh market data $(date -u +%Y-%m-%d)"
+          # Stamp ET so the nine same-day commits are told apart at a glance.
+          git commit -m "Refresh market data $(TZ=America/New_York date '+%Y-%m-%d %H:%M %Z')"
+          # Another run may have pushed while this one was fetching.
+          git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
           git push

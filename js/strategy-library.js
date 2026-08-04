@@ -85,12 +85,15 @@ const STRATEGY_LIBRARY = [
     here: '39.5% / −58.7%', reported: '+6.91% avg holding QQQ vs bonds in downturns; app-implemented', src: 'HW' },
   // --- hand-picked (tag 'picked'): my own, not from a published write-up. No
   // `src`, so the card title renders as plain text instead of a dead link. ---
-  { n: 26, name: 'Rolling median 250', tag: 'picked', runnable: true,
+  { n: 26, name: 'Median overextension 250d', tag: 'picked', runnable: true,
     rules: 'Signal: traded fund vs the MEDIAN of its own last 250 closes. Exit: price > 55% above the median → park (cash by default). Enter: any time it is not. Freq: daily. Overextension filter only — there is no downside rule, so it holds all the way through every crash.',
     here: '62.4% / −79.1%', reported: 'Hand-picked; numbers are this app’s own backtest, not an external claim' },
   { n: 39, name: 'Overheat exit \u2014 SSO signal (sell when stretched)', tag: 'picked', runnable: true,
-    rules: 'Signal: SSO vs its own 150-day SMA. Exit: signal closes >20% above the SMA \u2192 park (cash by default). Enter: any time it is not. Freq: daily. Signal and traded fund are separate knobs. Overextension filter only \u2014 like Rolling median 250 it has no downside rule, so it holds through every crash.',
+    rules: 'Signal: SSO vs its own 150-day SMA. Exit: signal closes >20% above the SMA \u2192 park (cash by default). Enter: any time it is not. Freq: daily. Signal and traded fund are separate knobs. Overextension filter only \u2014 like Median overextension 250d it has no downside rule, so it holds through every crash.',
     here: '\u2014', reported: 'Hand-picked; numbers are this app\u2019s own backtest, not an external claim' },
+  { n: 40, name: 'Median overextension (250d) \u2014 SQQQ park', tag: 'picked', runnable: true,
+    rules: 'Hold TQQQ. When it closes 55% above its 250-day median, sell and buy SQQQ. Buy back when it drops under. Checked daily. No stop-loss.',
+    here: '82.8% / \u221279.1%', reported: 'Hand-picked; numbers are this app\u2019s own backtest, not an external claim' },
   // --- optimizer winners (tag 'overfit'): the single top-ranked row from each
   // tab of the 9sig and SMA overfit explorers. These are the BEST-FITTING
   // parameter sets found by sweeping thousands of combinations against a fixed
@@ -187,6 +190,7 @@ const SL_MONTHLY = 1000;              // added at the start of each new month
 
 // Bounds for the four card windows. `null` end → last available bar.
 const SL_ERA_BOUNDS = {
+  '1953': ['1953-01-01', null],   // whole span — overlaps the four below by design
   '1980': ['1980-01-01', '2000-03-31'],
   '2000': ['2000-03-31', '2009-03-31'],
   '2009': ['2009-03-31', '2025-12-31'],
@@ -232,6 +236,11 @@ function slCagrDD(res) {
     dd = computeDailyMaxDrawdownMulti(mult, rows).pct;
   } else if (ctrl && ctrl.length && rows && typeof computeDailyMaxDrawdown === 'function') {
     dd = computeDailyMaxDrawdown(ctrl, rows, res.ddKey || 'tqqq').pct;
+  } else if (rows && typeof buildCustomDDControls === 'function' && typeof computeDailyMaxDrawdownMulti === 'function') {
+    // Code entries: rebuild daily control points from the log so the card is
+    // measured exactly like the app's — see customSeriesResult().
+    const cc = buildCustomDDControls(log);
+    if (cc) dd = computeDailyMaxDrawdownMulti(cc, rows).pct;
   }
   if (dd == null) {
     let peak = -Infinity; dd = 0;
@@ -440,10 +449,20 @@ function slStatsFor(n) {
   if (!code && !s.preset) return (st.byN[n] = null);
   const { data, dates, quarters } = st;
   const sparkEi = dates.length - 1;
-  // Code entries index the daily series; presets index quarterlyData.
+  // Code entries index the daily series; presets index quarterlyData. Both start
+  // one quarter EARLIER than the era's nominal boundary, because that is what the
+  // app does: picking "Entry Quarter Q1 2000" buys at the previous quarter's close
+  // (chart.js — `simEntryIdx = entryIdx - 1`). Running a card from the boundary
+  // itself skipped that quarter, and for the 2000 era it holds the dot-com top —
+  // worth up to 7.7pp of drawdown between a card and the strategy added from it.
+  const entryQIdx = (d) => { const qi = slQIdx(d, false); return qi > 0 ? qi - 1 : qi; };
+  const qDateAt = (qi, fallback) =>
+    (qi >= 0 && typeof quarterlyData !== 'undefined' && quarterlyData[qi]) ? quarterlyData[qi][0] : fallback;
   const run = code
-    ? (from, to) => slRunCode(code, data, slIdxOnOrAfter(dates, from), to === null ? sparkEi : slIdxOnOrBefore(dates, to))
-    : (from, to) => slRunPreset(s.preset, slQIdx(from, false), slQIdx(to, true));
+    ? (from, to) => slRunCode(code, data,
+        slIdxOnOrBefore(dates, qDateAt(entryQIdx(from), from)),
+        to === null ? sparkEi : slIdxOnOrBefore(dates, qDateAt(slQIdx(to, true), to)))
+    : (from, to) => slRunPreset(s.preset, entryQIdx(from), slQIdx(to, true));
   try {
     const metrics = {};
     for (const era of STRATEGY_ERAS) {
@@ -475,6 +494,9 @@ function slInvalidateStats() { SL_STATS = null; _strategyLibraryBuilt = false; _
 // hard on small moves; that is what an annual rate means, and it matches what
 // the app's own strategy pills show for the same span.
 const STRATEGY_ERAS = [
+  // Whole-span column first, then the breakdown. The four windows below start
+  // at 1980, so without this the 1953-1980 stretch never showed up anywhere.
+  { key: '1953', label: '1953–today', sub: 'full history' },
   { key: '1980', label: '1980–2000 Q1', sub: 'pre-bubble run-up' },
   { key: '2000', label: '2000 Q1–2009 Q1', sub: 'dot-com peak → GFC bottom' },
   { key: '2009', label: '2009 Q1–2025 Q4', sub: 'post-GFC bull' },
@@ -511,7 +533,12 @@ function eraTableHtml(m) {
   }).join('');
   const ddCells = STRATEGY_ERAS.map(era => {
     const c = m && m[era.key];
-    return c ? `<td class="sl-era-dd">−${Math.round(c.dd)}%</td>` : '<td class="sl-era-dd">—</td>';
+    // Past 90% the rounded figure hides the only thing that matters. −99.960%
+    // and −100% are a survivable account and a wiped-out one, and both round to
+    // "−100%", so keep three decimals up there and whole percent below.
+    return c
+      ? `<td class="sl-era-dd">−${c.dd > 90 ? c.dd.toFixed(3) : Math.round(c.dd)}%</td>`
+      : '<td class="sl-era-dd">—</td>';
   }).join('');
   return `<table class="sl-era-table">
     <tr class="sl-row-date"><th scope="row">date</th>${dateCells}</tr>

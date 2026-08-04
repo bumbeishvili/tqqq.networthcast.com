@@ -42,16 +42,23 @@ async function loadSPXLDaily() {
   return parseDataFile(await resp.text());
 }
 
+async function loadSQQQDaily() {
+  const resp = await fetch('data/synthetic-sqqq.tsv?v=baked');
+  return parseDataFile(await resp.text());
+}
+
 // Merge daily TSVs by date. The synthetic TSVs already contain synthesized
 // pre-inception rows (baked by update_data.py), so this is a straight join —
 // no synthesis here. monthlyData column layout:
-//   [date, tqqq, qqq, spy, qld, sso, spxl]   (cols 0..6)
-function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily) {
+//   [date, tqqq, qqq, spy, qld, sso, spxl]   (cols 0..6); sqqq rides on the
+//   daily objects only (custom strategies read it by name, not by column).
+function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily, sqqqDaily) {
   const tqqqMap = new Map(tqqqDaily.map(d => [d[0], d[1]]));
   const spyMap  = new Map(spyDaily.map(d => [d[0], d[1]]));
   const qldMap  = qldDaily  ? new Map(qldDaily.map(d  => [d[0], d[1]])) : null;
   const ssoMap  = ssoDaily  ? new Map(ssoDaily.map(d  => [d[0], d[1]])) : null;
   const spxlMap = spxlDaily ? new Map(spxlDaily.map(d => [d[0], d[1]])) : null;
+  const sqqqMap = sqqqDaily ? new Map(sqqqDaily.map(d => [d[0], d[1]])) : null;
   const result = [];
   for (const [date, qqqPrice] of qqqDaily) {
     const tqqqPrice = tqqqMap.get(date);
@@ -64,6 +71,7 @@ function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily
         qld:  qldMap  ? (qldMap.get(date)  || 0) : 0,
         sso:  ssoMap  ? (ssoMap.get(date)  || 0) : 0,
         spxl: spxlMap ? (spxlMap.get(date) || 0) : 0,
+        sqqq: sqqqMap ? (sqqqMap.get(date) || 0) : 0,
       });
     }
   }
@@ -412,6 +420,7 @@ function precomputeSMASeries() {
     qqq:  daily.map(d => d.qqq),  spy:  daily.map(d => d.spy),
     tqqq: daily.map(d => d.tqqq), qld:  daily.map(d => d.qld),
     sso:  daily.map(d => d.sso),  spxl: daily.map(d => d.spxl),
+    sqqq: daily.map(d => d.sqqq),
   };
 
   const sma = makeLazyIndicator(seriesByAsset, toMonthly, rollingSMA);

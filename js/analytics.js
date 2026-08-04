@@ -848,6 +848,26 @@ document.addEventListener('change', (e) => {
     return true;
   }
 
+  // Kick off the sandboxed run for a custom strategy behind the hovered cell,
+  // then re-fill the tooltip once the points land (only if still hovered).
+  let _warming = null;
+  function warmCustomTooltip(td, startYear, period) {
+    if (!isCfgKey(analyticsStrategy)) return;
+    const cfg = cfgFromKey(analyticsStrategy);
+    if (!cfg || cfg.type !== 'custom' || typeof analyticsCodeRun !== 'function') return;
+    const rng = _cellRange(startYear, period);
+    if (!rng) return;
+    const m = _analyticsMoneyInputs();
+    const tag = cfg.id + '|' + startYear + ':' + period;
+    if (_warming === tag) return;
+    _warming = tag;
+    analyticsCodeRun(cfg, m.initial, m.monthly, m.annualRaise, rng.entryIdx, rng.exitIdx).then(() => {
+      _warming = null;
+      const still = grid.querySelector(`td[data-yp="${startYear}:${period}"]`);
+      if (still && still.classList.contains('cell-hover') || (still && !tooltip.hasAttribute('hidden'))) fillTooltip(still);
+    });
+  }
+
   function fillTooltip(td) {
     const startYear = +td.dataset.r;
     const period    = +td.dataset.c;
@@ -882,6 +902,9 @@ document.addEventListener('change', (e) => {
     let lineChart = '';
     if (cellSim) {
       const series = analyticsTooltipPoints(analyticsStrategy, cellSim, baselineVal, null, startYear, period, false);
+      // Custom strategy with nothing cached yet: run it, then redraw this same
+      // cell's tooltip if the pointer is still on it.
+      if (!series.length) warmCustomTooltip(td, startYear, period);
       if (series.length >= 2) {
         const baselineSeries = analyticsTooltipPoints(analyticsBaseline, cellSim, baselineVal, series, startYear, period, true);
         lineChart = buildTooltipLineChart(series, {
@@ -1517,6 +1540,14 @@ function analyticsCodeRun(cfg, initial, monthly, annualRaise, entryIdx, exitIdx)
   });
 }
 
+// Synchronous peek at the memoized worker result — the tooltip is built inline
+// on hover and cannot await, so a custom strategy can only draw once its run
+// has landed in the cache.
+function analyticsCodeCached(cfg, initial, monthly, annualRaise, entryIdx, exitIdx) {
+  const ck = analyticsCodeCacheKey(cfg, initial, monthly, annualRaise, entryIdx, exitIdx);
+  return _analyticsCodeCache.has(ck) ? _analyticsCodeCache.get(ck) : null;
+}
+
 // Quarter-aligned value array for any heatmap key over one heatmap row's range.
 // Returns a number[] indexed by quarter offset from entryIdx (so cell value =
 // arr[exitIdx - entryIdx], and computeMaxDDPrefix works directly on it).
@@ -1576,10 +1607,15 @@ function _analyticsMoneyInputs() {
 function analyticsTooltipPoints(key, cellSim, baselineVal, stratSeries, startYear, period, isBaseline) {
   if (isCfgKey(key)) {
     const cfg = cfgFromKey(key);
-    if (!cfg || cfg.type === 'custom') return [];
+    if (!cfg) return [];
     const rng = _cellRange(startYear, period);
     if (!rng) return [];
     const m = _analyticsMoneyInputs();
+    // Custom code runs in the worker (async), so serve the memoized result;
+    // a miss returns [] and the caller kicks off the run + redraws.
+    if (cfg.type === 'custom') {
+      return analyticsCodeCached(cfg, m.initial, m.monthly, m.annualRaise, rng.entryIdx, rng.exitIdx) || [];
+    }
     return analyticsConfigPoints(cfg, m.initial, m.monthly, m.rate, m.annualRaise, rng.entryIdx, rng.exitIdx);
   }
   return isBaseline
@@ -1825,10 +1861,10 @@ function buildTooltipLineChart(series, opts) {
   }
   const area = `M${xAt(0).toFixed(1)},${lineBot.toFixed(1)} ` + line.replace(/^M/, 'L') + `L${xAt(series.length - 1).toFixed(1)},${lineBot.toFixed(1)} Z`;
 
-  // Baseline overlay: dashed muted line spanning the same x-range. If the
-  // baseline has the same sample count as the strategy series we map
-  // index-for-index; otherwise we treat it as a flat target and stretch
-  // its first value across the full width.
+  // Baseline overlay: dashed muted line spanning the same x-range. Aligned by
+  // DATE, not index — a custom strategy logs on its own cadence while built-ins
+  // are quarterly, so index matching silently degraded the baseline to a flat
+  // line whenever a custom strategy was on either side of the comparison.
   // Start / end markers + value labels at the line endpoints. Decide whether
   // to place each label above or below the dot based on which side has more
   // breathing room (so labels don't crash into the bar strip or the bottom).
@@ -1845,14 +1881,25 @@ function buildTooltipLineChart(series, opts) {
   let baselineEndLabel = '';
   if (baselineSeries && baselineSeries.length) {
     let bPath = '';
-    if (baselineSeries.length === series.length) {
+    const dated = baselineSeries.filter(b => b && b.date != null && Number.isFinite(b.value));
+    if (dated.length > 1 && series[0] && series[0].date != null) {
+      // Step through the baseline in lockstep with the strategy's dates,
+      // carrying the last known value forward between baseline samples.
+      let bi = 0;
+      for (let i = 0; i < series.length; i++) {
+        const d = series[i].date;
+        while (bi + 1 < dated.length && dated[bi + 1].date <= d) bi++;
+        if (dated[bi].date > d) continue;      // baseline starts later than the strategy
+        bPath += (bPath === '' ? 'M' : 'L') + xAt(i).toFixed(1) + ',' + yLineAt(dated[bi].value).toFixed(1) + ' ';
+      }
+    } else if (baselineSeries.length === series.length) {
       for (let i = 0; i < baselineSeries.length; i++) {
         const v = baselineSeries[i].value;
         if (!Number.isFinite(v)) continue;
         bPath += (bPath === '' ? 'M' : 'L') + xAt(i).toFixed(1) + ',' + yLineAt(v).toFixed(1) + ' ';
       }
     } else {
-      // Flat target — paint as a horizontal line at the (constant) value.
+      // Genuinely a flat target (custom $ / % baselines carry no dates).
       const v = baselineSeries[baselineSeries.length - 1].value;
       if (Number.isFinite(v)) {
         const yy = yLineAt(v).toFixed(1);

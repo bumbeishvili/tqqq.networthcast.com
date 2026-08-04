@@ -449,6 +449,7 @@ data.spy   : daily closing price of SPY   (S&P 500)
 data.qld   : daily closing price of QLD   (2x Nasdaq-100, ProShares Ultra QQQ)
 data.sso   : daily closing price of SSO   (2x S&P 500, ProShares Ultra S&P500)
 data.spxl  : daily closing price of SPXL  (3x S&P 500, Direxion Daily S&P500 Bull 3x)
+data.sqqq  : daily closing price of SQQQ  (-3x Nasdaq-100 INVERSE — rises when QQQ falls), synthesized back to 1953
 - data[id] works for any of those ids, which is how an asset dropdown gets used.
 - Prices are positive numbers; a few of the earliest values may be 0 (missing history) — guard divisions.
 - The arrays span the FULL history. You MAY read indices before p.startIdx for warm-up (e.g. to seed a
@@ -550,8 +551,9 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
 
 === HOW THE SIMULATION WORKS ===
 - You manage cash and holdings yourself in local variables — nothing is auto-invested.
-- Trade at that day's close, data[<id>][i]. tqqq, qld, sso, and spxl are ALREADY leveraged products; do
-  not invent additional borrowing or leverage.
+- Trade at that day's close, data[<id>][i]. tqqq, qld, sso, spxl and sqqq are ALREADY leveraged products;
+  do not invent additional borrowing or leverage. sqqq is INVERSE (-3x): it gains when the Nasdaq falls and
+  bleeds badly in any rising or sideways market, so it only makes sense as a short-lived hedge leg.
 - Add p.monthly of new cash at each new month (grown by p.annualRaise per calendar year).
 - Decide each day using only data up to that day (no look-ahead / no future prices).
 
@@ -702,7 +704,7 @@ function buildCustomPrompt(desc) {
 let _customDataCache = null;
 function buildCustomData() {
   if (_customDataCache) return _customDataCache;
-  if (typeof daily === 'undefined' || !daily) return { dates: [], tqqq: [], qqq: [], spy: [], qld: [], sso: [], spxl: [] };
+  if (typeof daily === 'undefined' || !daily) return { dates: [], tqqq: [], qqq: [], spy: [], qld: [], sso: [], spxl: [], sqqq: [] };
   _customDataCache = {
     dates: daily.map(d => d.date),
     tqqq:  daily.map(d => d.tqqq),
@@ -711,6 +713,7 @@ function buildCustomData() {
     qld:   daily.map(d => d.qld),
     sso:   daily.map(d => d.sso),
     spxl:  daily.map(d => d.spxl),
+    sqqq:  daily.map(d => d.sqqq || 0),
   };
   return _customDataCache;
 }
@@ -1032,10 +1035,23 @@ function customSeriesResult(log, ctx, error, tcOverride) {
   const series = resampleByDate(points, labels);
   const finalV = series.length ? series[series.length - 1] : 0;
   const startV = series.length ? series[0] : 0;
-  // Custom strategies have no reconstructable share/cash control points, so
-  // drawdown stays on the rebalance-grain series. CAGR is money-weighted.
+  // Drawdown is revalued at EVERY daily close, same as the built-in engines —
+  // never on `series` (chart-label grain steps over intra-label troughs) and
+  // never on the log alone (a strategy logging only trades + month ends misses
+  // intra-month troughs). Falls back to log grain, then label grain, when the
+  // strategy doesn't emit held/shares/cash. CAGR is money-weighted, unaffected.
   const cagr = cfgMoneyWeightedCAGR(ctx, finalV);
-  const dd = (typeof computeMaxDrawdown === 'function') ? computeMaxDrawdown(series, labels) : { pct: 0, peakDate: null, troughDate: null };
+  const ddVals = points.map(p => p.value), ddDates = points.map(p => p.date);
+  const ddCtrl = (typeof buildCustomDDControls === 'function') ? buildCustomDDControls(log) : null;
+  const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
+  let dd = null;
+  if (ddCtrl && dailyRows && typeof computeDailyMaxDrawdownMulti === 'function') {
+    dd = computeDailyMaxDrawdownMulti(ddCtrl, dailyRows);
+  }
+  if (!dd && typeof computeMaxDrawdown === 'function') {
+    dd = computeMaxDrawdown(ddVals.length ? ddVals : series, ddVals.length ? ddDates : labels);
+  }
+  if (!dd) dd = { pct: 0, peakDate: null, troughDate: null };
   return { data: series, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate };
 }
 
@@ -1552,7 +1568,7 @@ function renderCustomBuilder() {
       <div class="builder-modal">
         <div class="sc-modal-title">Describe your strategy</div>
         <div class="wip-note">⚠ Custom strategies are a work in progress — their results may still change.</div>
-        <div class="builder-help">In plain English, describe your strategy in as much detail as you can. You can base it on any of these tickers — <b>TQQQ</b>, <b>QLD</b>, <b>QQQ</b>, <b>SPY</b>, <b>SSO</b>, <b>SPXL</b> — plus entry/exit rules, thresholds, and how monthly contributions are handled.</div>
+        <div class="builder-help">In plain English, describe your strategy in as much detail as you can. You can base it on any of these tickers — <b>TQQQ</b>, <b>QLD</b>, <b>QQQ</b>, <b>SPY</b>, <b>SSO</b>, <b>SPXL</b>, <b>SQQQ</b> (inverse −3×) — plus entry/exit rules, thresholds, and how monthly contributions are handled.</div>
         <textarea id="builder-desc" class="builder-textarea" placeholder="e.g. Hold TQQQ. At each month-end, if QQQ closed below its 200-day moving average, move everything to cash; when it closes back above, buy TQQQ again. Add the monthly contribution to whatever I'm holding.">${_escHtml(cfg.desc || '')}</textarea>
         <div class="builder-actions">
           <button type="button" class="sc-modal-btn" data-builder-cancel>Cancel</button>
@@ -2413,7 +2429,7 @@ function renderCustomPanelBody(cfgId) {
   // needs nothing beyond rendering the control here, and its choice persists to
   // cfg.color like any saved strategy's.
   if (typeof buildColorPickerHtml === 'function') html += buildColorPickerHtml(cfg.type);
-  html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qld</code>, <code>qqq</code>, <code>spy</code>, <code>sso</code>, <code>spxl</code> (daily closes). Base your rules on any of them.</div>`;
+  html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qld</code>, <code>qqq</code>, <code>spy</code>, <code>sso</code>, <code>spxl</code>, <code>sqqq</code> (daily closes). Base your rules on any of them.</div>`;
   html += `<button type="button" id="custom-edit-builder" class="custom-edit-btn">Edit strategy</button>`;
   if (cfg.desc) html += `<div class="custom-desc-readout">${_escHtml(cfg.desc)}</div>`;
   if (err) html += `<div class="custom-error"><b>Couldn't run it:</b> ${_escHtml(err)} <span class="custom-error-hint">— click Edit strategy to fix the code.</span></div>`;

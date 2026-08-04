@@ -10,6 +10,7 @@ This folder contains daily closing-price series for **TQQQ, QLD, QQQ, SPY, SSO, 
 - **QLD** (2× Nasdaq-100, ProShares Ultra QQQ) — June 2006
 - **SPXL** (3× S&P 500, Direxion Daily S&P500 Bull 3x) — November 2008
 - **TQQQ** (3× Nasdaq-100) — February 2010
+- **SQQQ** (−3× Nasdaq-100, ProShares UltraPro Short QQQ) — February 2010
 
 Pre-launch history is reconstructed from longer-lived indexes (Nasdaq-100, S&P 500, PHLX Semiconductor), using the same daily formulas the ETFs themselves use (leverage, expense ratios, financing costs on the borrowed leg, swap-counterparty spreads), and stitched onto the real series at each ETF's launch day.
 
@@ -27,6 +28,7 @@ The result is a continuous "what it would have looked like" series for each fund
 | **spy.tsv** | January 29, 1993 — when SPY launched. | 1988–1993 uses the real S&P 500 Total Return index. 1985–1988 falls back to the plain S&P 500 (`^GSPC`) because total-return data isn't available that far back. No financing-cost adjustment (SPY is not leveraged). |
 | **synthetic-sso.tsv** | June 21, 2006 — when SSO (ProShares Ultra S&P500, 2×) launched. | Pre-2006 uses `(1 + 2 × SP500_daily − 1 × (short_rate + 0.50%)/yr − 0.87%/yr expense)`. 1988–2006 uses real `^SP500TR`; 1985–1988 falls back to price-only `^GSPC` (S&P dividend gap ~1.8%/yr understated). |
 | **synthetic-spxl.tsv** | November 5, 2008 — when SPXL (Direxion Daily S&P500 Bull 3x) launched. | Pre-2008 uses `(1 + 3 × SP500_daily − 2 × (short_rate + 0.50%)/yr − 0.95%/yr expense)`. 1988–2008 uses real `^SP500TR`; 1985–1988 falls back to price-only `^GSPC`. |
+| **synthetic-sqqq.tsv** | February 11, 2010 — when SQQQ launched. | Pre-2010 uses the INVERSE model `(1 − 3 × NDX_daily + 4.028 × short_rate/yr − 1.537 %/yr)`. An inverse fund borrows nothing; it is short 3 units and sits on (1+L)=4 units of cash **earning** the short rate. Both coefficients are fitted against real SQQQ 2010–2026: the rate slope came out 4.028 against a theoretical 4.0, and the −1.537 %/yr intercept covers the 0.95 % fee plus swap spread and slippage. Replayed forward from launch the model tracks the real fund to within −6.4 % / +1.9 % cumulative over 16.5 years. |
 | **fed-funds-effective.tsv** | Daily, July 1, 1954 → present. | None — pulled from FRED series `DFF`. Used by the synthesis to compute the financing cost on the leveraged leg from 1954 onward. |
 | **t-bill-3mo.tsv** | Monthly, January 1934 → present. | None — pulled from FRED series `TB3MS`. Used as the pre-Fed-Funds-market (1934–1953) short-rate proxy. |
 | **short-rates.tsv** | Daily, January 2, 1934 → present. | Derived: DFF where it exists, TB3MS forward-filled where DFF doesn't reach. This is the single file the synthesis script reads. |
@@ -98,6 +100,7 @@ You can grab any of the files straight from GitHub at the URLs below. They're re
 | SPY  | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/spy.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/spy.tsv) |
 | SSO  | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-sso.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-sso.tsv) |
 | SPXL | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv) |
+| SQQQ | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv) |
 | Fed Funds Effective Rate (daily, 1954+) | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv) |
 | 3-month T-bill (monthly, 1934+) | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv) |
 | Combined daily short rates (1934+) | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/short-rates.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/short-rates.tsv) |
