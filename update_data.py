@@ -1,8 +1,14 @@
 #!/usr/bin/env python3
 """
-Fetches daily closing prices for QQQ, QLD, TQQQ, SPY, SSO, and SPXL
+Fetches daily closing prices for QQQ, QLD, TQQQ, SPY, SSO, SPXL, and SQQQ
 from Yahoo Finance and short-term interest rates from FRED, then writes them
 as TSV files consumed by index.html.
+
+Two modes. The default (no flags, what the cron runs) is an incremental
+refresh: replace the post-IPO tail of the seven price TSVs with fresh
+yfinance bars, copy the committed pre-IPO synthesized prefix through
+untouched, never touch FRED. --rebuild runs the full synthesis below.
+--refresh-rates re-pulls the three FRED rate TSVs; nothing else does.
 
 Pre-IPO history is fabricated by walking actual daily index values backward
 from each ETF's first real trading day, applying the leveraged-return-minus-
@@ -18,10 +24,12 @@ Funds rate: slope 1.998 (theory predicts exactly 2.0), R² 0.97.
 
 Sources used:
 
-  ^NDX  base series   ← local ^ndx_d.csv (Stooq, back to 1938-01-03)
-                          merged with yfinance ^NDX from 1985-10-01 (overrides
-                          the CSV on overlapping dates)
-  ^GSPC, ^SP500TR, QQQ, QLD, TQQQ, SPY, SSO, SPXL, QQQ-raw  ← yfinance
+  ^NDX  base series   ← local ^ndx_d.csv (Stooq, back to 1938-01-03), NOT
+                          committed to the repo. read_ndx_csv() returns [] when
+                          it is absent, so a --rebuild without it reaches only
+                          as far back as yfinance ^NDX (1985-10-01). Merged with
+                          yfinance ^NDX, which overrides the CSV on overlaps.
+  ^GSPC, ^SP500TR, QQQ, QLD, TQQQ, SPY, SSO, SPXL, SQQQ, QQQ-raw  ← yfinance
   DFF  (daily 1954+)  ← FRED  — Fed Funds Effective Rate, the swap-counterparty
                                 financing reference for leveraged ETFs
   TB3MS (monthly 1934+) ← FRED — 3-month T-bill, used as the pre-1954 proxy
@@ -40,9 +48,18 @@ Synthesis formulas:
   SSO  1988 → 2006    ← ^SP500TR                     (2× − 1×rate − SSO exp)
   SPXL pre-1988       ← ^GSPC                        (3× − 2×rate − SPXL exp)
   SPXL 1988 → 2008    ← ^SP500TR                     (3× − 2×rate − SPXL exp)
+  SQQQ pre-1999       ← extended ^NDX                (inverse model, below)
+  SQQQ 1999 → 2010    ← derived NDX-TR               (inverse model, below)
+
+The three ^GSPC fallbacks are clipped to the extended-^NDX start date, not to
+1985. With ^ndx_d.csv present that is 1938, and the committed TSVs carry it
+from their 1953 first row. So every S&P-based series is price-only for roughly
+35 years, not for a couple of years — see the bias note below.
 
 QQQ and SPY have leverage 1, so (L-1) × rate = 0 — no financing-cost term.
-QLD, TQQQ, SSO, and SPXL get the rate correction.
+QLD, TQQQ, SSO, and SPXL get the rate correction, each at the benchmark rate
+plus its own swap spread (see the calibration block below). SQQQ is inverse
+and earns rather than pays: it uses walk_backward_inverse(), not walk_backward().
 
 The local ^ndx_d.csv extends pre-1985 history. The actual NASDAQ-100 index
 didn't exist before 1985-01-31, so values before that are a back-reconstruction
@@ -57,23 +74,33 @@ annualized estimate. This is what lets the TQQQ 1999-2010 phase track real
 TQQQ to within QQQ's small tracking error instead of the −0.6%/yr structural
 drift you'd get from chaining through QQQ_adj directly.
 
-Known biases (after the financing-cost correction):
+Known biases (after the financing-cost correction and swap spreads):
 
-  - For pre-1999 QQQ and TQQQ we have only ^NDX (price-only) — Yahoo lists
-    ^XNDX (NDX Total Return) but serves no history for it; NASDAQ.com's API,
-    NASDAQ Data Link, Stooq, Tiingo, EODHD, Alpha Vantage all gate it.
-    Pre-1999 synth QQQ understates ~0.7%/yr; pre-1999 synth TQQQ ~2%/yr.
-  - For 1985-10-01 → 1987-12-31 SPY uses ^GSPC (price-only) because
-    ^SP500TR's Yahoo history starts 1988-01-04. Measured TR premium over
-    that overlap is +3.86pp/yr, so ~9% cumulative understatement for that
-    2.3-year window.
-  - Residual operational drag of ~1.3 pp/yr (swap spreads, NAV/market price
-    deviations, daily rebalancing slippage) is NOT modeled. Real TQQQ
-    underperforms our rate-corrected synthesis by roughly that constant
-    amount across all rate regimes.
+  - For pre-1999 QQQ, QLD, TQQQ, and SQQQ we have only ^NDX (price-only) —
+    Yahoo lists ^XNDX (NDX Total Return) but serves no history for it;
+    NASDAQ.com's API, NASDAQ Data Link, Stooq, Tiingo, EODHD, Alpha Vantage
+    all gate it. Dividends contributed 0.690 pp/yr to QQQ over 1999-2026,
+    so pre-1999 synth QQQ runs ~0.7%/yr light and synth TQQQ ~2%/yr.
+  - SPY, SSO, and SPXL use price-only ^GSPC from the files' 1953 start to
+    ^SP500TR's 1988-01-04 first bar. The ^SP500TR-vs-^GSPC premium shrinks
+    as dividend yields fall: 3.97 pp/yr over 1988-1990, 3.70 over 1988-1993,
+    2.92 over 1988-2000, 1.82 over 2000-2010, 2.30 over the full 1988-2026
+    overlap. The windows next to the gap are the applicable ones and
+    pre-1988 yields were higher still, so the 1953-1988 stretch runs
+    ~3.7-4.0 pp/yr light at 1×, and L × that leveraged. Longest-span bias
+    in the dataset.
+  - Swap spreads (TQQQ_SWAP_SPREAD etc.) now carry what used to be logged
+    here as an unmodeled ~1.3 pp/yr residual. TQQQ's 0.65%/yr was fitted to
+    absorb that residual outright, so nothing measurable is left over for
+    TQQQ. QLD/SSO/SPXL spreads are unregressed estimates: their residual is
+    unmeasured, not zero.
+  - Still unmodeled inside those estimates: NAV-vs-market price deviation
+    and daily rebalancing slippage on QLD, SSO, and SPXL.
 
 Usage:
-    python3 update_data.py
+    python3 update_data.py                    # incremental price refresh
+    python3 update_data.py --refresh-rates    # re-pull FRED rate TSVs
+    python3 update_data.py --rebuild          # full synthesis from scratch
 """
 import csv
 import io
@@ -674,8 +701,8 @@ else:
 # ---- SSO: real ProShares 2× S&P500 from 2006-06-21, synthesized prefix ----
 # Mirrors QLD's two-phase chain but on the S&P 500. Phase 1 walks back through
 # ^SP500TR (real S&P total-return index, 1988+); phase 2 falls back to ^GSPC
-# (price-only, ~1.8%/yr understated for missing dividends, but the only signal
-# we have pre-1988).
+# (price-only, the only signal we have pre-1988). The missing dividends cost
+# ~3.7-4.0 pp/yr at 1× in the years adjacent to the gap, so ~2× that here.
 sso_phase1_rows, sso_phase1_pairs = walk_backward(
     sp500tr_pairs,
     anchor_date=sso_df.index[0],

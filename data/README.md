@@ -1,6 +1,6 @@
-# Long-history TQQQ, QLD, QQQ, SPY, SSO, and SPXL price data (+ short-rate reference data)
+# Long-history price data for TQQQ, QLD, QQQ, SPY, SSO, SPXL, and SQQQ
 
-This folder contains daily closing-price series for **TQQQ, QLD, QQQ, SPY, SSO, and SPXL** stretching back **decades before any of these ETFs actually existed**, along with the **historical short-term interest rate series** the synthesis methodology depends on. They power the [Strategies Simulator](https://9sig.networthcast.com), and they're published here so anyone can grab them and run their own backtests without reinventing the synthesis work.
+Daily closing prices for seven ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://9sig.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
 
 ## ETF launch dates
 
@@ -12,85 +12,92 @@ This folder contains daily closing-price series for **TQQQ, QLD, QQQ, SPY, SSO, 
 - **TQQQ** (3× Nasdaq-100) — February 2010
 - **SQQQ** (−3× Nasdaq-100, ProShares UltraPro Short QQQ) — February 2010
 
-Pre-launch history is reconstructed from longer-lived indexes (Nasdaq-100, S&P 500, PHLX Semiconductor), using the same daily formulas the ETFs themselves use (leverage, expense ratios, financing costs on the borrowed leg, swap-counterparty spreads), and stitched onto the real series at each ETF's launch day.
+Everything before a fund's launch date is reconstructed. The script walks the longer-lived index backward from launch day, applying the same daily arithmetic the fund itself runs on: leverage, expense ratio, financing cost on the borrowed leg, swap-counterparty spread. What comes out is a continuous "what it would have looked like" series. None of it happened, because the funds didn't exist. It is what the math says their daily prices would have done given the underlying index and the short-term rates of each era.
 
-The result is a continuous "what it would have looked like" series for each fund. It's not what really happened — those investments didn't exist yet — but it's what *the math says* their daily prices would have done given the underlying index **and the prevailing short-term interest rates of each era**.
-
-> **Shipped range: January 2, 1953 → present.** The underlying index reconstruction runs back to 1938, but the published TSVs are trimmed to start in **1953** — the point where daily data becomes clean (before 1953 the NYSE ran Saturday sessions, and the pre-1953 reconstruction is the roughest). Everything below describing 1938–1953 synthesis is how that early stretch *was* built; it's no longer included in the files.
+> **The price files start January 2, 1953.** The rate files go back further; `short-rates.tsv` starts in 1934. 1953 is where daily data gets clean, since the NYSE ran Saturday sessions before then. That start date lives in the committed TSVs themselves. `update_data.py` has no trimming step, and its daily refresh copies whatever pre-IPO prefix is already on disk.
 
 ## The files
 
 | File | Real history starts | Synthesized portion |
 | --- | --- | --- |
-| **synthetic-qqq.tsv** | March 10, 1999 — when QQQ launched. From here on it's real, dividend-adjusted Yahoo Finance data. | Before 1999 the series is built from the Nasdaq-100 index (`^NDX`), minus QQQ's tiny expense ratio. No financing-cost adjustment (QQQ is not leveraged). |
-| **synthetic-qld.tsv** | June 21, 2006 — when QLD (ProShares Ultra QQQ, 2×) launched. | Pre-2006 uses `(1 + 2 × NDX_daily − 1 × (short_rate + 0.50%)/yr − 0.95%/yr expense)`. 1999–2006 uses derived NDX-TR; 1938–1999 falls back to price-only `^NDX`. |
-| **synthetic-tqqq.tsv** | February 11, 2010 — when TQQQ launched. | Pre-2010 uses a leveraged-ETF formula that **includes the financing cost and a swap-counterparty spread**: `(1 + 3 × NDX_daily − 2 × (short_rate + 0.65%)/yr − 0.88%/yr expense)`. For 1999–2010 the underlying is the derived NDX-TR series (real Nasdaq movement plus actual dividends); for 1938–1999 it falls back to price-only `^NDX` because dividend data isn't available that far back. |
-| **spy.tsv** | January 29, 1993 — when SPY launched. | 1988–1993 uses the real S&P 500 Total Return index. 1985–1988 falls back to the plain S&P 500 (`^GSPC`) because total-return data isn't available that far back. No financing-cost adjustment (SPY is not leveraged). |
-| **synthetic-sso.tsv** | June 21, 2006 — when SSO (ProShares Ultra S&P500, 2×) launched. | Pre-2006 uses `(1 + 2 × SP500_daily − 1 × (short_rate + 0.50%)/yr − 0.87%/yr expense)`. 1988–2006 uses real `^SP500TR`; 1985–1988 falls back to price-only `^GSPC` (S&P dividend gap ~1.8%/yr understated). |
-| **synthetic-spxl.tsv** | November 5, 2008 — when SPXL (Direxion Daily S&P500 Bull 3x) launched. | Pre-2008 uses `(1 + 3 × SP500_daily − 2 × (short_rate + 0.50%)/yr − 0.95%/yr expense)`. 1988–2008 uses real `^SP500TR`; 1985–1988 falls back to price-only `^GSPC`. |
-| **synthetic-sqqq.tsv** | February 11, 2010 — when SQQQ launched. | Pre-2010 uses the INVERSE model `(1 − 3 × NDX_daily + 4.028 × short_rate/yr − 1.537 %/yr)`. An inverse fund borrows nothing; it is short 3 units and sits on (1+L)=4 units of cash **earning** the short rate. Both coefficients are fitted against real SQQQ 2010–2026: the rate slope came out 4.028 against a theoretical 4.0, and the −1.537 %/yr intercept covers the 0.95 % fee plus swap spread and slippage. Replayed forward from launch the model tracks the real fund to within −6.4 % / +1.9 % cumulative over 16.5 years. |
-| **fed-funds-effective.tsv** | Daily, July 1, 1954 → present. | None — pulled from FRED series `DFF`. Used by the synthesis to compute the financing cost on the leveraged leg from 1954 onward. |
-| **t-bill-3mo.tsv** | Monthly, January 1934 → present. | None — pulled from FRED series `TB3MS`. Used as the pre-Fed-Funds-market (1934–1953) short-rate proxy. |
-| **short-rates.tsv** | Daily, January 2, 1934 → present. | Derived: DFF where it exists, TB3MS forward-filled where DFF doesn't reach. This is the single file the synthesis script reads. |
+| **synthetic-qqq.tsv** | March 10, 1999, when QQQ launched. Real dividend-adjusted Yahoo Finance data from there on. | Before 1999, built from the Nasdaq-100 index (`^NDX`) minus QQQ's 0.20 %/yr expense ratio. No financing cost; QQQ is not leveraged. |
+| **synthetic-qld.tsv** | June 21, 2006, when QLD (ProShares Ultra QQQ, 2×) launched. | Pre-2006: `(1 + 2 × NDX_daily − 1 × (short_rate + 0.50%)/yr − 0.95%/yr expense)`. 1999–2006 uses derived NDX-TR; before 1999 it falls back to price-only `^NDX`. |
+| **synthetic-tqqq.tsv** | February 11, 2010, when TQQQ launched. | Pre-2010: `(1 + 3 × NDX_daily − 2 × (short_rate + 0.65%)/yr − 0.88%/yr expense)`. For 1999–2010 the underlying is derived NDX-TR (real Nasdaq movement plus actual dividends). Before 1999 it falls back to price-only `^NDX`, since dividend data doesn't reach that far. |
+| **spy.tsv** | January 29, 1993, when SPY launched. | 1988–1993 uses the real S&P 500 Total Return index (`^SP500TR`). Before 1988 it falls back to plain `^GSPC`, since `^SP500TR`'s Yahoo history starts 1988-01-04. No financing cost; SPY is not leveraged. |
+| **synthetic-sso.tsv** | June 21, 2006, when SSO (ProShares Ultra S&P500, 2×) launched. | Pre-2006: `(1 + 2 × SP500_daily − 1 × (short_rate + 0.50%)/yr − 0.87%/yr expense)`. 1988–2006 uses real `^SP500TR`, earlier years price-only `^GSPC`. |
+| **synthetic-spxl.tsv** | November 5, 2008, when SPXL (Direxion Daily S&P500 Bull 3x) launched. | Pre-2008: `(1 + 3 × SP500_daily − 2 × (short_rate + 0.50%)/yr − 0.95%/yr expense)`. 1988–2008 uses real `^SP500TR`, earlier years price-only `^GSPC`. |
+| **synthetic-sqqq.tsv** | February 11, 2010, when SQQQ launched. | Pre-2010 uses the inverse model `(1 − 3 × NDX_daily + 4.028 × short_rate/yr − 1.537 %/yr)`. An inverse fund borrows nothing. It is short 3 units and sits on (1+L)=4 units of cash *earning* the short rate. Both coefficients are fitted against real SQQQ 2010–2026: the rate slope came out 4.028 against a theoretical 4.0, and the −1.537 %/yr intercept covers the 0.95 % fee plus swap spread and slippage. Replayed forward from launch, the model tracks the real fund to within −6.4 % / +1.9 % cumulative over 16.5 years. |
+| **fed-funds-effective.tsv** | Daily, July 1, 1954 onward. | None. FRED series `DFF`. Supplies the financing cost on the leveraged leg from 1954. |
+| **t-bill-3mo.tsv** | Monthly, January 1934 onward. | None. FRED series `TB3MS`. The pre-Fed-Funds-market short-rate proxy for 1934–1953. |
+| **short-rates.tsv** | Daily, January 2, 1934 onward. | Derived: `DFF` where it exists, `TB3MS` forward-filled where it doesn't. The only rate file the synthesis reads. |
 
-A local `^ndx_d.csv` (sourced from Stooq) extends Nasdaq-100 history back to **January 1938**. The actual Nasdaq-100 index didn't exist before 1985, so values before then are themselves a back-reconstruction by the data provider — treat pre-1985 synthetic QQQ/TQQQ as "rough hypothetical" rather than gospel.
+Yahoo's `^NDX` history starts in 1985, which is also when the Nasdaq-100 index itself began. `update_data.py` reaches further back by merging a local `^ndx_d.csv` from Stooq, and **that file is not committed to this repo**. Without it, `read_ndx_csv()` returns nothing and a from-scratch `--rebuild` stops where Yahoo stops. The 1953-onward history in the committed TSVs was generated while the CSV was present. Anything before 1985 is the data provider's own back-reconstruction of an index that did not yet exist, so read pre-1985 QQQ, QLD, TQQQ, and SQQQ as rough hypotheticals.
 
 ## The financing-cost correction
 
-A leveraged ETF holding $1 of investor NAV produces $3 of NDX exposure by **borrowing** the extra $2 of synthetic exposure from a bank via total-return swap. The bank charges interest on that $2 every day. Meanwhile the fund's $1 of cash collateral earns roughly the same short-term rate. Net daily drag:
+A 3× ETF holding $1 of investor NAV produces $3 of index exposure. It borrows the other $2 from a bank through a total-return swap and pays interest on that $2 every day. Its own $1 of collateral earns roughly the same short rate, so the two partly cancel:
 
 ```
 financing_drag_daily ≈ (L − 1) × short_rate_daily
                      = 2 × short_rate_daily   (for L=3, i.e. TQQQ)
 ```
 
-**This drag is invisible in ProShares' published expense ratio** (0.88 %/year — the management fee) but is the dominant cost component in any non-zero interest-rate environment. Empirically verified against 2010-present TQQQ data:
+None of this appears in the published expense ratio. ProShares lists 0.88 %/year for TQQQ, which is the management fee on its own. At any non-zero short rate the financing term is the larger of the two. Measured against real TQQQ from 2010 on:
 
-- Regression of (naive synthesis − real TQQQ) on Fed Funds rate over 17 years → **slope 1.998** (theory predicts exactly 2.0), **R² 0.97**.
-- In 2023 with Fed Funds at 5 %: real TQQQ underperformed a "no-financing-cost" synthesis by **11.3 percentage points** — matching `2 × 5 % = 10 %` predicted drag almost perfectly.
-- In 2010–2015 with Fed Funds near 0 %: drag was only ~1.3 %/year (the irreducible operational residual).
+- Regressing (naive synthesis − real TQQQ) on the Fed Funds rate over 16 years gives slope **1.998** and R² **0.97**. Theory predicts exactly 2.0.
+- 2023, Fed Funds at 5 %: real TQQQ came in **11.3 percentage points** below a synthesis with no financing term, against a predicted 2 × 5 % = 10 %.
+- 2010–2015, Fed Funds near zero: drag of about 1.3 %/year.
 
-Pre-2010 backtests done without this correction are **wildly optimistic** in any high-rate era. The 1970s and early 80s (Fed Funds 7–19 %) would have eaten **15–35 percentage points/year** of TQQQ's returns to financing alone.
+Skip the correction and a pre-2010 backtest runs optimistic wherever rates were high. Fed Funds sat between 7 % and 19 % through the 1970s and early 80s, which costs TQQQ 15–35 percentage points a year to financing alone.
 
 ## Swap-counterparty spread
 
-The financing-cost model says the leveraged ETF pays **Fed Funds × (L−1)** on its borrowed leg. Reality is dirtier: the swap counterparty doesn't lend at Fed Funds — they lend at **Fed Funds + a spread** that covers their risk premium and desk margin. This spread is:
+The model above has the fund paying Fed Funds × (L−1). No counterparty actually lends at Fed Funds. They lend at Fed Funds plus a spread covering their risk premium and desk margin.
 
-- Small for mature, deep-liquidity products (QLD, SSO, TQQQ, SPXL)
+TQQQ's spread is calibrated: regress the no-spread synthesis against the real fund, then take the spread that closes the residual to about zero over the full window. The other three are that result carried across by leverage tier, and have never been regressed against their own funds.
 
-Each product's spread is **calibrated empirically** by regressing the naive (no-spread) synthesis against real ETF data and finding the spread that closes the residual gap to ≈ 0 over the full window:
-
-| ETF | Leverage | TER (mgmt fee) | Calibrated spread | Window used | Full-window residual |
-|---|---|---|---|---|---|
-| **QLD**  | 2× (NDX) | 0.95 % | **0.50 %/yr** | 2006–present (uncalibrated estimate) | not yet regressed |
-| **SSO**  | 2× (SPX) | 0.87 % | **0.50 %/yr** | 2006–present (uncalibrated estimate) | not yet regressed |
-| **TQQQ** | 3× (NDX) | 0.88 % | **0.65 %/yr** | 2010–present (15+yr) | ~1.3 pp/yr → ≈ 0 with spread |
-| **SPXL** | 3× (SPX) | 0.95 % | **0.50 %/yr** | 2008–present (uncalibrated estimate) | not yet regressed |
+| ETF | Leverage | TER (mgmt fee) | Spread used | Basis |
+|---|---|---|---|---|
+| **QLD**  | 2× (NDX) | 0.95 % | 0.50 %/yr | estimate; standard ProShares 2× tier, not regressed |
+| **SSO**  | 2× (SPX) | 0.87 % | 0.50 %/yr | estimate; mirrors QLD's 2× spread, not regressed |
+| **TQQQ** | 3× (NDX) | 0.88 % | 0.65 %/yr | calibrated on 2010–present: the 1.3 pp/yr residual ÷ (L−1) = 2 |
+| **SPXL** | 3× (SPX) | 0.95 % | 0.50 %/yr | estimate; S&P 3× swaps assumed tighter than NDX, not regressed |
 
 ## How accurate is the synthesized portion?
 
-After applying the financing-cost correction, the remaining known biases are:
+Four biases survive the financing-cost correction.
 
-1. **Missing dividends pre-1999.** For pre-1999 QQQ and TQQQ we have only `^NDX` (price-only) — Yahoo lists `^XNDX` (NDX Total Return) but serves no history for it; NASDAQ.com's API, NASDAQ Data Link, Stooq, Tiingo, EODHD, and Alpha Vantage all gate it. Pre-1999 synth QQQ understates by ~0.7 %/year; pre-1999 synth TQQQ understates by ~2 %/year (= 3 × dividend yield).
+**1. Nasdaq dividends before 1999.** For pre-1999 QQQ, QLD, TQQQ, and SQQQ there is only `^NDX`, which is price-only. Yahoo lists `^XNDX` (NDX Total Return) but serves no history for it, and NASDAQ.com's API, NASDAQ Data Link, Stooq, Tiingo, EODHD, and Alpha Vantage all gate it. Dividends contributed 0.690 pp/year to QQQ from its 1999 launch to today, so pre-1999 synthetic QQQ runs about 0.7 %/year light and synthetic TQQQ about 2 %/year (3 × that).
 
-2. **Swap-counterparty spread** (modeled, calibrated above): QLD 0.50 %/yr, SSO 0.50 %/yr, TQQQ 0.65 %/yr, SPXL 0.50 %/yr added to the financing rate for the borrowed leg. Closes most of what was previously the "~1.3 %/year unmodeled operational residual" for TQQQ.
+**2. S&P dividends before 1988.** SPY, SSO, and SPXL run on price-only `^GSPC` from the files' 1953 start to 1988-01-04. How big that gap is depends on the window you measure `^SP500TR` against `^GSPC` over, because the S&P dividend yield has fallen steadily:
 
-3. **Residual operational drag** (still not modeled): NAV-vs-market price deviations and daily-rebalancing slippage. For 3× products this is ~0.3–0.5 %/yr.
+| Window | TR premium |
+|---|--:|
+| 1988–1990 | 3.97 pp/yr |
+| 1988–1993 | 3.70 pp/yr |
+| 1988–2000 | 2.92 pp/yr |
+| 2000–2010 | 1.82 pp/yr |
+| 1988–2026 (full overlap) | 2.30 pp/yr |
 
-3. **1985–1987 SPY uses price-only S&P 500** because `^SP500TR`'s Yahoo history starts 1988-01-04. Measured TR premium over the overlap is +3.86 pp/year, so ~9 % cumulative understatement for that 2.3-year window.
+The years next to the missing stretch are the ones that apply, and pre-1988 yields were higher still, so **3.7–4.0 pp/year** is the correction for 1953–1988. The full-overlap 2.30 is a floor. Leveraged series run light by L × that. Thirty-five years of every S&P-based series sit under this one, which makes it the largest bias in the dataset by span.
 
-Net direction of bias on TQQQ pre-2010 (vs what real TQQQ would have done if it existed):
-- **Low-rate eras** (1938–45, mid-1950s): synthetic ≈ flat to slightly low (dividend gap > tiny operational drag).
-- **Moderate-rate eras** (most history): synthetic ≈ slightly high by 1–3 pp/year.
-- **High-rate eras** (1970s–80s): synthetic ≈ high by 2–3 pp/year operational, but rate effect is now corrected, so net is much smaller than the previous uncorrected synthesis.
+**3. Swap-counterparty spread.** Modeled and applied per the table above. TQQQ's 0.65 %/yr was fitted to absorb the whole measured 1.3 pp/yr residual, so nothing measurable is left over there. QLD, SSO, and SPXL use unregressed estimates. Their residual is unmeasured rather than zero.
 
-For everything **from 2010 (TQQQ), 1999 (QQQ), and 1988 (SPY) onward** the price data is real and dividend-adjusted, so backtests over the last 15–25 years are unaffected by any synthesis biases.
+**4. Operational drag the spread doesn't capture.** NAV-versus-market price deviation and daily-rebalancing slippage. TQQQ's calibrated spread already swallows whatever this came to over 2010–2026. For the other three it sits inside the gap their estimated spreads fail to close, and nobody has measured that gap.
+
+Net direction on TQQQ before 2010, against what real TQQQ would have done had it existed:
+
+- **Low-rate eras** (mid-1950s): flat to slightly light. The dividend gap outweighs the small operational drag.
+- **Moderate-rate eras** (most of the history): 1–3 pp/year high.
+- **High-rate eras** (1970s–80s): the rate effect is corrected now, leaving the operational component at 2–3 pp/year high.
+
+From 2010 (TQQQ, SQQQ), 2008 (SPXL), 2006 (QLD, SSO), 1999 (QQQ), and 1993 (SPY) onward the prices are real and dividend-adjusted. Backtests confined to the last 15–30 years carry no synthesis bias at all.
 
 ## How to use the data
 
 ### Direct download
 
-You can grab any of the files straight from GitHub at the URLs below. They're refreshed automatically every weekday with the latest closing prices and the latest Fed Funds rate, and there's no rate-limiting on these endpoints — it's safe to point an app or script directly at them and have your data stay current.
+Fetch any file straight from GitHub:
 
 | File | URL |
 | --- | --- |
@@ -105,9 +112,11 @@ You can grab any of the files straight from GitHub at the URLs below. They're re
 | 3-month T-bill (monthly, 1934+) | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv) |
 | Combined daily short rates (1934+) | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/short-rates.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/short-rates.tsv) |
 
+`raw.githubusercontent.com` sits behind a CDN with its own cache TTL and enforces GitHub's unauthenticated rate limit. A client polling it in a tight loop will get stale bytes or a 429. Fetch once a day and cache locally.
+
 ### File format
 
-Every file is a plain tab-separated table:
+Plain tab-separated, two columns:
 
 ```
 Date	Close              ← price files (Close column)
@@ -121,21 +130,28 @@ Date	Rate               ← rate files (Rate column, value in % per year)
 ...
 ```
 
-- One row per trading day (or per month for `t-bill-3mo.tsv`).
-- The date column always says `16:00:00` — that's the New York 4 PM close.
-- Price closes are in **US dollars**. Rate values are **annual percentages**.
-- Dates use `M/D/YYYY` formatting.
+- One row per trading day, or per month for `t-bill-3mo.tsv`.
+- The time is always `16:00:00`, the New York 4 PM close.
+- Closes are US dollars. Rates are annual percentages.
+- Dates use unpadded `M/D/YYYY`.
 
-Every spreadsheet, Python script, R notebook, etc. can read this with default settings (just tell it the delimiter is a tab).
+## Auto-refresh
 
-## Daily auto-refresh
+`.github/workflows/update-data.yml` fires hourly on weekdays (`30 13-22 * * 1-5`) and gates each fire to 09:00–17:30 ET, so nine runs land per trading day: one at the open, seven through the session, one after the close. Each run executes `update_data.py` in its default incremental mode and commits `data/*.tsv` only when the bytes changed, which makes holidays a no-op.
 
-A scheduled GitHub Action runs every weekday at 15:30 UTC (about two hours after the US market opens), regenerates all six files from the latest Yahoo Finance and FRED data, and pushes them back to the repository. Whatever you fetch from the URLs above is always the latest version — no caching layer to wait on.
+Incremental mode touches the **seven price files only**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED. The three rate files refresh by hand:
 
-If you find a bug in the synthesis logic or have a suggestion, open an issue or send a PR against the script that generates the files (`update_data.py` at the repo root).
+```bash
+python3 update_data.py --refresh-rates    # re-pull DFF + TB3MS from FRED
+python3 update_data.py --rebuild          # full re-synthesis; needs ^ndx_d.csv for pre-1985
+```
+
+So the rate files lag the price files. Check the last row of `short-rates.tsv` before you rely on a recent rate; as of this writing it trails the price files by about three months.
+
+Found a bug in the synthesis? Open an issue, or send a PR against `update_data.py` at the repo root.
 
 ## A note on synthetic backtesting
 
-These synthetic series are reconstructions, not history. They're as good as we can do given that QQQ and TQQQ simply weren't around through most market cycles people care about — but they should be read in that spirit. If a strategy backtest looks great in 1973 or 2000, that's a *what-if*, not a track record. Treat them accordingly.
+These are reconstructions. QQQ and TQQQ were not around for most of the market cycles people want to test against, and this is the best available substitute, but read it in that spirit. A strategy that looks great in 1973 or 2000 has a what-if behind it, not a track record.
 
-The financing-cost correction (added 2026-05) closes the single biggest source of error in the previous synthesis, but a ~1.3 %/year operational residual remains unmodeled. **Absolute CAGRs from pre-2010 backtests are still approximate by ~1–2 percentage points**; relative comparisons between strategies (which all touch the same underlying) remain reliable.
+Absolute CAGRs from pre-2010 backtests carry both dividend gaps above: roughly 2 pp/year on Nasdaq series before 1999, and 3.7–4.0 pp/year × leverage on S&P series before 1988. Both push the same direction for every strategy holding the same underlying, so a ranking of strategies against each other survives much better than any one of their quoted CAGRs.
