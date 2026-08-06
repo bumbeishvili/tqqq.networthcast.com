@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Edit",
+      "Write",
+      "Read",
+      "Bash(*)",
+      "WebFetch(*)",
+      "Bash(node -e ' *)",
+      "Bash([ -f \"$SP/fp-null-c5.json\" ])",
+      "Bash(exit 1)"
+    ],
+    "deny": [
+      "Bash(rm -rf:*)",
+      "Bash(sudo:*)",
+      "Bash(git commit:*)"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}

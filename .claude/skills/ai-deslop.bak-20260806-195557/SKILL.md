@@ -1,6 +1,6 @@
 ---
 name: ai-deslop
-description: Write prose a skeptical reader can check — numbers you measured and claims you can attribute, in sentences without the padding that gives generated text away. Applies to chat replies, markdown docs, READMEs, commit bodies, PR descriptions and code comments. Branches on audience — a full style pass for human-facing prose, structure-preserving rules for files a model reads (SKILL.md, CLAUDE.md, specs, prompts). Use when writing or editing prose of any kind, when a draft reads as AI-generated, or when asked to deslop, de-AI, or clean up the writing in a file.
+description: Write prose a skeptical reader can check: numbers you measured and claims you can attribute, in sentences without the padding that gives generated text away. Applies to chat replies, markdown docs, READMEs, commit bodies, PR descriptions and code comments. Branches on audience: a full style pass for human-facing prose, structure-preserving rules for files a model reads (SKILL.md, CLAUDE.md, specs, prompts). Use when writing or editing prose of any kind, when a draft reads as AI-generated, or when asked to deslop, de-AI, or clean up the writing in a file.
 ---
 
 # ai-deslop
