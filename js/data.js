@@ -12,40 +12,23 @@ function parseDataFile(text) {
   });
 }
 
-async function loadQQQDaily() {
-  const resp = await fetch('data/synthetic-qqq.tsv?v=baked');
+// The daily GitHub Action rewrites these TSVs in place, so a fixed query
+// string (the old `?v=baked`) just pinned every browser to a stale copy.
+// `cache: 'no-cache'` revalidates on each load: a few bytes for a 304 when the
+// file is unchanged, fresh bytes the moment the cron publishes new data.
+async function loadSeries(file) {
+  const resp = await fetch('data/' + file, { cache: 'no-cache' });
+  if (!resp.ok) throw new Error('Failed to load ' + file + ' (HTTP ' + resp.status + ')');
   return parseDataFile(await resp.text());
 }
 
-async function loadQLDDaily() {
-  const resp = await fetch('data/synthetic-qld.tsv?v=baked');
-  return parseDataFile(await resp.text());
-}
-
-async function loadTQQQDaily() {
-  const resp = await fetch('data/synthetic-tqqq.tsv?v=baked');
-  return parseDataFile(await resp.text());
-}
-
-async function loadSPYDaily() {
-  const resp = await fetch('data/spy.tsv?v=baked');
-  return parseDataFile(await resp.text());
-}
-
-async function loadSSODaily() {
-  const resp = await fetch('data/synthetic-sso.tsv?v=baked');
-  return parseDataFile(await resp.text());
-}
-
-async function loadSPXLDaily() {
-  const resp = await fetch('data/synthetic-spxl.tsv?v=baked');
-  return parseDataFile(await resp.text());
-}
-
-async function loadSQQQDaily() {
-  const resp = await fetch('data/synthetic-sqqq.tsv?v=baked');
-  return parseDataFile(await resp.text());
-}
+async function loadQQQDaily()  { return loadSeries('synthetic-qqq.tsv'); }
+async function loadQLDDaily()  { return loadSeries('synthetic-qld.tsv'); }
+async function loadTQQQDaily() { return loadSeries('synthetic-tqqq.tsv'); }
+async function loadSPYDaily()  { return loadSeries('spy.tsv'); }
+async function loadSSODaily()  { return loadSeries('synthetic-sso.tsv'); }
+async function loadSPXLDaily() { return loadSeries('synthetic-spxl.tsv'); }
+async function loadSQQQDaily() { return loadSeries('synthetic-sqqq.tsv'); }
 
 // Merge daily TSVs by date. The synthetic TSVs already contain synthesized
 // pre-inception rows (baked by update_data.py), so this is a straight join —
