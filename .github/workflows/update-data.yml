@@ -70,12 +70,17 @@ jobs:
           # Written into the same commit as the data it describes, so the
           # frontend (footer "last updated" note) can fetch this one small
           # file instead of needing git history or a Last-Modified header
-          # (GitHub Pages doesn't reliably set one from commit time).
-          stamp="$(TZ=America/New_York date '+%Y-%m-%d %H:%M %Z')"
-          echo "$stamp" > data/last-updated.txt
+          # (GitHub Pages doesn't reliably set one from commit time). UTC
+          # ISO-8601 — unambiguous and directly `new Date()`-parseable, unlike
+          # an "EDT"/"EST"-suffixed string (JS Date parsing of named zone
+          # abbreviations isn't reliably cross-browser). The frontend converts
+          # it to the viewer's own local time for display.
+          stamp_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+          echo "$stamp_utc" > data/last-updated.txt
           git add 'data/*.tsv' data/last-updated.txt
-          # Stamp ET so the nine same-day commits are told apart at a glance.
-          git commit -m "Refresh market data $stamp"
+          # Commit message stays ET so the nine same-day commits are told
+          # apart at a glance in git log.
+          git commit -m "Refresh market data $(TZ=America/New_York date '+%Y-%m-%d %H:%M %Z')"
           # Another run may have pushed while this one was fetching.
           git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
           git push

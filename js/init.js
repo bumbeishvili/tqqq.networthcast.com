@@ -19,10 +19,17 @@
   // this specific file needs to always reflect the live repo state, unlike
   // the ?v=-busted JS/CSS assets which only change on a real code deploy.
   fetch('data/last-updated.txt', { cache: 'no-store' }).then(r => r.ok ? r.text() : null).then(stamp => {
-    const el = document.getElementById('data-through');
-    if (!el || !stamp) return;
-    el.textContent = 'Data last fetched ' + stamp.trim();
-    el.removeAttribute('hidden');
+    const wrap = document.getElementById('data-through');
+    const el = document.getElementById('data-fetched-at');
+    if (!wrap || !el || !stamp) return;
+    // The file is UTC ISO-8601; `new Date()` parses that reliably and its
+    // getDate()/getHours()/etc. read back in the VIEWER'S local time zone —
+    // that conversion is the whole point of fetching a UTC stamp.
+    const d = new Date(stamp.trim());
+    if (Number.isNaN(d.getTime())) return;
+    const pad2 = (n) => n < 10 ? '0' + n : '' + n;
+    el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    wrap.removeAttribute('hidden');
   }).catch(() => {});
   quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);
   monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);

@@ -275,11 +275,6 @@
     color: var(--accent-text);
     border-color: var(--accent);
   }
-  .data-through {
-    margin-left: 10px;
-    padding-left: 10px;
-    border-left: 1px solid var(--border);
-  }
 
   .panel {
     background: var(--surface);
