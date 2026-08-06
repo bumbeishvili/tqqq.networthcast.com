@@ -174,8 +174,42 @@ let analyticsStrategy = '9sig';
 let analyticsBaseline = 'compounded';
 let analyticsCustomTarget = 1000000; // default $1M when "Custom Target ($)" is selected
 let analyticsCustomGrowthPct = 20;   // default 20%/yr when "Custom Growth (%)" is selected
+let analyticsYearMin = null;         // null = uncapped low end (earliest data year); else earliest start year to draw as a row
+let analyticsYearMax = null;         // null = uncapped high end (latest data year); else latest start year to draw as a row
 let analyticsBuildEpoch = 0;
 let analyticsRefreshTimer = null;
+
+// Full (minYear, maxYear) span covered by the loaded data — the heatmap's
+// natural row range before the user's start-year filter is applied. Shared by
+// buildHeatmap() (to know the uncapped range) and refreshAnalyticsPickers()
+// (to bound the year-range slider).
+function _analyticsYearSpan() {
+  if (typeof quarterlyData === 'undefined' || !quarterlyData || !quarterlyData.length) return null;
+  let minYear = Infinity, maxYear = -Infinity;
+  for (let i = 0; i < quarterlyData.length; i++) {
+    const y = parseInt(quarterlyData[i][0].substring(0, 4));
+    if (y < minYear) minYear = y;
+    if (y > maxYear) maxYear = y;
+  }
+  return { minYear, maxYear, span: maxYear - minYear };
+}
+
+// Position/size the highlighted span between the two year-range handles.
+// Native <input type=range> has no selected-range styling of its own, so this
+// is a plain absolutely-positioned bar driven off the same min/max the thumbs
+// already show — kept in a helper since both the picker refresh and the drag
+// handler need to repaint it.
+function _updateYearRangeFill(minInput, maxInput) {
+  const fill = document.getElementById('analytics-year-range-fill');
+  if (!fill) return;
+  const trackMin = +minInput.min, trackMax = +minInput.max;
+  const span = trackMax - trackMin;
+  if (!(span > 0)) { fill.style.left = '0%'; fill.style.width = '0%'; return; }
+  const loPct = (+minInput.value - trackMin) / span * 100;
+  const hiPct = (+maxInput.value - trackMin) / span * 100;
+  fill.style.left = loPct + '%';
+  fill.style.width = (hiPct - loPct) + '%';
+}
 
 const BASELINE_LABELS = {
   'compounded':  'Compounded Cash',
@@ -273,6 +307,24 @@ function refreshAnalyticsPickers() {
       savedGroup(analyticsBaseline) +
       `<optgroup label="Custom">${mkOpt('custom', 'Custom Target ($)', analyticsBaseline)}${mkOpt('custom-pct', 'Custom Growth (% per year)', analyticsBaseline)}</optgroup>`;
     baseSel.value = analyticsBaseline;
+  }
+
+  // ----- ", for start years <min>–<max>" — filters which start-year rows the grid draws -----
+  const minInput = document.getElementById('analytics-year-min-input');
+  const maxInput = document.getElementById('analytics-year-max-input');
+  const rangeDisplay = document.getElementById('analytics-year-range-display');
+  const yearSpan = _analyticsYearSpan();
+  if (minInput && maxInput && yearSpan && yearSpan.span >= 1) {
+    if (analyticsYearMin != null && analyticsYearMin < yearSpan.minYear) analyticsYearMin = yearSpan.minYear;
+    if (analyticsYearMax != null && analyticsYearMax > yearSpan.maxYear) analyticsYearMax = yearSpan.maxYear;
+    const lo = analyticsYearMin != null ? analyticsYearMin : yearSpan.minYear;
+    const hi = analyticsYearMax != null ? analyticsYearMax : yearSpan.maxYear;
+    minInput.min = maxInput.min = String(yearSpan.minYear);
+    minInput.max = maxInput.max = String(yearSpan.maxYear);
+    minInput.value = String(lo);
+    maxInput.value = String(hi);
+    if (rangeDisplay) rangeDisplay.textContent = lo + '–' + hi;
+    _updateYearRangeFill(minInput, maxInput);
   }
 }
 
@@ -612,6 +664,32 @@ document.addEventListener('input', (e) => {
     if (display) display.textContent = (v >= 0 ? '+' : '') + v + '%';
     buildHeatmap();
   }
+});
+
+// Year-range dual slider: filters which start-year ROWS the grid draws to
+// [min, max]. Two overlapping native inputs (see .period-dual-range in
+// styles.css) — each handler pushes the other input past it rather than
+// letting them cross, so the range never inverts. Filtering rows (not period
+// columns) is what makes the grid visibly react to every drag — a period-length
+// filter left whole rows empty whenever a recent start year hadn't lived long
+// enough yet to reach the selected holding length.
+document.addEventListener('input', (e) => {
+  const isMin = e.target && e.target.id === 'analytics-year-min-input';
+  const isMax = e.target && e.target.id === 'analytics-year-max-input';
+  if (!isMin && !isMax) return;
+  const minInput = document.getElementById('analytics-year-min-input');
+  const maxInput = document.getElementById('analytics-year-max-input');
+  let lo = parseInt(minInput.value, 10), hi = parseInt(maxInput.value, 10);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return;
+  if (isMin && lo > hi) { hi = lo; maxInput.value = String(hi); }
+  if (isMax && hi < lo) { lo = hi; minInput.value = String(lo); }
+  const yearSpan = _analyticsYearSpan();
+  analyticsYearMin = (yearSpan && lo <= yearSpan.minYear) ? null : lo;
+  analyticsYearMax = (yearSpan && hi >= yearSpan.maxYear) ? null : hi;
+  const display = document.getElementById('analytics-year-range-display');
+  if (display) display.textContent = lo + '–' + hi;
+  _updateYearRangeFill(minInput, maxInput);
+  buildHeatmap();
 });
 
 // Metric dropdowns inside the modal — change feeds back to the underlying
@@ -2338,6 +2416,12 @@ async function buildHeatmap() {
   const maxYear = allYears[allYears.length - 1];
   const periods = [];
   for (let p = 1; p <= (maxYear - minYear); p++) periods.push(p);
+  // Row filter: which start-year rows to draw. Unlike a period-length filter,
+  // this directly determines the row set, so the grid visibly shrinks/grows
+  // with the slider instead of leaving rows that can't reach a long enough
+  // holding period sitting empty.
+  const rowMinYear = analyticsYearMin != null ? Math.max(minYear, analyticsYearMin) : minYear;
+  const rowMaxYear = analyticsYearMax != null ? Math.min(maxYear, analyticsYearMax) : maxYear;
 
   // Build the list of valid (startYear, period) cells. The row is the year
   // you started investing; the column is "N years later". Entry anchors at
@@ -2358,7 +2442,7 @@ async function buildHeatmap() {
   }
 
   const cells = [];
-  for (let sy = maxYear; sy >= minYear; sy--) {
+  for (let sy = rowMaxYear; sy >= rowMinYear; sy--) {
     for (const p of periods) {
       const endYear = sy + p - 1;
       if (endYear > maxYear) continue;
@@ -2398,7 +2482,7 @@ async function buildHeatmap() {
     // First open (or structure changed) → render empty skeleton.
     const headerHTML = '<tr><th></th>' + periods.map(p => `<th data-c="${p}">${p}y</th>`).join('') + '</tr>';
     const bodyParts = [];
-    for (let sy = maxYear; sy >= minYear; sy--) {
+    for (let sy = rowMaxYear; sy >= rowMinYear; sy--) {
       bodyParts.push(`<tr><th data-r="${sy}">${sy}</th>`);
       for (const p of periods) {
         const c = lookup.get(sy + ':' + p);

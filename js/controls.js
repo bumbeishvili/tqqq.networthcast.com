@@ -766,6 +766,12 @@ async function shareConfig() {
       params.set('acp', String(analyticsCustomGrowthPct));
     }
   }
+  if (typeof analyticsYearMin !== 'undefined' && analyticsYearMin != null) {
+    params.set('anp', String(analyticsYearMin));
+  }
+  if (typeof analyticsYearMax !== 'undefined' && analyticsYearMax != null) {
+    params.set('amp', String(analyticsYearMax));
+  }
 
   const url = window.location.origin + window.location.pathname + '?' + params.toString();
 
