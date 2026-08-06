@@ -419,7 +419,7 @@ function buildLegendChipsHtml(indices, opts) {
       const cagrStr  = `${cagrSign}${cagr.toFixed(1)}%`;
       let ddRow = '';
       if (m && Number.isFinite(m.maxDD)) {
-        const ddStr = m.maxDD > 0 ? `−${m.maxDD.toFixed(1)}%` : '0.0%';
+        const ddStr = fmtDD(m.maxDD);
         const ddRange = (typeof fmtDDRange === 'function') ? fmtDDRange(m.ddPeak, m.ddTrough) : '';
         const rangeHtml = ddRange ? `<span class="legend-metric-range">${ddRange}</span>` : '';
         ddRow = `
@@ -1012,7 +1012,7 @@ function renderStatsGrid(idx) {
   const cagrSign = m.cagr >= 0 ? '+' : '';
   const cagrCls  = m.cagr >= 0 ? 'positive' : 'negative';
   const cagrStr  = Number.isFinite(m.cagr) ? `${cagrSign}${m.cagr.toFixed(1)}%` : '–';
-  const ddStr    = Number.isFinite(m.maxDD) && m.maxDD > 0 ? `−${m.maxDD.toFixed(1)}%` : '0.0%';
+  const ddStr    = fmtDD(m.maxDD);
   const ddRange  = (typeof fmtDDRange === 'function') ? fmtDDRange(m.ddPeak, m.ddTrough) : '';
   const ddRangeHtml = ddRange ? `<div class="strategy-stat-range">${ddRange}</div>` : '';
   return `

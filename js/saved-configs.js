@@ -1882,7 +1882,7 @@ function buildConfigPillHtml(cfg) {
   if (Number.isFinite(m.cagr)) {
     const cagrSign = m.cagr >= 0 ? '+' : '';
     const cagrCls = m.cagr >= 0 ? 'positive' : 'negative';
-    const ddStr = Number.isFinite(m.maxDD) ? (m.maxDD > 0 ? `−${m.maxDD.toFixed(1)}%` : '0.0%') : '';
+    const ddStr = Number.isFinite(m.maxDD) ? fmtDD(m.maxDD) : '';
     const ddRange = (typeof fmtDDRange === 'function') ? fmtDDRange(m.ddPeak, m.ddTrough) : '';
     const ddRangeHtml = ddRange ? ` <span class="sc-metric-range">${ddRange}</span>` : '';
     metrics = `
@@ -2438,7 +2438,7 @@ function renderCustomPanelBody(cfgId) {
   const m = (window._configMetrics || {})[cfgId];
   if (!err && m && Number.isFinite(m.cagr)) {
     const cagrCls = m.cagr >= 0 ? 'positive' : 'negative';
-    const ddStr = Number.isFinite(m.maxDD) ? (m.maxDD > 0 ? `−${m.maxDD.toFixed(1)}%` : '0.0%') : '—';
+    const ddStr = Number.isFinite(m.maxDD) ? fmtDD(m.maxDD) : '—';
     const ddRange = (typeof fmtDDRange === 'function') ? fmtDDRange(m.ddPeak, m.ddTrough) : '';
     const ddRangeHtml = ddRange ? `<div class="custom-stat-range">${ddRange}</div>` : '';
     html += `

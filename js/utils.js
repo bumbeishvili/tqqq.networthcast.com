@@ -36,6 +36,15 @@ function fmtDayMonthYear(dateStr) {
   return d + ' ' + _LOG_MONTHS[m - 1] + ' ' + y;
 }
 
+// Formats a max-drawdown percentage (0-100 scale, e.g. 78.9) as "−78.9%".
+// Past -90% it switches to 4 decimal places: on a leveraged fund the gap
+// between -99.9% (0.1% of capital survives) and -99.99% (0.01% survives) is a
+// 10x difference in what's actually left, and 1-decimal rounding erases it.
+function fmtDD(pct) {
+  if (!(pct > 0)) return '0.0%';
+  return '−' + pct.toFixed(pct > 90 ? 4 : 1) + '%';
+}
+
 // Peak-to-trough date range for a drawdown label, e.g. "12 Feb 2023–4 Jun 2024".
 // Returns '' if either date is missing (so callers can append without nesting).
 function fmtDDRange(peakDate, troughDate) {

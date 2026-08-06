@@ -885,9 +885,8 @@ document.addEventListener('change', (e) => {
 
     const fmtMoney = (v) => fmtFull(Math.round(v));
     const fmtPct   = (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
-    const fmtDD    = (v) => v > 0 ? '−' + (v * 100).toFixed(1) + '%' : '0.0%';
     const fmtDDWithRange = (v, s) => {
-      const main = fmtDD(v);
+      const main = fmtDD(v * 100);
       const range = (s && typeof fmtDDRange === 'function') ? fmtDDRange(s.ddPeak, s.ddTrough) : '';
       return range ? `${main}<span class="tt-hdr-stat-range">${range}</span>` : main;
     };
@@ -914,8 +913,8 @@ document.addEventListener('change', (e) => {
         </div>
         <div class="tt-hdr-stat-row">
           <span class="tt-hdr-stat-label">Drawdown</span>
-          <span class="tt-hdr-stat-cell"><span>Median</span><b>${fmtDD(ddStat.median)}</b></span>
-          <span class="tt-hdr-stat-cell"><span>Mean</span><b>${fmtDD(ddStat.mean)}</b></span>
+          <span class="tt-hdr-stat-cell"><span>Median</span><b>${fmtDD(ddStat.median * 100)}</b></span>
+          <span class="tt-hdr-stat-cell"><span>Mean</span><b>${fmtDD(ddStat.mean * 100)}</b></span>
           <span class="tt-hdr-stat-cell"><span>Worst</span><b>${fmtDDWithRange(ddStat.max, worstDdSample)}</b></span>
           <span class="tt-hdr-stat-cell"><span>Best</span><b>${fmtDDWithRange(ddStat.min, bestDdSample)}</b></span>
         </div>
@@ -990,7 +989,7 @@ document.addEventListener('change', (e) => {
         });
       }
     }
-    const ddStr = Number.isFinite(maxDD) && maxDD > 0 ? '−' + (maxDD * 100).toFixed(1) + '%' : '0.0%';
+    const ddStr = fmtDD(maxDD * 100);
     const ddRange = (typeof fmtDDRange === 'function') ? fmtDDRange(ddPeak, ddTrough) : '';
     const ddRangeHtml = ddRange ? ` <span class="tt-dd-range">${ddRange}</span>` : '';
 
