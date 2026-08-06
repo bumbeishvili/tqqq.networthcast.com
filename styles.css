@@ -201,12 +201,15 @@
     .right-col > .panel > .control-group { order: 3; }
     .right-col > .panel > div:last-child { order: 4; }
     .header { gap: 8px; margin-bottom: 14px; }
-    /* Pull share button out of absolute and stack it below the title. Icon-only
-       at this size — the desktop "Share current configuration" label is hidden. */
-    #share-btn {
+    /* Pull the header actions out of absolute and stack them below the title.
+       Share is icon-only at this size — the desktop "Share current
+       configuration" label is hidden. */
+    .header-actions {
       position: static;
       margin-top: 4px;
       align-self: center;
+    }
+    #share-btn {
       width: 34px;
       padding: 0;
     }
@@ -271,6 +274,11 @@
   .site-footer a:hover {
     color: var(--accent-text);
     border-color: var(--accent);
+  }
+  .data-through {
+    margin-left: 10px;
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
   }
 
   .panel {
@@ -362,6 +370,15 @@
 
   .control-group .value-display.period {
     font-size: 15px;
+    line-height: 1;
+    /* Entry/Exit Quarter now sits in a flex row next to the date-pick-btn
+       icon (index.html). align-items:center centers each item's MARGIN box,
+       so the inherited margin-bottom: 6px (meant for the space before the
+       slider below) was making the text hug the row's top edge while the
+       margin filled the bottom — throwing it visibly off-center from the
+       icon, which has no such margin. Zeroed here; the row wrapper carries
+       that spacing instead (index.html inline style). */
+    margin-bottom: 0;
   }
 
   input[type="range"] {
@@ -666,6 +683,40 @@
   .modal-icon-btn:hover {
     background: rgba(134, 118, 255, 0.18);
     border-color: var(--accent);
+  }
+
+  /* Exact-day entry/exit picker trigger, next to disp-entry/disp-exit. Scaled
+     down from .modal-icon-btn to sit inline with the small period labels.
+     Muted by default (a quiet secondary affordance, not a call to action next
+     to the number people actually look at) — it picks up the accent color on
+     hover/open, and stays accented via .is-active while an override is set,
+     so it's still discoverable and still signals state, just not shouting. */
+  .date-pick-btn {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(122, 122, 166, 0.08);
+    border: 1px solid rgba(122, 122, 166, 0.25);
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .date-pick-btn:hover,
+  .date-pick-btn.date-pick-open {
+    background: rgba(134, 118, 255, 0.14);
+    border-color: var(--accent);
+    color: var(--accent-text);
+  }
+  /* Set (via JS) whenever this side has an active exact-day override, so the
+     icon itself signals override state independent of the label text. */
+  .date-pick-btn.is-active {
+    background: rgba(134, 118, 255, 0.22);
+    border-color: var(--accent);
+    color: var(--accent);
   }
 
   /* --- Strategy Library --- */
@@ -2342,6 +2393,105 @@
   }
   .lc-ok:hover { background: rgba(134, 118, 255, 0.26); }
 
+  /* Exact-day entry/exit calendar popup (js/date-picker.js). Same panel
+     chrome as .line-color-pop/.pdrop-popup; the day grid follows
+     .lc-swatches' grid-of-small-cells shape rather than inventing a new one. */
+  .datecal-pop {
+    position: fixed;
+    z-index: 11000;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: var(--shadow-lg);
+    padding: 10px;
+    width: 260px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .datecal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+  /* Month + year jump straight to any point in the loaded dataset — the
+     nav arrows alone would take hundreds of clicks to reach e.g. 1980 from
+     a recent default month. */
+  .datecal-title-group {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex: 1;
+    justify-content: center;
+  }
+  .datecal-title-group .inline-select {
+    font-size: 11px;
+    padding: 2px 3px 2px 5px;
+  }
+  .datecal-month-select { width: 52px; }
+  .datecal-year-select { width: 58px; }
+  .datecal-nav {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid rgba(134, 118, 255, 0.3);
+    border-radius: 5px;
+    background: rgba(134, 118, 255, 0.08);
+    color: var(--accent-text);
+    cursor: pointer;
+    font-size: 14px;
+    line-height: 1;
+  }
+  .datecal-nav:hover:not(:disabled) { background: rgba(134, 118, 255, 0.18); border-color: var(--accent); }
+  .datecal-nav:disabled { opacity: 0.3; cursor: default; }
+  .datecal-weekdays,
+  .datecal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .datecal-weekdays span {
+    font-size: 9px;
+    text-align: center;
+    color: var(--text-muted);
+    text-transform: uppercase;
+  }
+  .datecal-day {
+    aspect-ratio: 1;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text);
+    background: transparent;
+    border: none;
+    padding: 0;
+  }
+  .datecal-day:hover:not(:disabled) { background: rgba(134, 118, 255, 0.14); }
+  .datecal-day.is-sel {
+    background: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  .datecal-day:disabled {
+    color: var(--text-muted);
+    opacity: 0.35;
+    cursor: default;
+  }
+  .datecal-footer {
+    margin-top: 8px;
+    text-align: center;
+  }
+  .datecal-clear {
+    font-size: 10px;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-decoration: underline;
+  }
+  .datecal-clear:hover { color: var(--text); }
+
   /* Styled confirm dialog (saved-strategy delete) */
   .sc-modal-overlay {
     position: fixed;
@@ -3699,12 +3849,42 @@
     border-radius: 6px;
   }
 
-  /* Share button — icon + text on desktop, icon-only on smaller viewports
-     (the @media (max-width: 900px) override below hides .share-btn-label). */
-  #share-btn {
+  /* Top-right header actions (GitHub link + Share). Absolutely positioned as
+     a group so it isn't in the title/subtitle flex flow — .header's
+     padding-right is what stops a long title sliding under it. */
+  .header-actions {
     position: absolute;
     top: 0;
     right: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  /* Quiet by default (a permanent utility link, not the primary action) —
+     matches the muted-then-accent-on-hover treatment used for the exact-day
+     picker icon elsewhere on this page. */
+  .github-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    color: var(--text-muted);
+    background: rgba(122, 122, 166, 0.08);
+    border: 1px solid rgba(122, 122, 166, 0.25);
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .github-link:hover {
+    color: var(--accent-text);
+    background: rgba(134, 118, 255, 0.14);
+    border-color: var(--accent);
+  }
+
+  /* Share button — icon + text on desktop, icon-only on smaller viewports
+     (the @media (max-width: 900px) override below hides .share-btn-label). */
+  #share-btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;

@@ -1558,6 +1558,24 @@ function render() {
     window._dualRange.updateUI();
   }
 
+  // Exact-day override (calendar picker, js/date-picker.js). Cleared
+  // automatically the instant the coarse slider is dragged — see
+  // initDualRange()'s onChanged() in controls.js.
+  let entryOverride = (document.getElementById('entry-exact-date') || {}).value || '';
+  let exitOverride  = (document.getElementById('exit-exact-date')  || {}).value || '';
+  // Defensive: a restored/shared value might point at a non-trading day or an
+  // inverted range (hand-edited URL, stale localStorage from a shorter data
+  // window). Silently fall back to quarter-snapped rather than breaking render.
+  if (entryOverride && (!dailyDateToIdx || !dailyDateToIdx.has(entryOverride))) entryOverride = '';
+  if (exitOverride  && (!dailyDateToIdx || !dailyDateToIdx.has(exitOverride)))  exitOverride  = '';
+  if (entryOverride && exitOverride && entryOverride >= exitOverride) { entryOverride = ''; exitOverride = ''; }
+  const entryDateForSim = entryOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]);
+  const exitDateForSim  = exitOverride  || (quarterlyData[exitIdx]    && quarterlyData[exitIdx][0]);
+  const entryPickBtn = document.getElementById('entry-date-pick');
+  const exitPickBtn  = document.getElementById('exit-date-pick');
+  if (entryPickBtn) entryPickBtn.classList.toggle('is-active', !!entryOverride);
+  if (exitPickBtn)  exitPickBtn.classList.toggle('is-active', !!exitOverride);
+
   document.getElementById('disp-initial').textContent = fmtFull(initial);
   document.getElementById('disp-monthly').textContent = fmtFull(monthly);
   // Annual increase is now a dropdown that shows its own value — no separate display.
@@ -1566,8 +1584,8 @@ function render() {
   const rv = (rate * 100);
   // Rate is always 0.5%-snapped (see sliderToRate), so 1 decimal place is enough.
   document.getElementById('disp-rate').textContent = rv.toFixed(1) + '%';
-  document.getElementById('disp-entry').textContent = qLabel(quarterlyData[entryIdx][0]);
-  document.getElementById('disp-exit').textContent = qLabel(quarterlyData[exitIdx][0]);
+  document.getElementById('disp-entry').textContent = entryOverride ? fmtDayMonthYear(entryOverride) : qLabel(quarterlyData[entryIdx][0]);
+  document.getElementById('disp-exit').textContent  = exitOverride  ? fmtDayMonthYear(exitOverride)  : qLabel(quarterlyData[exitIdx][0]);
 
   // Per-strategy underlying + 9sig signal-growth from their side-panel selects.
   // SMA has its own selector because its only relationship to the leveraged
@@ -1610,15 +1628,22 @@ function render() {
   if (_rebalPct > 0 && typeof buildEnvelopeQData === 'function' && typeof PERIOD_DAYS !== 'undefined') {
     const _pd = PERIOD_DAYS[mainPeriod] || 63;
     const _off = Math.round(_rebalPct / 100 * (_pd - 1));
-    const _eD = quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0];
-    const _xD = quarterlyData[exitIdx] && quarterlyData[exitIdx][0];
-    const _q = buildEnvelopeQData(mainPeriod, _off, _eD, _xD);
+    const _q = buildEnvelopeQData(mainPeriod, _off, entryDateForSim, exitDateForSim);
     if (_q && _q.length >= 2) _rebalQData = _q;
+  }
+  // Exact-day override qData — only when the rebalance-point feature above
+  // hasn't already claimed qData (that path is itself already anchored at
+  // entryDateForSim/exitDateForSim, so it's automatically day-exact too).
+  let _exactQData = null;
+  if (!_rebalQData && (entryOverride || exitOverride) && typeof buildExactRangeQData === 'function') {
+    const _q2 = buildExactRangeQData(mainPeriod, entryDateForSim, exitDateForSim);
+    if (_q2 && _q2.length >= 2) _exactQData = _q2;
   }
 
   const sigOpts = {
     qGrowth,
-    ...(_rebalQData ? { qData: _rebalQData } : {}),
+    ...(_rebalQData ? { qData: _rebalQData } : _exactQData ? { qData: _exactQData } : {}),
+    ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
     underlyingCol: sigUlCol,
     crashDropPct:   Number.isFinite(crashDropPct) ? crashDropPct : 30,
     crashLookbackMonths,
@@ -1690,6 +1715,7 @@ function render() {
     confirmBuySteps:  +((document.getElementById('select-sma-confirm-buy')  || {}).value) || 0,
     confirmSellSteps: +((document.getElementById('select-sma-confirm-sell') || {}).value) || 0,
     settleDays:       +((document.getElementById('select-sma-settle')       || {}).value) || 0,
+    ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
     emitDD: true, // dense per-step multi-asset control points for an accurate max-drawdown
   };
   const { smaPoints, smaLog, ddControls: smaDdControls } = simulateSMA(initial, monthly, smaCashRate, simEntryIdx, exitIdx, annualRaise, smaOpts);
@@ -1724,8 +1750,8 @@ function render() {
   // rebalances every period_days starting at entry + dayShift — so dayShift
   // becomes "rebalance day OF THE PERIOD" sensitivity. Every ghost is anchored
   // at the same chart-entry visually; only the rebalance schedule varies.
-  const _entryDate = quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0];
-  const _exitDate  = quarterlyData[exitIdx]    && quarterlyData[exitIdx][0];
+  const _entryDate = entryDateForSim;
+  const _exitDate  = exitDateForSim;
   const _rawShiftSims = showBaseEnvelope
     ? envelopeShiftDays.map(dayShift => {
         const ghostQData = (typeof buildEnvelopeQData === 'function')

@@ -94,8 +94,11 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   const rsiOhAtStep   = rsiByKey ? rsiByKey[smaAsset + '_' + rsiOhWindow]   : null;
   const rsiCoolAtStep = rsiByKey ? rsiByKey[smaAsset + '_' + rsiCoolWindow] : null;
 
-  const startDate = quarterlyData[entryIdx][0];
-  const endDate   = quarterlyData[exitIdx][0];
+  // entryDateOverride/exitDateOverride let a caller pin the exact day (from
+  // the calendar picker) instead of the quarter boundary entryIdx/exitIdx
+  // point at — undefined for every caller that hasn't set an override.
+  const startDate = opts.entryDateOverride || quarterlyData[entryIdx][0];
+  const endDate   = opts.exitDateOverride  || quarterlyData[exitIdx][0];
   // row layout: [date, tqqq, qqq, spy, qld, sso, spxl] — sigAsset is QQQ
   // (col 2) or SPY (col 3); the leveraged underlying is selected via ulCol.
   const assetCol  = SMA_ASSET_COL[smaAsset] || 2;
@@ -608,8 +611,12 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
     }
   }
   if (!_customYearly && quarterlyData && qData !== quarterlyData && ((period !== 'quarterly' && periodData) || opts.qData)) {
-    const entryDate = quarterlyData[entryIdx] && quarterlyData[entryIdx][0];
-    const exitDate  = quarterlyData[exitIdx]  && quarterlyData[exitIdx][0];
+    // Prefer an exact-day override over the quarter-boundary date normally
+    // looked up from entryIdx/exitIdx — otherwise a day-precision qData (see
+    // js/data.js buildExactRangeQData) would get re-matched against the wrong
+    // (quarter-snapped) boundary dates here.
+    const entryDate = opts.entryDateOverride || (quarterlyData[entryIdx] && quarterlyData[entryIdx][0]);
+    const exitDate  = opts.exitDateOverride  || (quarterlyData[exitIdx]  && quarterlyData[exitIdx][0]);
     if (entryDate && exitDate) {
       let e = 0, x = qData.length - 1;
       for (let i = 0; i < qData.length; i++) { if (qData[i][0] <= entryDate) e = i; else break; }

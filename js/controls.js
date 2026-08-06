@@ -1,6 +1,6 @@
 // Slider max is set in init() after data loads
 
-const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-9sig-rebalance-point','select-9sig-spike-target','select-9sig-cost','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-bg-window','select-sma-cost'];
+const SLIDER_IDS = ['slider-initial','slider-monthly','slider-raise','slider-rate','slider-entry','slider-exit','entry-exact-date','exit-exact-date','select-bh-underlying','select-sma-asset','select-sma-window','select-sma-underlying','select-9sig-underlying','select-9sig-growth','select-9sig-crashdrop','select-9sig-crashwin','select-9sig-spike','select-9sig-period','select-9sig-cash','select-9sig-cashrate','select-9sig-buypower','select-9sig-deploy','select-9sig-target-compound','select-9sig-park-asset','select-9sig-rebalance-point','select-9sig-spike-target','select-9sig-cost','select-sma-cashrate','select-sma-entry-buf','select-sma-exit-buf','select-sma-rsi-oh','select-sma-rsi-oh-window','select-sma-rsi-cool','select-sma-rsi-cool-window','select-sma-confirm-buy','select-sma-confirm-sell','select-sma-settle','select-sma-out-asset','select-sma-dca-in','select-sma-dca-to-out','select-sma-bg-gtfo','select-sma-bg-asset','select-sma-bg-window','select-sma-cost'];
 const LS_KEY = '9sig-sliders';
 // Bump APP_VERSION whenever a backwards-incompatible change ships (a control
 // id is renamed, a default flips, a strategy is dropped). On mismatch we
@@ -462,6 +462,13 @@ if (inflPill) inflPill.addEventListener('click', () => {
   }
 
   function onChanged() {
+    // Touching the coarse quarter slider is authoritative — clear any
+    // exact-day override from the calendar picker (js/date-picker.js) so the
+    // two controls can't disagree about where the range actually starts/ends.
+    const eEl = document.getElementById('entry-exact-date');
+    const xEl = document.getElementById('exit-exact-date');
+    if (eEl && eEl.value) eEl.value = '';
+    if (xEl && xEl.value) xEl.value = '';
     saveSliders();
     render();
   }
@@ -646,6 +653,10 @@ async function shareConfig() {
   params.set('r', String(sliderToRate(+get('slider-rate').value)));
   params.set('e', get('slider-entry').value);
   params.set('x', get('slider-exit').value);
+  // Exact-day entry/exit override (calendar picker) — only present when set,
+  // so an untouched link is byte-identical to before this feature existed.
+  if (get('entry-exact-date') && get('entry-exact-date').value) params.set('ed', get('entry-exact-date').value);
+  if (get('exit-exact-date')  && get('exit-exact-date').value)  params.set('xd', get('exit-exact-date').value);
 
   // Buy & Hold consolidated chip — which underlying it tracks.
   if (get('select-bh-underlying')) params.set('bu', get('select-bh-underlying').value);

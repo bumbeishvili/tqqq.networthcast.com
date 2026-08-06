@@ -12,6 +12,18 @@
     return;
   }
   daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY);
+  // "Last updated" freshness note in the footer — the actual wall-clock time
+  // the data was last fetched (written by .github/workflows/update-data.yml
+  // into this file in the SAME commit as the data it describes), not just
+  // the most recent trading day the data covers. `cache: 'no-store'` because
+  // this specific file needs to always reflect the live repo state, unlike
+  // the ?v=-busted JS/CSS assets which only change on a real code deploy.
+  fetch('data/last-updated.txt', { cache: 'no-store' }).then(r => r.ok ? r.text() : null).then(stamp => {
+    const el = document.getElementById('data-through');
+    if (!el || !stamp) return;
+    el.textContent = 'Data last fetched ' + stamp.trim();
+    el.removeAttribute('hidden');
+  }).catch(() => {});
   quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);
   monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);
   dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
@@ -106,6 +118,9 @@
   if (params.get('rp') !== null) { const el = document.getElementById('select-9sig-rebalance-point'); if (el) el.value = params.get('rp'); hasUrlParams = true; }
   if (params.get('srp') !== null) { const el = document.getElementById('select-9sig-spike-target'); if (el) el.value = params.get('srp'); hasUrlParams = true; }
   if (params.get('ntc') !== null) { const el = document.getElementById('select-9sig-cost'); if (el) el.value = params.get('ntc'); hasUrlParams = true; }
+  // Exact-day entry/exit override (calendar picker)
+  if (params.get('ed') !== null) { const el = document.getElementById('entry-exact-date'); if (el) el.value = params.get('ed'); hasUrlParams = true; }
+  if (params.get('xd') !== null) { const el = document.getElementById('exit-exact-date');  if (el) el.value = params.get('xd'); hasUrlParams = true; }
   // Analytics modal pre-state (modal is opened after render() so the chart exists)
   if (params.get('as')) analyticsStrategy = params.get('as');
   if (params.get('ab')) analyticsBaseline = params.get('ab');

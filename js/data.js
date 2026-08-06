@@ -285,6 +285,26 @@ function buildEnvelopeQData(period, dayOffset, entryDate, exitDate) {
   return result;
 }
 
+// Day-precision entry/exit override qData (calendar picker). Unlike
+// buildEnvelopeQData above (which walks in fixed periodDays increments, built
+// for the rebalance-point-% sensitivity feature), this keeps every
+// IN-BETWEEN rebalance pinned to its real period-end date — only the two
+// boundary rows shift off the period grid, to the exact day picked. Row
+// shape matches buildEnvelopeQData / quarterlyData: [date, tqqq, qqq, spy,
+// qld, sso, spxl].
+function buildExactRangeQData(period, entryDate, exitDate) {
+  if (!daily || !dailyDateToIdx) return [];
+  const eIdx = dailyDateToIdx.get(entryDate);
+  const xIdx = dailyDateToIdx.get(exitDate);
+  if (eIdx == null || xIdx == null || eIdx >= xIdx) return [];
+  const src = (periodDataByName && periodDataByName[period]) || quarterlyData;
+  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl];
+  const result = [rowFor(daily[eIdx])];
+  for (const p of src) { if (p[0] > entryDate && p[0] < exitDate) result.push(p); }
+  result.push(rowFor(daily[xIdx]));
+  return result;
+}
+
 // === Simple Moving Average precomputation ===
 // Used by the SMA timing strategy: at each rebalance check, compare the
 // signal asset's close to its N-day SMA on the same day. If above → hold

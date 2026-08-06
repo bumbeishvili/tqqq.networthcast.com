@@ -451,7 +451,7 @@ function slStatsFor(n) {
   const sparkEi = dates.length - 1;
   // Code entries index the daily series; presets index quarterlyData. Both start
   // one quarter EARLIER than the era's nominal boundary, because that is what the
-  // app does: picking "Entry Quarter Q1 2000" buys at the previous quarter's close
+  // app does: picking "Entry Q1 2000" buys at the previous quarter's close
   // (chart.js — `simEntryIdx = entryIdx - 1`). Running a card from the boundary
   // itself skipped that quarter, and for the 2000 era it holds the dot-com top —
   // worth up to 7.7pp of drawdown between a card and the strategy added from it.

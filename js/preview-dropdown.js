@@ -59,7 +59,10 @@
   const PREVIEW_SELECT_IDS = Object.keys(PREVIEW_SELECTS);
 
   // Shared base params (initial / monthly / raise / window), incl. the
-  // "enter at quarter start" entry shift — mirrors chart.js render().
+  // "enter at quarter start" entry shift — mirrors chart.js render(). Also
+  // mirrors render()'s exact-day override handling (js/date-picker.js) so a
+  // preview bar reflects what you'd ACTUALLY get, not the quarter-snapped
+  // number, whenever an override is active.
   function readBaseParams() {
     let entryIdx = +document.getElementById('slider-entry').value;
     let exitIdx  = +document.getElementById('slider-exit').value;
@@ -68,12 +71,21 @@
     if (!Number.isFinite(exitIdx)  || exitIdx  < 0) exitIdx  = maxIdx;
     if (entryIdx > maxIdx) entryIdx = maxIdx;
     if (exitIdx  > maxIdx) exitIdx  = maxIdx;
+    const simEntryIdx = entryIdx > 0 ? entryIdx - 1 : entryIdx;
+    let entryOverride = (document.getElementById('entry-exact-date') || {}).value || '';
+    let exitOverride  = (document.getElementById('exit-exact-date')  || {}).value || '';
+    if (entryOverride && (!dailyDateToIdx || !dailyDateToIdx.has(entryOverride))) entryOverride = '';
+    if (exitOverride  && (!dailyDateToIdx || !dailyDateToIdx.has(exitOverride)))  exitOverride  = '';
+    if (entryOverride && exitOverride && entryOverride >= exitOverride) { entryOverride = ''; exitOverride = ''; }
     return {
       initial:     sliderToInitial(+document.getElementById('slider-initial').value),
       monthly:     sliderToMonthly(+document.getElementById('slider-monthly').value),
       annualRaise: +document.getElementById('slider-raise').value / 100,
-      simEntryIdx: entryIdx > 0 ? entryIdx - 1 : entryIdx,
+      simEntryIdx,
       exitIdx,
+      entryDateOverride: entryOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]) || null,
+      exitDateOverride:  exitOverride  || (quarterlyData[exitIdx]    && quarterlyData[exitIdx][0])    || null,
+      hasExactOverride: !!(entryOverride || exitOverride),
     };
   }
   const _num = (id, d) => { const el = document.getElementById(id); const n = el ? +el.value : NaN; return Number.isFinite(n) ? n : d; };
@@ -131,13 +143,19 @@
     if (p.rebalPct > 0 && typeof buildEnvelopeQData === 'function' && typeof PERIOD_DAYS !== 'undefined') {
       const pd = PERIOD_DAYS[p.rebalancePeriod] || 63;
       const off = Math.round(p.rebalPct / 100 * (pd - 1));
-      const eD = quarterlyData[p.simEntryIdx] && quarterlyData[p.simEntryIdx][0];
-      const xD = quarterlyData[p.exitIdx] && quarterlyData[p.exitIdx][0];
-      const q = buildEnvelopeQData(p.rebalancePeriod, off, eD, xD);
+      const q = buildEnvelopeQData(p.rebalancePeriod, off, p.entryDateOverride, p.exitDateOverride);
       if (q && q.length >= 2) _qd = q;
+    }
+    // Exact-day override qData — only when the rebalance-point path above
+    // hasn't already claimed one (that path is itself already anchored at
+    // p.entryDateOverride/p.exitDateOverride, so it's automatically exact too).
+    if (!_qd && p.hasExactOverride && typeof buildExactRangeQData === 'function') {
+      const q2 = buildExactRangeQData(p.rebalancePeriod, p.entryDateOverride, p.exitDateOverride);
+      if (q2 && q2.length >= 2) _qd = q2;
     }
     const r = simulate(p.initial, p.monthly, p.cashRate, p.simEntryIdx, p.exitIdx, p.annualRaise, {
       ...(_qd ? { qData: _qd } : {}),
+      ...(p.hasExactOverride ? { entryDateOverride: p.entryDateOverride, exitDateOverride: p.exitDateOverride } : {}),
       qGrowth: p.qGrowth, underlyingCol: p.underlyingCol, crashDropPct: p.crashDropPct,
       crashLookbackMonths: p.crashLookbackMonths, spikeTriggerPct: p.spikeTriggerPct,
       rebalancePeriod: p.rebalancePeriod, cashPct: p.cashPct, contribDeployPct: p.contribDeployPct,
@@ -155,13 +173,21 @@
       bgGtfoPct: p.bgGtfoPct, bgAsset: p.bgAsset, bgWindow: p.bgWindow, tradeCostPct: p.tradeCostPct,
       rsiOhWindow: p.rsiOhWindow, rsiCoolWindow: p.rsiCoolWindow,
       rebalanceCheck: p.rebalanceCheck, confirmBuySteps: p.confirmBuySteps, confirmSellSteps: p.confirmSellSteps, settleDays: p.settleDays,
+      ...(p.hasExactOverride ? { entryDateOverride: p.entryDateOverride, exitDateOverride: p.exitDateOverride } : {}),
     });
     return (r.smaPoints && r.smaPoints.length) ? r.smaPoints[r.smaPoints.length - 1].value : 0;
   }
   // One 9sig sim (no skipBH) yields all four Buy & Hold finals at once.
   function bhFinals() {
     const p = read9sigParams();
+    let _qd;
+    if (p.hasExactOverride && typeof buildExactRangeQData === 'function') {
+      const q2 = buildExactRangeQData(p.rebalancePeriod, p.entryDateOverride, p.exitDateOverride);
+      if (q2 && q2.length >= 2) _qd = q2;
+    }
     const r = simulate(p.initial, p.monthly, p.cashRate, p.simEntryIdx, p.exitIdx, p.annualRaise, {
+      ...(_qd ? { qData: _qd } : {}),
+      ...(p.hasExactOverride ? { entryDateOverride: p.entryDateOverride, exitDateOverride: p.exitDateOverride } : {}),
       qGrowth: p.qGrowth, underlyingCol: p.underlyingCol, crashDropPct: p.crashDropPct,
       crashLookbackMonths: p.crashLookbackMonths, spikeTriggerPct: p.spikeTriggerPct,
       rebalancePeriod: p.rebalancePeriod, cashPct: p.cashPct, contribDeployPct: p.contribDeployPct,
