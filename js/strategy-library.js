@@ -540,11 +540,11 @@ function eraTableHtml(m) {
       ? `<td class="sl-era-dd">−${c.dd > 90 ? c.dd.toFixed(3) : Math.round(c.dd)}%</td>`
       : '<td class="sl-era-dd">—</td>';
   }).join('');
-  return `<table class="sl-era-table">
+  return `<div class="sl-era-table-wrap"><table class="sl-era-table">
     <tr class="sl-row-date"><th scope="row">date</th>${dateCells}</tr>
     <tr class="sl-row-cagr"><th scope="row">cagr</th>${cagrCells}</tr>
     <tr class="sl-row-dd"><th scope="row">max drawdown</th>${ddCells}</tr>
-  </table>`;
+  </table></div>`;
 }
 
 // Compact money: $10k, $257k, $22M, $1.3B.

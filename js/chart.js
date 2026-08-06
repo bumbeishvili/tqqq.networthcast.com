@@ -2101,9 +2101,21 @@ function render() {
     el.style.display = 'block';
     const panelRect = c.canvas.closest('.panel').getBoundingClientRect();
     const canvasRect = c.canvas.getBoundingClientRect();
+    // Measured, not assumed: the box has no max-width and a long strategy
+    // name (e.g. "Median overextension (250d) — SQQQ park") can render wider
+    // than the 240px this math used to assume, so the "does it overflow"
+    // check was sometimes wrong on its own terms even before the missing
+    // left-edge clamp below.
+    const ttWidth = el.offsetWidth || 240;
     let left = tooltip.caretX + canvasRect.left - panelRect.left + 14;
     let top = tooltip.caretY + canvasRect.top - panelRect.top - 40;
-    if (left + 240 > panelRect.width) left = tooltip.caretX + canvasRect.left - panelRect.left - 240;
+    if (left + ttWidth > panelRect.width) left = tooltip.caretX + canvasRect.left - panelRect.left - ttWidth - 14;
+    // The flip above assumes there's room to the LEFT of the tap point too —
+    // on a narrow mobile panel there often isn't, and this had no floor, so
+    // the box could render with a chunk of itself past the left edge of the
+    // screen (this is what "tooltip goes outside of screen" was: not
+    // clipped/scrollable, just genuinely positioned off-viewport).
+    if (left < 10) left = 10;
     if (top < 0) top = 10;
     el.style.left = left + 'px';
     el.style.top = top + 'px';
@@ -2145,24 +2157,39 @@ function render() {
     // eventually. Runs every layout pass, before the chart area is computed,
     // so the wider margin takes effect in the same pass it's measured in.
     beforeLayout(c) {
-      if (window.innerWidth <= 600) return; // labels are suppressed below; keep the narrow margin
       const lastIdx = c.data.labels.length - 1;
       if (lastIdx < 0) return;
       const cx = c.ctx;
+      // Compact mode (narrow viewports): name only, no $ value line — a
+      // full label (name + value) doesn't fit next to a phone-width plot,
+      // but the plot NEEDS some identification directly on the lines. Fully
+      // suppressing labels left the chart as unlabeled colored squiggles —
+      // the legend chips are a separate scroll away, not a substitute for
+      // "which line is which" while actually looking at the lines.
+      const compact = window.innerWidth <= 600;
       let maxW = 0;
       c.data.datasets.forEach((ds, i) => {
         if (ds._isShift || !c.isDatasetVisible(i)) return;
         const val = ds.data[lastIdx];
         if (typeof val !== 'number' || !isFinite(val)) return;
-        cx.font = '600 9px "Open Sans", sans-serif';
+        cx.font = compact ? '600 8px "Open Sans", sans-serif' : '600 9px "Open Sans", sans-serif';
         maxW = Math.max(maxW, cx.measureText((ds.label || lineNames[i] || '').toUpperCase()).width);
-        cx.font = '500 11px "JetBrains Mono", monospace';
-        maxW = Math.max(maxW, cx.measureText(fmtFull(Math.round(val))).width);
+        if (!compact) {
+          cx.font = '500 11px "JetBrains Mono", monospace';
+          maxW = Math.max(maxW, cx.measureText(fmtFull(Math.round(val))).width);
+        }
       });
       if (maxW === 0) return;
       // 8px gap from the plot edge to the text, 8px breathing room past it;
       // clamped so one absurdly long custom-strategy name can't eat the plot.
-      c.options.layout.padding.right = Math.max(100, Math.min(260, Math.round(maxW) + 16));
+      // Compact mode's ceiling is lower than desktop's — it's only ever one
+      // short line of text, not name-over-value — but still needs to clear
+      // "INVESTED COMPOUNDED" (the longest built-in name) at the smaller 8px
+      // font without silently clipping it against the canvas edge the same
+      // way an under-sized fixed margin did before this whole plugin existed.
+      c.options.layout.padding.right = compact
+        ? Math.max(40, Math.min(130, Math.round(maxW) + 12))
+        : Math.max(100, Math.min(260, Math.round(maxW) + 16));
     },
     afterDraw(c) {
       const { ctx: cx, chartArea: area } = c;
@@ -2177,10 +2204,8 @@ function render() {
           inflBtn._lx = bx; inflBtn._ly = by;
         }
       }
-      // On phone-width viewports the end-of-line labels are suppressed —
-      // the legend chips above already show name + CAGR + DD, and reclaiming
-      // the right margin gives the actual plot a usable width.
-      if (window.innerWidth <= 600) return;
+      // Compact mode below — see the matching comment in beforeLayout.
+      const compact = window.innerWidth <= 600;
       const lastIdx = c.data.labels.length - 1;
       if (lastIdx < 0) return;
 
@@ -2215,9 +2240,11 @@ function render() {
         return { y, origY: y, i, color, name: ds.label || lineNames[i], val };
       }).filter(Boolean);
 
-      // Sort by y position and de-overlap
+      // Sort by y position and de-overlap. Compact mode only ever draws one
+      // line of text (name, no value), so it needs much less vertical room
+      // between neighbors than the name-over-value desktop layout.
       items.sort((a, b) => a.y - b.y);
-      const gap = 26;
+      const gap = compact ? 13 : 26;
       // Push down pass
       for (let k = 1; k < items.length; k++) {
         if (items[k].y - items[k - 1].y < gap) {
@@ -2259,6 +2286,18 @@ function render() {
         cx.arc(area.right, origY, isActive ? 5 : 3, 0, Math.PI * 2);
         cx.fillStyle = it.color;
         cx.fill();
+
+        if (compact) {
+          // Name only, vertically centered on the line — there's no value
+          // line underneath to share the row with.
+          cx.font = '600 8px "Open Sans", sans-serif';
+          cx.fillStyle = it.color;
+          cx.globalAlpha = 0.88;
+          cx.textBaseline = 'middle';
+          cx.fillText(it.name.toUpperCase(), x, it.y);
+          cx.globalAlpha = 1;
+          return;
+        }
 
         // Label name
         cx.font = '600 9px "Open Sans", sans-serif';
@@ -2638,17 +2677,16 @@ function render() {
       animation: false,
       interaction: { mode: 'index', intersect: false },
       // Reserve space on the right edge for the end-of-line strategy labels.
-      // On phone-width viewports the labels are hidden by the endLabels plugin
-      // (legend chips above already convey the same info), so we reclaim that
-      // space for the actual plot area.
-      // 140, not 120: "INVESTED COMPOUNDED" is the longest label and sat right
-      // on the old boundary, so it clipped against the canvas edge. The wider
-      // layout has pixels to spare.
+      // This is just the seed value for the very first layout pass — the
+      // endLabels plugin's beforeLayout hook measures the actual current
+      // labels (name+value on desktop, name-only "compact" mode on phone
+      // width) and overwrites this every render, so it stays correct as
+      // strategies/names change. See that plugin for the real sizing logic.
       // left/bottom clear the "log" pill, which CSS parks in the plot's
       // bottom-left corner: padding.left pushes chartArea.left right so the
       // first date label moves off it, padding.bottom lifts chartArea.bottom so
       // the "$0" label rises above it.
-      layout: { padding: { right: window.innerWidth <= 600 ? 8 : 140, left: 26, bottom: 12 } },
+      layout: { padding: { right: window.innerWidth <= 600 ? 50 : 140, left: 26, bottom: 12 } },
       plugins: {
         legend: { display: false }, // replaced with custom #chart-legend chips
         tooltip: {
@@ -2661,7 +2699,11 @@ function render() {
           ticks: {
             color: '#383874',
             font: { size: 10 },
-            maxTicksLimit: 10,
+            // Fewer ticks on narrow viewports: 10 labels across a ~350px-wide
+            // mobile plot forces a steep rotation, and the resulting label
+            // height ate into the LOG toggle's fixed bottom-left position
+            // (they sit only a few px apart — see .chart-log-toggle CSS).
+            maxTicksLimit: window.innerWidth <= 600 ? 6 : 10,
             callback: function(val) {
               const d = this.getLabelForValue(val);
               return d ? d.substring(0, 7) : '';

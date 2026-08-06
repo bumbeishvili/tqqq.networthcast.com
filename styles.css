@@ -201,19 +201,6 @@
     .right-col > .panel > .control-group { order: 3; }
     .right-col > .panel > div:last-child { order: 4; }
     .header { gap: 8px; margin-bottom: 14px; }
-    /* Pull the header actions out of absolute and stack them below the title.
-       Share is icon-only at this size — the desktop "Share current
-       configuration" label is hidden. */
-    .header-actions {
-      position: static;
-      margin-top: 4px;
-      align-self: center;
-    }
-    #share-btn {
-      width: 34px;
-      padding: 0;
-    }
-    #share-btn .share-btn-label { display: none; }
     /* Analytics modal: let the title row wrap, push strategy options + baseline
        onto their own full-width rows, and let strategy options scroll
        horizontally inside the row instead of wrapping awkwardly. */
@@ -245,10 +232,12 @@
   @media (max-width: 600px) {
     body { padding: 12px; }
     .header h1 { font-size: 17px; }
-    .header p  { font-size: 11px; }
-    /* The share button loses its text label at this width, so it needs far
-       less clearance — reclaim it for the title. */
-    .header { padding-right: 56px; column-gap: 10px; }
+    /* Dropped rather than shrunk: the GitHub + Share icons (github-link 34px
+       + gap 8px + icon-only share-btn 34px = 76px) need more room at this
+       width than "Backtesting TQQQ · 1953–2026" can share the row with
+       without the two colliding. */
+    .header p  { display: none; }
+    .header { padding-right: 90px; column-gap: 10px; }
     .panel { padding: 16px; }
     .panel h2 { font-size: 12px; margin-bottom: 12px; }
   }
@@ -455,6 +444,19 @@
     white-space: nowrap;
     margin: 0 20px 7px 0;
     line-height: 1.6;
+  }
+  /* The nowrap packing above assumes a wide (desktop) panel. At phone width
+     a full sentence like "Sell everything to cash when TQQQ is +40% above
+     its 200-day average." is wider than the panel itself, and nowrap just
+     clips it off the right edge — invisibly, with no scrollbar, since the
+     panel doesn't overflow-scroll. Block + normal white-space lets each rule
+     wrap onto its own multi-line paragraph instead. */
+  @media (max-width: 900px) {
+    #sma-controls .adaptive-line {
+      display: block;
+      white-space: normal;
+      margin: 0 0 10px 0;
+    }
   }
   .adaptive-line strong {
     color: var(--text);
@@ -713,6 +715,12 @@
     border-color: var(--accent);
     color: var(--accent);
   }
+  /* 18×18 reads fine as a quiet desktop affordance next to a mouse cursor;
+     on touch it's below any reasonable tap-target size for a control this
+     frequently used (setting exact entry/exit days). Icon stays 11px. */
+  @media (max-width: 900px) {
+    .date-pick-btn { width: 30px; height: 30px; }
+  }
 
   /* --- Strategy Library --- */
   .strategy-library-btn {
@@ -869,6 +877,12 @@
     border: 1px solid var(--border);
     border-radius: 10px;
     transition: border-color 0.15s;
+    /* Grid items default to min-width:auto, i.e. they won't shrink below
+       their content's min-content size. The era table's own min-width (for
+       its horizontal-scroll fix, see .sl-era-table-wrap) was ballooning this
+       whole card past its grid track instead of staying put and letting the
+       table scroll internally. min-width:0 is the standard override. */
+    min-width: 0;
   }
   .sl-card:hover { border-color: rgba(198, 78, 255, 0.4); }
   .sl-card-off { opacity: 0.6; }
@@ -1028,9 +1042,22 @@
     background: var(--surface);
     border-radius: 6px;
   }
-  /* Era metrics: one row per measure, one column per window */
+  /* Era metrics: one row per measure, one column per window. The date/CAGR
+     labels (e.g. "2000 Q1–2009 Q1") don't fit a proportional column once the
+     card gets much narrower than desktop — at mobile widths that squeezed
+     every column down to ~44px and the unbroken labels spilled sideways into
+     each other (no natural break point around the en-dash). Scrolling the
+     table at a fixed comfortable column width keeps every label readable
+     instead of shrinking further; the wrapper only scrolls when the card is
+     narrower than min-width, so desktop is unaffected. */
+  .sl-era-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 6px;
+  }
   .sl-era-table {
     width: 100%;
+    min-width: 480px;
     border-collapse: collapse;
     table-layout: fixed;
     background: var(--surface);
@@ -2125,6 +2152,13 @@
     color: var(--accent-text);
   }
   .legend-chip.legend-hidden .legend-more { color: var(--text-muted); }
+  /* This is the only way to open a strategy's settings panel, and the
+     desktop-tuned padding (2px 4px) renders an ~22×18px hit target — well
+     under any touch-target guideline. Bigger padding on touch-relevant
+     widths only; the 14px icon itself is unchanged. */
+  @media (max-width: 900px) {
+    .legend-chip .legend-more { padding: 10px; }
+  }
 
   /* ===== Saved configurations (Parameters panel) ===== */
   #saved-configs { margin-top: 18px; }
@@ -3088,6 +3122,18 @@
   .strategy-panel.is-open .strategy-panel-content {
     transform: translateX(0);
   }
+  /* At phone width the 360px/92vw desktop sizing above leaves only a sliver
+     of the page visible beside the panel — too narrow to usefully see or
+     touch anything back there, it just showed a strip of chart bleeding
+     through. Full-width instead, and the desktop-only drag-to-resize handle
+     (dragging it wouldn't mean anything against the screen edge) is hidden.
+     Must come AFTER the base .strategy-panel-content rule above: equal
+     specificity means source order decides, and a media query earlier in the
+     file does NOT win against a later plain rule just because it's scoped. */
+  @media (max-width: 900px) {
+    .strategy-panel-content { width: 100vw; max-width: 100vw; }
+    .strategy-panel-resizer { display: none; }
+  }
   .strategy-panel-header {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);
@@ -3666,6 +3712,7 @@
     padding: 14px 16px;
     z-index: 20;
     min-width: 220px;
+    max-width: calc(100vw - 24px);
     box-shadow: var(--shadow-lg);
   }
   /* Close × inside the main-chart tooltip. Hidden on desktop (hover/leave
@@ -3901,6 +3948,23 @@
     background: var(--accent);
     color: var(--bg);
     border-color: var(--accent);
+  }
+  /* Keep the header actions pinned top-right (like desktop) at mobile widths
+     too, rather than stacking them below the title — the subtitle drops
+     instead (see the "Backtesting TQQQ · …" rule in the max-width:600px
+     block below) to free up the room they need. Share is icon-only at this
+     size — the desktop "Share current configuration" label is hidden. Must
+     come AFTER the base .header-actions/#share-btn rules above: equal
+     specificity means source order decides, and a same-specificity override
+     placed EARLIER in the file already bit this exact element once (it
+     silently stayed absolutely-positioned at every mobile width regardless
+     of this rule, until the override was moved down here). */
+  @media (max-width: 900px) {
+    #share-btn {
+      width: 34px;
+      padding: 0;
+    }
+    #share-btn .share-btn-label { display: none; }
   }
 
   /* Shown only when localStorage was written by an older APP_VERSION. Pinned
