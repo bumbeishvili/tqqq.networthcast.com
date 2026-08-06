@@ -2111,6 +2111,33 @@ function render() {
   // Plugin: draw end-of-line labels directly on canvas
   const endLabelPlugin = {
     id: 'endLabels',
+    // Size the reserved right margin to whatever the widest current label
+    // actually needs, measured with the same fonts afterDraw renders with.
+    // A fixed pixel guess (the old approach) works until a longer strategy
+    // name shows up — library additions and user-typed custom-strategy names
+    // are unbounded, so a hardcoded number is guaranteed to clip again
+    // eventually. Runs every layout pass, before the chart area is computed,
+    // so the wider margin takes effect in the same pass it's measured in.
+    beforeLayout(c) {
+      if (window.innerWidth <= 600) return; // labels are suppressed below; keep the narrow margin
+      const lastIdx = c.data.labels.length - 1;
+      if (lastIdx < 0) return;
+      const cx = c.ctx;
+      let maxW = 0;
+      c.data.datasets.forEach((ds, i) => {
+        if (ds._isShift || !c.isDatasetVisible(i)) return;
+        const val = ds.data[lastIdx];
+        if (typeof val !== 'number' || !isFinite(val)) return;
+        cx.font = '600 9px "Open Sans", sans-serif';
+        maxW = Math.max(maxW, cx.measureText((ds.label || lineNames[i] || '').toUpperCase()).width);
+        cx.font = '500 11px "JetBrains Mono", monospace';
+        maxW = Math.max(maxW, cx.measureText(fmtFull(Math.round(val))).width);
+      });
+      if (maxW === 0) return;
+      // 8px gap from the plot edge to the text, 8px breathing room past it;
+      // clamped so one absurdly long custom-strategy name can't eat the plot.
+      c.options.layout.padding.right = Math.max(100, Math.min(260, Math.round(maxW) + 16));
+    },
     afterDraw(c) {
       const { ctx: cx, chartArea: area } = c;
       if (!area) return;
