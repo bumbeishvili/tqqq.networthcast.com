@@ -550,11 +550,17 @@ function statIcon(name) {
 }
 // One metric card: icon + label head, big value, optional sub-line. `tip`
 // adds a hover-info (?) next to the label using the shared .info-icon tooltip.
-function statCard(label, icon, value, valueCls, sub, tip) {
+// `delta` is an optional { text, tone } badge shown next to the value — e.g.
+// a custom strategy reporting how much a reading moved since yesterday.
+// `tone` is a pre-resolved CSS class ('positive'/'negative'/''), same as
+// `valueCls` — callers resolve raw tone strings ('good'/'bad'/...) before
+// passing them in, so this stays a plain rendering function.
+function statCard(label, icon, value, valueCls, sub, tip, delta) {
   const info = tip ? ` <span class="info-icon" tabindex="0" data-tip="${tip}">ⓘ</span>` : '';
+  const deltaHtml = delta && delta.text ? ` <span class="strategy-stat-delta ${delta.tone || ''}">${delta.text}</span>` : '';
   return `<div class="strategy-stat">
       <div class="strategy-stat-head"><span class="strategy-stat-label">${label}${info}</span>${statIcon(icon)}</div>
-      <div class="strategy-stat-value ${valueCls || ''}">${value}</div>
+      <div class="strategy-stat-value ${valueCls || ''}">${value}${deltaHtml}</div>
       ${sub ? `<div class="strategy-stat-range">${sub}</div>` : ''}
     </div>`;
 }

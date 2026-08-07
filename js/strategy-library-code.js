@@ -982,9 +982,18 @@ CODE[40] = `{
     let cash = p.initial, shares = 0, held = "cash";
     let invested = p.initial, prevMonth = null, awaitingLeg2 = false, feesPaid = 0;
     let med = 0, above = 0, trigger = 0, stretched = false, want = "cash";
+    // Yesterday's readings, captured one bar behind — lets the final day's
+    // signal cards show "moved by X today" instead of just the raw level.
+    let prevAbove = 0, prevRoom = 0;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4), 10);
 
     for (let i = p.startIdx; i <= p.endIdx; i++) {
+      // med/above/trigger still hold YESTERDAY's values at this point (today's
+      // recompute is below), so this is exactly where to snapshot them.
+      if (i > p.startIdx) {
+        prevAbove = above;
+        prevRoom = trigger > 0 && px[i - 1] > 0 ? trigger / px[i - 1] - 1 : 0;
+      }
       if (px[i] > 0) ins(px[i]);
       // Drop the bar that just fell out of the window. Skip it on the very first
       // iteration when the warm-up loop never inserted px[startIdx - W] — without
@@ -1082,7 +1091,23 @@ CODE[40] = `{
     const room = trigger > 0 && last > 0 ? trigger / last - 1 : 0;
     const roomStr = (room >= 0 ? "+" : "−") + Math.abs(room * 100).toFixed(2) + "%";
     const pending = want !== held;
-    const twoDay = p.splitDays && p.park !== "cash";
+
+    // Day-over-day deltas for the signal cards below — how much each reading
+    // moved from yesterday's close to today's, so the panel shows a live
+    // pulse instead of a static snapshot.
+    const deltaAbove = (above - prevAbove) * 100;
+    const deltaAboveStr = (deltaAbove >= 0 ? "+" : "−") + Math.abs(deltaAbove).toFixed(2) + "%";
+    const deltaRoom = (room - prevRoom) * 100;
+    const deltaRoomStr = (deltaRoom >= 0 ? "+" : "−") + Math.abs(deltaRoom).toFixed(2) + "%";
+    // Headroom SHRINKING (a negative delta) means the fund closed nearer the
+    // trigger than yesterday — while still holding it (not stretched) that's
+    // the fund RISING, which is the favorable direction for this position, so
+    // the color is the opposite of the delta's own sign, not a match to it.
+    const deltaRoomTone = deltaRoom <= 0 ? "good" : "bad";
+    const heldPrevPx = priceOf(held, p.endIdx - 1);
+    const heldGainPct = heldPrevPx > 0 ? (priceOf(held, p.endIdx) / heldPrevPx - 1) * 100 : null;
+    const heldGainStr = heldGainPct == null ? null
+      : (heldGainPct >= 0 ? "+" : "−") + Math.abs(heldGainPct).toFixed(2) + "%";
 
     return {
       log: log,
@@ -1093,39 +1118,30 @@ CODE[40] = `{
             tone: stretched ? "bad" : "good",
             icon: stretched ? "trendUp" : "trendDown",
             sub: last.toFixed(2) + " vs " + med.toFixed(2) + " median",
-            tip: "Last close against the middle value of the last " + W + " closes. Stretched too far above it means park; anything else means hold " + A + "." },
-          { label: "Exit trigger",
-            value: "+" + (over * 100).toFixed(1) + "%",
-            icon: "sliders",
-            sub: "fires above " + trigger.toFixed(2),
-            tip: "How far over the median the fund must close before parking. Raise it to sit through more froth, lower it to step aside earlier and more often. The +55% default is the peak of a window/threshold sweep run on 2010–2026 — the cells either side of it score 5–11pp lower, so treat it as a fitted number." },
-          { label: stretched ? "Below trigger by" : "Headroom to trigger",
+            delta: { text: deltaAboveStr, tone: deltaAbove >= 0 ? "good" : "bad" },
+            tip: "Last close against the middle value of the last " + W + " closes. Stretched too far above it means park; anything else means hold " + A + ". The bracketed figure is how much this reading moved from yesterday's close to today's." },
+          { label: stretched ? "Below trigger by" : "Headroom",
             value: roomStr,
             tone: stretched ? "bad" : "good",
             icon: "activity",
             sub: stretched ? "needs to fall under " + trigger.toFixed(2) : last.toFixed(2) + " → " + trigger.toFixed(2),
-            tip: "How much further the fund can run before the exit fires, or how far it must fall to get back in." },
-          { label: "Conversion path",
-            value: twoDay ? "2 days · 2 fees" : "1 day · " + (p.park === "cash" ? "1 fee" : "2 fees"),
-            icon: "clock",
-            sub: pending ? "pending: buy " + WANT + " next bar" : "$" + feesPaid.toFixed(0) + " in fees so far",
-            tip: twoDay ? "Fund-to-fund moves are two transactions, one per day: sell to cash, then buy " + K + " the next bar. Both legs pay the cost, and the signal is re-checked before the second, so a one-day whipsaw leaves you in cash." : "Both legs execute at the same close and each pays the cost. Turn on one-trade-per-day to split them across two bars." },
+            delta: { text: deltaRoomStr, tone: deltaRoomTone },
+            tip: "How much further the fund can run before the exit fires, or how far it must fall to get back in. The bracketed figure is today's move — headroom shrinking usually means the fund is climbing, the favorable direction while still holding it, so it's shown in green even though the headroom number itself went down." },
           { label: "Currently held",
             value: held.toUpperCase() + (pending ? " → " + WANT : ""),
             tone: held === p.asset ? "good" : "bad",
             icon: held === p.asset ? "trendUp" : "flag",
             sub: held === "cash" ? "earning " + (p.cashRate || 0) + "%/yr" : "at " + priceOf(held, p.endIdx).toFixed(2),
+            delta: heldGainStr ? { text: heldGainStr, tone: heldGainPct >= 0 ? "good" : "bad" } : null,
             tip: "What is owned on the last day, plus any leg queued for the next bar. No stop, no trend filter, no crash rule — it only reacts to overextension, so it rides declines all the way down." + (p.park === "sqqq" ? " SQQQ is −3x inverse and bleeds in any rising or flat market." : "") }
         ],
         decision: {
           action: pending ? (WANT === "cash" ? "Move to cash" : "Buy " + WANT) : (stretched ? (K === "cash" ? "Stay in cash" : "Hold " + K) : "Buy " + A),
-          note: pending ? "leg 2 — sold to cash last bar, " + WANT + " buys next" : (stretched ? "price is " + pctStr + " over its " + W + "-day median, past the +" + (over * 100).toFixed(1) + "% line" : "price is " + pctStr + " vs median, under the +" + (over * 100).toFixed(1) + "% line"),
+          note: pending ? "leg 2 — sold to cash last bar, " + WANT + " buys next" : (stretched ? "price is " + pctStr + " over its " + W + "-day median" : "price is " + pctStr + " vs median"),
           tone: stretched ? "bad" : "good",
           reasons: [
             { name: "Overextension", val: A + " " + pctStr + " vs " + W + "d median", tag: stretched ? "out · " + K : "in · " + A, lean: stretched ? (p.park === "cash" ? "cash" : "out") : "buy" },
-            { name: "Trigger level", val: "+" + (over * 100).toFixed(1) + "% = " + trigger.toFixed(2), tag: stretched ? "breached" : roomStr + " away", lean: stretched ? "out" : "hold" },
-            { name: "Execution", val: twoDay ? "one trade per day, 2 fees per switch" : "both legs same day, 2 fees per switch", tag: pending ? "leg 2 pending" : "$" + feesPaid.toFixed(0) + " paid", lean: "hold" },
-            { name: "Downside rule", val: "none — no stop, no trend filter", tag: "holds through crashes", lean: "hold" }
+            { name: "Trigger level", val: "+" + (over * 100).toFixed(1) + "% = " + trigger.toFixed(2), tag: stretched ? "breached" : roomStr + " away", lean: stretched ? "out" : "hold" }
           ]
         }
       }

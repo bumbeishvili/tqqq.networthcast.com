@@ -40,6 +40,9 @@
     const pad2 = (n) => n < 10 ? '0' + n : '' + n;
     el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
     wrap.removeAttribute('hidden');
+    // Exposed so other "as of" stamps (e.g. a custom strategy's signal-metrics
+    // panel) can show the same fetch time without re-fetching or reformatting.
+    window._dataFetchedAt = d;
   }).catch(() => {});
   quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);
   monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);

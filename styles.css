@@ -3344,6 +3344,18 @@
   }
   .strategy-stat-value.positive { color: var(--green-text); }
   .strategy-stat-value.negative { color: var(--red-text); }
+  /* Small "how much this moved today" badge next to a signal card's value —
+     deliberately its own color, independent of the value's tone (a shrinking
+     "headroom to trigger" reads as favorable even though the card itself is
+     toned neutrally, so the two can't just share one class). */
+  .strategy-stat-delta {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-subtle);
+  }
+  .strategy-stat-delta.positive { color: var(--green-text); }
+  .strategy-stat-delta.negative { color: var(--red-text); }
   /* Icon head for every metric card: label on the left, subtle icon on the right. */
   .strategy-stat-head {
     display: flex; align-items: center; justify-content: space-between; gap: 6px;

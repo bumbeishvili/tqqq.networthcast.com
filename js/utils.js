@@ -1,4 +1,14 @@
 
+// A JS Date → "HH:MM", local time. Same zero-padding as the header's "Data
+// last fetched" stamp (js/init.js) — pulled out so any other "as of" label
+// (e.g. a custom strategy's signal-metrics panel) can show the identical
+// fetch time without duplicating the pad logic.
+function fmtTimeHHMM(d) {
+  if (!(d instanceof Date) || Number.isNaN(d.getTime())) return '';
+  const pad2 = (n) => n < 10 ? '0' + n : '' + n;
+  return pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+}
+
 function qLabel(dateStr) {
   const y = dateStr.substring(0, 4);
   const m = parseInt(dateStr.substring(5, 7));

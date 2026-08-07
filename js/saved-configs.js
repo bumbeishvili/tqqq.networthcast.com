@@ -786,19 +786,23 @@ function customWorkerMain() {
     return out.length ? out : null;
   }
   // Live signal dashboard the strategy reports for its LAST evaluated day:
-  // { cards: [{ label, value, sub, tip, tone, icon }], decision: { action, note,
-  // tone, reasons: [{ name, val, tag, lean }] } }. Same sanitize-to-primitives
-  // rule as readColumns — only plain strings cross back out of the sandbox.
+  // { cards: [{ label, value, sub, tip, tone, icon, delta: { text, tone } }],
+  // decision: { action, note, tone, reasons: [{ name, val, tag, lean }] } }.
+  // Same sanitize-to-primitives rule as readColumns — only plain strings (or,
+  // for `delta`, a plain {text,tone} pair of strings) cross back out of the
+  // sandbox.
   function readSignals(raw) {
     if (!raw || typeof raw !== 'object') return null;
     var S = function (v) { return v == null ? null : String(v); };
-    var cards = [], i, c;
+    var cards = [], i, c, delta;
     if (Array.isArray(raw.cards)) {
       for (i = 0; i < raw.cards.length && cards.length < 12; i++) {
         c = raw.cards[i];
         if (!c || c.label == null) continue;
+        delta = (c.delta && typeof c.delta === 'object' && c.delta.text != null)
+          ? { text: S(c.delta.text), tone: S(c.delta.tone) } : null;
         cards.push({ label: S(c.label), value: S(c.value), sub: S(c.sub),
-                     tip: S(c.tip), tone: S(c.tone), icon: S(c.icon) });
+                     tip: S(c.tip), tone: S(c.tone), icon: S(c.icon), delta: delta });
       }
     }
     var d = null, reasons = [], r;
@@ -2416,9 +2420,14 @@ function buildCustomSignalMetricsHtml(signals, asOfDate) {
   const cards = (signals.cards || []).filter(c => c && c.label);
   if (cards.length && typeof statCard === 'function') {
     const asOf = signals.asOf || asOfDate;
+    // Same fetch timestamp the header's "Data last fetched" stamp uses (see
+    // js/init.js), just the HH:MM part — the trading-day date already comes
+    // from the strategy's own log, so only the time is worth adding here.
+    const timeStr = (window._dataFetchedAt && typeof fmtTimeHHMM === 'function')
+      ? ', ' + fmtTimeHHMM(window._dataFetchedAt) : '';
     const stamp = asOf
       ? ` <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--text-muted)">· as of ${esc(
-          (typeof fmtLogDate === 'function') ? fmtLogDate(asOf) : asOf)}</span>`
+          (typeof fmtLogDate === 'function') ? fmtLogDate(asOf) : asOf)}${timeStr}</span>`
       : '';
     const body = cards.map(c => statCard(
       esc(c.label),
@@ -2426,7 +2435,8 @@ function buildCustomSignalMetricsHtml(signals, asOfDate) {
       esc(c.value != null ? c.value : '—'),
       toneCls(c.tone),
       c.sub ? esc(c.sub) : '',
-      c.tip ? esc(c.tip) : ''
+      c.tip ? esc(c.tip) : '',
+      c.delta && c.delta.text ? { text: esc(c.delta.text), tone: toneCls(c.delta.tone) } : null
     )).join('');
     html += `<div class="strategy-panel-section-label" style="margin-top:24px">Signal metrics${stamp}</div>
       <div class="strategy-stats">${body}</div>`;
