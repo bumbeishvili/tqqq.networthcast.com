@@ -719,9 +719,18 @@ async function shareConfig() {
     params.set('hd', hidden.join(','));
   }
 
+  // Only strategies currently ACTIVE (not toggled off via the eye icon) are
+  // shared — an inactive strategy the sender isn't even looking at shouldn't
+  // ride along in every link, bloating the URL and handing the recipient a
+  // strategy (possibly its full source) the sender never meant to send.
+  const activeCfgs = (typeof getSavedConfigs === 'function') ? getSavedConfigs().filter(c => !c.hidden) : [];
+
   // Open strategy sidebar (which chip's detail panel is showing), by stable key.
   // `sp` covers the four BASE panels; `spc` covers a saved/custom strategy's own
-  // panel, as an index into the `sc`/`scz` array serialised below (same order).
+  // panel, as an index into `activeCfgs` — same array, same order, as what
+  // gets serialised into `sc`/`scz` below. If the open panel belongs to a
+  // HIDDEN strategy, it's simply not in activeCfgs (findIndex → -1 → `spc`
+  // stays unset) — there's no shared entry for the recipient to open anyway.
   // A saved base-type strategy sets both: `sp` opens the right panel shape even
   // if the strategy itself fails to resolve on arrival.
   if (typeof getOpenPanelKey === 'function') {
@@ -729,34 +738,32 @@ async function shareConfig() {
     if (pk) params.set('sp', pk);
   }
   if (typeof openSavedConfigIndex === 'function') {
-    const ci = openSavedConfigIndex();
+    const ci = openSavedConfigIndex(activeCfgs);
     if (ci >= 0) params.set('spc', String(ci));
   }
 
-  // Saved strategies, including custom ones (code + description). SECURITY: shared
-  // custom code is never trusted on arrival — it arrives `_transient` (nothing is
-  // written to the recipient's localStorage until they click Save) and, like all
-  // custom code, ALWAYS runs inside a locked-down Web Worker sandbox (no DOM,
-  // storage, cookies, or network), so running someone else's strategy is safe.
-  if (typeof getSavedConfigs === 'function') {
-    const cfgs = getSavedConfigs();
-    if (cfgs && cfgs.length) {
-      const lean = cfgs.map(c => {
-        const o = { type: c.type, name: c.name, params: c.params || {}, color: c.color, hidden: !!c.hidden };
-        if (c.type === 'custom') { o.code = c.code || ''; o.desc = c.desc || ''; }
-        return o;
-      });
-      // `scz` is the deflated payload (see packSharePayload) — a custom
-      // strategy's source is long enough that the plain form blows the URL
-      // length limit. `sc` stays as the fallback for browsers without
-      // CompressionStream, and old links carrying it still load.
-      try {
-        const json = JSON.stringify(lean);
-        const packed = await packSharePayload(json);
-        if (packed) params.set('scz', packed);
-        else params.set('sc', encodeURIComponent(json));
-      } catch (e) {}
-    }
+  // Saved strategies, including custom ones (code + description). SECURITY:
+  // shared custom code is never trusted on arrival — it arrives `_transient`
+  // (nothing is written to the recipient's localStorage until they click
+  // Save) and, like all custom code, ALWAYS runs inside a locked-down Web
+  // Worker sandbox (no DOM, storage, cookies, or network), so running someone
+  // else's strategy is safe.
+  if (activeCfgs.length) {
+    const lean = activeCfgs.map(c => {
+      const o = { type: c.type, name: c.name, params: c.params || {}, color: c.color };
+      if (c.type === 'custom') { o.code = c.code || ''; o.desc = c.desc || ''; }
+      return o;
+    });
+    // `scz` is the deflated payload (see packSharePayload) — a custom
+    // strategy's source is long enough that the plain form blows the URL
+    // length limit. `sc` stays as the fallback for browsers without
+    // CompressionStream, and old links carrying it still load.
+    try {
+      const json = JSON.stringify(lean);
+      const packed = await packSharePayload(json);
+      if (packed) params.set('scz', packed);
+      else params.set('sc', encodeURIComponent(json));
+    } catch (e) {}
   }
 
   // Analytics modal state

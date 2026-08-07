@@ -1744,13 +1744,15 @@ function importSharedConfigs(arr) {
 }
 
 // Which saved strategy (if any) has its panel open right now, as an INDEX into
-// getSavedConfigs() — that array is what a share link serialises, in order, so
-// the index is the stable cross-machine reference. Covers custom panels (which
-// leave _currentPanelIdx null) and saved base-type panels alike.
-function openSavedConfigIndex() {
+// `list` — a share link only serialises ACTIVE (non-hidden) strategies, so the
+// caller passes that same filtered array, keeping the index a valid reference
+// into what's actually in the link. Defaults to the full savedConfigs for any
+// other caller that wants the plain "which one is open" answer. Covers custom
+// panels (which leave _currentPanelIdx null) and saved base-type panels alike.
+function openSavedConfigIndex(list) {
   const id = window._openCustomCfgId || window._editingConfigId;
   if (!id) return -1;
-  return savedConfigs.findIndex(c => c.id === id);
+  return (list || savedConfigs).findIndex(c => c.id === id);
 }
 // Resolve a shared-array entry back to a LOCAL config id after import. Cannot
 // match on the dedup signature: importSharedConfigs runs the name through
