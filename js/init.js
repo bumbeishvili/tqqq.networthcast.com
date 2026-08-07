@@ -9,15 +9,25 @@
     ]);
   } catch(e) {
     console.error('Failed to load data:', e);
+    // render() never runs on this path, so the loading spinner (index.html)
+    // would otherwise spin forever with no explanation.
+    const loadingText = document.getElementById('chart-loading-text');
+    if (loadingText) {
+      loadingText.textContent = 'Could not load market data — try refreshing the page.';
+      loadingText.classList.add('is-error');
+    }
+    const spinner = document.querySelector('#chart-loading .chart-loading-spinner');
+    if (spinner) spinner.style.display = 'none';
     return;
   }
   daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY);
-  // "Last updated" freshness note in the footer — the actual wall-clock time
-  // the data was last fetched (written by .github/workflows/update-data.yml
-  // into this file in the SAME commit as the data it describes), not just
-  // the most recent trading day the data covers. `cache: 'no-store'` because
-  // this specific file needs to always reflect the live repo state, unlike
-  // the ?v=-busted JS/CSS assets which only change on a real code deploy.
+  // "Last updated" freshness note in the header subtitle — the actual
+  // wall-clock time the data was last fetched (written by
+  // .github/workflows/update-data.yml into this file in the SAME commit as
+  // the data it describes), not just the most recent trading day the data
+  // covers. `cache: 'no-store'` because this specific file needs to always
+  // reflect the live repo state, unlike the ?v=-busted JS/CSS assets which
+  // only change on a real code deploy.
   fetch('data/last-updated.txt', { cache: 'no-store' }).then(r => r.ok ? r.text() : null).then(stamp => {
     const wrap = document.getElementById('data-through');
     const el = document.getElementById('data-fetched-at');

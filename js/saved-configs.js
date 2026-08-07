@@ -357,6 +357,24 @@ function resampleByDate(points, labels) {
   });
 }
 
+// Same step-resample, but for STALE data shown while a fresh worker run is
+// pending (see computeCustomSeries). A slider/param change can move the label
+// range past what the stale points actually cover — plain resampleByDate would
+// forward-fill the last known value across that whole gap, drawing a flat line
+// pinned at the old endpoint instead of showing "this hasn't been computed for
+// the new range yet." Null outside the stale points' own date coverage instead,
+// so the chart just shows a gap until the real result arrives.
+function resampleByDateClamped(points, labels) {
+  if (!points || !points.length) return labels.map(() => null);
+  const minD = points[0].date, maxD = points[points.length - 1].date;
+  let j = 0;
+  return labels.map(d => {
+    if (d < minD || d > maxD) return null;
+    while (j + 1 < points.length && points[j + 1].date <= d) j++;
+    return points[j].value;
+  });
+}
+
 // ===== Custom (user / LLM-written) strategies ==========================
 // A custom strategy is a saved config of type 'custom' carrying pasted JS in
 // cfg.code. The code must evaluate to { name, params, run(data, p) } (or a bare
@@ -1025,16 +1043,20 @@ function cfgMoneyWeightedCAGR(ctx, finalV) {
 }
 
 // Turn a (worker-computed) log into a label-aligned series + stats. No code eval.
-function customSeriesResult(log, ctx, error, tcOverride) {
+function customSeriesResult(log, ctx, error, tcOverride, stale) {
   const labels = ctx.labels;
   if (error) return { data: labels.map(() => null), cagr: 0, maxDD: 0, start: 0, end: 0, ddPeak: null, ddTrough: null };
   const points = (log || [])
     .filter(r => r && r.date != null && typeof r.value === 'number' && Number.isFinite(r.value))
     .map(r => ({ date: String(r.date), value: r.value }))
     .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
-  const series = resampleByDate(points, labels);
-  const finalV = series.length ? series[series.length - 1] : 0;
-  const startV = series.length ? series[0] : 0;
+  const series = stale ? resampleByDateClamped(points, labels) : resampleByDate(points, labels);
+  // Stale/clamped series can end (or start) in a null gap — fall back to the
+  // nearest real value rather than letting the stat pills read as 0.
+  const lastReal = (arr) => { for (let i = arr.length - 1; i >= 0; i--) if (arr[i] != null) return arr[i]; return 0; };
+  const firstReal = (arr) => { for (let i = 0; i < arr.length; i++) if (arr[i] != null) return arr[i]; return 0; };
+  const finalV = series.length ? lastReal(series) : 0;
+  const startV = series.length ? firstReal(series) : 0;
   // Drawdown is revalued at EVERY daily close, same as the built-in engines —
   // never on `series` (chart-label grain steps over intra-label troughs) and
   // never on the log alone (a strategy logging only trades + month ends misses
@@ -1057,7 +1079,9 @@ function customSeriesResult(log, ctx, error, tcOverride) {
 
 // Custom strategy series — served from the worker-result cache. On a cache miss
 // (new code/params/range) it schedules a sandboxed run and, until that returns,
-// shows the last good line so the chart doesn't flicker.
+// shows the last good line over whatever date range it actually covers — not
+// flat-filled past its own coverage, so a slider drag shows a gap instead of a
+// stale line pinned at the old endpoint (see resampleByDateClamped).
 function computeCustomSeries(cfg, ctx) {
   window._customCtx = ctx; // shared by the bar-preview popup
   if (!cfg.code || !String(cfg.code).trim()) {
@@ -1078,7 +1102,7 @@ function computeCustomSeries(cfg, ctx) {
   scheduleCustomRun(cfg, sig, computeCustomGlobals(cfg, ctx));
   window._customErrors[cfg.id] = null; // computing…
   window._customLogs[cfg.id] = (cached && cached.log) || [];
-  return customSeriesResult(cached ? cached.log : [], ctx, null, cached ? cached.totalContributed : null);
+  return customSeriesResult(cached ? cached.log : [], ctx, null, cached ? cached.totalContributed : null, true);
 }
 
 // Run the right engine for a config and return its label-aligned series + stats.
@@ -2335,10 +2359,12 @@ function buildCustomLogTableHtml(log, columns) {
     </label>` : '';
   const wrapCls = 'custom-log-wrap' + (_customLogHideContrib ? ' hide-contrib' : '') + (_customLogHideEase ? ' hide-dca' : '');
   return `
-    <div class="strategy-panel-section-label" style="margin-top:18px">Transaction Log (${log.length} rows)</div>
+    <div class="log-section">
+    ${logSectionHeaderHtml(`Transaction Log (${log.length} rows)`, 18)}
     <div style="display:flex;gap:16px;flex-wrap:wrap">${contribToggle}${easeToggle}</div>
     <div class="${wrapCls}"><table class="custom-log"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
-    ${holdSummary}`;
+    ${holdSummary}
+    </div>`;
 }
 
 // Sidebar for a custom strategy — focuses on the RESULT (settings + an Edit

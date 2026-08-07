@@ -2,7 +2,7 @@ let chart = null;
 // How many horizontal gridlines / y-axis labels to draw. Applied both as
 // Chart.js's maxTicksLimit (linear) and as an explicit thinning pass after the
 // log-scale "nice value" filter, which runs too late for maxTicksLimit to bind.
-const Y_TICKS = 4;
+const Y_TICKS = 8;
 // Axis-only money formatting: fmt() pads to a fixed width so columns of numbers
 // line up in the tables and tooltips, but on the axis that padding is just
 // noise — "$5.000M" says nothing "$5M" doesn't. Trims trailing zeros while
@@ -817,7 +817,8 @@ function buildSmaLogTableHtml(smaLog) {
       Hide ease-in slices (${easeCount})
     </label>` : '';
   return `
-    <div class="strategy-panel-section-label" style="margin-top:24px">SMA Transaction Log</div>
+    <div class="log-section">
+    ${logSectionHeaderHtml('SMA Transaction Log')}
     <div style="display:flex;gap:16px;flex-wrap:wrap">${contribToggle}${easeToggle}</div>
     <div class="quarter-table-wrap${_smaLogHideContrib ? ' hide-contrib' : ''}${_smaLogHideEase ? ' hide-dca' : ''}">
       <table>
@@ -841,6 +842,7 @@ function buildSmaLogTableHtml(smaLog) {
       </table>
     </div>
     ${holdSummary}
+    </div>
   `;
 }
 
@@ -892,12 +894,14 @@ function buildSimpleLogTableHtml(title, log, valueAt, typeFor) {
       <td>${fmtFull(Math.round(valueAt(i)))}</td>
     </tr>`).join('');
   return `
-    <div class="strategy-panel-section-label" style="margin-top:24px">${title}</div>
+    <div class="log-section">
+    ${logSectionHeaderHtml(title)}
     <div class="quarter-table-wrap">
       <table>
         <thead><tr><th># <span class="info-icon" tabindex="0" data-tip="Row number — the first row is 0, then each counts up.">ⓘ</span></th><th>Date</th><th>Type</th><th>New $</th><th>Value</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+    </div>
     </div>
   `;
 }
@@ -929,12 +933,14 @@ function buildBuyHoldLogTableHtml(title, log, series, ulName) {
     </tr>`;
   }).join('');
   return `
-    <div class="strategy-panel-section-label" style="margin-top:24px">${title}</div>
+    <div class="log-section">
+    ${logSectionHeaderHtml(title)}
     <div class="quarter-table-wrap">
       <table>
         <thead><tr><th># <span class="info-icon" tabindex="0" data-tip="Row number in the full price history (the initial buy is 0). When there are no contributions the table collapses to just the first and last rows, so the numbers can jump.">ⓘ</span></th><th>Date</th><th>Type</th><th>New $</th><th>${ulName} Price</th><th>${ulName} Shares</th><th>Value</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
+    </div>
     </div>
   `;
 }
@@ -967,7 +973,8 @@ function buildLogTableHtml(d) {
     </tr>`;
   }).join('');
   return `
-    <div class="strategy-panel-section-label" style="margin-top:24px">Rebalance Log</div>
+    <div class="log-section">
+    ${logSectionHeaderHtml('Rebalance Log')}
     <div class="quarter-table-wrap">
       <table>
         <thead>
@@ -988,6 +995,7 @@ function buildLogTableHtml(d) {
         </thead>
         <tbody>${rows}</tbody>
       </table>
+    </div>
     </div>
   `;
 }
@@ -1499,6 +1507,35 @@ document.addEventListener('keydown', (e) => {
   const panel = document.getElementById('strategy-panel');
   if (panel && panel.classList.contains('is-open')) attemptCloseStrategyPanel();
 });
+
+// Desktop-only: size .chart-container to fill whatever vertical space is
+// actually left below the fold, without pushing the page tall enough to
+// scroll. A pure-CSS stretch chain (body → grid → flex → flex-grow) turned
+// out to fight itself — nested auto-height containers don't reliably clamp
+// to "available space, no more" — so this measures the real rendered layout
+// instead. It's exact in one pass: nothing above or below the chart depends
+// on the chart's OWN height, only on how much taller/shorter it makes the
+// page, so "how far is the entry/exit block's bottom edge from where it
+// should end" IS the exact amount to grow or shrink the chart by.
+let _chartFitRaf = null;
+function fitChartHeight() {
+  if (_chartFitRaf) return; // coalesce bursts (resize, rapid render() calls)
+  _chartFitRaf = requestAnimationFrame(() => {
+    _chartFitRaf = null;
+    if (window.innerWidth <= 900) return; // mobile/tablet keep their fixed 420px
+    const container = document.querySelector('.chart-container');
+    const controlGroup = document.querySelector('.right-col .control-group');
+    if (!container || !controlGroup) return;
+    const bodyPadBottom = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
+    const target = window.innerHeight - bodyPadBottom - 4; // 4px margin against sub-pixel rounding
+    const delta = target - controlGroup.getBoundingClientRect().bottom;
+    const current = container.getBoundingClientRect().height;
+    const next = Math.max(420, Math.min(1100, current + delta));
+    if (Math.abs(next - current) < 1) return; // avoid redundant style writes
+    document.documentElement.style.setProperty('--chart-fit-height', next + 'px');
+  });
+}
+window.addEventListener('resize', fitChartHeight);
 
 function render() {
   if (!quarterlyData) return; // data not loaded yet
@@ -2751,6 +2788,11 @@ function render() {
       }
     }
   });
+  // First successful chart creation — the loading overlay (index.html) has
+  // done its job. This branch only runs once per page load (subsequent
+  // render() calls take the `if (chart)` update path above), so no separate
+  // "have we hidden it yet" flag is needed.
+  document.getElementById('chart-loading')?.setAttribute('hidden', '');
   if (typeof appendConfigDatasets === 'function') appendConfigDatasets(chart, cfgCtx);
   if (typeof applyBaseColorOverrides === 'function') applyBaseColorOverrides(chart);
   if (typeof applyNineSigFamily === 'function') applyNineSigFamily(chart);
@@ -2833,5 +2875,7 @@ function render() {
   refreshAllLegends();
 
   if (typeof refreshAnalytics === 'function') refreshAnalytics();
+
+  fitChartHeight();
 }
 

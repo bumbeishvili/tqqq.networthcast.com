@@ -169,9 +169,15 @@
   /* Orion's dashboard split: a narrow left rail of small cards against the page
      background, and one large elevated container holding the visualisation.
      Widening the frame and narrowing the rail hands ~180px straight to the
-     chart, which is the only thing here that benefits from more pixels. */
+     chart, which is the only thing here that benefits from more pixels.
+     A max-width, fixed or capped, always leaves a fixed gutter once the
+     window outgrows it — on an ultrawide monitor that gutter is huge. There's
+     no readability reason to cap it here (the sidebar is a fixed-width column
+     of controls, not running text), so this scales with the viewport with no
+     ceiling at all — 97vw, always. The sidebar's fixed 288px doesn't need to
+     grow, so all of that scales straight into the chart's `1fr` column. */
   .layout {
-    max-width: 1440px;
+    width: 97vw;
     margin: 0 auto;
     display: grid;
     grid-template-columns: 288px 1fr;
@@ -245,22 +251,18 @@
     .header h1 { font-size: 15px; }
   }
 
-  .site-footer {
-    max-width: 1200px;
-    margin: 32px auto 24px;
-    padding: 0 24px;
-    text-align: center;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-  .site-footer a {
+  /* The "Data last fetched" link now lives in the header subtitle (was a
+     footer link before the footer was folded into it — see #data-through in
+     index.html). Same understated dashed-underline treatment as the old
+     footer link, just re-scoped to where the text lives now. */
+  .header p a {
     color: var(--text-muted);
     text-decoration: none;
     border-bottom: 1px dashed rgba(122, 122, 166, 0.4);
     padding-bottom: 1px;
     transition: color 0.15s, border-color 0.15s;
   }
-  .site-footer a:hover {
+  .header p a:hover {
     color: var(--accent-text);
     border-color: var(--accent);
   }
@@ -3538,6 +3540,29 @@
     user-select: none;
   }
   .strategy-panel-body .log-contrib-toggle input { cursor: pointer; margin: 0; }
+  /* CSV download button in each transaction-log section header. */
+  .log-csv-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 3px 7px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s, background 0.15s;
+  }
+  .log-csv-btn:hover {
+    color: var(--accent-text);
+    border-color: var(--accent);
+    background: rgba(134, 118, 255, 0.08);
+  }
   /* Collapsed state: drop the monthly-contribution rows from the table. */
   .strategy-panel-body .quarter-table-wrap.hide-contrib tr.log-row-contrib { display: none; }
   /* Collapsed state: drop the ease-in "Buy more" slice rows. */
@@ -3570,6 +3595,50 @@
     width: 100%;
     height: 420px;
   }
+
+  /* Desktop and up: fill however much vertical space is actually left below
+     the fold, without going so far it forces a scrollbar. A pure-CSS stretch
+     chain (body → grid → flex → flex-grow) turned out to fight itself —
+     nested auto-height containers don't reliably clamp to "available space,
+     no more" the way a direct measurement does — so js/chart.js's
+     fitChartHeight() measures the real layout and sets this via a custom
+     property instead. The px fallback only matters before that JS runs. */
+  @media (min-width: 901px) {
+    .chart-container { height: var(--chart-fit-height, 700px); }
+  }
+
+  /* Shown in place of the chart while the daily TSVs are fetched and the
+     first Chart.js instance is built (js/init.js). Removed once render()
+     completes its first pass — see the `chart = new Chart(...)` creation
+     path in js/chart.js, which only runs that one time. */
+  .chart-loading {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: var(--surface, #fff);
+    z-index: 4;
+  }
+  .chart-loading[hidden] { display: none; }
+  .chart-loading-spinner {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    border: 3px solid rgba(134, 118, 255, 0.18);
+    border-top-color: var(--accent);
+    animation: chart-loading-spin 0.8s linear infinite;
+  }
+  @keyframes chart-loading-spin {
+    to { transform: rotate(360deg); }
+  }
+  .chart-loading-text {
+    font: 500 12px 'Open Sans', sans-serif;
+    color: var(--text-muted);
+  }
+  .chart-loading-text.is-error { color: var(--red-text, #d64545); }
 
   /* LOG / DEINFLATED toggles: two-state controls, so they wear the shared
      on/off language (same tints and borders as the strategy pills) rather than
@@ -3796,6 +3865,16 @@
     display: flex;
     flex-direction: column;
     gap: 24px;
+    /* .right-col is a grid item of .layout — grid items default to
+       min-width: auto, which floors their width at their content's
+       min-content size. Chart.js sets the canvas's own width via inline
+       style each time it resizes, and a <canvas> counts toward min-content
+       like a replaced element (same class of bug as the .sl-card table
+       overflow earlier) — so once the canvas grows wide, .right-col refuses
+       to shrink back below that even after the viewport narrows, and the
+       chart gets stuck at its widest-ever size. min-width: 0 lets it shrink
+       freely; .chart-container's own width: 100% still governs the chart. */
+    min-width: 0;
   }
 
   .legend-row {

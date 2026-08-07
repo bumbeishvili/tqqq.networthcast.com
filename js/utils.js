@@ -229,3 +229,58 @@ async function unpackSharePayload(packed) {
     return new TextDecoder().decode(buf);
   } catch (e) { return null; }
 }
+
+// ===== Transaction-log CSV export =======================================
+// Shared by every log table (SMA / 9sig / Buy & Hold / Invested Compounded /
+// custom strategies) — one download button, one export path, so a column
+// added to any table is exported for free instead of needing its own scraper.
+
+// A table's own DOM is the source of truth for what's currently ON SCREEN
+// (respects the "hide monthly contributions" / "hide ease-in slices" toggles,
+// which just CSS-hide rows rather than removing them), so export reads from
+// the rendered <table> rather than re-deriving columns from the raw log array.
+function tableToCsv(table) {
+  const clean = (s) => s.replace(/ⓘ/g, '').replace(/\s+/g, ' ').trim();
+  const esc = (s) => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  const header = Array.from(table.querySelectorAll('thead th')).map(th => esc(clean(th.textContent)));
+  const rows = Array.from(table.querySelectorAll('tbody tr'))
+    .filter(tr => getComputedStyle(tr).display !== 'none')
+    .map(tr => Array.from(tr.children).map(td => esc(clean(td.textContent))).join(','));
+  return [header.join(','), ...rows].join('\n');
+}
+function downloadTextFile(content, filename, mime) {
+  const blob = new Blob([content], { type: mime + ';charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 200);
+}
+// `btn` is the download button inside a `.log-section` wrapper (see
+// logSectionHeaderHtml) that also contains the <table> to export — walking
+// from the button rather than a global selector means each log section
+// downloads its OWN table even when several are open on the page at once.
+function downloadLogCsv(btn) {
+  const section = btn.closest('.log-section');
+  const table = section && section.querySelector('table');
+  if (!table) return;
+  const titleEl = section.querySelector('.strategy-panel-section-label span');
+  const title = (titleEl ? titleEl.textContent : 'transaction-log').trim();
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  const stamp = new Date().toISOString().slice(0, 10);
+  downloadTextFile(tableToCsv(table), `tqqq-${slug}-${stamp}.csv`, 'text/csv');
+}
+// Header row shared by every log table: the section title plus a small CSV
+// download button, right-aligned. The `.log-section` wrapper around title +
+// toggles + table is what lets downloadLogCsv() find "this table", not just
+// "the first table on the page" — see its comment above.
+function logSectionHeaderHtml(title, marginTop) {
+  return `<div class="strategy-panel-section-label" style="margin-top:${marginTop == null ? 24 : marginTop}px;display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <span>${title}</span>
+    <button type="button" class="log-csv-btn" onclick="downloadLogCsv(this)" title="Download as CSV" aria-label="Download CSV">
+      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      CSV
+    </button>
+  </div>`;
+}
