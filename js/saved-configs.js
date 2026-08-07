@@ -926,11 +926,34 @@ function computeCustomGlobals(cfg, ctx) {
   if (!endIdx) endIdx = Math.max(0, dlen - 1);
   return { initial: ctx.initial, monthly: ctx.monthly, annualRaise: ctx.annualRaise, startIdx, endIdx, entryDate, exitDate };
 }
-// Debounce so a slider drag coalesces into a single worker run.
+// Throttled (not debounced) so a slider drag updates the line WHILE you're
+// still dragging, not only once you let go. A plain debounce resets its timer
+// on every event, and a continuous drag fires events faster than the timer's
+// delay — so the timer never actually elapses until the drag stops, which is
+// exactly why custom strategies looked frozen until slide-end. A throttle
+// instead fires on a steady cadence (CUSTOM_THROTTLE_MS) throughout the drag.
+//
+// Also skips scheduling entirely while a request for this cfg is already in
+// flight, rather than queuing another one behind it — a Worker processes
+// messages one at a time, so queuing here would just rebuild the same lag one
+// level down (the chart "catching up" through a backlog of now-stale values
+// after you stop). onCustomWorkerMessage always calls render() when the
+// in-flight one resolves, which re-derives the (by-then possibly newer) sig
+// and calls back in here — so the freshest value is retried automatically the
+// moment the worker frees up, with no extra bookkeeping needed here.
+const _customLastFireAt = {}; // cfgId -> Date.now() of the last actual worker post
+const CUSTOM_THROTTLE_MS = 150;
 function scheduleCustomRun(cfg, sig, globals) {
   for (const k in _customPending) if (_customPending[k].cfgId === cfg.id && _customPending[k].sig === sig) return;
+  if (_customRunTimers[cfg.id] && _customRunTimers[cfg.id].sig === sig) return;
+  for (const k in _customPending) if (_customPending[k].cfgId === cfg.id) return; // busy — let it resolve, render() will retry
   if (_customRunTimers[cfg.id]) clearTimeout(_customRunTimers[cfg.id].t);
-  _customRunTimers[cfg.id] = { sig, t: setTimeout(function () { delete _customRunTimers[cfg.id]; runCustomInWorker(cfg, sig, globals); }, 120) };
+  const wait = Math.max(0, CUSTOM_THROTTLE_MS - (Date.now() - (_customLastFireAt[cfg.id] || 0)));
+  _customRunTimers[cfg.id] = { sig, t: setTimeout(function () {
+    delete _customRunTimers[cfg.id];
+    _customLastFireAt[cfg.id] = Date.now();
+    runCustomInWorker(cfg, sig, globals);
+  }, wait) };
 }
 function runCustomInWorker(cfg, sig, globals) {
   const w = ensureCustomWorker();
