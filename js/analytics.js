@@ -328,6 +328,57 @@ function refreshAnalyticsPickers() {
   }
 }
 
+// Default the two pickers to whatever is actually on the main chart right
+// now — the best- (top) and worst- (bottom) performing VISIBLE lines by
+// final value — instead of a fixed '9sig' vs Compounded Cash that has
+// nothing to do with what the user is currently looking at. Called every
+// time the modal opens (see toggleAnalytics), before refreshAnalyticsPickers
+// reads analyticsStrategy/analyticsBaseline to build the dropdowns.
+function pickAnalyticsDefaultsFromChart() {
+  if (typeof chart === 'undefined' || !chart || !chart.data) return;
+  const bhUL = ((document.getElementById('select-bh-underlying') || {}).value || 'tqqq').toLowerCase();
+  const baseIdx = (typeof BASE_COLOR_DATASET_IDX !== 'undefined') ? BASE_COLOR_DATASET_IDX : {};
+  const candidates = [];
+
+  // Built-in strategies, keyed the same way the dropdowns are. Compounded
+  // Cash is baseline-only (it's never offered as the "strategy" to visualize
+  // — see _visibleBuiltinStrategies), flagged here so it's excluded below.
+  const baseEntries = [
+    ['9sig', baseIdx['9sig'], false],
+    ['bh-' + bhUL, baseIdx['bh'], false],
+    ['sma', baseIdx['sma'], false],
+    ['compounded', baseIdx['invested'], true],
+  ];
+  for (const [key, idx, isBaselineOnly] of baseEntries) {
+    if (idx == null || !chart.isDatasetVisible(idx)) continue;
+    const m = (window._strategyMetrics || {})[idx];
+    if (m && Number.isFinite(m.end)) candidates.push({ key, end: m.end, isBaselineOnly });
+  }
+
+  // Saved strategies. window._configMetrics is keyed by cfg.id directly (see
+  // appendConfigDatasets) — no chart-dataset-index bookkeeping needed here.
+  const configs = (typeof getSavedConfigs === 'function') ? getSavedConfigs() : [];
+  for (const cfg of configs) {
+    if (cfg.hidden) continue;
+    const m = (window._configMetrics || {})[cfg.id];
+    if (m && Number.isFinite(m.end)) candidates.push({ key: CFG_KEY_PREFIX + cfg.id, end: m.end, isBaselineOnly: false });
+  }
+
+  if (!candidates.length) return; // nothing visible on the chart — leave the previous selection
+
+  // Top = the best-performing visible line eligible to BE the strategy.
+  const stratCandidates = candidates.filter(c => !c.isBaselineOnly);
+  if (stratCandidates.length) {
+    analyticsStrategy = stratCandidates.reduce((a, b) => b.end > a.end ? b : a).key;
+  }
+  // Bottom = the worst-performing visible line, excluding whatever just got
+  // picked as the strategy (comparing a line against itself is meaningless).
+  const baseCandidates = candidates.filter(c => c.key !== analyticsStrategy);
+  if (baseCandidates.length) {
+    analyticsBaseline = baseCandidates.reduce((a, b) => b.end < a.end ? b : a).key;
+  }
+}
+
 // Generic per-strategy accessors driven by STRATEGY_REGISTRY. Each strategy
 // declares which key on the simulate() result holds its array and how to
 // project a scalar value off a record; these helpers do the rest.
@@ -470,6 +521,7 @@ function toggleAnalytics() {
   if (willOpen) {
     modal.removeAttribute('hidden');
     document.body.style.overflow = 'hidden';
+    pickAnalyticsDefaultsFromChart(); // default to whatever's actually on the chart right now
     refreshAnalyticsPickers(); // list built-in + saved strategies in both pickers
     buildHeatmap();
   } else {
