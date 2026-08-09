@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=220">
+<link rel="stylesheet" href="styles.css?v=233">
 </head>
 <body>
 
@@ -65,38 +65,67 @@
       <button id="analytics-toggle" onclick="toggleAnalytics()">analytics grid</button>
     </div>
 
-    <div class="control-group">
-      <label>Initial Investment</label>
-      <div class="value-display" id="disp-initial">$10,000</div>
-      <input type="range" id="slider-initial" min="0" max="1000" step="1" value="333">
+    <!-- Default contribution model: a formula (initial lump sum + monthly,
+         optionally growing). Swapped out for #contrib-tx-active when a real
+         transaction history is loaded (js/transactions.js) — see
+         toggleContribMode() there. -->
+    <div id="contrib-default-controls">
+      <!-- Shown only when a real transaction history was uploaded before but
+           is currently switched off (js/transactions.js's renderTxSwitchBanner)
+           — lets you flip back without re-pasting/re-uploading. -->
+      <button type="button" class="tx-clear-btn" id="tx-switch-banner" style="margin-bottom:10px" hidden></button>
+      <div class="control-group">
+        <label>Initial Investment</label>
+        <div class="value-display" id="disp-initial">$10,000</div>
+        <input type="range" id="slider-initial" min="0" max="1000" step="1" value="333">
+      </div>
+
+      <div class="control-group">
+        <div class="mc-head">
+          <label>Monthly Contribution</label>
+          <div style="display:flex;align-items:center;gap:4px">
+            <span class="value-display" id="disp-monthly">$500</span>
+            <button type="button" class="date-pick-btn" id="tx-upload-btn" title="Use your real transaction history instead" aria-label="Use your real transaction history instead">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </button>
+          </div>
+        </div>
+        <label class="mc-raise" for="slider-raise" title="Grow the monthly contribution by this much each year">
+          <span class="mc-raise-txt">increase</span> <select id="slider-raise" class="inline-select raise-select">
+            <option value="0" selected>0%</option>
+            <option value="1">1%</option>
+            <option value="2">2%</option>
+            <option value="3">3%</option>
+            <option value="4">4%</option>
+            <option value="5">5%</option>
+            <option value="6">6%</option>
+            <option value="7">7%</option>
+            <option value="8">8%</option>
+            <option value="9">9%</option>
+            <option value="10">10%</option>
+            <option value="12">12%</option>
+            <option value="15">15%</option>
+            <option value="20">20%</option>
+            <option value="25">25%</option>
+          </select> <span class="mc-raise-txt">/yr</span>
+        </label>
+        <!-- Logarithmic $0–$1M scale (see sliderToMonthly). Position 233 ≈ $500. -->
+        <input type="range" id="slider-monthly" min="0" max="1000" step="1" value="233">
+      </div>
     </div>
 
-    <div class="control-group">
-      <div class="mc-head">
-        <label>Monthly Contribution</label>
-        <span class="value-display" id="disp-monthly">$500</span>
+    <!-- Active-state summary shown instead of the sliders above once a real
+         transaction history is loaded. Populated by renderTxSummary() in
+         js/transactions.js. -->
+    <div id="contrib-tx-active" class="control-group" hidden>
+      <label>Real transaction history</label>
+      <div class="tx-summary" id="tx-summary-text"></div>
+      <div style="display:flex;gap:8px">
+        <button type="button" class="tx-clear-btn" id="tx-switch-to-sliders-btn" style="flex:1">Switch to sliders</button>
+        <button type="button" class="date-pick-btn tx-delete-btn" id="tx-delete-btn" title="Permanently delete this transaction history" aria-label="Permanently delete this transaction history">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
+        </button>
       </div>
-      <label class="mc-raise" for="slider-raise" title="Grow the monthly contribution by this much each year">
-        <span class="mc-raise-txt">increase</span> <select id="slider-raise" class="inline-select raise-select">
-          <option value="0" selected>0%</option>
-          <option value="1">1%</option>
-          <option value="2">2%</option>
-          <option value="3">3%</option>
-          <option value="4">4%</option>
-          <option value="5">5%</option>
-          <option value="6">6%</option>
-          <option value="7">7%</option>
-          <option value="8">8%</option>
-          <option value="9">9%</option>
-          <option value="10">10%</option>
-          <option value="12">12%</option>
-          <option value="15">15%</option>
-          <option value="20">20%</option>
-          <option value="25">25%</option>
-        </select> <span class="mc-raise-txt">/yr</span>
-      </label>
-      <!-- Logarithmic $0–$1M scale (see sliderToMonthly). Position 233 ≈ $500. -->
-      <input type="range" id="slider-monthly" min="0" max="1000" step="1" value="233">
     </div>
 
     <!-- Build a strategy from pasted (e.g. LLM-written) code. -->
@@ -1291,19 +1320,20 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=220"></script>
-<script src="js/utils.js?v=220"></script>
-<script src="js/simulate.js?v=220"></script>
-<script src="js/metrics.js?v=220"></script>
-<script src="js/chart.js?v=220"></script>
-<script src="js/controls.js?v=220"></script>
-<script src="js/date-picker.js?v=220"></script>
-<script src="js/analytics.js?v=220"></script>
-<script src="js/preview-dropdown.js?v=220"></script>
-<script src="js/saved-configs.js?v=220"></script>
-<script src="js/strategy-library-code.js?v=220"></script>
-<script src="js/strategy-library.js?v=220"></script>
-<script src="js/init.js?v=220"></script>
+<script src="js/data.js?v=233"></script>
+<script src="js/utils.js?v=233"></script>
+<script src="js/simulate.js?v=233"></script>
+<script src="js/metrics.js?v=233"></script>
+<script src="js/chart.js?v=233"></script>
+<script src="js/controls.js?v=233"></script>
+<script src="js/date-picker.js?v=233"></script>
+<script src="js/transactions.js?v=233"></script>
+<script src="js/analytics.js?v=233"></script>
+<script src="js/preview-dropdown.js?v=233"></script>
+<script src="js/saved-configs.js?v=233"></script>
+<script src="js/strategy-library-code.js?v=233"></script>
+<script src="js/strategy-library.js?v=233"></script>
+<script src="js/init.js?v=233"></script>
 
 </body>
 </html>

@@ -228,6 +228,34 @@
       } catch (e) {}
     }
   }
+
+  // Real transaction history (js/transactions.js) — a share link's `txz`/`tx`
+  // wins over localStorage, same precedence as the `scz`/`sc` saved-configs
+  // restore right above.
+  if (typeof _txStateFromRows === 'function') {
+    const txz = params.get('txz');
+    const tx = params.get('tx');
+    let txJson = null;
+    if (txz && typeof unpackSharePayload === 'function') txJson = await unpackSharePayload(txz);
+    else if (tx) { try { txJson = decodeURIComponent(tx); } catch (e) { txJson = null; } }
+    let txRows = null;
+    if (txJson) { try { txRows = JSON.parse(txJson); } catch (e) { txRows = null; } }
+    if (Array.isArray(txRows) && txRows.length) {
+      // A shared link always opens with its transactions active — that's the
+      // whole point of sharing it.
+      const state = _txStateFromRows(txRows, 'upload');
+      window._txSchedule = state;
+      window._txScheduleStash = state;
+    } else if (typeof loadTransactionsFromStorage === 'function') {
+      const loaded = loadTransactionsFromStorage();
+      if (loaded) {
+        window._txScheduleStash = loaded.state;
+        window._txSchedule = loaded.active ? loaded.state : null;
+      }
+    }
+    if (window._txSchedule && typeof applyTxEntryDate === 'function') applyTxEntryDate();
+    if (typeof toggleContribMode === 'function') toggleContribMode();
+  }
   render();
 
   // Apply post-render shared state: dataset visibility + analytics modal.

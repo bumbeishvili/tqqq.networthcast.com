@@ -474,15 +474,26 @@ data.sqqq  : daily closing price of SQQQ  (-3x Nasdaq-100 INVERSE — rises when
   moving average), but only push LOG rows for indices within [p.startIdx, p.endIdx].
 
 === INPUTS: p ===
-p.initial     : starting cash, available at p.startIdx (number)
-p.monthly     : new cash to ADD at the start of each new month, i.e. when
-                data.dates[i].slice(0,7) !== data.dates[i-1].slice(0,7). May be 0.
-p.annualRaise : fraction to grow the monthly contribution each calendar year (e.g. 0.03 = +3%/yr; 0 = none)
-p.startIdx    : first index to simulate (inclusive)
-p.endIdx      : last index to simulate (inclusive)
-p.entryDate   : equals data.dates[p.startIdx];   p.exitDate equals data.dates[p.endIdx]
-p.<yourId>    : the user's chosen value for each param you declared (already typed for you: number for
-                numeric options, boolean for [true, false], string otherwise)
+p.initial       : starting cash, available at p.startIdx (number)
+p.contributions : { "YYYY-MM-DD": amount } — every day new cash lands. Usually one entry
+                  per calendar month (the classic monthly-DCA case), but when the user has
+                  uploaded their OWN real transaction history it's whatever real dates and
+                  amounts they actually deposited — could be irregular, could skip months,
+                  could land mid-month. THIS is the source of truth for contributions, not a
+                  formula you compute yourself. On each day you simulate:
+                    var amt = p.contributions[data.dates[i]] || 0;
+                    if (amt > 0) { cash += amt; contributed = amt; action = "contribution"; }
+p.monthly, p.annualRaise : the SAME contributions, pre-collapsed into "amount per month" +
+                  "% growth per year" — kept only for strategies that want a quick read of the
+                  overall shape (e.g. to size something proportionally). Do not use these to
+                  recompute contribution amounts yourself; p.contributions already has the
+                  exact real number for every date and is always correct, including when it
+                  doesn't follow a flat-plus-growth pattern.
+p.startIdx      : first index to simulate (inclusive)
+p.endIdx        : last index to simulate (inclusive)
+p.entryDate     : equals data.dates[p.startIdx];   p.exitDate equals data.dates[p.endIdx]
+p.<yourId>      : the user's chosen value for each param you declared (already typed for you:
+                  number for numeric options, boolean for [true, false], string otherwise)
 
 === RETURN: return { log } — and make every row say as much as possible ===
 "log" is an array in ASCENDING date order. "date" and "value" are the only REQUIRED keys, but a bare
@@ -918,8 +929,12 @@ function customSig(cfg, ctx) {
 function computeCustomGlobals(cfg, ctx) {
   let entryDate = null, exitDate = null, startIdx = 0, endIdx = 0;
   if (typeof quarterlyData !== 'undefined' && quarterlyData) {
-    entryDate = (quarterlyData[ctx.simEntryIdx] || [])[0];
-    exitDate  = (quarterlyData[ctx.exitIdx] || [])[0];
+    // ctx.entryDateOverride/exitDateOverride (the exact-date picker, or a real
+    // transaction history's entry date) previously weren't threaded through
+    // here at all — custom strategies only ever saw the coarse quarter-snapped
+    // date. Fixed in js/chart.js's cfgCtx construction.
+    entryDate = ctx.entryDateOverride || (quarterlyData[ctx.simEntryIdx] || [])[0];
+    exitDate  = ctx.exitDateOverride  || (quarterlyData[ctx.exitIdx] || [])[0];
   }
   if (typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx) {
     const s = dailyDateToIdx.get(entryDate), en = dailyDateToIdx.get(exitDate);
@@ -928,7 +943,20 @@ function computeCustomGlobals(cfg, ctx) {
   }
   const dlen = (typeof daily !== 'undefined' && daily) ? daily.length : 0;
   if (!endIdx) endIdx = Math.max(0, dlen - 1);
-  return { initial: ctx.initial, monthly: ctx.monthly, annualRaise: ctx.annualRaise, startIdx, endIdx, entryDate, exitDate };
+  // Contribution schedule as a plain {date: amount} object — postMessage-safe
+  // and simple for a strategy to index by data.dates[i] (see CUSTOM_PROMPT's
+  // p.contributions docs). Real transaction history (js/transactions.js) when
+  // active, else the same formula-derived schedule the built-in engines use
+  // (js/simulate.js buildFormulaSchedule) — so a strategy written against
+  // p.contributions behaves identically whether or not a real history is loaded.
+  let contributions = null;
+  const sched = ctx.contribSchedule || (typeof buildFormulaSchedule === 'function' && entryDate && exitDate
+    ? buildFormulaSchedule(ctx.monthly, ctx.annualRaise, entryDate, exitDate) : null);
+  if (sched && sched.byDate && sched.byDate.size) {
+    contributions = {};
+    for (const [d, amt] of sched.byDate) contributions[d] = amt;
+  }
+  return { initial: ctx.initial, monthly: ctx.monthly, annualRaise: ctx.annualRaise, startIdx, endIdx, entryDate, exitDate, contributions };
 }
 // Throttled (not debounced) so a slider drag updates the line WHILE you're
 // still dragging, not only once you let go. A plain debounce resets its timer
@@ -1063,7 +1091,8 @@ function cfgMoneyWeightedCAGR(ctx, finalV) {
   const endDate = labels.length ? labels[labels.length - 1] : null;
   if (typeof moneyWeightedCAGR === 'function' && startDate && endDate) {
     return moneyWeightedCAGR(ctx.initial, ctx.monthly, ctx.annualRaise, startDate, endDate,
-      ctx.years, finalV, (typeof monthlyData !== 'undefined' ? monthlyData : null), ctx.totalContributed);
+      ctx.years, finalV, (typeof monthlyData !== 'undefined' ? monthlyData : null), ctx.totalContributed,
+      ctx.contribSchedule);
   }
   return (ctx.years > 0 && ctx.totalContributed > 0 && finalV > 0)
     ? (Math.pow(finalV / ctx.totalContributed, 1 / ctx.years) - 1) * 100 : 0;
@@ -1135,7 +1164,29 @@ function computeCustomSeries(cfg, ctx) {
 // Run the right engine for a config and return its label-aligned series + stats.
 function computeConfigSeries(cfg, ctx) {
   if (cfg.type === 'custom') return computeCustomSeries(cfg, ctx);
-  const { initial, monthly, annualRaise, simEntryIdx, exitIdx, labels, years, totalContributed } = ctx;
+  const { initial, monthly, annualRaise, simEntryIdx, exitIdx, labels, years, totalContributed,
+          entryDateOverride, exitDateOverride, contribSchedule } = ctx;
+  // Shared by every branch below — a real uploaded transaction history
+  // (js/transactions.js) or the exact-date picker override, threaded through
+  // exactly like render() already does for the main/base lines (js/chart.js).
+  // Previously missing here entirely: a saved/derived 9sig/SMA/Buy&Hold/
+  // Invested Compounded line fell back to the OLD monthly-formula schedule
+  // and the quarter-snapped entry date, silently ignoring both overrides.
+  const _dateOverrideOpts = (entryDateOverride || exitDateOverride)
+    ? { entryDateOverride, exitDateOverride } : {};
+  // entryDateOverride/exitDateOverride alone have NO effect on simulate() —
+  // it only re-derives entryIdx/exitIdx from them when a custom qData is
+  // ALSO present (js/simulate.js's `qData !== quarterlyData` gate). Buy &
+  // Hold and Invested Compounded have no "period" concept of their own (they
+  // always run on plain quarterlyData), so this exact-range qData is what
+  // makes the override actually apply for them — same fallback chart.js's
+  // render() uses for the main line.
+  const _bhExactQData = ((entryDateOverride || exitDateOverride) && typeof buildExactRangeQData === 'function')
+    ? buildExactRangeQData('quarterly',
+        entryDateOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]),
+        exitDateOverride  || (quarterlyData[exitIdx]    && quarterlyData[exitIdx][0]))
+    : null;
+  const _bhQDataOpts = (_bhExactQData && _bhExactQData.length >= 2) ? { qData: _bhExactQData } : {};
   const p = cfg.params || {};
   let points = null;
   let subPoints = null; // 9sig Holding/Target/Cash breakdown (for its sub-series)
@@ -1152,6 +1203,8 @@ function computeConfigSeries(cfg, ctx) {
     const cd = +pget(p, 'select-9sig-crashdrop', 30);
     const sp = +pget(p, 'select-9sig-spike', 100);
     const opts = {
+      schedule: contribSchedule,
+      ..._dateOverrideOpts,
       qGrowth: (+pget(p, 'select-9sig-growth', 9)) / 100 || 0.09,
       underlyingCol: ulColFromVal(pget(p, 'select-9sig-underlying', 'tqqq')),
       crashDropPct: Number.isFinite(cd) ? cd : 30,
@@ -1167,14 +1220,26 @@ function computeConfigSeries(cfg, ctx) {
       tradeCostPct: +pget(p, 'select-9sig-cost', 0) || 0,
     };
     // Rebalance point: shift the schedule to N% through each period.
+    // entryDateOverride/exitDateOverride ALONE have no effect on simulate() —
+    // it only re-derives entryIdx/exitIdx from them when a custom qData is
+    // ALSO present (js/simulate.js's `qData !== quarterlyData` gate). So
+    // both this qData and the exact-range fallback below prefer the override
+    // dates over the quarter-snapped ones, same as chart.js's render().
+    const _entryDateForQ = entryDateOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]);
+    const _exitDateForQ  = exitDateOverride  || (quarterlyData[exitIdx]    && quarterlyData[exitIdx][0]);
     const _rp = +pget(p, 'select-9sig-rebalance-point', 0) || 0;
     if (_rp > 0 && typeof buildEnvelopeQData === 'function' && typeof PERIOD_DAYS !== 'undefined') {
       const _pd = PERIOD_DAYS[opts.rebalancePeriod] || 63;
       const _off = Math.round(_rp / 100 * (_pd - 1));
-      const _q = buildEnvelopeQData(opts.rebalancePeriod, _off,
-        quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0],
-        quarterlyData[exitIdx] && quarterlyData[exitIdx][0]);
+      const _q = buildEnvelopeQData(opts.rebalancePeriod, _off, _entryDateForQ, _exitDateForQ);
       if (_q && _q.length >= 2) opts.qData = _q;
+    }
+    // No rebalance-point qData claimed one — if an exact-date override is
+    // active, build the day-precision qData that makes it actually apply
+    // (same fallback chart.js's render() uses for the main line).
+    if (!opts.qData && (entryDateOverride || exitDateOverride) && typeof buildExactRangeQData === 'function') {
+      const _q2 = buildExactRangeQData(opts.rebalancePeriod, _entryDateForQ, _exitDateForQ);
+      if (_q2 && _q2.length >= 2) opts.qData = _q2;
     }
     // A yearly config is coarser than the chart's quarterly axis floor → get
     // quarter-end value snapshots so its line/sub-series draw at quarter detail.
@@ -1193,6 +1258,8 @@ function computeConfigSeries(cfg, ctx) {
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: '9sig', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints };
   } else if (cfg.type === 'sma') {
     const opts = {
+      schedule: contribSchedule,
+      ..._dateOverrideOpts,
       smaAsset: pget(p, 'select-sma-asset', 'qqq') || 'qqq',
       smaWindow: +pget(p, 'select-sma-window', 200) || 200,
       underlyingCol: ulColFromVal(pget(p, 'select-sma-underlying', 'tqqq')),
@@ -1222,7 +1289,7 @@ function computeConfigSeries(cfg, ctx) {
     ddMulti = r.ddControls || null;
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'sma', smaLog: r.smaLog, smaPoints: r.smaPoints };
   } else if (cfg.type === 'bh') {
-    const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, {});
+    const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, { schedule: contribSchedule, ..._dateOverrideOpts, ..._bhQDataOpts });
     const key = pget(p, 'select-bh-underlying', 'tqqq');
     const arr = key === 'qqq' ? r.qqqPoints
               : key === 'spy' ? r.spyPoints
@@ -1236,7 +1303,7 @@ function computeConfigSeries(cfg, ctx) {
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'bh', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints };
   } else if (cfg.type === 'invested') {
     const rate = (typeof sliderToRate === 'function' ? sliderToRate(+pget(p, 'slider-rate', 0)) : 0) / 100;
-    const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, { baselineRate: rate });
+    const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, { baselineRate: rate, schedule: contribSchedule, ..._dateOverrideOpts, ..._bhQDataOpts });
     points = (r.log || []).map(l => ({ date: l.date, value: l.investedCompounded }));
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'invested', log: r.log };
   }
@@ -1294,7 +1361,8 @@ function computeConfigGhosts(cfg, ctx) {
   if (!cfg.showEnvelope) return [];
   if (typeof simulate !== 'function' || typeof buildEnvelopeShifts !== 'function'
       || typeof getShiftedPeriodData !== 'function') return [];
-  const { initial, monthly, annualRaise, simEntryIdx, exitIdx, labels } = ctx;
+  const { initial, monthly, annualRaise, simEntryIdx, exitIdx, labels,
+          entryDateOverride, exitDateOverride, contribSchedule } = ctx;
   const p = cfg.params || {};
   const period = pget(p, 'select-9sig-period', 'quarterly') || 'quarterly';
   // Lazily build (and memoize, reusing data.js's cache) the period's shifts.
@@ -1327,14 +1395,20 @@ function computeConfigGhosts(cfg, ctx) {
   // the canonical entryIdx/exitIdx so simulate()'s yearly entry-remap finds
   // qData[0] (which we set to the canonical entry date) and walks the full
   // qData without slicing it down to a single row.
-  const entryDate = quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0];
-  const exitDate  = quarterlyData[exitIdx]    && quarterlyData[exitIdx][0];
+  // Prefer the exact-date override over the quarter-snapped date, same as
+  // the main line's entryDateForSim (js/chart.js) — otherwise a ghost would
+  // anchor a day or more off from where the main 9sig line actually starts.
+  const entryDate = entryDateOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]);
+  const exitDate  = exitDateOverride  || (quarterlyData[exitIdx]    && quarterlyData[exitIdx][0]);
   return entry.shifts.map(dayShift => {
     const qData = (typeof buildEnvelopeQData === 'function')
       ? buildEnvelopeQData(period, dayShift, entryDate, exitDate)
       : null;
     if (!qData || qData.length < 2) return labels.map(() => null);
-    const r = simulate(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, { ...sigParams, qData, skipBH: true });
+    const r = simulate(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, {
+      ...sigParams, qData, skipBH: true, schedule: contribSchedule,
+      ...((entryDateOverride || exitDateOverride) ? { entryDateOverride, exitDateOverride } : {}),
+    });
     const rows = r.log || [];
     return resampleByDate(rows.map(l => ({ date: l.date, value: l.total })), labels);
   });

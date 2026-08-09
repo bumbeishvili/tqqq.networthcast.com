@@ -422,6 +422,15 @@ if (inflPill) inflPill.addEventListener('click', () => {
   function getMax() { return maxVal; }
   function setMax(v) { maxVal = v; updateUI(); }
 
+  // A real uploaded transaction history (js/transactions.js) pins the entry
+  // date to the first transaction and hands every engine that exact date —
+  // dragging the entry thumb away from it would silently desync the chart
+  // from the real schedule (the initial deposit amount and every dated
+  // contribution still assume that fixed start). So the entry side is locked
+  // while a schedule is active; the exit thumb stays fully free, same as
+  // today (exit isn't tied to the transaction data).
+  function entryLocked() { return !!window._txSchedule; }
+
   // The quarter axis is warped so recent quarters get more of the track. Same
   // idea as the monthly-contribution slider's log mapping, just anchored at the
   // right edge instead of the left: it's distance-from-today (in quarters) that
@@ -459,16 +468,21 @@ if (inflPill) inflPill.addEventListener('click', () => {
     exitThumb.style.left = xp + '%';
     fill.style.left = ep + '%';
     fill.style.width = (xp - ep) + '%';
+    entryThumb.classList.toggle('thumb-locked', entryLocked());
+    entryThumb.title = entryLocked() ? 'Entry is set by your uploaded transactions — clear them to adjust' : '';
   }
 
-  function onChanged() {
-    // Touching the coarse quarter slider is authoritative — clear any
-    // exact-day override from the calendar picker (js/date-picker.js) so the
-    // two controls can't disagree about where the range actually starts/ends.
+  // `side` identifies which thumb actually moved this time ('entry' or
+  // 'exit') — only THAT side's exact-day override (js/date-picker.js) gets
+  // cleared, so dragging just the entry thumb doesn't silently drop an exit
+  // date you deliberately picked, and vice versa. Omitted for the paths that
+  // shift BOTH thumbs together (fill-drag, step/keyboard/play) — both
+  // positions actually changed there, so both overrides go stale.
+  function onChanged(side) {
     const eEl = document.getElementById('entry-exact-date');
     const xEl = document.getElementById('exit-exact-date');
-    if (eEl && eEl.value) eEl.value = '';
-    if (xEl && xEl.value) xEl.value = '';
+    if ((side === 'entry' || side == null) && eEl && eEl.value) eEl.value = '';
+    if ((side === 'exit'  || side == null) && xEl && xEl.value) xEl.value = '';
     saveSliders();
     render();
   }
@@ -476,6 +490,7 @@ if (inflPill) inflPill.addEventListener('click', () => {
   // Thumb dragging
   function startThumbDrag(thumb, isEntry) {
     return function(e) {
+      if (isEntry && entryLocked()) return;
       e.preventDefault();
       const rect = container.getBoundingClientRect();
       function onMove(ev) {
@@ -492,7 +507,7 @@ if (inflPill) inflPill.addEventListener('click', () => {
           exitInput.value = val;
         }
         updateUI();
-        onChanged();
+        onChanged(isEntry ? 'entry' : 'exit');
       }
       function onUp() {
         document.removeEventListener('mousemove', onMove);
@@ -517,6 +532,7 @@ if (inflPill) inflPill.addEventListener('click', () => {
   fill.addEventListener('touchstart', startFillDrag, { passive: false });
 
   function startFillDrag(e) {
+    if (entryLocked()) return; // fill-drag moves both thumbs, including the pinned entry
     e.preventDefault();
     const rect = container.getBoundingClientRect();
     const startX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -562,18 +578,24 @@ if (inflPill) inflPill.addEventListener('click', () => {
     const pct = ((e.clientX - rect.left) / rect.width) * 100;
     const val = percentToVal(pct);
     const entry = +entryInput.value, exit = +exitInput.value;
-    if (Math.abs(val - entry) < Math.abs(val - exit)) {
+    let side;
+    if (!entryLocked() && Math.abs(val - entry) < Math.abs(val - exit)) {
       entryInput.value = Math.min(val, exit - 1);
+      side = 'entry';
+    } else if (entryLocked() && Math.abs(val - entry) < Math.abs(val - exit)) {
+      return; // click landed nearer the pinned entry thumb — ignore rather than move it
     } else {
       exitInput.value = Math.max(val, entry + 1);
+      side = 'exit';
     }
     updateUI();
-    onChanged();
+    onChanged(side);
   });
 
   // Shift the entire range by `dir` quarters; returns true if it actually
   // moved, false at boundary (used to auto-stop the play buttons).
   function step(dir) {
+    if (entryLocked()) return false; // shifts both thumbs, including the pinned entry
     const newEntry = +entryInput.value + dir;
     const newExit = +exitInput.value + dir;
     if (newEntry < 0 || newExit > getMax()) return false;
@@ -763,6 +785,18 @@ async function shareConfig() {
       const packed = await packSharePayload(json);
       if (packed) params.set('scz', packed);
       else params.set('sc', encodeURIComponent(json));
+    } catch (e) {}
+  }
+
+  // Real transaction history (js/transactions.js) — same tier of data as
+  // saved strategies above: personal, so it rides the same compressed-payload
+  // pattern (`txz` deflated, `tx` plain fallback) rather than a plain `t=...`.
+  if (window._txSchedule && window._txSchedule.rows && window._txSchedule.rows.length) {
+    try {
+      const json = JSON.stringify(window._txSchedule.rows);
+      const packed = await packSharePayload(json);
+      if (packed) params.set('txz', packed);
+      else params.set('tx', encodeURIComponent(json));
     } catch (e) {}
   }
 

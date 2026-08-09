@@ -1557,9 +1557,17 @@ function render() {
   // the fixed top pill doesn't track the controls (which now belong to the saved
   // strategy). Restored just before the panel/legends are rebuilt below.
   if (typeof freezeBaseForEditing === 'function') freezeBaseForEditing();
-  const initial = sliderToInitial(+document.getElementById('slider-initial').value);
+  let initial = sliderToInitial(+document.getElementById('slider-initial').value);
   const monthly = sliderToMonthly(+document.getElementById('slider-monthly').value);
   const annualRaise = +document.getElementById('slider-raise').value / 100;
+  // A real uploaded transaction history (js/transactions.js) overrides the
+  // Initial Investment slider with its own first (earliest) transaction, and
+  // hands every engine its own real contribution schedule below instead of
+  // the monthly/annualRaise formula. `monthly`/`annualRaise` stay as read —
+  // harmless once `contribSchedule` is passed, since every engine prefers
+  // opts.schedule over recomputing its own formula-based one.
+  if (window._txSchedule) initial = window._txSchedule.initial;
+  const contribSchedule = window._txSchedule ? window._txSchedule.schedule : undefined;
   // `rate` is the Invested Compounded baseline rate (the slider in that
   // sidebar). 9sig and SMA each have their own parked-cash rate now.
   const rate = sliderToRate(+document.getElementById('slider-rate').value) / 100;
@@ -1685,6 +1693,7 @@ function render() {
 
   const sigOpts = {
     qGrowth,
+    schedule: contribSchedule,
     ...(_rebalQData ? { qData: _rebalQData } : _exactQData ? { qData: _exactQData } : {}),
     ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
     underlyingCol: sigUlCol,
@@ -1741,6 +1750,7 @@ function render() {
   const smaWindow = +((document.getElementById('select-sma-window') || {}).value) || 200;
   const smaOpts = {
     smaAsset, smaWindow, underlyingCol: smaUlCol,
+    schedule: contribSchedule,
     entryBufferPct:       +((document.getElementById('select-sma-entry-buf') || {}).value) || 0,
     exitBufferPct:        +((document.getElementById('select-sma-exit-buf')  || {}).value) || 0,
     rsiOverheatThreshold: +((document.getElementById('select-sma-rsi-oh')   || {}).value) || 0,
@@ -1804,6 +1814,8 @@ function render() {
         return simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise, {
           qData: ghostQData,
           skipBH: true,
+          schedule: contribSchedule,
+          ...((entryOverride || exitOverride) ? { entryDateOverride: _entryDate, exitDateOverride: _exitDate } : {}),
           qGrowth,
           underlyingCol: sigUlCol,
           crashDropPct:   Number.isFinite(crashDropPct) ? crashDropPct : 30,
@@ -1846,7 +1858,8 @@ function render() {
   // schedule for every strategy — only the final value differs.
   const _mw = (finalValue) => moneyWeightedCAGR(
     initial, monthly, annualRaise, log[0].date, finalLog.date,
-    years, finalValue, (typeof monthlyData !== 'undefined' ? monthlyData : null), totalContributed);
+    years, finalValue, (typeof monthlyData !== 'undefined' ? monthlyData : null), totalContributed,
+    contribSchedule);
   const ret9 = _mw(finalLog.total);
   const retBH = _mw(finalBH);
   const retQQQ = _mw(finalQQQ);
@@ -1982,7 +1995,17 @@ function render() {
   }
   // Shared context for saved-config lines (saved-configs.js). They reuse the
   // global initial/monthly/date-range; only their own strategy knobs are frozen.
-  const cfgCtx = { initial, monthly, annualRaise, simEntryIdx, exitIdx, labels, years, totalContributed };
+  // entryDateOverride/exitDateOverride: previously NOT threaded through to
+  // custom/saved strategies at all — computeCustomGlobals only ever saw the
+  // coarse quarter-snapped date, a pre-existing gap. A real transaction
+  // history relies on the exact-date override to set the entry date, so this
+  // needed fixing for custom strategies to see the same entry date the main
+  // chart already does.
+  const cfgCtx = {
+    initial, monthly, annualRaise, simEntryIdx, exitIdx, labels, years, totalContributed,
+    ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
+    contribSchedule,
+  };
   if (chart) {
     // Strip saved-config datasets up front so the envelope length math below
     // (which assumes datasets end at the envelope block) stays correct.
@@ -2150,6 +2173,7 @@ function render() {
     // check was sometimes wrong on its own terms even before the missing
     // left-edge clamp below.
     const ttWidth = el.offsetWidth || 240;
+    const ttHeight = el.offsetHeight || 0;
     let left = tooltip.caretX + canvasRect.left - panelRect.left + 14;
     let top = tooltip.caretY + canvasRect.top - panelRect.top - 40;
     if (left + ttWidth > panelRect.width) left = tooltip.caretX + canvasRect.left - panelRect.left - ttWidth - 14;
@@ -2160,6 +2184,14 @@ function render() {
     // clipped/scrollable, just genuinely positioned off-viewport).
     if (left < 10) left = 10;
     if (top < 0) top = 10;
+    // Same idea vertically: with many visible lines the row list can get tall
+    // enough that the tooltip's bottom edge lands past the viewport — and
+    // since it's absolutely positioned (not clipped), that grows the PAGE's
+    // scrollable height instead of just being an offscreen tooltip. Clamp
+    // against the viewport (converted into panel-relative coords, since
+    // `top` is measured from the panel), not just the panel's own bounds.
+    const viewportBottomInPanel = window.innerHeight - panelRect.top - 10;
+    if (top + ttHeight > viewportBottomInPanel) top = Math.max(10, viewportBottomInPanel - ttHeight);
     el.style.left = left + 'px';
     el.style.top = top + 'px';
   };

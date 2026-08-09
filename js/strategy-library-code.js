@@ -17,8 +17,8 @@ CODE[1] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -32,7 +32,7 @@ CODE[1] = `{
         else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -50,8 +50,8 @@ CODE[2] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -62,7 +62,7 @@ CODE[2] = `{
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -80,8 +80,8 @@ CODE[3] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -92,7 +92,7 @@ CODE[3] = `{
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -111,8 +111,8 @@ CODE[8] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -125,7 +125,7 @@ CODE[8] = `{
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -144,8 +144,8 @@ CODE[9] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -156,7 +156,7 @@ CODE[9] = `{
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -176,8 +176,8 @@ CODE[10] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -188,7 +188,7 @@ CODE[10] = `{
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -206,8 +206,8 @@ CODE[11] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -218,7 +218,7 @@ CODE[11] = `{
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -236,8 +236,8 @@ CODE[12] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -248,7 +248,7 @@ CODE[12] = `{
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -268,8 +268,8 @@ CODE[13] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -287,7 +287,7 @@ CODE[13] = `{
         else if (state === "qqq" && pxQ > 0) { shQ += cash / pxQ; cash = 0; }
       }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action.indexOf("buy") === 0 || action.indexOf("derisk") === 0 || monthEnd)
+      if (contributed !== 0 || action.indexOf("buy") === 0 || action.indexOf("derisk") === 0 || monthEnd)
         log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action });
     }
     return { log };
@@ -311,8 +311,8 @@ CODE[15] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -326,7 +326,7 @@ CODE[15] = `{
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -348,8 +348,8 @@ CODE[17] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -362,7 +362,7 @@ CODE[17] = `{
       else if ((!bull || stopped) && invested) { cash = sh * px; sh = 0; invested = false; action = stopped ? "stop" : "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || action === "stop" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || action === "stop" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -381,8 +381,8 @@ CODE[18] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -397,7 +397,7 @@ CODE[18] = `{
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -416,8 +416,8 @@ CODE[19] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -428,7 +428,7 @@ CODE[19] = `{
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -447,8 +447,8 @@ CODE[20] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       const px = lev[i], newMonth = prevMonth === null || month !== prevMonth;
@@ -462,7 +462,7 @@ CODE[20] = `{
         sh = (total * targetW) / px; cash = total - sh * px; w = targetW; action = "rebalance";
       }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "rebalance" || monthEnd)
+      if (contributed !== 0 || action === "rebalance" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action, weight: w });
     }
     return { log };
@@ -486,8 +486,8 @@ CODE[22] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -501,7 +501,7 @@ CODE[22] = `{
       else if (invested && (!up || rsi > p.sell)) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -525,8 +525,8 @@ CODE[23] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -541,7 +541,7 @@ CODE[23] = `{
       else if (!wantIn && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -561,8 +561,8 @@ CODE[24] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -584,7 +584,7 @@ CODE[24] = `{
         else if (want === "qqq" && pxQ > 0) { shQ += cash / pxQ; cash = 0; }
       }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "delever" || action === "gtfo" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "delever" || action === "gtfo" || monthEnd)
         log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action });
     }
     return { log };
@@ -604,8 +604,8 @@ CODE[25] = `{
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold";
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4)) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
       }
       prevMonth = month;
@@ -621,7 +621,7 @@ CODE[25] = `{
         else if (state === "park" && pxP > 0) { shPark += cash / pxP; cash = 0; }
       }
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
-      if (contributed > 0 || action === "buy" || action === "derisk" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "derisk" || monthEnd)
         log.push({ date: data.dates[i], value: shLev * pxL + shPark * pxP + cash, price: pxL, contributed: contributed, action: action });
     }
     return { log };
@@ -688,8 +688,8 @@ CODE[26] = `{
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "", fee = 0;
       cash *= 1 + dayRate;
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4), 10) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; invested += amt; action = "contribution";
       }
       prevMonth = month;
@@ -718,7 +718,7 @@ CODE[26] = `{
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
-      if (contributed > 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || monthEnd || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
@@ -823,8 +823,8 @@ CODE[39] = `{
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "", fee = 0;
       cash *= 1 + dayRate;
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4), 10) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; invested += amt; action = "contribution";
       }
       prevMonth = month;
@@ -855,7 +855,7 @@ CODE[39] = `{
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
-      if (contributed > 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || monthEnd || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: px, shares: shares, holdingsValue: stockVal,
@@ -1011,8 +1011,8 @@ CODE[40] = `{
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "", fee = 0, traded = 0, leg = "";
       cash *= 1 + dayRate;
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4), 10) - y0);
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; invested += amt; action = "contribution";
       }
       prevMonth = month;
@@ -1071,7 +1071,7 @@ CODE[40] = `{
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
       feesPaid += fee;
-      if (contributed > 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || monthEnd || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,

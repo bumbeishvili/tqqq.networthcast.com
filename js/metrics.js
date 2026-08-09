@@ -44,16 +44,30 @@ function computeMoneyWeightedReturn(flows) {
 }
 
 // Build the contribution cash-flow stream shared by every strategy over a date
-// span: an initial outflow at t=0, then each monthly contribution (with annual
-// raise) at its own date. `monthlyRows` are [date, ...] rows (the global
-// monthlyData shape); only those in (startDate, endDate] count, matching the
-// simulate() contribution window. All flows are NEGATIVE (money in) — append the
-// strategy's final value as a positive flow before solving for the return.
-function buildContributionFlows(initial, monthly, annualRaise, startDate, endDate, monthlyRows) {
-  annualRaise = annualRaise || 0;
+// span: an initial outflow at t=0, then each contribution at its own date. All
+// flows are NEGATIVE (money in) — append the strategy's final value as a
+// positive flow before solving for the return.
+//
+// `schedule` (optional, from js/simulate.js's buildFormulaSchedule or a real
+// uploaded transaction history) is preferred when supplied — its `.list` is
+// already `{date, amount}` pairs, real dates included, no formula needed here.
+// Without it, falls back to the original formula recomputed against
+// `monthlyRows` ([date, ...] rows, the global monthlyData shape) — kept
+// exactly as before so existing callers/tests (tests/sim.cjs) are unaffected.
+function buildContributionFlows(initial, monthly, annualRaise, startDate, endDate, monthlyRows, schedule) {
   const start = new Date(startDate + 'T00:00:00Z');
-  const startYear = parseInt(String(startDate).substring(0, 4), 10);
   const flows = [{ t: 0, cf: -initial }];
+  if (schedule && schedule.list) {
+    for (const row of schedule.list) {
+      if (row.date > startDate && row.date <= endDate && row.amount !== 0) {
+        const t = (new Date(row.date + 'T00:00:00Z') - start) / (365.25 * 86400000);
+        flows.push({ t, cf: -row.amount });
+      }
+    }
+    return flows;
+  }
+  annualRaise = annualRaise || 0;
+  const startYear = parseInt(String(startDate).substring(0, 4), 10);
   if (monthlyRows && monthly > 0) {
     for (let i = 0; i < monthlyRows.length; i++) {
       const d = monthlyRows[i][0];
@@ -70,10 +84,11 @@ function buildContributionFlows(initial, monthly, annualRaise, startDate, endDat
 
 // Convenience: money-weighted CAGR (%) for one strategy given its contribution
 // schedule and final value. Falls back to the simple end/contributed CAGR when
-// the IRR can't be solved (degenerate or loss-to-zero streams).
-function moneyWeightedCAGR(initial, monthly, annualRaise, startDate, endDate, years, finalValue, monthlyRows, totalContributed) {
+// the IRR can't be solved (degenerate or loss-to-zero streams). `schedule` is
+// optional — see buildContributionFlows.
+function moneyWeightedCAGR(initial, monthly, annualRaise, startDate, endDate, years, finalValue, monthlyRows, totalContributed, schedule) {
   if (!(finalValue > 0) || !(years > 0)) return 0;
-  const flows = buildContributionFlows(initial, monthly, annualRaise, startDate, endDate, monthlyRows);
+  const flows = buildContributionFlows(initial, monthly, annualRaise, startDate, endDate, monthlyRows, schedule);
   flows.push({ t: years, cf: finalValue });
   const r = computeMoneyWeightedReturn(flows);
   if (r != null && Number.isFinite(r)) return r;

@@ -717,6 +717,13 @@
     border-color: var(--accent);
     color: var(--accent);
   }
+  /* Entry's exact-day picker is disabled while a real transaction history is
+     active (js/transactions.js) — entry is pinned to the first transaction. */
+  .date-pick-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
   /* 18×18 reads fine as a quiet desktop affordance next to a mouse cursor;
      on touch it's below any reasonable tap-target size for a control this
      frequently used (setting exact entry/exit days). Icon stays 11px. */
@@ -1935,6 +1942,14 @@
   .dual-range .thumb:hover {
     box-shadow: 0 0 14px rgba(198, 78, 255, 0.6);
   }
+  /* Entry thumb is pinned while a real transaction history is active
+     (js/transactions.js, js/controls.js's entryLocked()) — dragging it away
+     would desync the chart from the schedule's real first-transaction date. */
+  .dual-range .thumb.thumb-locked {
+    cursor: not-allowed;
+    opacity: 0.5;
+    box-shadow: none;
+  }
 
   .period-play {
     flex-shrink: 0;
@@ -2791,6 +2806,60 @@
     transition: border-color 0.15s, color 0.15s, background 0.15s;
   }
   .new-custom-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.06); }
+
+  /* Active-state summary shown in place of the Initial/Monthly sliders once a
+     real transaction history is loaded (js/transactions.js). */
+  .tx-summary {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .tx-summary b { font-family: 'JetBrains Mono', monospace; }
+  .tx-clear-btn {
+    width: 100%;
+    padding: 9px 10px;
+    font: 600 12px 'Open Sans', sans-serif;
+    border-radius: 6px;
+    border: 1px dashed var(--border);
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .tx-clear-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.06); }
+  .tx-delete-btn:hover { border-color: var(--red-text); color: var(--red-text); background: rgba(var(--red-rgb), 0.08); }
+
+  /* Parsed-rows preview inside the transaction-upload modal. */
+  .tx-preview-table-wrap {
+    max-height: 260px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 4px;
+  }
+  .tx-preview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .tx-preview-table th {
+    position: sticky;
+    top: 0;
+    background: var(--surface2);
+    text-align: left;
+    padding: 6px 10px;
+    font-weight: 600;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  .tx-preview-table td {
+    padding: 5px 10px;
+    border-bottom: 1px solid rgba(122, 122, 166, 0.15);
+    color: var(--text);
+  }
+  .tx-preview-table tr:last-child td { border-bottom: none; }
 
   /* Custom strategy pill badge */
   .saved-config-pill .sc-badge {
@@ -3794,6 +3863,13 @@
     z-index: 20;
     min-width: 220px;
     max-width: calc(100vw - 24px);
+    /* Backstop for the pathological case (content taller than the whole
+       viewport) — the JS repositioning in externalTooltip (js/chart.js)
+       handles the normal "many visible lines" case by moving the tooltip up
+       so it fits; this just guarantees it can never itself grow the page's
+       scrollable height even if that math is somehow insufficient. */
+    max-height: calc(100vh - 20px);
+    overflow-y: auto;
     box-shadow: var(--shadow-lg);
   }
   /* Close × inside the main-chart tooltip. Hidden on desktop (hover/leave

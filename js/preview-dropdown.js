@@ -77,10 +77,17 @@
     if (entryOverride && (!dailyDateToIdx || !dailyDateToIdx.has(entryOverride))) entryOverride = '';
     if (exitOverride  && (!dailyDateToIdx || !dailyDateToIdx.has(exitOverride)))  exitOverride  = '';
     if (entryOverride && exitOverride && entryOverride >= exitOverride) { entryOverride = ''; exitOverride = ''; }
+    // A real uploaded transaction history (js/transactions.js) overrides the
+    // Initial Investment slider and hands every preview its own real
+    // contribution schedule — mirrors render()'s same override in chart.js,
+    // so a bar preview never reads a different "initial"/contribution reality
+    // than what the main line is actually showing.
+    const txActive = !!window._txSchedule;
     return {
-      initial:     sliderToInitial(+document.getElementById('slider-initial').value),
+      initial:     txActive ? window._txSchedule.initial : sliderToInitial(+document.getElementById('slider-initial').value),
       monthly:     sliderToMonthly(+document.getElementById('slider-monthly').value),
       annualRaise: +document.getElementById('slider-raise').value / 100,
+      schedule:    txActive ? window._txSchedule.schedule : undefined,
       simEntryIdx,
       exitIdx,
       entryDateOverride: entryOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]) || null,
@@ -154,6 +161,7 @@
       if (q2 && q2.length >= 2) _qd = q2;
     }
     const r = simulate(p.initial, p.monthly, p.cashRate, p.simEntryIdx, p.exitIdx, p.annualRaise, {
+      schedule: p.schedule,
       ...(_qd ? { qData: _qd } : {}),
       ...(p.hasExactOverride ? { entryDateOverride: p.entryDateOverride, exitDateOverride: p.exitDateOverride } : {}),
       qGrowth: p.qGrowth, underlyingCol: p.underlyingCol, crashDropPct: p.crashDropPct,
@@ -166,6 +174,7 @@
   }
   function smaFinal(p) {
     const r = simulateSMA(p.initial, p.monthly, p.cashRate, p.simEntryIdx, p.exitIdx, p.annualRaise, {
+      schedule: p.schedule,
       smaAsset: p.smaAsset, smaWindow: p.smaWindow, underlyingCol: p.underlyingCol,
       entryBufferPct: p.entryBufferPct, exitBufferPct: p.exitBufferPct,
       rsiOverheatThreshold: p.rsiOverheatThreshold, rsiCoolThreshold: p.rsiCoolThreshold,
@@ -186,6 +195,7 @@
       if (q2 && q2.length >= 2) _qd = q2;
     }
     const r = simulate(p.initial, p.monthly, p.cashRate, p.simEntryIdx, p.exitIdx, p.annualRaise, {
+      schedule: p.schedule,
       ...(_qd ? { qData: _qd } : {}),
       ...(p.hasExactOverride ? { entryDateOverride: p.entryDateOverride, exitDateOverride: p.exitDateOverride } : {}),
       qGrowth: p.qGrowth, underlyingCol: p.underlyingCol, crashDropPct: p.crashDropPct,

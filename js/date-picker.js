@@ -91,6 +91,10 @@
     }
     return quarterlyData.length - 1;
   }
+  // Exposed so js/transactions.js (loaded after this file) can drag the
+  // dual-range thumb to a real transaction's entry date the same way this
+  // file drags it to a manually-picked exact date.
+  window.quarterIdxForDate = quarterIdxForDate;
   // Clamp a (year, month) pick to the loaded dataset's actual span — the year
   // select offers every year in range, but a month within the boundary
   // year(s) can still fall outside the data (e.g. picking the earliest year

@@ -1,4 +1,67 @@
 
+// Materializes the contribution formula ONCE instead of every engine (9sig,
+// SMA, Buy & Hold, Invested Compounded, metrics.js's money-weighted CAGR, and
+// every custom-strategy sandbox run) independently recomputing
+// `monthly * (1+annualRaise)^(year-startYear)`. Two lookup views, because two
+// different trigger conventions already coexist in this codebase:
+//   - `byMonth` ('YYYY-MM' -> $): what 9sig/Buy & Hold/Invested
+//     Compounded/metrics.js already key off — they iterate `monthlyData`,
+//     whose rows are dated at each month's LAST trading day. A month-keyed
+//     lookup doesn't care which day within the month fires it.
+//   - `byDate` (exact 'YYYY-MM-DD' -> $, dated at each month's FIRST trading
+//     day in range): for anything that walks a daily array and fires on
+//     "the month just changed" — SMA's daily-check mode and every
+//     custom/library strategy's `for (i = p.startIdx..p.endIdx)` loop.
+// When a real uploaded transaction schedule is active (js/transactions.js),
+// its own byDate/byMonth maps are used instead of this function — same
+// shape, real data instead of the formula.
+// `priceDateByMonth` ('YYYY-MM' -> exact 'YYYY-MM-DD' to price that month's
+// immediately-deployed portion at, for 9sig's contribDeployPct) is
+// deliberately left EMPTY here — the formula schedule keeps 9sig's existing
+// month-row pricing exactly as before (regression-safe). Only a REAL
+// transaction schedule (js/transactions.js) populates it, since that's the
+// only case where "the real day's price" is more than an arbitrary choice
+// within the month.
+function buildFormulaSchedule(monthly, annualRaise, entryDate, exitDate) {
+  const byDate = new Map(), byMonth = new Map(), list = [], priceDateByMonth = new Map();
+  if (!(monthly > 0) || !entryDate || !exitDate) return { byDate, byMonth, list, priceDateByMonth };
+  const startYear = parseInt(entryDate.slice(0, 4), 10);
+  const amountFor = (d) => monthly * Math.pow(1 + (annualRaise || 0), parseInt(d.slice(0, 4), 10) - startYear);
+
+  if (typeof monthlyData !== 'undefined' && monthlyData) {
+    for (const row of monthlyData) {
+      const d = row[0];
+      if (d > entryDate && d <= exitDate) byMonth.set(d.slice(0, 7), amountFor(d));
+    }
+  }
+  if (typeof daily !== 'undefined' && daily && typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx) {
+    const startIdx = dailyDateToIdx.get(entryDate);
+    const endIdx = dailyDateToIdx.get(exitDate);
+    if (startIdx != null && endIdx != null) {
+      let prevMonth = null;
+      for (let i = startIdx; i <= endIdx; i++) {
+        const d = daily[i].date;
+        const month = d.slice(0, 7);
+        if (prevMonth !== null && month !== prevMonth) {
+          const amt = amountFor(d);
+          byDate.set(d, amt);
+          list.push({ date: d, amount: amt });
+        }
+        prevMonth = month;
+      }
+    }
+  }
+  return { byDate, byMonth, list, priceDateByMonth };
+}
+
+// Column index (matching monthlyData/quarterlyData's [date, tqqq, qqq, spy,
+// qld, sso, spxl] layout) -> the same asset's property name on a `daily` row
+// object ({date, tqqq, qqq, ...}). Lets anything holding a numeric column
+// index (ulCol, parkCol) look up an exact daily price instead of a monthly
+// one — used by 9sig's contribDeployPct pricing when a real transaction
+// schedule supplies an exact day (see buildScheduleFromTransactions).
+const COL_TO_DAILY_KEY = ['date', 'tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl'];
+
 // SMA timing strategy: hold TQQQ while the signal asset (QQQ or SPY) closes
 // above its N-day simple moving average; flip to cash (earning the user's
 // configured rate) when it closes below. Monthly resolution — checks the
@@ -99,6 +162,10 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   // point at — undefined for every caller that hasn't set an override.
   const startDate = opts.entryDateOverride || quarterlyData[entryIdx][0];
   const endDate   = opts.exitDateOverride  || quarterlyData[exitIdx][0];
+  // Contribution schedule — a real uploaded transaction history (js/transactions.js)
+  // when the caller supplies one, otherwise the formula materialized once here
+  // instead of recomputed inline below. See buildFormulaSchedule's own comment.
+  const schedule = opts.schedule || buildFormulaSchedule(monthly, annualRaise, startDate, endDate);
   // row layout: [date, tqqq, qqq, spy, qld, sso, spxl] — sigAsset is QQQ
   // (col 2) or SPY (col 3); the leveraged underlying is selected via ulCol.
   const assetCol  = SMA_ASSET_COL[smaAsset] || 2;
@@ -188,9 +255,10 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   const shares = { tqqq: 0, qqq: 0, spy: 0, qld: 0, sso: 0, spxl: 0 };
   let cash = initial;
   let totalInvested = initial;
-  const startYear = parseInt(sm0[0].substring(0, 4));
-  let currentMonthly = monthly;
-  let lastYear = startYear;
+  // Last contribution amount that actually landed (schedule lookup, below) —
+  // held here for logging on later steps (e.g. a DCA-ladder continuation)
+  // that reference "the contribution that triggered this", not this step's own.
+  let currentMonthly = 0;
 
   // Pricing helper — column-zero (no data) returns 0 so callers skip the trade.
   function priceOf(row, asset) {
@@ -281,16 +349,36 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     const newMonth = curMonthStr !== prevMonthStr;
     prevMonthStr = curMonthStr;
 
-    const yr = parseInt(mDate.substring(0, 4));
-    if (yr > lastYear) {
-      currentMonthly = monthly * Math.pow(1 + annualRaise, yr - startYear);
-      lastYear = yr;
-    }
     if (newMonth) {
-      // Accrue cash interest on idle cash, then add this month's contribution.
+      // Accrue cash interest on idle cash, then add this month's contribution
+      // (0 for a month the schedule has nothing landing in — e.g. a gap in a
+      // real uploaded transaction history).
+      currentMonthly = schedule.byMonth.get(curMonthStr) || 0;
       if (cash > 0) cash *= (1 + monthlyRate);
       totalInvested += currentMonthly;
-      cash += currentMonthly;
+      if (currentMonthly < 0) {
+        // Withdrawal (a real uploaded transaction can be negative). Rule:
+        // cash covers it first; sell from whatever's currently held for the
+        // rest, at this step's price.
+        let need = -currentMonthly;
+        const fromCash = Math.min(Math.max(cash, 0), need);
+        cash -= fromCash;
+        need -= fromCash;
+        if (need > 0) {
+          for (const a of Object.keys(shares)) {
+            if (need <= 0 || shares[a] <= 0) continue;
+            const p = priceOf(row, a);
+            if (p <= 0) continue;
+            const grossNeeded = Math.min(shares[a] * p, need / (1 - cost));
+            shares[a] -= grossNeeded / p;
+            need -= grossNeeded * (1 - cost);
+          }
+        }
+        // Any `need` still left here means the withdrawal exceeded the
+        // entire portfolio — an edge case not modeled further.
+      } else {
+        cash += currentMonthly;
+      }
     }
 
     // Raw signal for this step, then apply the confirmation filter: only commit
@@ -655,8 +743,10 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   let totalInvested = initial;
   let totalFee = _initFee;
   let investedCompounded = initial;
-  let currentMonthly = monthly;
-  const startYear = parseInt(qSlice[0][0].substring(0, 4));
+  // Contribution schedule — a real uploaded transaction history when the
+  // caller supplies one, otherwise the formula materialized once. See
+  // buildFormulaSchedule's own comment (js/simulate.js).
+  const schedule = opts.schedule || buildFormulaSchedule(monthly, annualRaise, qSlice[0][0], qSlice[qSlice.length - 1][0]);
 
   const log = [];
   // Quarter-end value snapshots for the chart, used ONLY when the rebalance
@@ -678,13 +768,6 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
     let qFee = 0; // trading cost paid across this period's contributions + rebalance
 
     if (qi > 0) {
-      // Annual raise: increase monthly contribution at each new year
-      const currentYear = parseInt(qDate.substring(0, 4));
-      const prevYear = parseInt(prevQDate.substring(0, 4));
-      if (currentYear > prevYear) {
-        currentMonthly = monthly * Math.pow(1 + annualRaise, currentYear - startYear);
-      }
-
       // Add monthly contributions. Canonical 9Sig sends 100% to cash and waits
       // for the next rebalance — `contribDeployPct` lets the user split each
       // contribution: that fraction is deployed into the underlying at the
@@ -700,29 +783,78 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       // half would silently evaporate, since shares can't be bought without
       // a price to divide by.
       const applyContribAtPrice = (mPrice, mDate, monthlyRow) => {
-        const toStock = currentMonthly * contribDeployPct;
-        const toPark  = currentMonthly - toStock;
-        if (toStock > 0 && mPrice > 0) {
-          tqqqShares += toStock * (1 - cost) / mPrice; qFee += toStock * cost;
-        } else if (toStock > 0) {
-          // No underlying price (data gap) — the would-be stock half waits as
-          // park instead. (For cash park that's `cash`; for asset park that's
-          // shares of the asset bought at this month's price, if available.)
+        // 0 for a month the schedule has nothing landing in (e.g. a gap in a
+        // real uploaded transaction history).
+        const currentMonthly = schedule.byMonth.get(mDate.slice(0, 7)) || 0;
+        // A real transaction schedule knows the EXACT day this month's money
+        // landed (priceDateByMonth) — price the immediately-deployed portion
+        // there instead of at the month-row's date. Empty for the default
+        // formula schedule, so this is a no-op (mPrice unchanged) unless a
+        // real history is active — regression-safe.
+        if (schedule.priceDateByMonth && schedule.priceDateByMonth.size &&
+            typeof daily !== 'undefined' && daily && typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx) {
+          const exactDate = schedule.priceDateByMonth.get(mDate.slice(0, 7));
+          const exactIdx = exactDate != null ? dailyDateToIdx.get(exactDate) : null;
+          if (exactIdx != null) {
+            const key = COL_TO_DAILY_KEY[ulCol];
+            const exactPrice = key ? daily[exactIdx][key] : null;
+            if (exactPrice > 0) mPrice = exactPrice;
+          }
         }
-        // Park-side flow:
-        //  - cash mode: dollar bucket grows by `toPark`, then earns interest.
-        //  - asset mode: buy shares at the month's park price; cash is just a
-        //    stale dollar mirror (re-priced after the loop). No interest.
-        if (isCashPark) {
-          // Always include the no-price fallback's full amount + the explicit
-          // toPark when a stock-half ran.
-          const addCash = (toStock > 0 && mPrice > 0) ? toPark : currentMonthly;
-          cash += addCash;
-          cash *= (1 + monthlyRate);
-        } else if (toPark > 0) {
-          const parkMP = monthlyRow ? (monthlyRow[parkCol] || 0) : 0;
-          if (parkMP > 0) parkShares += toPark / parkMP;
-          else            cash += toPark; // missing park price → stash as cash; reconciled at next rebalance
+        if (currentMonthly < 0) {
+          // Withdrawal — a real uploaded transaction can be negative (money
+          // taken OUT). Rule: cash (or the park asset's value, in asset-park
+          // mode) covers it first; sell the underlying for the rest, at this
+          // month's price.
+          let need = -currentMonthly;
+          if (isCashPark) {
+            const fromCash = Math.min(Math.max(cash, 0), need);
+            cash -= fromCash;
+            need -= fromCash;
+          } else {
+            const parkMP = monthlyRow ? (monthlyRow[parkCol] || 0) : 0;
+            const parkVal = parkMP > 0 ? parkShares * parkMP : 0;
+            const fromPark = Math.min(parkVal, need);
+            if (fromPark > 0 && parkMP > 0) parkShares -= fromPark / parkMP;
+            need -= fromPark;
+          }
+          if (need > 0 && mPrice > 0 && tqqqShares > 0) {
+            // Sell enough GROSS shares that the fee-adjusted proceeds cover
+            // `need` (capped at what's actually held).
+            const grossNeeded = Math.min(tqqqShares * mPrice, need / (1 - cost));
+            const sharesToSell = grossNeeded / mPrice;
+            tqqqShares -= sharesToSell;
+            qFee += grossNeeded * cost;
+            need -= grossNeeded * (1 - cost);
+          }
+          // Any `need` still left here means the withdrawal exceeded the
+          // entire portfolio — an edge case not modeled further.
+          if (isCashPark) cash *= (1 + monthlyRate);
+        } else {
+          const toStock = currentMonthly * contribDeployPct;
+          const toPark  = currentMonthly - toStock;
+          if (toStock > 0 && mPrice > 0) {
+            tqqqShares += toStock * (1 - cost) / mPrice; qFee += toStock * cost;
+          } else if (toStock > 0) {
+            // No underlying price (data gap) — the would-be stock half waits as
+            // park instead. (For cash park that's `cash`; for asset park that's
+            // shares of the asset bought at this month's price, if available.)
+          }
+          // Park-side flow:
+          //  - cash mode: dollar bucket grows by `toPark`, then earns interest.
+          //  - asset mode: buy shares at the month's park price; cash is just a
+          //    stale dollar mirror (re-priced after the loop). No interest.
+          if (isCashPark) {
+            // Always include the no-price fallback's full amount + the explicit
+            // toPark when a stock-half ran.
+            const addCash = (toStock > 0 && mPrice > 0) ? toPark : currentMonthly;
+            cash += addCash;
+            cash *= (1 + monthlyRate);
+          } else if (toPark > 0) {
+            const parkMP = monthlyRow ? (monthlyRow[parkCol] || 0) : 0;
+            if (parkMP > 0) parkShares += toPark / parkMP;
+            else            cash += toPark; // missing park price → stash as cash; reconciled at next rebalance
+          }
         }
         totalInvested += currentMonthly;
         newCashThisQ += currentMonthly;
@@ -900,18 +1032,19 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       const qDate = qSlice[qi][0];
       const qP = qSlice[qi][col];
       if (qi > 0 && (!requirePrice || qP)) {
-        const yr = parseInt(qDate.substring(0, 4));
-        const m = monthly * Math.pow(1 + annualRaise, yr - startYear);
         if (fastMonthly) {
           const monthsInQ = monthsLookup[entryIdx + qi];
           for (let k = 0; k < monthsInQ.length; k++) {
-            const mp = monthlyData[monthsInQ[k]][col];
+            const mRow = monthlyData[monthsInQ[k]];
+            const m = schedule.byMonth.get(mRow[0].slice(0, 7)) || 0;
+            const mp = mRow[col];
             if (requirePrice ? mp : true) shares += m / mp;
-            if (sampleQuarterly && mp > 0 && isQuarterEnd(monthlyData[monthsInQ[k]][0])) sample.push({ date: monthlyData[monthsInQ[k]][0], value: shares * mp });
+            if (sampleQuarterly && mp > 0 && isQuarterEnd(mRow[0])) sample.push({ date: mRow[0], value: shares * mp });
           }
         } else {
           for (const row of monthlyData) {
             if (row[0] > prevQ && row[0] <= qDate) {
+              const m = schedule.byMonth.get(row[0].slice(0, 7)) || 0;
               const mp = row[col];
               if (requirePrice ? mp : true) shares += m / mp;
               if (sampleQuarterly && mp > 0 && isQuarterEnd(row[0])) sample.push({ date: row[0], value: shares * mp });
