@@ -293,9 +293,20 @@ function slCurveFromLog(log, quarters) {
 // Evaluate a library strategy's code and run it over [si, ei] at its defaults.
 function slRunCode(code, data, si, ei) {
   const mod = new Function('"use strict"; return (' + code + '\n);')();
+  const entryDate = data.dates[si], exitDate = data.dates[ei];
+  // p.contributions is what every CODE[n] entry actually reads for its
+  // monthly cash (js/strategy-library-code.js, rewritten this session to
+  // `p.contributions[data.dates[i]]` instead of recomputing the formula
+  // inline) — without it every lookup silently resolves to 0, so these
+  // preview cards ran on the initial lump sum alone with no monthly DCA at
+  // all. buildCustomContributions (js/simulate.js) is the shared builder —
+  // also used by computeCustomGlobals (saved-configs.js) for the real
+  // sandboxed run — so this path (a plain `new Function`, not the Worker
+  // sandbox) can't quietly fall out of sync with it again.
+  const contributions = buildCustomContributions(SL_MONTHLY, 0, entryDate, exitDate, null);
   const p = {
     initial: SL_START_CAPITAL, monthly: SL_MONTHLY, annualRaise: 0,
-    startIdx: si, endIdx: ei, entryDate: data.dates[si], exitDate: data.dates[ei],
+    startIdx: si, endIdx: ei, entryDate, exitDate, contributions,
   };
   for (const sp of (mod.params || [])) {
     let v = sp.default;

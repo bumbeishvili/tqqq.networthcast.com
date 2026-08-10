@@ -54,6 +54,26 @@ function buildFormulaSchedule(monthly, annualRaise, entryDate, exitDate) {
   return { byDate, byMonth, list, priceDateByMonth };
 }
 
+// Builds the p.contributions plain object a custom/library strategy reads
+// (p.contributions[data.dates[i]] — see saved-configs.js's CUSTOM_PROMPT for
+// the full docs) from either an explicit schedule (a real uploaded
+// transaction history) or the formula fallback (buildFormulaSchedule above).
+// The ONE place this assembly happens — called from computeCustomGlobals
+// (saved-configs.js, the live sandboxed run) AND slRunCode (strategy-library.js,
+// the library preview cards), which have no shared-function access of their
+// own worth speaking of but both call this instead of hand-building the same
+// fields independently. That duplication is exactly what let slRunCode
+// silently keep serving p.contributions === undefined (and so every
+// contribution lookup resolving to 0) after this field was added elsewhere —
+// a second call site with no reason to diverge, diverging anyway.
+function buildCustomContributions(monthly, annualRaise, entryDate, exitDate, explicitSchedule) {
+  const sched = explicitSchedule || (entryDate && exitDate ? buildFormulaSchedule(monthly, annualRaise, entryDate, exitDate) : null);
+  if (!sched || !sched.byDate || !sched.byDate.size) return null;
+  const contributions = {};
+  for (const [d, amt] of sched.byDate) contributions[d] = amt;
+  return contributions;
+}
+
 // Column index (matching monthlyData/quarterlyData's [date, tqqq, qqq, spy,
 // qld, sso, spxl] layout) -> the same asset's property name on a `daily` row
 // object ({date, tqqq, qqq, ...}). Lets anything holding a numeric column

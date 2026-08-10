@@ -956,15 +956,12 @@ function computeCustomGlobals(cfg, ctx) {
   // and simple for a strategy to index by data.dates[i] (see CUSTOM_PROMPT's
   // p.contributions docs). Real transaction history (js/transactions.js) when
   // active, else the same formula-derived schedule the built-in engines use
-  // (js/simulate.js buildFormulaSchedule) — so a strategy written against
-  // p.contributions behaves identically whether or not a real history is loaded.
-  let contributions = null;
-  const sched = ctx.contribSchedule || (typeof buildFormulaSchedule === 'function' && entryDate && exitDate
-    ? buildFormulaSchedule(ctx.monthly, ctx.annualRaise, entryDate, exitDate) : null);
-  if (sched && sched.byDate && sched.byDate.size) {
-    contributions = {};
-    for (const [d, amt] of sched.byDate) contributions[d] = amt;
-  }
+  // (js/simulate.js's buildFormulaSchedule) — so a strategy written against
+  // p.contributions behaves identically whether or not a real history is
+  // loaded. buildCustomContributions (js/simulate.js) is the shared builder —
+  // also called from strategy-library.js's slRunCode, so the two can't
+  // silently diverge on what p.contributions contains the way they once did.
+  const contributions = buildCustomContributions(ctx.monthly, ctx.annualRaise, entryDate, exitDate, ctx.contribSchedule);
   return { initial: ctx.initial, monthly: ctx.monthly, annualRaise: ctx.annualRaise, startIdx, endIdx, entryDate, exitDate, contributions };
 }
 // Throttled (not debounced) so a slider drag updates the line WHILE you're
