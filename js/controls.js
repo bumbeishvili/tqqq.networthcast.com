@@ -18,7 +18,12 @@ const LS_VERSION_KEY = '9sig-app-version';
 // '9sig-saved-configs' holds user-saved strategies (saved-configs.js). Base
 // line-colour overrides and the alternate-runs toggle are session-only, so the
 // top pills stay canonical across refreshes. Cleared on a version reset.
-const LS_KEYS = [LS_KEY, '9sig-saved-configs'];
+// 'tqqq_transactions_v1' (js/transactions.js's LS_TX_KEY — literal here, not
+// the identifier, since this file loads before transactions.js) holds the
+// real transaction history; a version bump that changes its stored shape
+// needs this cleared too, same as the other two, or a returning user keeps
+// loading a shape the new code doesn't fully understand.
+const LS_KEYS = [LS_KEY, '9sig-saved-configs', 'tqqq_transactions_v1'];
 
 // The top legend pills are canonical reference strategies (9sig, SMA 200,
 // Buy & Hold, Invested Compounded). We do NOT persist their per-strategy knobs

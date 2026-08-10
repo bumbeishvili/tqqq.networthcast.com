@@ -33,6 +33,8 @@ function persistTransactions() {
         total: window._txScheduleStash.total,
         source: window._txScheduleStash.source,
         sheetUrl: window._txScheduleStash.sheetUrl || null,
+        dateCol: window._txScheduleStash.dateCol,
+        amountCol: window._txScheduleStash.amountCol,
         active: !!window._txSchedule,
       }));
     } else {
@@ -51,7 +53,7 @@ function loadTransactionsFromStorage() {
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.rows) || !parsed.rows.length) return null;
     return {
-      state: _txStateFromRows(parsed.rows, parsed.source || 'upload', parsed.sheetUrl || null),
+      state: _txStateFromRows(parsed.rows, parsed.source || 'upload', parsed.sheetUrl || null, parsed.dateCol, parsed.amountCol),
       active: parsed.active !== false,
     };
   } catch (e) { return null; }
@@ -168,25 +170,46 @@ function _txRowsFromCols(dataRows, dateCol, amountCol) {
   return { rows: merged, skipped, total: merged.reduce((s, r) => s + r.amount, 0) };
 }
 
+// Maps raw text to { rows, skipped, total, headers, dataRows, dateCol,
+// amountCol } using explicit column indices when given (and still in range
+// for this parse — a sheet whose layout changed falls back to auto-detect
+// rather than silently reading the wrong columns), else auto-detecting.
+// The one path both a fresh parse and "reapply the columns I already
+// picked" (refreshTxFromSheet, an edit re-fetch) go through, so a stored
+// column choice actually survives a background resync or page reload
+// instead of being silently re-guessed from scratch every time.
+function _txParseWithCols(text, dateCol, amountCol) {
+  const { headers, dataRows } = _txParseRaw(text);
+  if (!dataRows.length) return { rows: [], skipped: 0, total: 0, headers: null, dataRows: [], dateCol: 0, amountCol: 1 };
+  const colCount = headers ? headers.length : (dataRows[0] || []).length;
+  let dc = dateCol, ac = amountCol;
+  if (dc == null || ac == null || dc < 0 || ac < 0 || dc >= colCount || ac >= colCount || dc === ac) {
+    ({ dateCol: dc, amountCol: ac } = _txAutoDetectCols(headers, dataRows));
+  }
+  return { ..._txRowsFromCols(dataRows, dc, ac), headers, dataRows, dateCol: dc, amountCol: ac };
+}
 // Parses pasted/uploaded/fetched text into { rows, skipped, total, headers,
 // dataRows, dateCol, amountCol } — the last four let the modal show which
 // columns were picked and let the user override them (js/transactions.js's
-// #tx-date-col/#tx-amount-col selects) without re-parsing the text.
+// #tx-date-col/#tx-amount-col selects) without re-parsing the text. Always
+// auto-detects columns; _txParseWithCols is the variant that reapplies a
+// previously-chosen column pair instead.
 function parseTransactionText(text) {
-  const { headers, dataRows } = _txParseRaw(text);
-  if (!dataRows.length) return { rows: [], skipped: 0, total: 0, headers: null, dataRows: [], dateCol: 0, amountCol: 1 };
-  const { dateCol, amountCol } = _txAutoDetectCols(headers, dataRows);
-  return { ..._txRowsFromCols(dataRows, dateCol, amountCol), headers, dataRows, dateCol, amountCol };
+  return _txParseWithCols(text, null, null);
 }
 
 // Turns transaction rows (sorted ascending) into { initial, entryDate, rows,
-// schedule, total, source, sheetUrl }. The FIRST row is the seed lump sum
-// (`initial`) and sets the entry date — matching how every engine already
-// treats day one specially (the "new month" contribution trigger never fires
-// on the first day). Everything from the second row on is the contribution
-// schedule, in the exact { byDate, byMonth, list } shape buildFormulaSchedule
-// (js/simulate.js) already produces.
-function _txStateFromRows(rows, source, sheetUrl) {
+// schedule, total, source, sheetUrl, dateCol, amountCol }. The FIRST row is
+// the seed lump sum (`initial`) and sets the entry date — matching how every
+// engine already treats day one specially (the "new month" contribution
+// trigger never fires on the first day). Everything from the second row on
+// is the contribution schedule, in the exact { byDate, byMonth, list } shape
+// buildFormulaSchedule (js/simulate.js) already produces. dateCol/amountCol
+// (the column indices chosen when `rows` was built, upload or sheet) are
+// carried along purely so a 'sheet' source can re-fetch+re-map its raw CSV
+// later (refreshTxFromSheet, editing) without re-guessing which column is
+// which — `rows` itself no longer has any column concept once mapped.
+function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol) {
   if (!rows || !rows.length) return null;
   const [first, ...rest] = rows;
   const byDate = new Map(), byMonth = new Map(), list = [], priceDateByMonth = new Map();
@@ -208,6 +231,8 @@ function _txStateFromRows(rows, source, sheetUrl) {
     total: rows.reduce((s, r) => s + r.amount, 0),
     source: source || 'upload',
     sheetUrl: sheetUrl || null,
+    dateCol: (dateCol != null ? dateCol : null),
+    amountCol: (amountCol != null ? amountCol : null),
   };
 }
 
@@ -237,9 +262,11 @@ let _txPasteAreaValue = '';             // mirrors the textarea across re-render
 let _txSheetUrlValue = '';              // mirrors the URL input across re-renders, same reason
 let _txModalTab = 'upload';             // 'upload' | 'sheet' — which panel is showing
 
-// opts: { prefillText, prefillUrl, editMode } — all optional. Passing
-// prefillUrl auto-triggers a load (editing a sheet-sourced history should
-// show its current data immediately, not require an extra click).
+// opts: { prefillText, prefillUrl, dateCol, amountCol, editMode } — all
+// optional. Passing prefillUrl auto-triggers a load (editing a sheet-sourced
+// history should show its current data immediately, not require an extra
+// click); dateCol/amountCol, when given alongside it, reapply the schedule's
+// already-chosen columns instead of re-auto-detecting them.
 function openTxModal(opts) {
   opts = opts || {};
   closeTxModal();
@@ -258,7 +285,7 @@ function openTxModal(opts) {
   document.body.appendChild(overlay);
   renderTxModal();
   if (opts.prefillUrl) {
-    _txFetchSheet(opts.prefillUrl);
+    _txFetchSheet(opts.prefillUrl, (opts.dateCol != null && opts.amountCol != null) ? { dateCol: opts.dateCol, amountCol: opts.amountCol } : null);
   } else {
     const ta = overlay.querySelector('#tx-paste-area');
     if (ta) ta.focus();
@@ -343,7 +370,11 @@ function renderTxModal() {
 // Fetches a CSV/TSV URL (a Google Sheets "Publish to web" CSV export link)
 // and parses it exactly like pasted text. Populates the modal's preview on
 // success, or _txModalError on network/CORS failure or an empty response.
-async function _txFetchSheet(url) {
+// preferredCols ({dateCol, amountCol}), when given, re-applies a previously
+// chosen column pair instead of auto-detecting — used when re-opening the
+// modal to edit an existing sheet-sourced history, so the picker doesn't
+// silently reset to a fresh (possibly wrong) guess.
+async function _txFetchSheet(url, preferredCols) {
   _txModalLoading = true;
   _txModalError = null;
   renderTxModal();
@@ -351,7 +382,7 @@ async function _txFetchSheet(url) {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
-    const parsed = parseTransactionText(text);
+    const parsed = _txParseWithCols(text, preferredCols ? preferredCols.dateCol : null, preferredCols ? preferredCols.amountCol : null);
     // Only a hard failure when there's no table at all — a wrong column
     // guess (0 valid rows but a real table) still needs to reach the modal
     // so the date/value pickers render and the user can correct it.
@@ -388,7 +419,7 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#tx-edit-btn')) {
     const s = window._txSchedule || window._txScheduleStash;
     if (!s) return;
-    if (s.source === 'sheet' && s.sheetUrl) openTxModal({ prefillUrl: s.sheetUrl, editMode: true });
+    if (s.source === 'sheet' && s.sheetUrl) openTxModal({ prefillUrl: s.sheetUrl, editMode: true, dateCol: s.dateCol, amountCol: s.amountCol });
     else openTxModal({ prefillText: _txRowsToTsv(s.rows), editMode: true });
     return;
   }
@@ -410,7 +441,8 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-tx-confirm]')) {
     if (!_txParsedPreview || !_txParsedPreview.rows.length) return;
     const state = _txStateFromRows(_txParsedPreview.rows, _txParsedPreviewSource,
-      _txParsedPreviewSource === 'sheet' ? _txParsedPreviewUrl : null);
+      _txParsedPreviewSource === 'sheet' ? _txParsedPreviewUrl : null,
+      _txParsedPreview.dateCol, _txParsedPreview.amountCol);
     window._txSchedule = state;
     window._txScheduleStash = state;
     persistTransactions();
@@ -421,28 +453,25 @@ document.addEventListener('click', (e) => {
     if (typeof render === 'function') render();
     return;
   }
-  // Non-destructive: switches to slider mode but keeps the parsed history in
-  // _txScheduleStash (+ localStorage) so #tx-switch-banner can bring it back
-  // without a re-upload.
-  if (e.target.closest('#tx-switch-to-sliders-btn')) {
-    window._txSchedule = null;
+  // Single shared toggle, same DOM position in both states (index.html) so
+  // repeatedly clicking it to compare doesn't require re-aiming the mouse.
+  // Non-destructive either direction — the stash always survives, only
+  // _txSchedule (which one is ACTIVE) flips.
+  if (e.target.closest('#tx-mode-toggle-btn')) {
+    if (window._txSchedule) {
+      // -> slider mode. Reverts entry date too — same "use quarter default"
+      // behavior the exact-date picker's own clear link uses (date-picker.js).
+      window._txSchedule = null;
+      const el = document.getElementById('entry-exact-date');
+      if (el) el.value = '';
+    } else if (window._txScheduleStash) {
+      // -> reactivate the stashed history.
+      window._txSchedule = window._txScheduleStash;
+      applyTxEntryDate();
+    } else {
+      return;
+    }
     persistTransactions();
-    // Reverts entry date too — same "use quarter default" behavior the
-    // exact-date picker's own clear link uses (js/date-picker.js).
-    const el = document.getElementById('entry-exact-date');
-    if (el) el.value = '';
-    toggleContribMode();
-    if (typeof saveSliders === 'function') saveSliders();
-    if (typeof render === 'function') render();
-    return;
-  }
-  // Reactivates the stashed history from slider mode — the counterpart to
-  // #tx-switch-to-sliders-btn above.
-  if (e.target.closest('#tx-switch-banner')) {
-    if (!window._txScheduleStash) return;
-    window._txSchedule = window._txScheduleStash;
-    persistTransactions();
-    applyTxEntryDate();
     toggleContribMode();
     if (typeof saveSliders === 'function') saveSliders();
     if (typeof render === 'function') render();
@@ -533,7 +562,7 @@ function toggleContribMode() {
   defaultEl.hidden = active;
   activeEl.hidden = !active;
   if (active) renderTxSummary();
-  else renderTxSwitchBanner();
+  renderTxModeToggle();
   // Entry is pinned to the first transaction while a schedule is active — the
   // exact-day picker would otherwise let it drift away from that date, the
   // same desync the entry slider lock (js/controls.js's entryLocked()) exists
@@ -555,15 +584,26 @@ function renderTxSummary() {
     editBtn.setAttribute('aria-label', label);
   }
 }
-// Shown in slider mode only when a previously-uploaded history is stashed
-// (switched off, not deleted) — one click brings it back without a re-upload.
-function renderTxSwitchBanner() {
-  const el = document.getElementById('tx-switch-banner');
-  if (!el) return;
-  const s = window._txScheduleStash;
-  const show = !window._txSchedule && !!s;
-  el.hidden = !show;
-  if (show) el.textContent = `Switch to your ${s.rows.length} saved transaction${s.rows.length === 1 ? '' : 's'}`;
+// Single shared slider-mode <-> transaction-history toggle (index.html's
+// #tx-mode-toggle-btn, always the same DOM position in either mode). Label
+// and meaning flip with state: "Switch to sliders" while a history is
+// active, "Switch to your N saved transactions" while one is stashed but
+// off, hidden entirely when there's no history to toggle to at all.
+function renderTxModeToggle() {
+  const btn = document.getElementById('tx-mode-toggle-btn');
+  if (!btn) return;
+  if (window._txSchedule) {
+    btn.hidden = false;
+    btn.textContent = 'Switch to sliders';
+  } else if (window._txScheduleStash) {
+    const n = window._txScheduleStash.rows.length;
+    btn.hidden = false;
+    // "saved" dropped deliberately — at 3-digit transaction counts it wraps
+    // the button to two lines (measured: 54px vs. the single-line 37px).
+    btn.textContent = `Switch to your ${n} transaction${n === 1 ? '' : 's'}`;
+  } else {
+    btn.hidden = true;
+  }
 }
 
 // Auto-refresh entry point (js/init.js), called once after startup restore
@@ -580,9 +620,14 @@ async function refreshTxFromSheet() {
     const res = await fetch(cur.sheetUrl, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
-    const parsed = parseTransactionText(text);
+    // Reapplies the column choice already stored on `cur` instead of
+    // re-auto-detecting — this was the actual bug: every background resync
+    // (including the one on plain page refresh) re-ran auto-detection from
+    // scratch, silently discarding whatever column the user had picked and
+    // going back to whichever wrong column auto-detect landed on before.
+    const parsed = _txParseWithCols(text, cur.dateCol, cur.amountCol);
     if (!parsed.rows.length) throw new Error('empty sheet');
-    const fresh = _txStateFromRows(parsed.rows, 'sheet', cur.sheetUrl);
+    const fresh = _txStateFromRows(parsed.rows, 'sheet', cur.sheetUrl, parsed.dateCol, parsed.amountCol);
     window._txScheduleStash = fresh;
     persistTransactions();
     if (wasActive) {
@@ -592,7 +637,7 @@ async function refreshTxFromSheet() {
       if (typeof saveSliders === 'function') saveSliders();
       if (typeof render === 'function') render();
     } else {
-      renderTxSwitchBanner(); // row count in the banner text may have changed
+      renderTxModeToggle(); // row count in the toggle's label may have changed
     }
   } catch (e) {
     // Background sync — nothing to surface for a failure, just keep the cache.
