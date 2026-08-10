@@ -2627,6 +2627,57 @@
   }
   .builder-textarea:focus { border-color: var(--accent); }
   .builder-textarea::placeholder { color: var(--text-muted); }
+
+  /* Transaction-history modal (js/transactions.js) — shorter than the shared
+     .builder-textarea default so Cancel/Confirm stay in view without
+     scrolling; this is a small paste box, not a code editor. */
+  #tx-paste-area { min-height: 90px; }
+  .tx-tabs { display: flex; gap: 6px; margin-bottom: 10px; }
+  .tx-tab-btn {
+    flex: 1;
+    padding: 7px 10px;
+    font: 600 12px 'Open Sans', sans-serif;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface2);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s;
+  }
+  .tx-tab-btn:hover { border-color: var(--accent); color: var(--text); }
+  .tx-tab-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.12); }
+  .tx-preview-stats { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 6px; }
+  .tx-preview-stats b { color: var(--text); }
+  /* Lets the user override which parsed column is the date vs. the value —
+     js/transactions.js's #tx-date-col/#tx-amount-col selects. */
+  .tx-col-picker { display: flex; gap: 14px; margin: 8px 0; }
+  .tx-col-picker label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+  }
+  .tx-col-picker select { width: 100%; }
+  /* Live-sheet-link row inside the transaction-upload modal (js/transactions.js). */
+  .tx-sheet-row { display: flex; gap: 8px; }
+  .tx-sheet-url-input {
+    flex: 1;
+    min-width: 0;
+    font: 400 13px 'Open Sans', sans-serif;
+    background: var(--surface2);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    outline: none;
+  }
+  .tx-sheet-url-input:focus { border-color: var(--accent); }
+  .tx-sheet-url-input::placeholder { color: var(--text-muted); }
   .builder-textarea.code {
     font-family: 'JetBrains Mono', monospace;
     font-size: 12px;
@@ -2816,6 +2867,7 @@
     margin-bottom: 10px;
   }
   .tx-summary b { font-family: 'JetBrains Mono', monospace; }
+  .tx-sheet-tag { color: var(--text-muted); font-size: 12px; }
   .tx-clear-btn {
     width: 100%;
     padding: 9px 10px;
@@ -2832,7 +2884,7 @@
 
   /* Parsed-rows preview inside the transaction-upload modal. */
   .tx-preview-table-wrap {
-    max-height: 260px;
+    max-height: 150px;
     overflow-y: auto;
     border: 1px solid var(--border);
     border-radius: 8px;

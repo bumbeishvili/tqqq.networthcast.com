@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=233">
+<link rel="stylesheet" href="styles.css?v=237">
 </head>
 <body>
 
@@ -122,6 +122,9 @@
       <div class="tx-summary" id="tx-summary-text"></div>
       <div style="display:flex;gap:8px">
         <button type="button" class="tx-clear-btn" id="tx-switch-to-sliders-btn" style="flex:1">Switch to sliders</button>
+        <button type="button" class="date-pick-btn" id="tx-edit-btn" title="Edit transactions" aria-label="Edit transactions">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+        </button>
         <button type="button" class="date-pick-btn tx-delete-btn" id="tx-delete-btn" title="Permanently delete this transaction history" aria-label="Permanently delete this transaction history">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>
         </button>
@@ -1320,20 +1323,20 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=233"></script>
-<script src="js/utils.js?v=233"></script>
-<script src="js/simulate.js?v=233"></script>
-<script src="js/metrics.js?v=233"></script>
-<script src="js/chart.js?v=233"></script>
-<script src="js/controls.js?v=233"></script>
-<script src="js/date-picker.js?v=233"></script>
-<script src="js/transactions.js?v=233"></script>
-<script src="js/analytics.js?v=233"></script>
-<script src="js/preview-dropdown.js?v=233"></script>
-<script src="js/saved-configs.js?v=233"></script>
-<script src="js/strategy-library-code.js?v=233"></script>
-<script src="js/strategy-library.js?v=233"></script>
-<script src="js/init.js?v=233"></script>
+<script src="js/data.js?v=237"></script>
+<script src="js/utils.js?v=237"></script>
+<script src="js/simulate.js?v=237"></script>
+<script src="js/metrics.js?v=237"></script>
+<script src="js/chart.js?v=237"></script>
+<script src="js/controls.js?v=237"></script>
+<script src="js/date-picker.js?v=237"></script>
+<script src="js/transactions.js?v=237"></script>
+<script src="js/analytics.js?v=237"></script>
+<script src="js/preview-dropdown.js?v=237"></script>
+<script src="js/saved-configs.js?v=237"></script>
+<script src="js/strategy-library-code.js?v=237"></script>
+<script src="js/strategy-library.js?v=237"></script>
+<script src="js/init.js?v=237"></script>
 
 </body>
 </html>

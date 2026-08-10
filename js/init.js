@@ -257,6 +257,10 @@
     if (typeof toggleContribMode === 'function') toggleContribMode();
   }
   render();
+  // A sheet-linked transaction history re-syncs on every load (fire-and-forget,
+  // after the first paint already used the cached copy above) — see
+  // refreshTxFromSheet() in js/transactions.js.
+  if (typeof refreshTxFromSheet === 'function') refreshTxFromSheet();
 
   // Apply post-render shared state: dataset visibility + analytics modal.
   // Precedence: URL `hd` > localStorage `hidden-datasets` > chart defaults.

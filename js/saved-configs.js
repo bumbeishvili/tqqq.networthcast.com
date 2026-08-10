@@ -924,7 +924,16 @@ function sendCustomData() {
   _customDataSent = true;
 }
 function customSig(cfg, ctx) {
-  return [cfg.code || '', JSON.stringify(cfg.params || {}), ctx.initial, ctx.monthly, ctx.annualRaise, ctx.simEntryIdx, ctx.exitIdx].join('');
+  // Contribution schedule (real transaction history or its formula-derived
+  // fallback) and the exact-date overrides all feed computeCustomGlobals()'s
+  // `contributions`/`entryDate`/`exitDate` below — previously missing here
+  // entirely, so editing a transaction's amount/date (without also changing
+  // initial/monthly/annualRaise/the coarse quarter slider) left this sig
+  // unchanged and the worker cache silently kept serving the stale result.
+  const schedKey = (ctx.contribSchedule && ctx.contribSchedule.list)
+    ? ctx.contribSchedule.list.map(r => r.date + ':' + r.amount).join(',') : '';
+  return [cfg.code || '', JSON.stringify(cfg.params || {}), ctx.initial, ctx.monthly, ctx.annualRaise,
+    ctx.simEntryIdx, ctx.exitIdx, ctx.entryDateOverride || '', ctx.exitDateOverride || '', schedKey].join('|');
 }
 function computeCustomGlobals(cfg, ctx) {
   let entryDate = null, exitDate = null, startIdx = 0, endIdx = 0;
@@ -2271,7 +2280,14 @@ function computeCustomParamBars(cfg, sp, opts, popup) {
   opts.forEach((o, i) => {
     const overrides = {}; overrides[sp.id] = (typeof o.value === 'boolean') ? o.value : String(o.value);
     const merged = Object.assign({}, cfg.params || {}, overrides);
-    const key = [cfg.code, JSON.stringify(merged), globals.startIdx, globals.endIdx, globals.initial, globals.monthly, globals.annualRaise].join('');
+    // globals.contributions/entryDate/exitDate (the transaction schedule and
+    // its exact-date bounds) previously weren't part of this key — the same
+    // staleness bug as customSig() above, just for the per-option bar preview
+    // instead of the live line: editing transactions without also moving
+    // startIdx/endIdx/initial/monthly/annualRaise left old bars on screen.
+    const contribKey = globals.contributions ? JSON.stringify(globals.contributions) : '';
+    const key = [cfg.code, JSON.stringify(merged), globals.startIdx, globals.endIdx, globals.initial, globals.monthly, globals.annualRaise,
+      globals.entryDate || '', globals.exitDate || '', contribKey].join('|');
     const cached = window._customPreviewCache[key];
     if (cached != null) { finals[i] = cached; draw(); return; }
     runCustomPreview(cfg, overrides, globals, (msg) => {
