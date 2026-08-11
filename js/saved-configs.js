@@ -257,11 +257,8 @@ function applyColorPreview(color) {
     const idx = type ? BASE_COLOR_DATASET_IDX[type] : -1;
     if (idx >= 0 && chart.data.datasets[idx]) chart.data.datasets[idx].borderColor = color;
     if (type === '9sig') {
-      // 9sig's supporting lines share its colour …
+      // 9sig's supporting lines share its colour.
       [1, 5, 6].forEach(i => { if (chart.data.datasets[i]) chart.data.datasets[i].borderColor = color; });
-      // … and its envelope band ("alternate runs") tracks it too (faded).
-      const env = fadeColor(color, 0.12);
-      chart.data.datasets.forEach(ds => { if (ds._isShift && !ds._configId) ds.borderColor = env; });
     }
   }
   chart.update('none');
@@ -492,6 +489,10 @@ p.monthly, p.annualRaise : the SAME contributions, pre-collapsed into "amount pe
 p.startIdx      : first index to simulate (inclusive)
 p.endIdx        : last index to simulate (inclusive)
 p.entryDate     : equals data.dates[p.startIdx];   p.exitDate equals data.dates[p.endIdx]
+p.weeklyDisplay : true when the chart's shared axis is at weekly resolution (a run under ~10 years),
+                  false/undefined otherwise (a longer run, still monthly). Controls ONLY how often you
+                  push a "hold" snapshot row — see "When to push a row" below. Don't change any trading
+                  decision based on it; it's a display-density flag, not a strategy input.
 p.<yourId>      : the user's chosen value for each param you declared (already typed for you:
                   number for numeric options, boolean for [true, false], string otherwise)
 
@@ -533,7 +534,15 @@ When to push a row:
 - ALWAYS on p.startIdx ("start") and on p.endIdx ("end").
 - ALWAYS for every trade, every rebalance, and every ease-in slice.
 - ALWAYS for each monthly contribution (action "contribution", contributed = the amount added).
-- Plus at least one "hold" snapshot per month, so the line stays smooth between trades.
+- Plus at least one "hold" snapshot per month when p.weeklyDisplay is false/undefined — or per WEEK
+  when p.weeklyDisplay is true. Skipping this on a weekly run is the single most common way a strategy
+  ends up looking "blocky" next to the built-in engines: the chart step-resamples your sparse log onto
+  its own weekly axis, so any week you didn't log renders as a flat line even though the real price kept
+  moving. A cheap correct check inside your day loop (mirrors what the run() function already tracks):
+    var monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== data.dates[i].slice(0, 7);
+    var weekEnd = p.weeklyDisplay && (i === p.endIdx ||
+      Math.floor((Date.parse(data.dates[i]) / 86400000 + 3) / 7) !== Math.floor((Date.parse(data.dates[i + 1]) / 86400000 + 3) / 7));
+    if (contributed || action !== "hold" || monthEnd || weekEnd) { /* push the row */ }
 
 === COLUMNS: tooltips for your table ===
 Optional but strongly wanted: a top-level "columns" array describing your log's keys. Each entry is
@@ -932,8 +941,12 @@ function customSig(cfg, ctx) {
   // unchanged and the worker cache silently kept serving the stale result.
   const schedKey = (ctx.contribSchedule && ctx.contribSchedule.list)
     ? ctx.contribSchedule.list.map(r => r.date + ':' + r.amount).join(',') : '';
+  // ctx.displayGrain also feeds computeCustomGlobals()'s weeklyDisplay — same
+  // staleness risk as the fields above if left out (a window crossing the
+  // 10y threshold without any of the other fields changing would keep
+  // serving a cached result computed at the old log density).
   return [cfg.code || '', JSON.stringify(cfg.params || {}), ctx.initial, ctx.monthly, ctx.annualRaise,
-    ctx.simEntryIdx, ctx.exitIdx, ctx.entryDateOverride || '', ctx.exitDateOverride || '', schedKey].join('|');
+    ctx.simEntryIdx, ctx.exitIdx, ctx.entryDateOverride || '', ctx.exitDateOverride || '', schedKey, ctx.displayGrain || ''].join('|');
 }
 function computeCustomGlobals(cfg, ctx) {
   let entryDate = null, exitDate = null, startIdx = 0, endIdx = 0;
@@ -962,7 +975,14 @@ function computeCustomGlobals(cfg, ctx) {
   // also called from strategy-library.js's slRunCode, so the two can't
   // silently diverge on what p.contributions contains the way they once did.
   const contributions = buildCustomContributions(ctx.monthly, ctx.annualRaise, entryDate, exitDate, ctx.contribSchedule);
-  return { initial: ctx.initial, monthly: ctx.monthly, annualRaise: ctx.annualRaise, startIdx, endIdx, entryDate, exitDate, contributions };
+  // Tells the strategy to log at week resolution instead of just month-end —
+  // see CUSTOM_PROMPT's p.weeklyDisplay docs. Without this a custom line logs
+  // sparsely (once a month) and gets step-resampled onto the chart's shared
+  // axis, which reads as a blocky/stepped line next to the built-in engines'
+  // smooth weekly sampling once ctx.displayGrain (js/chart.js) floors at
+  // weekly for a <10y window.
+  const weeklyDisplay = ctx.displayGrain === 'weekly';
+  return { initial: ctx.initial, monthly: ctx.monthly, annualRaise: ctx.annualRaise, startIdx, endIdx, entryDate, exitDate, contributions, weeklyDisplay };
 }
 // Throttled (not debounced) so a slider drag updates the line WHILE you're
 // still dragging, not only once you let go. A plain debounce resets its timer
@@ -1171,7 +1191,7 @@ function computeCustomSeries(cfg, ctx) {
 function computeConfigSeries(cfg, ctx) {
   if (cfg.type === 'custom') return computeCustomSeries(cfg, ctx);
   const { initial, monthly, annualRaise, simEntryIdx, exitIdx, labels, years, totalContributed,
-          entryDateOverride, exitDateOverride, contribSchedule } = ctx;
+          entryDateOverride, exitDateOverride, contribSchedule, displayGrain } = ctx;
   // Shared by every branch below — a real uploaded transaction history
   // (js/transactions.js) or the exact-date picker override, threaded through
   // exactly like render() already does for the main/base lines (js/chart.js).
@@ -1247,9 +1267,14 @@ function computeConfigSeries(cfg, ctx) {
       const _q2 = buildExactRangeQData(opts.rebalancePeriod, _entryDateForQ, _exitDateForQ);
       if (_q2 && _q2.length >= 2) opts.qData = _q2;
     }
-    // A yearly config is coarser than the chart's quarterly axis floor → get
-    // quarter-end value snapshots so its line/sub-series draw at quarter detail.
-    opts.sampleQuarterly = (opts.rebalancePeriod === 'yearly');
+    // This config's period coarser than the chart's shared axis grain (see
+    // js/chart.js's cfgCtx.displayGrain) → get in-between value snapshots at
+    // that grain so its line/sub-series don't lose resolution relative to
+    // everything else sharing this axis. Falls back to the old
+    // yearly-only-vs-quarterly rule if displayGrain wasn't supplied (a
+    // caller other than chart.js's render(), e.g. a stale cached ctx shape).
+    opts.sampleQuarterly = displayGrain ? (displayGrain === 'quarterly' && opts.rebalancePeriod === 'yearly') : (opts.rebalancePeriod === 'yearly');
+    opts.sampleWeekly = displayGrain === 'weekly' && opts.rebalancePeriod !== 'weekly';
     const cashRate = (+pget(p, 'select-9sig-cashrate', 4) || 0) / 100;
     const r = simulate(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, opts);
     const seriesRows = (r.samplePoints && r.samplePoints.length) ? r.samplePoints : (r.log || []);
@@ -1287,6 +1312,10 @@ function computeConfigSeries(cfg, ctx) {
       confirmSellSteps: +pget(p, 'select-sma-confirm-sell', 0) || 0,
       settleDays: +pget(p, 'select-sma-settle', 0) || 0,
       emitDD: true,
+      // smaPoints (js/simulate.js) is otherwise only pushed on quarter-end
+      // dates regardless of window length — same displayGrain-driven weekly
+      // fill-out as the main SMA line (js/chart.js) and the 9sig branch above.
+      sampleWeekly: displayGrain === 'weekly',
     };
     const cashRate = (+pget(p, 'select-sma-cashrate', 4) || 0) / 100;
     const r = simulateSMA(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, opts);
@@ -1295,22 +1324,47 @@ function computeConfigSeries(cfg, ctx) {
     ddMulti = r.ddControls || null;
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'sma', smaLog: r.smaLog, smaPoints: r.smaPoints };
   } else if (cfg.type === 'bh') {
-    const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, { schedule: contribSchedule, ..._dateOverrideOpts, ..._bhQDataOpts });
+    // Same in-between snapshotting the main Buy & Hold line gets (js/chart.js's
+    // sigOpts) — without it this config's line falls back to bhPoints' native
+    // quarterly resolution and looks stepped next to the weekly-dense main line.
+    const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, {
+      schedule: contribSchedule, ..._dateOverrideOpts, ..._bhQDataOpts,
+      sampleQuarterly: displayGrain === 'quarterly',
+      sampleWeekly: displayGrain === 'weekly',
+    });
     const key = pget(p, 'select-bh-underlying', 'tqqq');
-    const arr = key === 'qqq' ? r.qqqPoints
+    const rawArr = key === 'qqq' ? r.qqqPoints
               : key === 'spy' ? r.spyPoints
               : key === 'qld' ? (r.qldPoints || [])
               : key === 'sso' ? (r.ssoPoints || [])
               : key === 'spxl' ? (r.spxlPoints || [])
               : r.bhPoints;
+    const sampleArr = key === 'qqq' ? r.qqqSample
+              : key === 'spy' ? r.spySample
+              : key === 'qld' ? r.qldSample
+              : key === 'sso' ? r.ssoSample
+              : key === 'spxl' ? r.spxlSample
+              : r.bhSample;
+    // Driven by the SAME flags passed to simulate() above, not by whether
+    // sampleArr happens to be non-empty — a duck-typed check would silently
+    // fall back to the blocky rawArr if the sampling path ever breaks again,
+    // hiding exactly the bug this fix addresses instead of surfacing it.
+    const arr = (displayGrain === 'quarterly' || displayGrain === 'weekly') ? sampleArr : rawArr;
     points = (arr || []).map(pt => ({ date: pt.date, value: pt.value }));
-    ddControls = (arr || []).map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 }));
+    // Drawdown control needs real per-step share counts, which only the raw
+    // (quarterly) points carry — the dense sample rows are value-only.
+    ddControls = (rawArr || []).map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 }));
     ddKey = key === 'qqq' ? 'qqq' : key === 'spy' ? 'spy' : key === 'qld' ? 'qld' : key === 'sso' ? 'sso' : key === 'spxl' ? 'spxl' : 'tqqq';
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'bh', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints };
   } else if (cfg.type === 'invested') {
     const rate = (typeof sliderToRate === 'function' ? sliderToRate(+pget(p, 'slider-rate', 0)) : 0) / 100;
-    const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, { baselineRate: rate, schedule: contribSchedule, ..._dateOverrideOpts, ..._bhQDataOpts });
-    points = (r.log || []).map(l => ({ date: l.date, value: l.investedCompounded }));
+    const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, {
+      baselineRate: rate, schedule: contribSchedule, ..._dateOverrideOpts, ..._bhQDataOpts,
+      sampleQuarterly: displayGrain === 'quarterly',
+      sampleWeekly: displayGrain === 'weekly',
+    });
+    const seriesRows = (displayGrain === 'quarterly' || displayGrain === 'weekly') ? r.samplePoints : (r.log || []);
+    points = seriesRows.map(l => ({ date: l.date, value: l.investedCompounded }));
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'invested', log: r.log };
   }
 
@@ -1336,88 +1390,6 @@ function fadeColor(hex, a) {
   if (!m) return hex;
   const n = parseInt(m[1], 16);
   return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
-}
-
-// "Show alternate runs" is a PER-STRATEGY setting (so toggling it for one strategy
-// never affects another's line, and it stays on when the panel is closed). The main
-// 9sig keeps a session flag; each saved 9sig stores its own cfg.showEnvelope. The
-// single panel checkbox reflects/sets whichever strategy is currently open.
-window._mainEnvelopeOn = false;
-function editingSaved9sigCfg() {
-  if (!window._editingConfigId) return null;
-  const cfg = savedConfigs.find(c => c.id === window._editingConfigId);
-  return (cfg && cfg.type === '9sig') ? cfg : null;
-}
-function currentEnvelopeFlag() {
-  const cfg = editingSaved9sigCfg();
-  return cfg ? !!cfg.showEnvelope : !!window._mainEnvelopeOn;
-}
-function setCurrentEnvelopeFlag(on) {
-  const cfg = editingSaved9sigCfg();
-  if (cfg) { cfg.showEnvelope = !!on; persistSavedConfigs(); }
-  else { window._mainEnvelopeOn = !!on; }
-}
-
-// Alternate-runs ("envelope") band for a saved 9sig strategy: rebalance-day-
-// shifted ghost lines computed from the strategy's OWN params. Shown whenever the
-// strategy's own showEnvelope flag is on and its line is visible — independent of
-// the panel and of every other strategy.
-function computeConfigGhosts(cfg, ctx) {
-  if (cfg.type !== '9sig' || cfg.hidden) return [];
-  if (!cfg.showEnvelope) return [];
-  if (typeof simulate !== 'function' || typeof buildEnvelopeShifts !== 'function'
-      || typeof getShiftedPeriodData !== 'function') return [];
-  const { initial, monthly, annualRaise, simEntryIdx, exitIdx, labels,
-          entryDateOverride, exitDateOverride, contribSchedule } = ctx;
-  const p = cfg.params || {};
-  const period = pget(p, 'select-9sig-period', 'quarterly') || 'quarterly';
-  // Lazily build (and memoize, reusing data.js's cache) the period's shifts.
-  let entry = (typeof _envelopeCacheByPeriod !== 'undefined' && _envelopeCacheByPeriod)
-    ? _envelopeCacheByPeriod[period] : null;
-  if (!entry) {
-    const shifts = buildEnvelopeShifts(period);
-    entry = { shifts, cache: shifts.map(s => getShiftedPeriodData(period, s)) };
-    if (typeof _envelopeCacheByPeriod !== 'undefined' && _envelopeCacheByPeriod) {
-      _envelopeCacheByPeriod[period] = entry;
-    }
-  }
-  const cd = +pget(p, 'select-9sig-crashdrop', 30);
-  const sp = +pget(p, 'select-9sig-spike', 100);
-  const sigParams = {
-    qGrowth: (+pget(p, 'select-9sig-growth', 9)) / 100 || 0.09,
-    underlyingCol: ulColFromVal(pget(p, 'select-9sig-underlying', 'tqqq')),
-    crashDropPct: Number.isFinite(cd) ? cd : 30,
-    crashLookbackMonths: +pget(p, 'select-9sig-crashwin', 24) || 24,
-    spikeTriggerPct: Number.isFinite(sp) ? sp : 100,
-    rebalancePeriod: period,
-    cashPct: (+pget(p, 'select-9sig-cash', 40) || 0) / 100,
-    contribDeployPct: pget(p, 'select-9sig-deploy', '0') === '1' ? 0.5 : (+pget(p, 'select-9sig-deploy', '0') || 0) / 100,
-    buyThrottlePct: +pget(p, 'select-9sig-buypower', 90) || 90,
-    parkAsset: pget(p, 'select-9sig-park-asset', 'cash') || 'cash',
-  };
-  const cashRate = (+pget(p, 'select-9sig-cashrate', 4) || 0) / 100;
-  // Build a per-ghost qData anchored at the chart's entry date. Each ghost
-  // rebalances at entry + dayOffset, then every `period_days` after. We pass
-  // the canonical entryIdx/exitIdx so simulate()'s yearly entry-remap finds
-  // qData[0] (which we set to the canonical entry date) and walks the full
-  // qData without slicing it down to a single row.
-  // Prefer the exact-date override over the quarter-snapped date, same as
-  // the main line's entryDateForSim (js/chart.js) — otherwise a ghost would
-  // anchor a day or more off from where the main 9sig line actually starts.
-  const entryDate = entryDateOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]);
-  const exitDate  = exitDateOverride  || (quarterlyData[exitIdx]    && quarterlyData[exitIdx][0]);
-  return entry.shifts.map(dayShift => {
-    const qData = (typeof buildEnvelopeQData === 'function')
-      ? buildEnvelopeQData(period, dayShift, entryDate, exitDate)
-      : null;
-    if (!qData || qData.length < 2) return labels.map(() => null);
-    const r = simulate(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, {
-      ...sigParams, qData, skipBH: true, schedule: contribSchedule,
-      ...((entryDateOverride || exitDateOverride) ? { entryDateOverride, exitDateOverride } : {}),
-    });
-    const rows = r.log || [];
-    return resampleByDate(rows.map(l => ({ date: l.date, value: l.total })), labels);
-  });
 }
 
 // --- chart dataset sync (called from render() in chart.js) -------------
@@ -1469,22 +1441,6 @@ function appendConfigDatasets(chart, ctx) {
         chart.setDatasetVisibility(chart.data.datasets.length - 1, !cfg.hidden);
       }
     }
-
-    // Per-strategy alternate-runs band (9sig + envelope on + visible). Tagged
-    // with the same _configId so it hides/shows and gets removed with the
-    // strategy; _isShift keeps it out of the tooltip + end-labels.
-    const ghosts = computeConfigGhosts(cfg, ctx);
-    if (ghosts.length) {
-      const gColor = fadeColor(cfg.color, 0.13);
-      for (const g of ghosts) {
-        chart.data.datasets.push({
-          label: '_cfgshift_', data: g, borderColor: gColor, backgroundColor: 'transparent',
-          fill: false, tension: 0.3, pointRadius: 0, pointHitRadius: 0, borderWidth: 1,
-          order: -1, _configLine: true, _configId: cfg.id, _isShift: true,
-        });
-        chart.setDatasetVisibility(chart.data.datasets.length - 1, true);
-      }
-    }
   }
 }
 
@@ -1528,9 +1484,6 @@ function saveConfigFromType(type) {
     color: (typeof getBaseColor === 'function') ? getBaseColor(type) : nextConfigColor(),
     hidden: false,
   };
-  // The copy inherits the main's "show alternate runs" state (per-strategy from
-  // here on); the main then resets, so its own envelope flag clears.
-  if (type === '9sig') { cfg.showEnvelope = !!window._mainEnvelopeOn; window._mainEnvelopeOn = false; }
   savedConfigs.push(cfg);
   persistSavedConfigs();
   // After saving we're editing the COPY, not the main strategy: its controls stay
@@ -1554,7 +1507,6 @@ function setBaseStrategyVisibility(type, visible) {
   if (!visible && typeof SUB_LEGEND !== 'undefined' && SUB_LEGEND[idx]) {
     for (const s of SUB_LEGEND[idx]) chart.setDatasetVisibility(s, false);
   }
-  if (typeof syncEnvelopeVisibility === 'function') syncEnvelopeVisibility();
   if (typeof saveSliders === 'function') saveSliders();
 }
 // While a saved (non-custom) strategy is open in the shared sidebar, mirror the
@@ -2284,7 +2236,7 @@ function computeCustomParamBars(cfg, sp, opts, popup) {
     // startIdx/endIdx/initial/monthly/annualRaise left old bars on screen.
     const contribKey = globals.contributions ? JSON.stringify(globals.contributions) : '';
     const key = [cfg.code, JSON.stringify(merged), globals.startIdx, globals.endIdx, globals.initial, globals.monthly, globals.annualRaise,
-      globals.entryDate || '', globals.exitDate || '', contribKey].join('|');
+      globals.entryDate || '', globals.exitDate || '', contribKey, globals.weeklyDisplay ? 1 : 0].join('|');
     const cached = window._customPreviewCache[key];
     if (cached != null) { finals[i] = cached; draw(); return; }
     runCustomPreview(cfg, overrides, globals, (msg) => {

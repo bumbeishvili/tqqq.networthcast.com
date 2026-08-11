@@ -186,87 +186,18 @@ function precomputeMonthlyByQuarter() {
   monthlyByQuarter = out;
   if (monthsInPeriodByName) monthsInPeriodByName.quarterly = out;
 }
-let shiftedQuarterlyCache = []; // current cache for whichever rebalance period is active
-let envelopeShiftDays    = []; // populated by init() — trading-day shift for each cache slot
-let envelopeShiftCount   = 0;  // populated by init() — = envelopeShiftDays.length
-// Per-period memo so switching weekly → yearly → quarterly doesn't rebuild
-// shifted-data cache each time. Build is O(N_shifts × N_periods).
-let _envelopeCacheByPeriod = {};
-let _currentEnvelopePeriod = null;
-
-function ensureEnvelopeCacheForPeriod(period) {
-  // The "alternate runs" envelope ghost-lines were removed — the rebalance point
-  // is now a real strategy parameter (select-9sig-rebalance-point) that shifts the
-  // schedule via buildEnvelopeQData(). Keeping this as a no-op (0 shifts) means
-  // every render site that loops over envelopeShiftCount draws nothing.
-  envelopeShiftDays  = [];
-  envelopeShiftCount = 0;
-}
-
-// One trading-quarter is roughly 63 trading days (5 days × 13 weeks, holidays
-// notwithstanding). Used to space the coarse "quarter-offset" envelope lines.
-const ENVELOPE_DAYS_PER_QUARTER = 63;            // legacy default (preserved for chart code that hardcoded it)
-const ENVELOPE_MAX_GHOSTS       = 60;            // density cap — sample evenly if a period has more trading days than this
-
-// Build the list of trading-day shifts the envelope renders for the given
-// rebalance period. Each shift rolls every period-end check back by N
-// trading days, so the envelope shows "what if I rebalanced N days earlier
-// within each period" for N from 1 to ~one full period. We deliberately do
-// NOT include cross-period shifts (e.g. for quarterly, shifts of 126/189/...
-// days that effectively start the strategy in a different era).
+// Build a custom qData array for the select-9sig-rebalance-point-% feature.
+// The run STARTS at the canonical entry date with the same $10K allocation
+// (anchoring the chart visually), then rebalances every `period_days`
+// trading days starting at `entry + dayOffset` — dayOffset comes from the
+// user's chosen % through the period, so this is "rebalance N% into each
+// period instead of exactly at the boundary." dayOffset=period_days
+// collapses to the canonical schedule.
 //
-// For periods with more days than ENVELOPE_MAX_GHOSTS, we sample evenly so
-// rendering stays under 100 lines (e.g. yearly = 252 trading days → 100
-// ghosts, ~every 2-3 days).
-function buildEnvelopeShifts(period) {
-  const days = PERIOD_DAYS[period] || ENVELOPE_DAYS_PER_QUARTER;
-  const shifts = [];
-  if (days <= ENVELOPE_MAX_GHOSTS) {
-    for (let d = 1; d <= days; d++) shifts.push(d);
-  } else {
-    // Even sampling. Always include 1 and `days` for the endpoints.
-    const step = days / ENVELOPE_MAX_GHOSTS;
-    for (let i = 0; i < ENVELOPE_MAX_GHOSTS; i++) {
-      shifts.push(Math.max(1, Math.round(1 + i * step)));
-    }
-  }
-  return shifts;
-}
-
-function getShiftedQuarterly(dayShift) {
-  return getShiftedPeriodData('quarterly', dayShift);
-}
-
-// Period-aware shifted data: same logic as getShiftedQuarterly but parameterized
-// by the rebalance period. Each row's date is mapped to the daily entry N
-// trading days earlier in time, so the envelope's "rebalance N days earlier"
-// semantics work across weekly / monthly / quarterly / yearly.
-function getShiftedPeriodData(period, dayShift) {
-  const src = (periodDataByName && periodDataByName[period]) || quarterlyData;
-  if (!src) return [];
-  return src.map(p => {
-    const naturalIdx = dailyDateToIdx.get(p[0]);
-    if (naturalIdx == null) return p;
-    const shiftedIdx = Math.max(0, naturalIdx - dayShift);
-    const d = daily[shiftedIdx];
-    return [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl];
-  });
-}
-
-// Build a custom qData array for an envelope-ghost sim. Every ghost STARTS at
-// the canonical entry date with the same $10K allocation (anchoring the chart
-// visually), then rebalances every `period_days` trading days starting at
-// `entry + dayOffset`. Different ghosts pick different `dayOffset` values
-// across 1..period_days, so the envelope shows "what if the strategy
-// rebalanced on a different day OF THE PERIOD" — i.e. rebalance-day
-// sensitivity. dayOffset=period_days collapses to the canonical schedule.
-//
-// Why not the older getShiftedPeriodData approach (shift every row's date
-// AND price back by N days): for periods longer than ~1 quarter, those shifts
-// effectively move the strategy's entry date backwards, so the sim runs for
-// the shifted window BEFORE the chart's first label and the ghost line shows
-// up far above $10K at the chart's leftmost x. This date-anchored builder
-// keeps every ghost's first data point at the canonical entry with $10K.
+// Date-anchored rather than shifting every row's date/price back by N days:
+// for periods longer than ~1 quarter, a date shift moves the entry
+// backwards, so the sim would run for a window before the chart's first
+// label and the line would show up far above $10K at the chart's leftmost x.
 function buildEnvelopeQData(period, dayOffset, entryDate, exitDate) {
   if (!daily || !dailyDateToIdx) return [];
   const entryDailyIdx = dailyDateToIdx.get(entryDate);

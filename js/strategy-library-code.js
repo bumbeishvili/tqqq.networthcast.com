@@ -6,6 +6,24 @@
 // Browser: exposes window.STRATEGY_CODE. Node: module.exports (for the backtest).
 const CODE = {};
 
+// Shared SOURCE text for every strategy's weekly-vs-monthly log-density
+// check (see CUSTOM_PROMPT's p.weeklyDisplay docs, js/saved-configs.js).
+// Each CODE[n] below still needs its OWN literal copy of this at RUNTIME —
+// the sandboxed Worker has no shared-function access, so every strategy's
+// executed text must stay fully self-contained — but there's no reason to
+// hand-duplicate the SOURCE 21 times too. Interpolated into each template
+// literal below at file-load time, so the string actually stored in
+// CODE[n] is byte-identical to writing it out by hand in each one.
+const WEEKLY_MONTH_END_SNIPPET = `      // Weekly-resolution logging when the chart's shared axis is weekly
+      // (a <10y window — js/chart.js's chartDisplayPeriod), so this line
+      // renders as smoothly as the built-in engines instead of a sparse
+      // once-a-month log getting step-resampled onto a much finer axis.
+      // Falls back to the original month-boundary check otherwise —
+      // byte-identical to before whenever p.weeklyDisplay is unset.
+      const monthEnd = p.weeklyDisplay
+        ? (i === p.endIdx || Math.floor((Date.parse(data.dates[i]) / 86400000 + 3) / 7) !== Math.floor((Date.parse(data.dates[i + 1]) / 86400000 + 3) / 7))
+        : (i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month);`;
+
 // #1 Faber 10-month: QQQ vs 200-SMA checked ONLY on the last trading day of each month.
 CODE[1] = `{
   name: "Faber 10-mo / 200-day (monthly) → TQQQ/cash",
@@ -23,7 +41,7 @@ CODE[1] = `{
       }
       prevMonth = month;
       const px = lev[i];
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (monthEnd) {
         let sum = 0, n = 0;
         for (let k = Math.max(0, i - W + 1); k <= i; k++) { if (sig[k] > 0) { sum += sig[k]; n++; } }
@@ -61,7 +79,7 @@ CODE[2] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -91,7 +109,7 @@ CODE[3] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -124,7 +142,7 @@ CODE[8] = `{
         else if (invested && s <= sma * dn) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -155,7 +173,7 @@ CODE[9] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -187,7 +205,7 @@ CODE[10] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -217,7 +235,7 @@ CODE[11] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -247,7 +265,7 @@ CODE[12] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -286,7 +304,7 @@ CODE[13] = `{
         if (state === "tqqq" && pxT > 0) { shT += cash / pxT; cash = 0; }
         else if (state === "qqq" && pxQ > 0) { shQ += cash / pxQ; cash = 0; }
       }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action.indexOf("buy") === 0 || action.indexOf("derisk") === 0 || monthEnd)
         log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action });
     }
@@ -325,7 +343,7 @@ CODE[15] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -361,7 +379,7 @@ CODE[17] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; peak = px; action = "buy"; }
       else if ((!bull || stopped) && invested) { cash = sh * px; sh = 0; invested = false; action = stopped ? "stop" : "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || action === "stop" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -396,7 +414,7 @@ CODE[18] = `{
         else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -427,7 +445,7 @@ CODE[19] = `{
       if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -461,7 +479,7 @@ CODE[20] = `{
         const total = sh * px + cash;
         sh = (total * targetW) / px; cash = total - sh * px; w = targetW; action = "rebalance";
       }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "rebalance" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action, weight: w });
     }
@@ -500,7 +518,7 @@ CODE[22] = `{
       if (up && !invested && rsi < p.buy && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (invested && (!up || rsi > p.sell)) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -540,7 +558,7 @@ CODE[23] = `{
       if (wantIn && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
       else if (!wantIn && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
@@ -583,7 +601,7 @@ CODE[24] = `{
         if (want === "tqqq" && pxT > 0) { shT += cash / pxT; cash = 0; }
         else if (want === "qqq" && pxQ > 0) { shQ += cash / pxQ; cash = 0; }
       }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "delever" || action === "gtfo" || monthEnd)
         log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action });
     }
@@ -620,7 +638,7 @@ CODE[25] = `{
         if (state === "lev" && pxL > 0) { shLev += cash / pxL; cash = 0; }
         else if (state === "park" && pxP > 0) { shPark += cash / pxP; cash = 0; }
       }
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "derisk" || monthEnd)
         log.push({ date: data.dates[i], value: shLev * pxL + shPark * pxP + cash, price: pxL, contributed: contributed, action: action });
     }
@@ -715,7 +733,7 @@ CODE[26] = `{
       }
       const hp = priceOf(held, i);
       const stockVal = shares * hp;
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
       if (contributed !== 0 || monthEnd || action !== "hold") {
@@ -852,7 +870,7 @@ CODE[39] = `{
       }
       const px = priceOf(held, i);
       const stockVal = shares * px;
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
       if (contributed !== 0 || monthEnd || action !== "hold") {
@@ -1067,7 +1085,7 @@ CODE[40] = `{
 
       const hp = priceOf(held, i);
       const stockVal = shares * hp;
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
       feesPaid += fee;

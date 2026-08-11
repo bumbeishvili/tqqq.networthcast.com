@@ -1180,12 +1180,6 @@ function renderStrategyPanelBody(idx) {
   }
   // Restore any <select> values the DOM moves reverted.
   for (const [s, v] of _selSnap) { if (s.value !== v) s.value = v; }
-  // The "Show alternate runs" checkbox reflects the CURRENT strategy's own flag
-  // (main session flag, or the open saved strategy's cfg.showEnvelope).
-  if (idx === 0) {
-    const envCb = document.getElementById('toggle-envelope');
-    if (envCb && typeof currentEnvelopeFlag === 'function') envCb.checked = currentEnvelopeFlag();
-  }
   // Preview-dropdown trigger labels read the (now-correct) select values.
   if (typeof window.refreshPreviewTriggers === 'function') window.refreshPreviewTriggers();
   // Restore the pre-rebuild scroll position.
@@ -1340,16 +1334,6 @@ function refreshAllLegends() {
   if (typeof renderSavedConfigPills === 'function') renderSavedConfigPills();
 }
 
-// The envelope "alternate runs" belong to the base 9sig line (dataset 0):
-// show its ghost band only when the envelope toggle is on AND the base 9sig
-// line itself is visible — otherwise the band floats with no owning line.
-// (Saved-strategy ghost bands carry a _configId and are managed per-strategy
-// in saved-configs.js, so they're skipped here.)
-// "Show alternate runs" is a PER-STRATEGY setting. The base (main 9sig) envelope
-// has its own session flag (window._mainEnvelopeOn); each saved 9sig stores its
-// own cfg.showEnvelope. A strategy's envelope shows whenever its own flag is on
-// and its line is visible — independent of the panel being open and of every other
-// strategy. (Saved strategies draw theirs via computeConfigGhosts.)
 // The x-axis date grain is the FINEST rebalance period among the 9sig strategies
 // that will actually be drawn — the main 9sig (if its line is visible) plus every
 // visible saved 9sig. Coarser strategies step-resample onto it without losing
@@ -1362,7 +1346,14 @@ function _finerPeriod(a, b) {
   if (!b) return a;
   return (_PERIOD_RANK[a] ?? 2) <= (_PERIOD_RANK[b] ?? 2) ? a : b;
 }
-function chartDisplayPeriod(livePeriod) {
+// Whole-year span between two 'YYYY-MM-DD' dates — used only to decide the
+// chart's sampling floor below, so an approximate 365.25-day year is fine.
+function _yearsSpan(entryDate, exitDate) {
+  if (!entryDate || !exitDate) return Infinity;
+  const a = new Date(entryDate + 'T00:00:00Z'), b = new Date(exitDate + 'T00:00:00Z');
+  return (b - a) / (365.25 * 24 * 3600 * 1000);
+}
+function chartDisplayPeriod(livePeriod, spanYears) {
   let p = null;
   // Main 9sig line: its period is the live (draft) period when we're editing the
   // main, or canonical quarterly when a saved strategy is being edited.
@@ -1375,11 +1366,13 @@ function chartDisplayPeriod(livePeriod) {
       }
     }
   }
-  // Floor the x-axis at QUARTERLY: a yearly strategy is still drawn (and
-  // hovered) at quarter resolution — its quarter-end values come from the sim's
-  // sampleQuarterly snapshots. Go finer than a quarter only when a finer
+  // Floor the x-axis at QUARTERLY normally, or WEEKLY for a short (<10y)
+  // window — a coarser strategy is still drawn/hovered at the floor's
+  // resolution via the sim's sampleQuarterly/sampleWeekly snapshots (see
+  // js/simulate.js). Go finer than the floor only when an even-finer
   // strategy (monthly / weekly) is actually visible.
-  return _finerPeriod(p || livePeriod || 'quarterly', 'quarterly');
+  const floor = (spanYears != null && spanYears < 10) ? 'weekly' : 'quarterly';
+  return _finerPeriod(p || livePeriod || floor, floor);
 }
 // The chart's minimum plottable value is 1. Values below 1 (e.g. a strategy fully
 // out of cash → Cash = 0) are raised to 1 so they always render: on a log axis 0
@@ -1396,15 +1389,6 @@ function clampChartMin(chart) {
     }
   }
 }
-function syncEnvelopeVisibility() {
-  if (!chart) return;
-  const baseVisible = chart.isDatasetVisible(0);
-  const show = !!window._mainEnvelopeOn && baseVisible;
-  chart.data.datasets.forEach((ds, i) => {
-    if (ds._isShift && !ds._configId) chart.setDatasetVisibility(i, show);
-  });
-}
-
 // Single delegated click handler — the legend HTML gets replaced on every
 // render, so attaching here once on document avoids leaks/duplicate
 // listeners while still working after re-renders.
@@ -1472,9 +1456,6 @@ document.addEventListener('click', (e) => {
     const subs = SUB_LEGEND[idx];
     if (subs) for (const sIdx of subs) chart.setDatasetVisibility(sIdx, false);
   }
-  // The base 9sig's envelope band ("alternate runs") follows its line's
-  // visibility — hide it when 9sig is hidden, restore it when shown.
-  if (idx === 0) syncEnvelopeVisibility();
   // The main 9sig's visibility changes which strategies the x-axis grain is
   // computed from (chartDisplayPeriod), so the chart must be fully recomputed.
   if (idx === 0) forceRender = true;
@@ -1542,6 +1523,63 @@ function fitChartHeight() {
   });
 }
 window.addEventListener('resize', fitChartHeight);
+
+// The ~15 select-sma-* knobs simulateSMA() needs beyond asset/window/underlying
+// (those three differ by caller — see below). Both the main chart's live SMA
+// line (render(), this file) and the analytics heatmap's SMA runs
+// (js/analytics.js's _smaParamsForAnalytics) read this same set with the same
+// defaults — shared here so a newly-added select-sma-* control (see CLAUDE.md's
+// "Adding a new configurable control" checklist) only needs updating in one
+// place, not two independently-typed copies that can quietly drift apart —
+// the same failure shape this session already found and fixed three times
+// (customSig, the param-bar preview cache, slRunCode).
+function readSmaBaseOpts() {
+  return {
+    entryBufferPct:       +((document.getElementById('select-sma-entry-buf') || {}).value) || 0,
+    exitBufferPct:        +((document.getElementById('select-sma-exit-buf')  || {}).value) || 0,
+    rsiOverheatThreshold: +((document.getElementById('select-sma-rsi-oh')   || {}).value) || 0,
+    rsiCoolThreshold:     +((document.getElementById('select-sma-rsi-cool') || {}).value) || 0,
+    outAsset:       ((document.getElementById('select-sma-out-asset') || {}).value) || 'cash',
+    dcaInMonths:    +((document.getElementById('select-sma-dca-in')      || {}).value) || 0,
+    dcaToOutMonths: +((document.getElementById('select-sma-dca-to-out')  || {}).value) || 0,
+    bgGtfoPct:      +((document.getElementById('select-sma-bg-gtfo')     || {}).value) || 0,
+    bgAsset:        ((document.getElementById('select-sma-bg-asset')     || {}).value) || 'qqq',
+    bgWindow:       +((document.getElementById('select-sma-bg-window')   || {}).value) || 0,
+    tradeCostPct:   +((document.getElementById('select-sma-cost')        || {}).value) || 0,
+    rsiOhWindow:    +((document.getElementById('select-sma-rsi-oh-window')   || {}).value) || 10,
+    rsiCoolWindow:  +((document.getElementById('select-sma-rsi-cool-window') || {}).value) || 10,
+    rebalanceCheck: 'daily',
+    confirmBuySteps:  +((document.getElementById('select-sma-confirm-buy')  || {}).value) || 0,
+    confirmSellSteps: +((document.getElementById('select-sma-confirm-sell') || {}).value) || 0,
+    settleDays:       +((document.getElementById('select-sma-settle')       || {}).value) || 0,
+  };
+}
+
+// The select-9sig-* knobs simulate() needs, shared the same way readSmaBaseOpts()
+// is above — chart.js's live 9sig line, analytics.js's heatmap 9sig runs, and
+// preview-dropdown.js's bar previews all read this same set with the same
+// defaults. underlyingCol and rebalancePeriod are deliberately NOT here: each
+// caller derives them differently (chart.js's rebalancePeriod freezes to
+// canonical quarterly while a saved config is being edited — analytics.js and
+// preview-dropdown.js have no such concept — so folding it into the shared
+// object would paper over a real behavioral difference, not just syntax).
+function read9sigBaseOpts() {
+  const crashDropPct    = +((document.getElementById('select-9sig-crashdrop') || {}).value);
+  const spikeTriggerPct = +((document.getElementById('select-9sig-spike')     || {}).value);
+  return {
+    qGrowth:             +((document.getElementById('select-9sig-growth') || {}).value) / 100 || 0.09,
+    crashDropPct:        Number.isFinite(crashDropPct) ? crashDropPct : 30,
+    crashLookbackMonths: +((document.getElementById('select-9sig-crashwin') || {}).value) || 24,
+    spikeTriggerPct:     Number.isFinite(spikeTriggerPct) ? spikeTriggerPct : 100,
+    cashPct:             (+((document.getElementById('select-9sig-cash') || {}).value) || 0) / 100,
+    contribDeployPct:    (+((document.getElementById('select-9sig-deploy') || {}).value) || 0) / 100,
+    targetFromPrevTarget: ((document.getElementById('select-9sig-target-compound') || {}).value) === 'target',
+    buyThrottlePct:      +((document.getElementById('select-9sig-buypower') || {}).value) || 90,
+    parkAsset:           ((document.getElementById('select-9sig-park-asset') || {}).value) || 'cash',
+    spikeResetPct:       ((document.getElementById('select-9sig-spike-target') || {}).value) || 'auto',
+    tradeCostPct:        +((document.getElementById('select-9sig-cost') || {}).value) || 0,
+  };
+}
 
 function render() {
   if (!quarterlyData) return; // data not loaded yet
@@ -1641,17 +1679,16 @@ function render() {
   // Per-strategy underlying + 9sig signal-growth from their side-panel selects.
   // SMA has its own selector because its only relationship to the leveraged
   // ETF is "hold it or not".
-  // Column index in quarterlyData: 1=TQQQ, 4=QLD, 5=SSO, 6=SPXL.
-  const ulSel = (id) => {
-    const v = (document.getElementById(id) || {}).value;
-    return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : 1;
-  };
+  // Column index in quarterlyData: 1=TQQQ, 4=QLD, 5=SSO, 6=SPXL. ulColFromVal
+  // is the canonical asset->column mapping (js/saved-configs.js) — this used
+  // to be its own reimplementation of the same ternary chain.
+  const ulSel = (id) => ulColFromVal((document.getElementById(id) || {}).value);
   const sigUlCol = ulSel('select-9sig-underlying');
   const smaUlCol = ulSel('select-sma-underlying');
-  const qGrowth  = +((document.getElementById('select-9sig-growth') || {}).value) / 100 || 0.09;
-  const crashDropPct  = +((document.getElementById('select-9sig-crashdrop') || {}).value);
-  const crashLookbackMonths = +((document.getElementById('select-9sig-crashwin') || {}).value) || 24;
-  const spikeTrigPct  = +((document.getElementById('select-9sig-spike')     || {}).value);
+  // qGrowth, crashDropPct, crashLookbackMonths, spikeTriggerPct, cashPct,
+  // contribDeployPct, targetFromPrevTarget, buyThrottlePct, parkAsset,
+  // spikeResetPct, tradeCostPct — see read9sigBaseOpts() above.
+  const _sig9Base = read9sigBaseOpts();
   // Two distinct periods, deliberately decoupled for correctness:
   //   • mainPeriod  — the period the MAIN 9sig line is actually SIMULATED at:
   //     its own live period (or canonical quarterly while a saved config is
@@ -1661,14 +1698,7 @@ function render() {
   //     Used only for the shared x-axis so no visible strategy loses detail; a
   //     coarser line is step-resampled onto it (identity when the grains match).
   const mainPeriod   = window._editingConfigId ? 'quarterly' : _livePeriod;
-  const displayGrain = chartDisplayPeriod(_livePeriod);
-  const cashPct = (+((document.getElementById('select-9sig-cash') || {}).value) || 0) / 100;
-  // Checkbox: ticked → deploy half of each contribution into stock immediately
-  // at the month's price, rest waits for rebalance. Off → canonical 9sig.
-  const contribDeployPct = (+((document.getElementById('select-9sig-deploy') || {}).value) || 0) / 100;
-  const targetFromPrevTarget = ((document.getElementById('select-9sig-target-compound') || {}).value) === 'target';
-  const buyThrottlePct = (+((document.getElementById('select-9sig-buypower') || {}).value) || 90);
-  const parkAsset = ((document.getElementById('select-9sig-park-asset') || {}).value) || 'cash';
+  const displayGrain = chartDisplayPeriod(_livePeriod, _yearsSpan(entryDateForSim, exitDateForSim));
 
   // Rebalance point: % of the way through each period where the check happens
   // (0 = start, 100 = end). Maps to a trading-day offset and shifts the schedule
@@ -1692,25 +1722,19 @@ function render() {
   }
 
   const sigOpts = {
-    qGrowth,
+    ..._sig9Base,
     schedule: contribSchedule,
     ...(_rebalQData ? { qData: _rebalQData } : _exactQData ? { qData: _exactQData } : {}),
     ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
     underlyingCol: sigUlCol,
-    crashDropPct:   Number.isFinite(crashDropPct) ? crashDropPct : 30,
-    crashLookbackMonths,
-    spikeTriggerPct: Number.isFinite(spikeTrigPct) ? spikeTrigPct : 100,
     rebalancePeriod: mainPeriod,
-    cashPct,
-    contribDeployPct,
-    targetFromPrevTarget,
-    buyThrottlePct,
-    parkAsset,
-    spikeResetPct: ((document.getElementById('select-9sig-spike-target') || {}).value) || 'auto',
-    tradeCostPct: (+((document.getElementById('select-9sig-cost') || {}).value) || 0),
-    // A yearly run is coarser than the quarterly x-axis floor → ask the sim for
-    // quarter-end value snapshots so the line/hover have quarter resolution.
-    sampleQuarterly: mainPeriod === 'yearly',
+    // mainPeriod coarser than the shared axis grain → ask the sim for
+    // in-between value snapshots at that grain so the line/hover don't lose
+    // resolution. Mutually exclusive: displayGrain is only ever one or the
+    // other (js/chart.js's chartDisplayPeriod floors at weekly for a <10y
+    // window, quarterly otherwise).
+    sampleQuarterly: displayGrain === 'quarterly' && mainPeriod === 'yearly',
+    sampleWeekly: displayGrain === 'weekly' && mainPeriod !== 'weekly',
     // Invested Compounded baseline (computed inside this sim) uses the global
     // rate; the 9sig parked cash uses its own rate (passed as the 3rd arg).
     baselineRate: rate,
@@ -1738,7 +1762,7 @@ function render() {
   const labels = sameGrain
     ? log.map(l => l.date)
     : simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise,
-        Object.assign({}, sigOpts, { rebalancePeriod: displayGrain, skipBH: true, sampleQuarterly: false })).log.map(l => l.date);
+        Object.assign({}, sigOpts, { rebalancePeriod: displayGrain, skipBH: true, sampleQuarterly: false, sampleWeekly: false })).log.map(l => l.date);
   const onLabels = (arr, valOf) => sameGrain
     ? arr.map(valOf)
     : resampleByDate((arr || []).map(a => ({ date: a.date, value: valOf(a) })), labels);
@@ -1751,86 +1775,15 @@ function render() {
   const smaOpts = {
     smaAsset, smaWindow, underlyingCol: smaUlCol,
     schedule: contribSchedule,
-    entryBufferPct:       +((document.getElementById('select-sma-entry-buf') || {}).value) || 0,
-    exitBufferPct:        +((document.getElementById('select-sma-exit-buf')  || {}).value) || 0,
-    rsiOverheatThreshold: +((document.getElementById('select-sma-rsi-oh')   || {}).value) || 0,
-    rsiCoolThreshold:     +((document.getElementById('select-sma-rsi-cool') || {}).value) || 0,
-    outAsset:       ((document.getElementById('select-sma-out-asset') || {}).value) || 'cash',
-    dcaInMonths:    +((document.getElementById('select-sma-dca-in')      || {}).value) || 0,
-    dcaToOutMonths: +((document.getElementById('select-sma-dca-to-out')  || {}).value) || 0,
-    bgGtfoPct:      +((document.getElementById('select-sma-bg-gtfo')     || {}).value) || 0,
-    bgAsset:        ((document.getElementById('select-sma-bg-asset')     || {}).value) || 'qqq',
-    bgWindow:       +((document.getElementById('select-sma-bg-window')   || {}).value) || 0,
-    tradeCostPct:   +((document.getElementById('select-sma-cost')        || {}).value) || 0,
-    rsiOhWindow:    +((document.getElementById('select-sma-rsi-oh-window')   || {}).value) || 10,
-    rsiCoolWindow:  +((document.getElementById('select-sma-rsi-cool-window') || {}).value) || 10,
-    rebalanceCheck: 'daily',
-    confirmBuySteps:  +((document.getElementById('select-sma-confirm-buy')  || {}).value) || 0,
-    confirmSellSteps: +((document.getElementById('select-sma-confirm-sell') || {}).value) || 0,
-    settleDays:       +((document.getElementById('select-sma-settle')       || {}).value) || 0,
+    ...readSmaBaseOpts(),
     ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
     emitDD: true, // dense per-step multi-asset control points for an accurate max-drawdown
+    // smaPoints (the chart-rendered series) is otherwise only pushed on
+    // quarter-end dates regardless of window length — this fills it out to
+    // weekly resolution on a <10y window, same idea as 9sig's sampleWeekly.
+    sampleWeekly: displayGrain === 'weekly',
   };
   const { smaPoints, smaLog, ddControls: smaDdControls } = simulateSMA(initial, monthly, smaCashRate, simEntryIdx, exitIdx, annualRaise, smaOpts);
-
-  // The base envelope is the MAIN 9sig line's own alternate runs, gated by its own
-  // session flag — independent of any saved strategy's envelope. Visibility is
-  // further gated on the main line being visible (syncEnvelopeVisibility).
-  const showBaseEnvelope = !!window._mainEnvelopeOn;
-  // Envelope ghost-line opacity — fixed default after the user-facing slider
-  // was removed; 0.12 reads as "clearly visible cluster, doesn't drown out
-  // the main strategy line".
-  const opacityVal = 0.12;
-  // The envelope band belongs to the base 9sig line, so it follows that line's
-  // colour (override or default), faded down.
-  const _nineSigColor = (window._lineColorOverrides && window._lineColorOverrides['9sig']) || "#45818e";
-  const envColor = (typeof fadeColor === 'function') ? fadeColor(_nineSigColor, opacityVal) : `rgba(134,118,255,)`;
-  // Each ghost line is the same 9sig strategy with rebalance shifted to a
-  // different day — must inherit ALL the user's 9sig knobs (signal-line
-  // growth %, underlying, 30-down drop, spike trigger), otherwise the
-  // ghosts wouldn't track the user's current strategy.
-  // Look up (or lazily build) the shifted-data cache for the current
-  // rebalance period. The cache is keyed by period; a yearly switch builds
-  // a fresh 100-entry cache the first time and reuses it on subsequent
-  // renders. envelopeShiftDays must match the period as well.
-  if (showBaseEnvelope) {
-    ensureEnvelopeCacheForPeriod(mainPeriod);
-  }
-  // Envelope ghosts are the MAIN line's alternate runs → simulated at mainPeriod,
-  // then step-resampled onto the shared x-axis (labels, built below) so they
-  // align even when the grain is finer than the main's period. Each ghost
-  // gets its own qData starting at the canonical entry date with $10K, then
-  // rebalances every period_days starting at entry + dayShift — so dayShift
-  // becomes "rebalance day OF THE PERIOD" sensitivity. Every ghost is anchored
-  // at the same chart-entry visually; only the rebalance schedule varies.
-  const _entryDate = entryDateForSim;
-  const _exitDate  = exitDateForSim;
-  const _rawShiftSims = showBaseEnvelope
-    ? envelopeShiftDays.map(dayShift => {
-        const ghostQData = (typeof buildEnvelopeQData === 'function')
-          ? buildEnvelopeQData(mainPeriod, dayShift, _entryDate, _exitDate)
-          : null;
-        if (!ghostQData || ghostQData.length < 2) return { log: [] };
-        return simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise, {
-          qData: ghostQData,
-          skipBH: true,
-          schedule: contribSchedule,
-          ...((entryOverride || exitOverride) ? { entryDateOverride: _entryDate, exitDateOverride: _exitDate } : {}),
-          qGrowth,
-          underlyingCol: sigUlCol,
-          crashDropPct:   Number.isFinite(crashDropPct) ? crashDropPct : 30,
-          crashLookbackMonths,
-          spikeTriggerPct: Number.isFinite(spikeTrigPct) ? spikeTrigPct : 100,
-          rebalancePeriod: mainPeriod,
-          cashPct,
-          contribDeployPct,
-          targetFromPrevTarget,
-          buyThrottlePct,
-          parkAsset,
-        });
-      })
-    : [];
-  const shiftResults = _rawShiftSims.map(s => onLabels(pick(s.samplePoints, s.log), l => l.total));
 
   if (log.length < 1) {
     if (chart) { chart.destroy(); chart = null; }
@@ -2005,6 +1958,11 @@ function render() {
     initial, monthly, annualRaise, simEntryIdx, exitIdx, labels, years, totalContributed,
     ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
     contribSchedule,
+    // The chart's shared x-axis grain (js/chart.js's chartDisplayPeriod) — a
+    // saved 9sig config coarser than this needs the same sampleQuarterly/
+    // sampleWeekly synthetic snapshots the main line requests above, or its
+    // line loses resolution relative to everything else sharing this axis.
+    displayGrain,
   };
   if (chart) {
     // Strip saved-config datasets up front so the envelope length math below
@@ -2035,32 +1993,9 @@ function render() {
     chart.data.datasets[9].data = []; chart.data.datasets[9].hidden = true;
     chart.data.datasets[10].data = []; chart.data.datasets[10].hidden = true;
     chart.data.datasets[11].data = []; chart.data.datasets[11].hidden = true;
-    while (chart.data.datasets.length < 12 + envelopeShiftCount) {
-      const offset = chart.data.datasets.length - 12;
-      chart.data.datasets.push({
-        label: '_shift_' + (offset + 1),
-        data: [],
-        borderColor: envColor,
-        backgroundColor: 'transparent',
-        fill: false,
-        tension: 0.3,
-        pointRadius: 0,
-        pointHitRadius: 0,
-        borderWidth: 1,
-        order: -1,
-        _isShift: true
-      });
-    }
-    for (let i = 0; i < envelopeShiftCount; i++) {
-      const ds9 = chart.data.datasets[12 + i];
-      ds9.data = showBaseEnvelope ? (shiftResults[i] || []) : [];
-      ds9.borderColor = envColor;
-      ds9.hidden = !showBaseEnvelope;
-    }
     if (typeof appendConfigDatasets === 'function') appendConfigDatasets(chart, cfgCtx);
     if (typeof applyBaseColorOverrides === 'function') applyBaseColorOverrides(chart);
     if (typeof applyNineSigFamily === 'function') applyNineSigFamily(chart);
-    syncEnvelopeVisibility();
     applyInflationToChart(chart); // deflate all lines to real $ when the toggle is on
     chart.options.scales.y.type = logScale ? 'logarithmic' : 'linear';
     chart.options.scales.y.beginAtZero = !logScale;
@@ -2412,15 +2347,9 @@ function render() {
       if (!log || !log.length || !labs || !labs.length) return;
       const xs = c.scales.x, ys = c.scales.y, area = c.chartArea;
       const ulName = ((document.getElementById('select-sma-underlying') || {}).value || 'tqqq').toUpperCase();
-      const xForDate = (date) => {
-        let i = 0;
-        while (i + 1 < labs.length && labs[i + 1] <= date) i++;
-        if (i >= labs.length - 1) return xs.getPixelForValue(labs.length - 1);
-        const x0 = xs.getPixelForValue(i), x1 = xs.getPixelForValue(i + 1);
-        const t0 = Date.parse(labs[i]), t1 = Date.parse(labs[i + 1]), t = Date.parse(date);
-        const frac = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
-        return x0 + (x1 - x0) * Math.max(0, Math.min(1, frac));
-      };
+      // Same interpolation as the standalone chartXForDate(c, date) above —
+      // aliased locally since this plugin calls it in a tight loop.
+      const xForDate = (date) => chartXForDate(c, date);
       const cx = c.ctx;
       cx.save();
 
@@ -2721,20 +2650,6 @@ function render() {
           borderDash: [5, 2, 2, 2],
           hidden: true,
         },
-        ...Array.from({ length: envelopeShiftCount }, (_, i) => ({
-          label: '_shift_' + (i + 1),
-          data: showBaseEnvelope ? (shiftResults[i] || []) : [],
-          borderColor: envColor,
-          backgroundColor: 'transparent',
-          fill: false,
-          tension: 0.3,
-          pointRadius: 0,
-          pointHitRadius: 0,
-          borderWidth: 1,
-          order: -1,
-          hidden: !showBaseEnvelope,
-          _isShift: true
-        }))
       ]
     },
     options: {
@@ -2834,7 +2749,6 @@ function render() {
   if (typeof appendConfigDatasets === 'function') appendConfigDatasets(chart, cfgCtx);
   if (typeof applyBaseColorOverrides === 'function') applyBaseColorOverrides(chart);
   if (typeof applyNineSigFamily === 'function') applyNineSigFamily(chart);
-  syncEnvelopeVisibility();
   applyInflationToChart(chart); // deflate all lines to real $ when the toggle is on
   clampChartMin(chart);
   chart.update('none');

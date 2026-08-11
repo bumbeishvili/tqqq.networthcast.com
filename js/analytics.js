@@ -1474,38 +1474,21 @@ let _perYearSimsKey = null;
 // Read the per-strategy underlying selectors and the 9sig signal-growth
 // selector off the side-panel UI. Mirror of the helper in chart.js's render().
 function _underlyingAndGrowth() {
-  const ulSel = (id) => {
-    const v = (document.getElementById(id) || {}).value;
-    return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : 1;
-  };
-  const cd = +((document.getElementById('select-9sig-crashdrop') || {}).value);
-  const cw = +((document.getElementById('select-9sig-crashwin')  || {}).value);
-  const sp = +((document.getElementById('select-9sig-spike')     || {}).value);
+  // ulColFromVal is the canonical asset->column mapping (js/saved-configs.js).
+  const ulSel = (id) => ulColFromVal((document.getElementById(id) || {}).value);
+  // rebalancePeriod is deliberately a plain DOM read here, NOT part of
+  // read9sigBaseOpts() — analytics.js has no "editing freezes to canonical
+  // quarterly" concept, so it never needs anything but the raw control value.
   const np = ((document.getElementById('select-9sig-period')    || {}).value) || 'quarterly';
-  const cashPct = (+((document.getElementById('select-9sig-cash') || {}).value) || 0) / 100;
-  const contribDeployPct = (+((document.getElementById('select-9sig-deploy') || {}).value) || 0) / 100;
-  const targetFromPrevTarget = ((document.getElementById('select-9sig-target-compound') || {}).value) === 'target';
   const nineSigCashRate = (+((document.getElementById('select-9sig-cashrate') || {}).value) || 0) / 100;
   const smaCashRate     = (+((document.getElementById('select-sma-cashrate')  || {}).value) || 0) / 100;
-  const buyThrottlePct  = (+((document.getElementById('select-9sig-buypower') || {}).value) || 90);
-  const parkAsset = ((document.getElementById('select-9sig-park-asset') || {}).value) || 'cash';
-  const spikeResetPct = ((document.getElementById('select-9sig-spike-target') || {}).value) || 'auto';
-  const nineSigTradeCostPct = (+((document.getElementById('select-9sig-cost') || {}).value) || 0);
+  const base = read9sigBaseOpts();
   return {
     sigUlCol: ulSel('select-9sig-underlying'),
     smaUlCol: ulSel('select-sma-underlying'),
-    qGrowth:  +((document.getElementById('select-9sig-growth') || {}).value) / 100 || 0.09,
-    crashDropPct:   Number.isFinite(cd) ? cd : 30,
-    crashLookbackMonths: Number.isFinite(cw) ? cw : 24,
-    spikeTriggerPct: Number.isFinite(sp) ? sp : 100,
+    ...base,
     rebalancePeriod: np,
-    cashPct,
-    contribDeployPct,
-    targetFromPrevTarget,
-    buyThrottlePct,
-    parkAsset,
-    spikeResetPct,
-    nineSigTradeCostPct,
+    nineSigTradeCostPct: base.tradeCostPct,
     nineSigCashRate,
     smaCashRate,
   };
@@ -1523,23 +1506,7 @@ function _smaParamsForAnalytics() {
     smaAsset:      (document.getElementById('select-sma-asset')  || {}).value || 'qqq',
     smaWindow:     +((document.getElementById('select-sma-window') || {}).value) || 200,
     underlyingCol: smaUlCol,
-    entryBufferPct:       +((document.getElementById('select-sma-entry-buf') || {}).value) || 0,
-    exitBufferPct:        +((document.getElementById('select-sma-exit-buf')  || {}).value) || 0,
-    rsiOverheatThreshold: +((document.getElementById('select-sma-rsi-oh')   || {}).value) || 0,
-    rsiCoolThreshold:     +((document.getElementById('select-sma-rsi-cool') || {}).value) || 0,
-    outAsset:       ((document.getElementById('select-sma-out-asset') || {}).value) || 'cash',
-    dcaInMonths:    +((document.getElementById('select-sma-dca-in')      || {}).value) || 0,
-    dcaToOutMonths: +((document.getElementById('select-sma-dca-to-out')  || {}).value) || 0,
-    bgGtfoPct:      +((document.getElementById('select-sma-bg-gtfo')     || {}).value) || 0,
-    bgAsset:        ((document.getElementById('select-sma-bg-asset')     || {}).value) || 'qqq',
-    bgWindow:       +((document.getElementById('select-sma-bg-window')   || {}).value) || 0,
-    tradeCostPct:   +((document.getElementById('select-sma-cost')        || {}).value) || 0,
-    rsiOhWindow:    +((document.getElementById('select-sma-rsi-oh-window')   || {}).value) || 10,
-    rsiCoolWindow:  +((document.getElementById('select-sma-rsi-cool-window') || {}).value) || 10,
-    rebalanceCheck: 'daily',
-    confirmBuySteps:  +((document.getElementById('select-sma-confirm-buy')  || {}).value) || 0,
-    confirmSellSteps: +((document.getElementById('select-sma-confirm-sell') || {}).value) || 0,
-    settleDays:       +((document.getElementById('select-sma-settle')       || {}).value) || 0,
+    ...(typeof readSmaBaseOpts === 'function' ? readSmaBaseOpts() : {}),
   };
 }
 

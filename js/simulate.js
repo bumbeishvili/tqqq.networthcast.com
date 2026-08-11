@@ -54,6 +54,40 @@ function buildFormulaSchedule(monthly, annualRaise, entryDate, exitDate) {
   return { byDate, byMonth, list, priceDateByMonth };
 }
 
+// Shared by simulate() and simulateSMA() below — both need to detect the
+// last trading day actually present in a given ISO week (Monday-start), to
+// know when to push an extra display point for a <10y window's weekly axis
+// floor (js/chart.js's chartDisplayPeriod). Hoisted here instead of each
+// function defining its own copy, the same duplication mistake this session
+// already found once in js/strategy-library-code.js's 21 near-identical
+// strategies. A fixed "Friday" check would miss weeks a holiday closes
+// early, hence the actual week-of-Monday comparison.
+function _mondayOf(d) {
+  const dt = new Date(d + 'T00:00:00Z');
+  const day = dt.getUTCDay(); // 0=Sun..6=Sat
+  dt.setUTCDate(dt.getUTCDate() + (day === 0 ? -6 : 1 - day));
+  return dt.toISOString().slice(0, 10);
+}
+function isWeekEnd(d, nextD) { return !nextD || _mondayOf(d) !== _mondayOf(nextD); }
+
+// Shared cursor-walk for the sampleWeekly catch-up closures in simulate()
+// (catchUpWeekly) and buyHold() (catchUpWeeklyBH) — both used to hand-roll
+// this exact guard/lookup/loop skeleton, differing only in what they push
+// per week-ending day. Walks `daily` from `fromDate` (exclusive) up to
+// `uptoExclusive` (exclusive), calling `onWeekEnd(dailyRow)` for each day
+// that's the last trading day of its ISO week. No-ops (and the caller's own
+// cursor should just jump to uptoExclusive) when sampleWeekly is off or the
+// date range can't be resolved.
+function walkWeekEnds(fromDate, uptoExclusive, sampleWeekly, onWeekEnd) {
+  if (!sampleWeekly || typeof daily === 'undefined' || !daily || typeof dailyDateToIdx === 'undefined' || !dailyDateToIdx) return;
+  const s = dailyDateToIdx.get(fromDate), e = dailyDateToIdx.get(uptoExclusive);
+  if (s == null || e == null) return;
+  for (let di = s + 1; di < e; di++) {
+    const dRow = daily[di];
+    if (isWeekEnd(dRow.date, daily[di + 1] && daily[di + 1].date)) onWeekEnd(dRow);
+  }
+}
+
 // Builds the p.contributions plain object a custom/library strategy reads
 // (p.contributions[data.dates[i]] — see saved-configs.js's CUSTOM_PROMPT for
 // the full docs) from either an explicit schedule (a real uploaded
@@ -336,6 +370,12 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   }];
   const qEnds = new Set();
   for (let qi = entryIdx; qi <= exitIdx; qi++) qEnds.add(quarterlyData[qi][0]);
+  // Same weekly-axis-floor idea as simulate()'s sampleWeekly (js/chart.js's
+  // chartDisplayPeriod, <10y window) — smaPoints below only pushed on
+  // quarter-end dates otherwise, which reads as a blocky/stepped line next
+  // to the built-in engines once the shared axis floors at weekly. isWeekEnd
+  // is the module-level helper shared with simulate() above.
+  const sampleWeekly = !!opts.sampleWeekly;
 
   // Dense control points for an honest max-drawdown: the FULL per-asset holding
   // + cash at each step, so a daily revaluation captures crashes while parked in
@@ -536,7 +576,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
 
     if (ddControls) ddControls.push({ date: mDate, h: snapHoldings(), cash });
 
-    if (qEnds.has(mDate)) {
+    if (qEnds.has(mDate) || (sampleWeekly && isWeekEnd(mDate, stepRows[m + 1] && stepRows[m + 1][0]))) {
       smaPoints.push({ date: mDate, value: totalAt(row), state });
     }
   }
@@ -782,6 +822,38 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   let prevQDate = qSlice[0][0];
   let crashNoSellCount = 0; // track consecutive 30-down no-sell skips (max 2)
 
+  // Weekly display-only snapshots — the chart floors its x-axis at weekly
+  // instead of quarterly for a short (<10y) window (js/chart.js's
+  // chartDisplayPeriod), so a coarser-period strategy (the quarterly default,
+  // or monthly/yearly) needs synthetic in-between points to draw/hover at
+  // that resolution — same idea as sampleQuarterly above, one grain finer.
+  // Mutually exclusive with it in practice (js/chart.js only ever requests
+  // one), additive + opt-gated the same way: rebalance math and `log` are
+  // untouched. isWeekEnd (module-level, above) is shared with simulateSMA().
+  const sampleWeekly = !!opts.sampleWeekly;
+  // Cursor for the weekly catch-up below (main loop's tqqqShares/cash/parkShares
+  // version) — the date its snapshots have been advanced through so far.
+  // Starts at the entry date: qi=0 IS the starting point, nothing to fill yet.
+  let _weekCursor = qSlice[0][0];
+  // Walks `daily` from the cursor up to (not including) `uptoExclusive`,
+  // pushing a samplePoints snapshot at each week-ending trading day found —
+  // shares/cash frozen exactly as they stand at call time (no interpolation,
+  // same contract as the quarterly snapshots above). Called right before
+  // each contribution is applied (so days before it see the OLD share count)
+  // and once more after the period's contributions are all in (so days
+  // between the last contribution and the rebalance are covered too).
+  const ulKey = COL_TO_DAILY_KEY[ulCol], parkKey = COL_TO_DAILY_KEY[parkCol];
+  const catchUpWeekly = (uptoExclusive) => {
+    walkWeekEnds(_weekCursor, uptoExclusive, sampleWeekly, (dRow) => {
+      const dPrice = ulKey ? dRow[ulKey] : 0;
+      if (!(dPrice > 0)) return;
+      const sv = tqqqShares * dPrice;
+      const cashAtSample = isCashPark ? cash : (parkKey && dRow[parkKey] > 0 ? parkShares * dRow[parkKey] : cash);
+      samplePoints.push({ date: dRow.date, price: dPrice, tqqqVal: sv, cash: cashAtSample, total: sv + cashAtSample, target: signalLine, invested: totalInvested, investedCompounded });
+    });
+    _weekCursor = uptoExclusive;
+  };
+
   for (let qi = 0; qi < qSlice.length; qi++) {
     const qDate  = qSlice[qi][0];
     const qPrice = qSlice[qi][ulCol];
@@ -894,13 +966,15 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       if (fastMonthly) {
         const monthsInQ = monthsLookup[entryIdx + qi];
         for (let mi = 0; mi < monthsInQ.length; mi++) {
+          catchUpWeekly(monthlyData[monthsInQ[mi]][0]);
           applyContribAtPrice(monthlyData[monthsInQ[mi]][ulCol], monthlyData[monthsInQ[mi]][0], monthlyData[monthsInQ[mi]]);
         }
       } else {
         for (const row of monthlyData) {
-          if (row[0] > prevQDate && row[0] <= qDate) applyContribAtPrice(row[ulCol], row[0], row);
+          if (row[0] > prevQDate && row[0] <= qDate) { catchUpWeekly(row[0]); applyContribAtPrice(row[ulCol], row[0], row); }
         }
       }
+      catchUpWeekly(qDate);
 
       // Re-price the park bucket to this period's prices before the rebalance
       // logic reads `cash`. For cash mode this is a no-op; for asset mode it
@@ -1023,14 +1097,18 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       const tqqqVal = tqqqShares * qPrice;
       totalFee += qFee;
       log.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, action, fee: qFee, invested: totalInvested, investedCompounded, target: signalLine });
-      // Period-end snapshot (post-rebalance) — keeps the quarter series continuous.
-      if (sampleQuarterly) samplePoints.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, target: signalLine, invested: totalInvested, investedCompounded });
+      // Period-end snapshot (post-rebalance) — keeps the sample series continuous.
+      // catchUpWeekly above deliberately stops short of qDate itself (so it
+      // doesn't duplicate whatever runs on this exact date), so this is the
+      // ONLY place that date's weekly point comes from — without it the
+      // series would show a gap at every single period boundary.
+      if (sampleQuarterly || sampleWeekly) samplePoints.push({ date: qDate, price: qPrice, tqqqVal, cash, total: tqqqVal + cash, target: signalLine, invested: totalInvested, investedCompounded });
       prevHolding = tqqqVal; // next period's target grows from THIS period's holding
     } else {
       // First quarter — just record starting state
       const tqqqVal = tqqqShares * qSlice[0][ulCol];
       log.push({ date: qDate, price: qSlice[0][ulCol], tqqqVal, cash, total: tqqqVal + cash, action: 'START', fee: _initFee, invested: totalInvested, investedCompounded, target: signalLine });
-      if (sampleQuarterly) samplePoints.push({ date: qDate, price: qSlice[0][ulCol], tqqqVal, cash, total: tqqqVal + cash, target: signalLine, invested: totalInvested, investedCompounded });
+      if (sampleQuarterly || sampleWeekly) samplePoints.push({ date: qDate, price: qSlice[0][ulCol], tqqqVal, cash, total: tqqqVal + cash, target: signalLine, invested: totalInvested, investedCompounded });
       prevHolding = tqqqVal;
     }
     prevQDate = qDate;
@@ -1047,7 +1125,21 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
     const points = [], sample = [];
     let shares = qSlice[0][col] ? initial / qSlice[0][col] : 0;
     let prevQ = qSlice[0][0];
-    if (sampleQuarterly && qSlice[0][col]) sample.push({ date: qSlice[0][0], value: shares * qSlice[0][col] });
+    // Same weekly catch-up idea as the main loop's, just against this
+    // column's own `shares` (frozen between contributions — buy & hold has
+    // no rebalance, only monthly buys, so "current shares × the week's real
+    // price" is exact, not interpolated).
+    let weekCursor = qSlice[0][0];
+    const dailyKey = COL_TO_DAILY_KEY[col];
+    const catchUpWeeklyBH = (uptoExclusive) => {
+      walkWeekEnds(weekCursor, uptoExclusive, sampleWeekly && !!dailyKey, (dRow) => {
+        const dp = dRow[dailyKey];
+        if (!(dp > 0)) return;
+        sample.push({ date: dRow.date, value: shares * dp });
+      });
+      weekCursor = uptoExclusive;
+    };
+    if ((sampleQuarterly || sampleWeekly) && qSlice[0][col]) sample.push({ date: qSlice[0][0], value: shares * qSlice[0][col] });
     for (let qi = 0; qi < qSlice.length; qi++) {
       const qDate = qSlice[qi][0];
       const qP = qSlice[qi][col];
@@ -1056,6 +1148,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
           const monthsInQ = monthsLookup[entryIdx + qi];
           for (let k = 0; k < monthsInQ.length; k++) {
             const mRow = monthlyData[monthsInQ[k]];
+            catchUpWeeklyBH(mRow[0]);
             const m = schedule.byMonth.get(mRow[0].slice(0, 7)) || 0;
             const mp = mRow[col];
             if (requirePrice ? mp : true) shares += m / mp;
@@ -1064,6 +1157,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
         } else {
           for (const row of monthlyData) {
             if (row[0] > prevQ && row[0] <= qDate) {
+              catchUpWeeklyBH(row[0]);
               const m = schedule.byMonth.get(row[0].slice(0, 7)) || 0;
               const mp = row[col];
               if (requirePrice ? mp : true) shares += m / mp;
@@ -1071,6 +1165,8 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
             }
           }
         }
+        catchUpWeeklyBH(qDate);
+        if (sampleWeekly && qP) sample.push({ date: qDate, value: shares * qP });
       }
       points.push({ date: qDate, value: qP ? shares * qP : 0, price: qP, shares });
       prevQ = qDate;

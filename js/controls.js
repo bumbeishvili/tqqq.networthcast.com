@@ -163,8 +163,6 @@ function saveSliders() {
     if (id === 'slider-monthly') v = String(sliderToMonthly(+v));
     vals[id] = v;
   });
-  // 'toggle-envelope' (alternate runs) is intentionally NOT persisted — it's a
-  // canonical 9sig view option that resets to off on refresh.
   vals['toggle-log-scale'] =
     document.getElementById('chart-log-toggle').getAttribute('aria-pressed') === 'true';
   vals['toggle-inflation'] =

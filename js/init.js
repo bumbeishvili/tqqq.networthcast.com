@@ -188,8 +188,6 @@
             : saved[id];
           el.value = v;
         });
-        // 'toggle-envelope' deliberately not restored — alternate runs reset
-        // to off on refresh (canonical 9sig view).
         if (saved['toggle-log-scale'] != null) setLogScale(!!saved['toggle-log-scale']);
         if (saved['toggle-inflation'] != null) { const b = document.getElementById('chart-inflation-toggle'); if (b) b.setAttribute('aria-pressed', saved['toggle-inflation'] ? 'true' : 'false'); }
       }
@@ -273,8 +271,6 @@
       if (ds._isShift || ds._configLine) return; // saved-config visibility comes from config.hidden
       chart.setDatasetVisibility(i, !hiddenSet.has(i));
     });
-    // The base envelope band follows the (now-restored) base 9sig visibility.
-    if (typeof syncEnvelopeVisibility === 'function') syncEnvelopeVisibility();
     chart.update();
     if (typeof refreshAllLegends === 'function') refreshAllLegends();
   };
