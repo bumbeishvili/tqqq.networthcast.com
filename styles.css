@@ -780,7 +780,7 @@
   .strategy-library-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 14px;
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);
     flex: 0 0 auto;
@@ -790,11 +790,25 @@
     font-size: 15px;
     font-weight: 700;
     color: var(--text);
+    flex: 0 0 auto;
   }
+  .strategy-library-header .modal-close { flex: 0 0 auto; }
   .strategy-library-body {
     padding: 16px 20px 20px;
     overflow: auto;
     flex: 1 1 auto;
+  }
+  /* Search + legend + pager stay pinned to the top of the scroll area while
+     the card grid scrolls underneath — same background as the modal so
+     scrolled-past cards don't show through. */
+  .sl-sticky-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--surface);
+    padding-bottom: 10px;
+    margin-bottom: 4px;
+    border-bottom: 1px solid var(--border);
   }
   .sl-intro {
     display: flex;
@@ -813,13 +827,13 @@
   .sl-intro-note { color: var(--text-muted); }
   .sl-intro-note b { color: var(--green-text); font-weight: 600; }
 
-  /* Card grid */
+  /* Pager — sits between the legend and the "N backtested" note in .sl-intro
+     now (was a standalone bar under the card grid), so it's compact, not
+     full-width. */
   .sl-pager {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-    margin-top: 12px;
+    gap: 8px;
     flex-wrap: wrap;
   }
   .sl-page-info { font-size: 11px; color: var(--text-muted); }
@@ -1029,16 +1043,22 @@
   }
   .sl-dot-strat { background: var(--accent2); }
   .sl-dot-spy { background: var(--text-muted); }
-  /* Work-in-progress banner */
+  /* Work-in-progress banner — lives beside the modal title now, so it has to
+     stay to a single line regardless of viewport width; full text on hover. */
   .sl-wip {
-    margin: 0 0 12px;
-    padding: 7px 12px;
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 5px 10px;
     background: rgba(232, 137, 11, 0.10);
     border: 1px solid rgba(232, 137, 11, 0.35);
     border-radius: 7px;
     color: var(--orange-text);
     font-size: 11px;
-    line-height: 1.5;
+    line-height: 1.4;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: help;
   }
   .sl-spark-empty {
     height: 56px;

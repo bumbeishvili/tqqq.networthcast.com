@@ -1980,6 +1980,11 @@ function render() {
     displayGrain,
   };
   if (chart) {
+    // externalTooltip (defined once, at chart creation below) is a stable
+    // callback Chart.js keeps calling on every render — it can't close over
+    // THIS render's displayGrain, so the current value is stashed on the
+    // chart instance instead and read fresh from there on each hover.
+    chart._displayGrain = displayGrain;
     // Strip saved-config datasets up front so the envelope length math below
     // (which assumes datasets end at the envelope block) stays correct.
     if (typeof removeConfigDatasets === 'function') removeConfigDatasets(chart);
@@ -2112,7 +2117,17 @@ function render() {
       `;
     }).join('');
 
-    el.innerHTML = `<button class="tt-close" type="button" aria-label="Close" data-tt-close>&times;</button><div class="tt-date">${qLabel(date)}</div>${rows}`;
+    // A quarter label collapses every weekly (or monthly) point in the same
+    // quarter down to the same "Q# YYYY" text, hiding exactly the date detail
+    // the finer axis exists to show — use the real date whenever the shared
+    // axis is finer than quarterly; qLabel stays for the genuinely
+    // quarter-grain case, where each point really is a quarter boundary.
+    // Reads c._displayGrain (stashed fresh each render), NOT the displayGrain
+    // closed over at chart-creation time — externalTooltip itself is only
+    // ever defined once, so a closed-over value would stay frozen at
+    // whatever it was on the very first render.
+    const ttDateLabel = c._displayGrain === 'quarterly' ? qLabel(date) : fmtDayMonthYear(date);
+    el.innerHTML = `<button class="tt-close" type="button" aria-label="Close" data-tt-close>&times;</button><div class="tt-date">${ttDateLabel}</div>${rows}`;
 
     el.style.display = 'block';
     const panelRect = c.canvas.closest('.panel').getBoundingClientRect();
@@ -2756,6 +2771,9 @@ function render() {
       }
     }
   });
+  // See the matching assignment in the `if (chart)` branch above — this is
+  // the first-creation half of the same stash.
+  chart._displayGrain = displayGrain;
   // First successful chart creation — the loading overlay (index.html) has
   // done its job. This branch only runs once per page load (subsequent
   // render() calls take the `if (chart)` update path above), so no separate

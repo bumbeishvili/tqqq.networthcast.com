@@ -403,18 +403,26 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     const rsiCoolV = rsiCoolAtStep ? rsiCoolAtStep[m] : null;
     const bgSma  = bgSmaAtStep ? bgSmaAtStep[m] : null;
 
-    // A new calendar month gates contributions, cash interest, and DCA-ladder
-    // steps — so these stay monthly regardless of the daily/monthly check grain.
+    // A new calendar month gates cash interest and DCA-ladder steps — those
+    // are genuinely monthly mechanics, so they stay tied to newMonth
+    // regardless of the daily/monthly check grain.
     const curMonthStr = mDate.substring(0, 7);
     const newMonth = curMonthStr !== prevMonthStr;
     prevMonthStr = curMonthStr;
+    if (newMonth && cash > 0) cash *= (1 + monthlyRate);
 
-    if (newMonth) {
-      // Accrue cash interest on idle cash, then add this month's contribution
-      // (0 for a month the schedule has nothing landing in — e.g. a gap in a
-      // real uploaded transaction history).
-      currentMonthly = schedule.byMonth.get(curMonthStr) || 0;
-      if (cash > 0) cash *= (1 + monthlyRate);
+    // Contribution/withdrawal timing is separate from newMonth: byDate has an
+    // entry on the exact day money actually lands — the real transaction date
+    // for an uploaded history, or (for the default formula schedule) the same
+    // first-trading-day-of-month newMonth already fired on, so this is
+    // byte-identical there. Without this split, a real withdrawal/deposit
+    // landed on newMonth (this loop's first trading day of the month) while
+    // simulate()'s 9sig/Invested-Compounded loop lands the SAME event on that
+    // month's LAST trading day (monthlyData's row date) — the same real-world
+    // event showing up roughly a month apart on the two lines.
+    const contribToday = schedule.byDate.has(mDate);
+    if (contribToday) {
+      currentMonthly = schedule.byDate.get(mDate) || 0;
       totalInvested += currentMonthly;
       if (currentMonthly < 0) {
         // Withdrawal (a real uploaded transaction can be negative). Rule:
@@ -542,10 +550,10 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
         }
         lastBuyStep = m;
         const isAdd = (prevHeldAsset === target); // already in it → a top-up
-        if (isAdd && !easeActive && newMonth) {
-          // New money (this month's contribution) deployed into the fund you
-          // already hold — a deposit that bought shares, NOT an ease slice. Show
-          // it as a contribution, but it still pays the trading fee.
+        if (isAdd && !easeActive && contribToday) {
+          // New money (this contribution) deployed into the fund you already
+          // hold — a deposit that bought shares, NOT an ease slice. Show it
+          // as a contribution, but it still pays the trading fee.
           smaLog.push({
             date: mDate, state, held: target, action: 'CONTRIB', contribAmt: currentMonthly, fee: buyAmt * cost,
             price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl,
@@ -562,8 +570,8 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
       }
     }
 
-    if (!tradedThisStep && newMonth && currentMonthly > 0) {
-      // No trade this step, but a monthly contribution went in — log it so the
+    if (!tradedThisStep && contribToday && currentMonthly > 0) {
+      // No trade this step, but a contribution went in — log it so the
       // money-in events show up in the transaction list too.
       smaLog.push({
         date: mDate, state, held: prevHeldAsset, action: 'CONTRIB', contribAmt: currentMonthly, fee: 0,
@@ -875,24 +883,12 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       // half would silently evaporate, since shares can't be bought without
       // a price to divide by.
       const applyContribAtPrice = (mPrice, mDate, monthlyRow) => {
-        // 0 for a month the schedule has nothing landing in (e.g. a gap in a
-        // real uploaded transaction history).
-        const currentMonthly = schedule.byMonth.get(mDate.slice(0, 7)) || 0;
-        // A real transaction schedule knows the EXACT day this month's money
-        // landed (priceDateByMonth) — price the immediately-deployed portion
-        // there instead of at the month-row's date. Empty for the default
-        // formula schedule, so this is a no-op (mPrice unchanged) unless a
-        // real history is active — regression-safe.
-        if (schedule.priceDateByMonth && schedule.priceDateByMonth.size &&
-            typeof daily !== 'undefined' && daily && typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx) {
-          const exactDate = schedule.priceDateByMonth.get(mDate.slice(0, 7));
-          const exactIdx = exactDate != null ? dailyDateToIdx.get(exactDate) : null;
-          if (exactIdx != null) {
-            const key = COL_TO_DAILY_KEY[ulCol];
-            const exactPrice = key ? daily[exactIdx][key] : null;
-            if (exactPrice > 0) mPrice = exactPrice;
-          }
-        }
+        // Exact-date amount first — a real transaction schedule applies here
+        // via applyContribForMonth's per-date loop below, one call per real
+        // transaction date. Falls back to the month's aggregate for the
+        // single-call-per-month path (the default formula schedule, or a
+        // real schedule with nothing landing in this particular month).
+        const currentMonthly = schedule.byDate.has(mDate) ? schedule.byDate.get(mDate) : (schedule.byMonth.get(mDate.slice(0, 7)) || 0);
         if (currentMonthly < 0) {
           // Withdrawal — a real uploaded transaction can be negative (money
           // taken OUT). Rule: cash (or the park asset's value, in asset-park
@@ -950,7 +946,9 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
         }
         totalInvested += currentMonthly;
         newCashThisQ += currentMonthly;
-        investedCompounded *= (1 + baselineMonthlyRate);
+        // Compounding itself lives in applyContribForMonth below, exactly
+        // once per calendar month regardless of how many individual
+        // transaction dates get applied through here that month.
         investedCompounded += currentMonthly;
         // Intra-period quarter-end snapshot (the period's own end is recorded
         // post-rebalance below). signalLine is still the prior period's value —
@@ -963,15 +961,64 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
           samplePoints.push({ date: mDate, price: mPrice, tqqqVal: sv, cash: cashAtSample, total: sv + cashAtSample, target: signalLine, invested: totalInvested, investedCompounded });
         }
       };
+      // Fires a month's contribution/withdrawal at that month's LAST trading
+      // day (monthlyRow's own date) by default — same as always. A real
+      // transaction schedule (schedule.list is only ever non-empty there —
+      // the default formula schedule never populates it, so this whole path
+      // is a no-op / regression-safe for anyone not using real transactions)
+      // instead applies EACH transaction landing in this calendar month at
+      // its OWN exact date/price, not the month's NET total aggregated at
+      // whichever transaction happened to be last (the old priceDateByMonth
+      // "last write wins" shortcut) — a month with an early withdrawal AND a
+      // later regular deposit needs both dates honored separately, or the
+      // withdrawal's visible timing silently slides to the deposit's date.
+      const applyContribForMonth = (monthlyRow) => {
+        const mEndDate = monthlyRow[0];
+        const monthKey = mEndDate.slice(0, 7);
+        // One month's worth of compounding, exactly once — before any of
+        // this month's individual transactions are added, same as the
+        // original single-call-per-month order (grow the EXISTING balance,
+        // then add new money; new money doesn't retroactively earn growth
+        // from earlier in the month it arrived).
+        investedCompounded *= (1 + baselineMonthlyRate);
+        const canWalkDaily = typeof daily !== 'undefined' && daily &&
+          typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx;
+        const datesThisMonth = (canWalkDaily && schedule.list && schedule.list.length)
+          ? [...new Set(schedule.list.filter(r => r.date.slice(0, 7) === monthKey).map(r => r.date))]
+              .filter(d => dailyDateToIdx.has(d)).sort()
+          : [];
+        if (datesThisMonth.length) {
+          const key = COL_TO_DAILY_KEY[ulCol];
+          for (const d of datesThisMonth) {
+            catchUpWeekly(d);
+            const price = key ? daily[dailyDateToIdx.get(d)][key] : 0;
+            applyContribAtPrice(price > 0 ? price : monthlyRow[ulCol], d, monthlyRow);
+            // catchUpWeekly's week-end walk excludes its own boundary date on
+            // both sides (fromDate and uptoExclusive are both exclusive), so
+            // without this push the change wouldn't reach the chart until the
+            // NEXT week's sample instead of the real date itself.
+            if ((sampleWeekly || sampleQuarterly) && price > 0) {
+              const sv = tqqqShares * price;
+              const cashAtSample = isCashPark
+                ? cash
+                : (monthlyRow[parkCol] > 0 ? parkShares * monthlyRow[parkCol] : cash);
+              samplePoints.push({ date: d, price, tqqqVal: sv, cash: cashAtSample, total: sv + cashAtSample, target: signalLine, invested: totalInvested, investedCompounded });
+            }
+          }
+          catchUpWeekly(mEndDate);
+        } else {
+          catchUpWeekly(mEndDate);
+          applyContribAtPrice(monthlyRow[ulCol], mEndDate, monthlyRow);
+        }
+      };
       if (fastMonthly) {
         const monthsInQ = monthsLookup[entryIdx + qi];
         for (let mi = 0; mi < monthsInQ.length; mi++) {
-          catchUpWeekly(monthlyData[monthsInQ[mi]][0]);
-          applyContribAtPrice(monthlyData[monthsInQ[mi]][ulCol], monthlyData[monthsInQ[mi]][0], monthlyData[monthsInQ[mi]]);
+          applyContribForMonth(monthlyData[monthsInQ[mi]]);
         }
       } else {
         for (const row of monthlyData) {
-          if (row[0] > prevQDate && row[0] <= qDate) { catchUpWeekly(row[0]); applyContribAtPrice(row[ulCol], row[0], row); }
+          if (row[0] > prevQDate && row[0] <= qDate) applyContribForMonth(row);
         }
       }
       catchUpWeekly(qDate);
@@ -1139,6 +1186,41 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       });
       weekCursor = uptoExclusive;
     };
+    const canWalkDaily = typeof daily !== 'undefined' && daily &&
+      typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx;
+    // Same fix as the main 9sig loop's applyContribForMonth: a real
+    // transaction schedule applies EACH transaction in this calendar month at
+    // its own exact date/price, not the month's aggregate at one date — a
+    // month with more than one real transaction (an early withdrawal AND a
+    // later regular deposit, say) needs both honored separately.
+    const applyMonth = (mRow) => {
+      const mEndDate = mRow[0];
+      const monthKey = mEndDate.slice(0, 7);
+      const datesThisMonth = (canWalkDaily && schedule.list && schedule.list.length)
+        ? [...new Set(schedule.list.filter(r => r.date.slice(0, 7) === monthKey).map(r => r.date))]
+            .filter(d => dailyDateToIdx.has(d)).sort()
+        : [];
+      if (datesThisMonth.length) {
+        for (const d of datesThisMonth) {
+          catchUpWeeklyBH(d);
+          const dp = dailyKey ? daily[dailyDateToIdx.get(d)][dailyKey] : null;
+          const p = dp > 0 ? dp : mRow[col];
+          const m = schedule.byDate.get(d) || 0;
+          if (requirePrice ? p : true) shares += m / p;
+          // catchUpWeeklyBH's week-end walk excludes its own boundary date on
+          // both sides, so without this push the change wouldn't reach the
+          // chart until the NEXT week's sample instead of the real date.
+          if ((sampleWeekly || sampleQuarterly) && dp > 0) sample.push({ date: d, value: shares * dp });
+        }
+        catchUpWeeklyBH(mEndDate);
+      } else {
+        catchUpWeeklyBH(mEndDate);
+        const m = schedule.byMonth.get(monthKey) || 0;
+        const mp = mRow[col];
+        if (requirePrice ? mp : true) shares += m / mp;
+        if (sampleQuarterly && mp > 0 && isQuarterEnd(mEndDate)) sample.push({ date: mEndDate, value: shares * mp });
+      }
+    };
     if ((sampleQuarterly || sampleWeekly) && qSlice[0][col]) sample.push({ date: qSlice[0][0], value: shares * qSlice[0][col] });
     for (let qi = 0; qi < qSlice.length; qi++) {
       const qDate = qSlice[qi][0];
@@ -1146,23 +1228,10 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       if (qi > 0 && (!requirePrice || qP)) {
         if (fastMonthly) {
           const monthsInQ = monthsLookup[entryIdx + qi];
-          for (let k = 0; k < monthsInQ.length; k++) {
-            const mRow = monthlyData[monthsInQ[k]];
-            catchUpWeeklyBH(mRow[0]);
-            const m = schedule.byMonth.get(mRow[0].slice(0, 7)) || 0;
-            const mp = mRow[col];
-            if (requirePrice ? mp : true) shares += m / mp;
-            if (sampleQuarterly && mp > 0 && isQuarterEnd(mRow[0])) sample.push({ date: mRow[0], value: shares * mp });
-          }
+          for (let k = 0; k < monthsInQ.length; k++) applyMonth(monthlyData[monthsInQ[k]]);
         } else {
           for (const row of monthlyData) {
-            if (row[0] > prevQ && row[0] <= qDate) {
-              catchUpWeeklyBH(row[0]);
-              const m = schedule.byMonth.get(row[0].slice(0, 7)) || 0;
-              const mp = row[col];
-              if (requirePrice ? mp : true) shares += m / mp;
-              if (sampleQuarterly && mp > 0 && isQuarterEnd(row[0])) sample.push({ date: row[0], value: shares * mp });
-            }
+            if (row[0] > prevQ && row[0] <= qDate) applyMonth(row);
           }
         }
         catchUpWeeklyBH(qDate);

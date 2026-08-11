@@ -727,16 +727,17 @@ function buildStrategyLibrary() {
     ? SL_STATS.quarters[0].key.slice(0, 4) + '–' + SL_STATS.quarters[SL_STATS.quarters.length - 1].key.slice(0, 4)
     : '';
   body.innerHTML = `
-    <div class="sl-wip">⚠ Work in progress. These are my own reimplementations from public write-ups, backtested on synthetic data with a $10k opening balance plus $1,000/month, and zero taxes. Real-world results would be worse: taxes and slippage eat the high-churn ones alive, and every 3× line here still lived through an 80–97% drawdown somewhere. Rough comparisons only — the numbers will change as I fix bugs and add the missing strategies.</div>
-    <div class="sl-intro">
-      <span class="sl-legend"><i class="sl-leg-strat"></i>strategy <i class="sl-leg-spy"></i>SPY · log · ${span}</span>
-      <span class="sl-intro-note">${ready}/${STRATEGY_LIBRARY.length} backtested · hover a name for rules</span>
+    <div class="sl-sticky-head">
+      <div class="sl-intro">
+        <span class="sl-legend"><i class="sl-leg-strat"></i>strategy <i class="sl-leg-spy"></i>SPY · log · ${span}</span>
+        <div class="sl-pager"></div>
+        <span class="sl-intro-note">${ready}/${STRATEGY_LIBRARY.length} backtested · hover a name for rules</span>
+      </div>
+      <input id="sl-search" class="sl-search" type="search" autocomplete="off" spellcheck="false"
+             placeholder="Search strategies — name, tag, or rule text…" aria-label="Search strategies">
     </div>
-    <input id="sl-search" class="sl-search" type="search" autocomplete="off" spellcheck="false"
-           placeholder="Search strategies — name, tag, or rule text…" aria-label="Search strategies">
     <div class="sl-noresults" hidden>No strategy matches that.</div>
-    <div class="sl-cards"></div>
-    <div class="sl-pager"></div>`;
+    <div class="sl-cards"></div>`;
   body.onclick = (e) => {
     const add = e.target.closest('[data-sl-add]');
     if (add) { addStrategyFromLibrary(+add.getAttribute('data-sl-add')); return; }
