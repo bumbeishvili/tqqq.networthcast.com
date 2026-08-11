@@ -1743,7 +1743,12 @@ function render() {
           samplePoints, bhSample, qqqSample, spySample, qldSample, ssoSample, spxlSample } = simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise, sigOpts);
   // For each line, the points fed to the chart: the quarter-end snapshots when
   // the run is coarser than the axis (yearly), else the rebalance-grain points.
-  const pick = (samp, pts) => (samp && samp.length) ? samp : pts;
+  // Driven by the SAME sampleQuarterly/sampleWeekly flags passed to simulate()
+  // above, not by whether samp happens to be non-empty — a duck-typed check
+  // would silently fall back to the coarser pts if the sampling path ever
+  // breaks, hiding a bug instead of surfacing it as a visibly wrong line.
+  const wantsSample = sigOpts.sampleQuarterly || sigOpts.sampleWeekly;
+  const pick = (samp, pts) => wantsSample ? samp : pts;
   const sigPts = pick(samplePoints, log);
   const bhPtsD = pick(bhSample, bhPoints);
   const qqqPtsD = pick(qqqSample, qqqPoints);

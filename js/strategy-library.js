@@ -361,7 +361,9 @@ function slRunPreset(preset, si, ei) {
     }
     opts.sampleQuarterly = (opts.rebalancePeriod === 'yearly');
     const r = simulate(SL_START_CAPITAL, SL_MONTHLY, (+g('select-9sig-cashrate', 4) || 0) / 100, si, ei, 0, opts);
-    const rows = (r.samplePoints && r.samplePoints.length) ? r.samplePoints : (r.log || []);
+    // Driven by the same sampleQuarterly flag set above, not by whether
+    // samplePoints happens to be non-empty (see js/chart.js's pick()).
+    const rows = opts.sampleQuarterly ? r.samplePoints : (r.log || []);
     const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl' };
     return {
       points: rows.map(l => ({ date: l.date, value: l.total != null ? l.total : l.value })),

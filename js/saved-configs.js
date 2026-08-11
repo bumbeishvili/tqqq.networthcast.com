@@ -1277,7 +1277,10 @@ function computeConfigSeries(cfg, ctx) {
     opts.sampleWeekly = displayGrain === 'weekly' && opts.rebalancePeriod !== 'weekly';
     const cashRate = (+pget(p, 'select-9sig-cashrate', 4) || 0) / 100;
     const r = simulate(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, opts);
-    const seriesRows = (r.samplePoints && r.samplePoints.length) ? r.samplePoints : (r.log || []);
+    // Driven by the same sampleQuarterly/sampleWeekly flags set above, not by
+    // whether samplePoints happens to be non-empty — see the 'bh'/'invested'
+    // branches below for why a duck-typed check is the wrong call here.
+    const seriesRows = (opts.sampleQuarterly || opts.sampleWeekly) ? r.samplePoints : (r.log || []);
     points = seriesRows.map(l => ({ date: l.date, value: l.total }));
     subPoints = {
       holding: seriesRows.map(l => ({ date: l.date, value: l.tqqqVal })),
