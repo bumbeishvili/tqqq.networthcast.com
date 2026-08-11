@@ -475,6 +475,13 @@ document.addEventListener('click', (e) => {
     toggleContribMode();
     if (typeof saveSliders === 'function') saveSliders();
     if (typeof render === 'function') render();
+    // A linked Google Sheet only auto-refreshes once at page startup
+    // (js/init.js) — without this, switching back to a sheet-sourced history
+    // mid-session showed whatever was last cached instead of the sheet's
+    // current data, and only a full page reload picked up the latest rows.
+    // No-ops for an upload-sourced (pasted) history; fire-and-forget, same as
+    // the startup call — it re-renders itself once the fetch resolves.
+    if (window._txSchedule && typeof refreshTxFromSheet === 'function') refreshTxFromSheet();
     return;
   }
   // Permanent delete — the only action that actually discards the stash.

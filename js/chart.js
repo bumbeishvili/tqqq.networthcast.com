@@ -1764,10 +1764,20 @@ function render() {
   // step-resampled onto them — so lines stay aligned without ever changing the
   // period a strategy is computed at.
   const sameGrain = (displayGrain === mainPeriod);
+  // sigOpts.qData (rebalance-point / exact-date-override) is built at
+  // mainPeriod's grain — dropped here so this dates-only sim resolves its own
+  // qData from periodDataByName[displayGrain] instead of silently inheriting
+  // mainPeriod's (coarser) dates. Left in, this collapsed the whole shared
+  // axis to mainPeriod's resolution any time an exact-date override was
+  // active — e.g. every transaction-history-backed run (js/transactions.js's
+  // applyTxEntryDate always sets the exact-date override), never weekly.
+  // entryDateOverride/exitDateOverride stay, so the exact entry/exit dates
+  // are still honored via simulate()'s own re-derivation into that qData.
+  const { qData: _sigOptsQData, ...sigOptsForLabels } = sigOpts;
   const labels = sameGrain
     ? log.map(l => l.date)
     : simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise,
-        Object.assign({}, sigOpts, { rebalancePeriod: displayGrain, skipBH: true, sampleQuarterly: false, sampleWeekly: false })).log.map(l => l.date);
+        Object.assign({}, sigOptsForLabels, { rebalancePeriod: displayGrain, skipBH: true, sampleQuarterly: false, sampleWeekly: false })).log.map(l => l.date);
   const onLabels = (arr, valOf) => sameGrain
     ? arr.map(valOf)
     : resampleByDate((arr || []).map(a => ({ date: a.date, value: valOf(a) })), labels);
