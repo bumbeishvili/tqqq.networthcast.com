@@ -183,6 +183,33 @@ function computeDayChange(todayVal, ydayVal) {
   return { pct: (todayVal - ydayVal) / ydayVal * 100, abs: todayVal - ydayVal };
 }
 
+// Marks a holdings snapshot ({assetKey: shares, ...} + cash) at the PREVIOUS
+// trading day's close — the day-change badge's "yesterday" side. This is a
+// deliberate REPRICE of today's end-state holdings, not a second simulation
+// with the exit moved back a day: the engines book contributions/compounding
+// by walking monthlyData MONTH-rows, and the current partial month's row is
+// dated at the latest trading day — so a sim that ends yesterday silently
+// drops the ENTIRE current month's contributions and compounding step, and
+// that whole month then shows up in the "one day" delta (with a real
+// transaction history that was thousands of dollars of pure artifact). A
+// reprice is exact whenever nothing traded today, immune to that artifact
+// entirely, and on a day something DID trade it still gives the
+// brokerage-style number (market movement on what you now hold, deposits
+// excluded). Returns null when the daily data can't support it.
+function repriceAtPrevTradingDay(holdings, cash) {
+  if (typeof daily === 'undefined' || !daily || daily.length < 2) return null;
+  const yRow = daily[daily.length - 2];
+  let total = (typeof cash === 'number' && isFinite(cash)) ? cash : 0;
+  for (const k of Object.keys(holdings || {})) {
+    const sh = holdings[k];
+    if (!(sh > 0)) continue;
+    const p = yRow[k];
+    if (!(p > 0)) return null; // asset with no close yesterday — can't reprice honestly
+    total += sh * p;
+  }
+  return total;
+}
+
 // Pre-render small letter-badge canvases for the Adaptive transition markers:
 // "9" on a cyan circle when switching to 9sig, "T" on a red circle when
 // switching to all-in TQQQ. Chart.js accepts a HTMLCanvasElement as pointStyle.

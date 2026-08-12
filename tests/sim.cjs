@@ -297,14 +297,14 @@ ck('dailyDD: cash cushions drawdown (25% not 50%)',
   ck('dailyDD >= period-grain DD for volatile holding', ddDaily >= ddPeriod && ddDaily > 0.5, 'daily ' + ddDaily.toFixed(3) + ' period ' + ddPeriod.toFixed(3));
 })();
 
-// ----- Day-change badge mechanism -----
-// js/chart.js's render() / js/saved-configs.js's computeConfigSeries both get
-// "yesterday's" total via a SECOND simulate() call with entryDateOverride/
-// exitDateOverride + a qData subset ending one trading day earlier than the
-// main call — this checks that mechanism produces a shorter-range result
-// consistent with fewer elapsed contributions. (No `daily` array in this
-// harness, so a quarterlyData subset stands in for the real one-trading-day
-// shift chart.js actually uses — same mechanism, coarser granularity.)
+// ----- exitDateOverride + qData subset (exact-range API) -----
+// A caller can pin a sim to an arbitrary shorter range via entryDateOverride/
+// exitDateOverride + a qData subset (the exact-date-picker mechanism) — this
+// checks that produces a shorter-range result consistent with fewer elapsed
+// contributions. (The day-change badge deliberately does NOT use this — an
+// exit-shifted sim drops the whole current partial month's contributions via
+// the month-row walk; it reprices end-state holdings instead, see
+// js/utils.js's repriceAtPrevTradingDay.)
 (function () {
   install(flat);
   const full = simulate(1000, 100, 0, 0, last, 0, {});

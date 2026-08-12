@@ -1033,16 +1033,26 @@ function scheduleCustomRun(cfg, sig, globals) {
   }, wait) };
 }
 function runCustomInWorker(cfg, sig, globals) {
+  // A day-change-badge job (synthetic '::yday' id, see scheduleCustomYesterdayRun)
+  // must record its failures in ITS cache, not _customResults — a stray
+  // '::yday'-keyed error entry there is never read, and leaving the yesterday
+  // cache empty would let the next render() re-dispatch the same failing job
+  // forever (each timeout → render → cache miss → dispatch again).
+  const isYday = cfg.id.endsWith('::yday');
+  const failTo = (error) => {
+    if (isYday) window._customYesterdayResults[cfg.id.slice(0, -6)] = { sig, value: null, error };
+    else window._customResults[cfg.id] = { sig, log: [], schema: (window._customSchemas[cfg.id] || []), error };
+    if (typeof render === 'function') render();
+  };
   const w = ensureCustomWorker();
-  if (!w) { window._customResults[cfg.id] = { sig, log: [], schema: [], error: 'Sandbox (Web Worker) unavailable in this browser.' }; if (typeof render === 'function') render(); return; }
+  if (!w) { failTo('Sandbox (Web Worker) unavailable in this browser.'); return; }
   sendCustomData();
   const reqId = ++_customWorkerSeq;
   const timer = setTimeout(function () {
     delete _customPending[reqId];
     try { w.terminate(); } catch (e) {}
     _customWorker = null; _customDataSent = false; // rebuilt on next use
-    window._customResults[cfg.id] = { sig, log: [], schema: (window._customSchemas[cfg.id] || []), error: 'Strategy timed out — possible infinite loop.' };
-    if (typeof render === 'function') render();
+    failTo('Strategy timed out — possible infinite loop.');
   }, CUSTOM_TIMEOUT_MS);
   _customPending[reqId] = { cfgId: cfg.id, sig, timer };
   w.postMessage({ type: 'run', reqId: reqId, code: cfg.code, globals: globals, rawParams: cfg.params || {} });
@@ -1254,25 +1264,20 @@ function computeConfigSeries(cfg, ctx) {
   const _bhQDataOpts = (_bhExactQData && _bhExactQData.length >= 2) ? { qData: _bhExactQData } : {};
   // Day-over-day change badge for this saved config (see js/chart.js's
   // isLatestDaySelected/prevTradingDayDate on ctx, and endLabelPlugin which
-  // draws it). One extra simulate()/simulateSMA() call with exitDateOverride
-  // shifted back one trading day — not a reprice of today's holdings at
-  // yesterday's price, which would be wrong on any day a rebalance/
-  // contribution happened in between (same reasoning as js/chart.js's
-  // render()). Returns a RAW yesterday value (not a precomputed delta) —
-  // endLabelPlugin diffs it against whichever TODAY value is current at draw
-  // time, same as the async custom-strategy path in computeCustomSeries.
-  const computeYesterdayFinal = (simFn, cashRate, opts, period, pickFinal) => {
-    if (!isLatestDaySelected || !entryDateForSim || !prevTradingDayDate) return null;
-    if (entryDateForSim >= prevTradingDayDate) return null;
-    if (typeof buildExactRangeQData !== 'function') return null;
-    const qData = buildExactRangeQData(period, entryDateForSim, prevTradingDayDate);
-    if (!qData || qData.length < 2) return null;
-    const r = simFn(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, Object.assign({}, opts, {
-      entryDateOverride: entryDateForSim, exitDateOverride: prevTradingDayDate,
-      qData, sampleQuarterly: false, sampleWeekly: false,
-    }));
-    const v = pickFinal(r);
-    if (typeof v !== 'number' || !isFinite(v)) return null;
+  // draws it). "Yesterday" = today's END-STATE HOLDINGS marked at the
+  // previous trading day's close via repriceAtPrevTradingDay (js/utils.js —
+  // its comment explains why a reprice, not an exit-shifted second sim: the
+  // engines' month-row contribution walk makes an exit-shifted sim drop the
+  // whole current month, which then shows up as a fake one-day move).
+  // Returns a RAW yesterday value (deflated to real $ when the inflation
+  // toggle is on) — endLabelPlugin diffs it against whichever TODAY value is
+  // current at draw time, same as the async custom-strategy path in
+  // computeCustomSeries. Invested Compounded gets no badge (a
+  // monthly-stepped synthetic baseline has no meaningful daily change).
+  const ydayFromHoldings = (holdings, cash) => {
+    if (!isLatestDaySelected || !prevTradingDayDate || typeof repriceAtPrevTradingDay !== 'function') return null;
+    const v = repriceAtPrevTradingDay(holdings, cash);
+    if (v == null) return null;
     const defl = (typeof inflationOn === 'function' && inflationOn() && typeof inflFactor === 'function')
       ? inflFactor(prevTradingDayDate, labels[0]) : 1;
     return v * defl;
@@ -1357,8 +1362,19 @@ function computeConfigSeries(cfg, ctx) {
     ddControls = (r.log || []).map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: l.cash }));
     ddKey = UL_KEY[opts.underlyingCol] || 'tqqq';
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: '9sig', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints };
-    ydayVal = computeYesterdayFinal(simulate, cashRate, opts, opts.rebalancePeriod,
-      (yr) => (yr.log && yr.log.length) ? yr.log[yr.log.length - 1].total : null);
+    const _sigLast = (r.log && r.log.length) ? r.log[r.log.length - 1] : null;
+    if (_sigLast && typeof daily !== 'undefined' && daily && daily.length) {
+      const _sigShares = _sigLast.price > 0 ? _sigLast.tqqqVal / _sigLast.price : 0;
+      const _parkKey = (opts.parkAsset || 'cash').toLowerCase();
+      const _todayRow = daily[daily.length - 1];
+      if (_parkKey === 'cash') {
+        ydayVal = ydayFromHoldings({ [ddKey]: _sigShares }, _sigLast.cash);
+      } else if (_todayRow[_parkKey] > 0) {
+        const _h = { [ddKey]: _sigShares };
+        _h[_parkKey] = (_h[_parkKey] || 0) + _sigLast.cash / _todayRow[_parkKey];
+        ydayVal = ydayFromHoldings(_h, 0);
+      }
+    }
   } else if (cfg.type === 'sma') {
     const opts = {
       schedule: contribSchedule,
@@ -1395,15 +1411,16 @@ function computeConfigSeries(cfg, ctx) {
     // Full multi-asset holdings per step → honest daily-revalued max drawdown.
     ddMulti = r.ddControls || null;
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'sma', smaLog: r.smaLog, smaPoints: r.smaPoints };
-    ydayVal = computeYesterdayFinal(simulateSMA, cashRate, Object.assign({}, opts, { emitDD: false }), 'quarterly',
-      (yr) => (yr.smaPoints && yr.smaPoints.length) ? yr.smaPoints[yr.smaPoints.length - 1].value : null);
+    const _smaCtlLast = (ddMulti && ddMulti.length) ? ddMulti[ddMulti.length - 1] : null;
+    if (_smaCtlLast) ydayVal = ydayFromHoldings(_smaCtlLast.h, _smaCtlLast.cash);
   } else if (cfg.type === 'bh') {
     // Same in-between snapshotting the main Buy & Hold line gets (js/chart.js's
     // sigOpts) — without it this config's line falls back to bhPoints' native
     // quarterly resolution and looks stepped next to the weekly-dense main line.
     const bhOpts = {
       schedule: contribSchedule, ..._dateOverrideOpts, ..._bhQDataOpts,
-      sampleQuarterly: displayGrain === 'quarterly',
+      // No sampleQuarterly: raw bh points are already quarterly (see `arr`
+      // below) — building quarter-end samples here would be wasted work.
       sampleWeekly: displayGrain === 'weekly',
     };
     const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, bhOpts);
@@ -1420,21 +1437,22 @@ function computeConfigSeries(cfg, ctx) {
               : key === 'sso' ? r.ssoSample
               : key === 'spxl' ? r.spxlSample
               : r.bhSample;
-    // Driven by the SAME flags passed to simulate() above, not by whether
-    // sampleArr happens to be non-empty — a duck-typed check would silently
-    // fall back to the blocky rawArr if the sampling path ever breaks again,
-    // hiding exactly the bug this fix addresses instead of surfacing it.
-    const arr = (displayGrain === 'quarterly' || displayGrain === 'weekly') ? sampleArr : rawArr;
+    // Weekly grain ONLY. At quarterly grain the raw points are already at
+    // the axis's own resolution (bh runs on quarterly qData rows), and the
+    // sample series is actually WORSE there: buyHold()'s quarter-end sample
+    // rows stop at the last completed quarter, missing the final
+    // partial-quarter point rawArr carries — which left this line's tail
+    // frozen at the previous quarter-end value (and the day-change badge
+    // comparing today's real holdings against that stale value).
+    const arr = displayGrain === 'weekly' ? sampleArr : rawArr;
     points = (arr || []).map(pt => ({ date: pt.date, value: pt.value }));
     // Drawdown control needs real per-step share counts, which only the raw
     // (quarterly) points carry — the dense sample rows are value-only.
     ddControls = (rawArr || []).map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 }));
     ddKey = key === 'qqq' ? 'qqq' : key === 'spy' ? 'spy' : key === 'qld' ? 'qld' : key === 'sso' ? 'sso' : key === 'spxl' ? 'spxl' : 'tqqq';
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'bh', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints };
-    ydayVal = computeYesterdayFinal(simulate, 0, bhOpts, 'quarterly', (yr) => {
-      const yArr = { qqq: yr.qqqPoints, spy: yr.spyPoints, qld: yr.qldPoints, sso: yr.ssoPoints, spxl: yr.spxlPoints }[key] || yr.bhPoints;
-      return (yArr && yArr.length) ? yArr[yArr.length - 1].value : null;
-    });
+    const _bhLast = (rawArr && rawArr.length) ? rawArr[rawArr.length - 1] : null;
+    if (_bhLast && _bhLast.shares > 0) ydayVal = ydayFromHoldings({ [ddKey]: _bhLast.shares }, 0);
   } else if (cfg.type === 'invested') {
     const rate = (typeof sliderToRate === 'function' ? sliderToRate(+pget(p, 'slider-rate', 0)) : 0) / 100;
     const investedOpts = {
@@ -1446,8 +1464,8 @@ function computeConfigSeries(cfg, ctx) {
     const seriesRows = (displayGrain === 'quarterly' || displayGrain === 'weekly') ? r.samplePoints : (r.log || []);
     points = seriesRows.map(l => ({ date: l.date, value: l.investedCompounded }));
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'invested', log: r.log };
-    ydayVal = computeYesterdayFinal(simulate, 0, investedOpts, 'quarterly',
-      (yr) => (yr.log && yr.log.length) ? yr.log[yr.log.length - 1].investedCompounded : null);
+    // No day-change badge for Invested Compounded — see ydayFromHoldings'
+    // comment above.
   }
   window._configDayChange[cfg.id] = ydayVal;
 

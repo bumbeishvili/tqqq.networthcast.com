@@ -846,6 +846,17 @@ async function shareConfig() {
     params.set('amp', String(analyticsYearMax));
   }
 
+  // A pinned chart range-selection (drag-to-select, held with Shift so it
+  // stays visible — js/chart.js). Shared as the two exact dates, not label
+  // indices — the recipient's chart may resolve to a different label grid
+  // (a different display grain, or a shifted entry/exit), so js/init.js's
+  // pinRangeSelection() re-resolves these dates against whatever labels
+  // actually exist there instead of trusting a positional index.
+  if (typeof getPinnedRangeDates === 'function') {
+    const pinned = getPinnedRangeDates();
+    if (pinned) { params.set('rf', pinned[0]); params.set('rt', pinned[1]); }
+  }
+
   const url = window.location.origin + window.location.pathname + '?' + params.toString();
 
   const toast = document.getElementById('share-toast');

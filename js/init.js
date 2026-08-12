@@ -346,6 +346,15 @@
     toggleAnalytics({ skipAutoPick: !!(asRaw || abRaw) });
   }
 
+  // A pinned chart range-selection (js/chart.js's drag-to-select, held with
+  // Shift so it stays visible). Shared as exact dates rather than label
+  // indices (see js/controls.js's share-builder), re-resolved here against
+  // whatever the chart's ACTUAL label grid is post-render — a no-op if the
+  // dates don't land on it (e.g. a display-grain or entry/exit difference)
+  // rather than pinning a wrong-looking range.
+  const rf = params.get('rf'), rt = params.get('rt');
+  if (rf && rt && typeof pinRangeSelection === 'function') pinRangeSelection(rf, rt);
+
   // Reopen the strategy sidebar that was open when the link was shared.
   // `spc` (a specific saved/custom strategy) wins over `sp` (a base panel):
   // openConfigForEdit opens the right panel itself and also loads the strategy's

@@ -1955,45 +1955,52 @@ function render() {
   };
 
   // Day-over-day change badge (drawn by endLabelPlugin, gated on
-  // isLatestDaySelected computed above near exitDateForSim). One extra
-  // simulate() call gives yesterday's 9sig + Invested Compounded + all six
-  // Buy & Hold finals together, same shape as the main call above; one extra
-  // simulateSMA() call gives SMA's. Re-run with exitDateOverride shifted back
-  // one trading day, NOT a reprice of today's final holdings at yesterday's
-  // price — repricing would be wrong on any day a rebalance/contribution
-  // happened between the two dates, which is exactly the case a real delta
-  // badge is most likely to be asked about.
-  window._dayChangeByIdx = {};
+  // isLatestDaySelected computed above near exitDateForSim). Each line's
+  // "yesterday" side is today's END-STATE HOLDINGS marked at the previous
+  // trading day's close — repriceAtPrevTradingDay (js/utils.js) explains why
+  // a reprice, not a second exit-shifted simulation (the engines' month-row
+  // contribution walk makes an exit-shifted sim drop the whole current
+  // month, which then masquerades as a one-day move). Stored as raw
+  // yesterday VALUES (deflated to real $ when the inflation toggle is on) —
+  // endLabelPlugin's dayChangeFor diffs each against whatever TODAY value
+  // the chart is actually drawing, so both sides are always in the same
+  // (nominal or deflated) units. Invested Compounded gets no badge: it's a
+  // monthly-stepped synthetic baseline with no meaningful close-to-close
+  // daily change.
+  window._ydayValueByIdx = {};
   if (isLatestDaySelected) {
-    const baseDate = labels[0];
-    const defl = inflationOn() ? inflFactor(prevTradingDayDate, baseDate) : 1;
-    const ydayQData = buildExactRangeQData(mainPeriod, entryDateForSim, prevTradingDayDate);
-    if (ydayQData && ydayQData.length >= 2) {
-      const ydayR = simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise,
-        Object.assign({}, sigOpts, {
-          entryDateOverride: entryDateForSim, exitDateOverride: prevTradingDayDate,
-          qData: ydayQData, sampleQuarterly: false, sampleWeekly: false,
-        }));
-      const ydayLog = ydayR.log;
-      if (ydayLog && ydayLog.length) {
-        const yLast = ydayLog[ydayLog.length - 1];
-        const yBhSeries = { tqqq: ydayR.bhPoints, qqq: ydayR.qqqPoints, spy: ydayR.spyPoints,
-          qld: ydayR.qldPoints, sso: ydayR.ssoPoints, spxl: ydayR.spxlPoints }[bhKey] || ydayR.bhPoints;
-        const yBhVal = (yBhSeries && yBhSeries.length) ? yBhSeries[yBhSeries.length - 1].value : null;
-        window._dayChangeByIdx[0] = computeDayChange(finalLog.total, yLast.total * defl);
-        window._dayChangeByIdx[7] = computeDayChange(finalLog.investedCompounded, yLast.investedCompounded * defl);
-        window._dayChangeByIdx[2] = computeDayChange(
-          bhPicked.series[bhPicked.series.length - 1].value,
-          yBhVal != null ? yBhVal * defl : null);
-      }
+    const defl = inflationOn() ? inflFactor(prevTradingDayDate, labels[0]) : 1;
+    const _ulKeys = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl' };
+    const _todayRow = daily[daily.length - 1];
+    // 9sig: shares from the final snapshot row; park side is either plain
+    // cash or park-asset shares re-derived from the row's (already
+    // park-repriced) cash mirror at today's park price.
+    const sigUlKey = _ulKeys[sigUlCol] || 'tqqq';
+    const sigShares = finalLog.price > 0 ? finalLog.tqqqVal / finalLog.price : 0;
+    const parkKey = (_sig9Base.parkAsset || 'cash').toLowerCase();
+    let y9 = null;
+    if (parkKey === 'cash') {
+      y9 = repriceAtPrevTradingDay({ [sigUlKey]: sigShares }, finalLog.cash);
+    } else if (_todayRow[parkKey] > 0) {
+      const h = { [sigUlKey]: sigShares };
+      h[parkKey] = (h[parkKey] || 0) + finalLog.cash / _todayRow[parkKey];
+      y9 = repriceAtPrevTradingDay(h, 0);
     }
-    const ydaySmaR = simulateSMA(initial, monthly, smaCashRate, simEntryIdx, exitIdx, annualRaise,
-      Object.assign({}, smaOpts, {
-        entryDateOverride: entryDateForSim, exitDateOverride: prevTradingDayDate,
-        sampleWeekly: false, emitDD: false,
-      }));
-    if (ydaySmaR.smaPoints && ydaySmaR.smaPoints.length) {
-      window._dayChangeByIdx[8] = computeDayChange(finalSMA, ydaySmaR.smaPoints[ydaySmaR.smaPoints.length - 1].value * defl);
+    if (y9 != null) window._ydayValueByIdx[0] = y9 * defl;
+    // Consolidated Buy & Hold: pure shares, no cash. (bhKeyName is declared
+    // further below — normalize bhKey locally instead of reordering.)
+    const _bhK = ['qqq', 'spy', 'qld', 'sso', 'spxl'].includes(bhKey) ? bhKey : 'tqqq';
+    const bhLast = bhPicked.series[bhPicked.series.length - 1];
+    if (bhLast && bhLast.shares > 0) {
+      const yBh = repriceAtPrevTradingDay({ [_bhK]: bhLast.shares }, 0);
+      if (yBh != null) window._ydayValueByIdx[2] = yBh * defl;
+    }
+    // SMA: full multi-asset end state from the drawdown control points
+    // (emitDD is always on for the main SMA line).
+    const smaCtlLast = smaDdControls && smaDdControls.length ? smaDdControls[smaDdControls.length - 1] : null;
+    if (smaCtlLast) {
+      const ySma = repriceAtPrevTradingDay(smaCtlLast.h, smaCtlLast.cash);
+      if (ySma != null) window._ydayValueByIdx[8] = ySma * defl;
     }
   }
 
@@ -2208,10 +2215,10 @@ function render() {
   // Drag-to-select a range on the chart (mouse/desktop only for v1 — a touch
   // drag would fight the page's own scroll and needs its own deliberate
   // gesture design, a separate follow-up). rangeSelectStart/End are label
-  // INDICES (not pixels) once resolved. The readout only exists WHILE
-  // rangeSelectDragging is true — releasing the mouse always clears it
-  // (see the mouseup handler below), it's a live preview, not something
-  // that persists until dismissed. null start = no selection at all.
+  // INDICES (not pixels) once resolved. Releasing the mouse normally clears
+  // it (a live preview, not something that persists until dismissed);
+  // holding Shift at release pins it instead (see the mouseup handler
+  // below). null start = no selection at all.
   let rangeSelectStart = null, rangeSelectEnd = null, rangeSelectDragging = false;
   let rangeSelectRAF = null;
   const hasRangeSelection = () => rangeSelectStart != null && rangeSelectEnd != null;
@@ -2221,6 +2228,31 @@ function render() {
     window._rangeChangeByIdx = null;
     renderChartLegend();
     if (chart) chart.update('none');
+  };
+  // Exposed so js/controls.js's share-link builder can read a pinned
+  // selection (there's nothing to read if the closure vars above stay
+  // private to this render() call) and js/init.js can restore one on load —
+  // same "stash on chart / expose a function" split this file already uses
+  // for chart._displayGrain and similar cross-scope needs.
+  window.getPinnedRangeDates = () => {
+    if (!hasRangeSelection() || !chart || !chart.data) return null;
+    const labels = chart.data.labels;
+    const lo = Math.min(rangeSelectStart, rangeSelectEnd), hi = Math.max(rangeSelectStart, rangeSelectEnd);
+    return (labels[lo] && labels[hi]) ? [labels[lo], labels[hi]] : null;
+  };
+  window.pinRangeSelection = (fromDate, toDate) => {
+    if (!chart || !chart.data || !chart.data.labels) return false;
+    const labels = chart.data.labels;
+    const i1 = labels.indexOf(fromDate), i2 = labels.indexOf(toDate);
+    // Exact dates may not land on the CURRENT chart's label grid (e.g. the
+    // display grain floored coarser than it was for the sharer, or the
+    // entry/exit range shifted) — no-op rather than pinning a wrong range.
+    if (i1 < 0 || i2 < 0) return false;
+    rangeSelectStart = i1; rangeSelectEnd = i2; rangeSelectDragging = false;
+    window._rangeChangeByIdx = computeRangeChangeByIdx(chart, Math.min(i1, i2), Math.max(i1, i2));
+    renderChartLegend();
+    chart.update('none');
+    return true;
   };
 
   const externalTooltip = (context) => {
@@ -2353,18 +2385,22 @@ function render() {
   }
 
   // Plugin: draw end-of-line labels directly on canvas
-  // Day-over-day change for dataset i's end label. Native lines (fixed
-  // indices, populated fresh every render() — see window._dayChangeByIdx
-  // above) already carry a precomputed {pct, abs}. Saved/custom configs
-  // instead cache a raw YESTERDAY value keyed by _configId (window.
-  // _configDayChange for saved 9sig/sma/bh/invested configs, window.
-  // _customYesterdayResults for custom/library-derived ones, the latter
-  // filled in asynchronously by a worker round-trip) — diffed against
-  // TODAY's value here, at draw time, so a today-value change between the
-  // yesterday-fetch and this draw self-corrects instead of showing a delta
-  // computed from a stale pairing.
+  // Day-over-day change for dataset i's end label. Every source caches a raw
+  // YESTERDAY value — window._ydayValueByIdx for the native lines (fixed
+  // indices, populated fresh every render()), window._configDayChange for
+  // saved 9sig/sma/bh configs, window._customYesterdayResults for custom/
+  // library-derived ones (filled in asynchronously by a worker round-trip) —
+  // and the delta is computed HERE, at draw time, against whatever TODAY
+  // value the chart is actually drawing. That keeps both sides of the diff
+  // in the same units (the chart's values are deflated in place when the
+  // inflation toggle is on; a precomputed nominal-today delta silently mixed
+  // nominal and real dollars), and a today-value change between the
+  // yesterday-fetch and this draw self-corrects instead of showing a stale
+  // pairing.
   const dayChangeFor = (i, ds, todayVal) => {
-    if (window._dayChangeByIdx && window._dayChangeByIdx[i]) return window._dayChangeByIdx[i];
+    if (window._ydayValueByIdx && (i in window._ydayValueByIdx)) {
+      return computeDayChange(todayVal, window._ydayValueByIdx[i]);
+    }
     const cfgId = ds && ds._configId;
     if (!cfgId) return null;
     if (window._configDayChange && (cfgId in window._configDayChange)) {
@@ -3257,17 +3293,45 @@ function render() {
     rangeSelectEnd = chartIndexForPixel(chart, clampedX);
     updateRangeSelectionLive();
   });
-  // Releasing the mouse always clears the selection — the readout is a
-  // live-while-dragging preview, not a persisted one you have to dismiss.
-  document.addEventListener('mouseup', () => {
+  // Releasing the mouse normally clears the selection — the readout is a
+  // live-while-dragging preview, not something you have to dismiss. Holding
+  // Shift at release keeps it pinned instead (e.g. to read the numbers at
+  // leisure or grab a screenshot) — dismissed later via Escape, a click
+  // outside the chart, or starting a fresh drag.
+  document.addEventListener('mouseup', (e) => {
     if (!rangeSelectDragging) return;
     rangeSelectDragging = false;
+    if (rangeSelectStart === rangeSelectEnd) {
+      // Resolved to the same label as the start — a plain click or a
+      // sub-pixel nudge, not a real drag. Clears instead of leaving a
+      // zero-width selection pinned.
+      clearRangeSelection();
+      return;
+    }
+    if (e.shiftKey) {
+      // Recompute once more so the pinned selection definitely reflects the
+      // final mouse position even if the last rAF-throttled update was
+      // still pending.
+      window._rangeChangeByIdx = computeRangeChangeByIdx(chart,
+        Math.min(rangeSelectStart, rangeSelectEnd), Math.max(rangeSelectStart, rangeSelectEnd));
+      renderChartLegend();
+      chart.update('none');
+      return;
+    }
     clearRangeSelection();
   });
-  // Escape cancels an in-progress drag (released some other way, or the user
-  // just wants out before letting go).
+  // Escape dismisses a pinned selection (shift-drag) or cancels an
+  // in-progress one (released some other way, or the user wants out before
+  // letting go).
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && rangeSelectDragging) clearRangeSelection();
+    if (e.key === 'Escape' && (hasRangeSelection() || rangeSelectDragging)) clearRangeSelection();
+  });
+  // A click entirely outside the chart also dismisses a pinned selection —
+  // same outside-tap-dismiss idea as the custom tooltip's own dismissal.
+  document.addEventListener('click', (e) => {
+    if (!hasRangeSelection()) return;
+    if (e.target && e.target.closest && e.target.closest('#mainChart')) return;
+    clearRangeSelection();
   });
 
   // Reverse link: hovering a transaction-log row highlights that trade's action
