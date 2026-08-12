@@ -3328,9 +3328,12 @@ function render() {
   });
   // A click entirely outside the chart also dismisses a pinned selection —
   // same outside-tap-dismiss idea as the custom tooltip's own dismissal.
+  // The Share buttons are exempt: sharing a pinned range is the main reason
+  // to pin one (shareConfig() carries it as rf/rt), so the click that shares
+  // it must not simultaneously dismiss it.
   document.addEventListener('click', (e) => {
     if (!hasRangeSelection()) return;
-    if (e.target && e.target.closest && e.target.closest('#mainChart')) return;
+    if (e.target && e.target.closest && (e.target.closest('#mainChart') || e.target.closest('#share-btn') || e.target.closest('#analytics-share'))) return;
     clearRangeSelection();
   });
 

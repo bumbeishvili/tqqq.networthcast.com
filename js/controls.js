@@ -663,6 +663,12 @@ if (inflPill) inflPill.addEventListener('click', () => {
 async function shareConfig() {
   const get = (id) => document.getElementById(id);
   const params = new URLSearchParams();
+  // Snapshot the pinned range NOW, before any await below — the click that
+  // fired this function also bubbles to js/chart.js's outside-click-dismiss
+  // listener, which clears the pinned selection as soon as this function's
+  // first await yields. Read any later, it's already gone (this is exactly
+  // how the rf/rt params silently went missing from shared links).
+  const pinnedRange = (typeof getPinnedRangeDates === 'function') ? getPinnedRangeDates() : null;
 
   // Stamp the app version the link was created with. On load, migrateSharedLink()
   // (see init.js) can detect an older `v` and upgrade/redirect the params so the
@@ -847,15 +853,14 @@ async function shareConfig() {
   }
 
   // A pinned chart range-selection (drag-to-select, held with Shift so it
-  // stays visible — js/chart.js). Shared as the two exact dates, not label
-  // indices — the recipient's chart may resolve to a different label grid
-  // (a different display grain, or a shifted entry/exit), so js/init.js's
-  // pinRangeSelection() re-resolves these dates against whatever labels
-  // actually exist there instead of trusting a positional index.
-  if (typeof getPinnedRangeDates === 'function') {
-    const pinned = getPinnedRangeDates();
-    if (pinned) { params.set('rf', pinned[0]); params.set('rt', pinned[1]); }
-  }
+  // stays visible — js/chart.js), snapshotted at the top of this function
+  // (see the comment there for why it can't be read here). Shared as the two
+  // exact dates, not label indices — the recipient's chart may resolve to a
+  // different label grid (a different display grain, or a shifted
+  // entry/exit), so js/init.js's pinRangeSelection() re-resolves these dates
+  // against whatever labels actually exist there instead of trusting a
+  // positional index.
+  if (pinnedRange) { params.set('rf', pinnedRange[0]); params.set('rt', pinnedRange[1]); }
 
   const url = window.location.origin + window.location.pathname + '?' + params.toString();
 
