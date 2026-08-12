@@ -4,7 +4,9 @@
   try {
     [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
-      // Only custom strategies read SQQQ, so a fetch failure must not blank the app.
+      // SQQQ is a first-class column (0-filled on failure): every engine
+      // guards zero prices, so a fetch failure degrades SQQQ options to
+      // empty/zero lines instead of blanking the app.
       loadSQQQDaily().catch(() => []),
     ]);
   } catch(e) {
@@ -44,8 +46,8 @@
     // panel) can show the same fetch time without re-fetching or reformatting.
     window._dataFetchedAt = d;
   }).catch(() => {});
-  quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);
-  monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);
+  quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
+  monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
   dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
   // Pre-index monthly entries per quarter so simulate()'s hot inner loops
   // become O(2-3) lookups instead of O(monthlyData.length) scans.

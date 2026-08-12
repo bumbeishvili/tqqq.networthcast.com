@@ -301,7 +301,7 @@ function applyParams(type, params) {
   }
 }
 function pget(p, id, dflt) { return (p && id in p) ? p[id] : dflt; }
-function ulColFromVal(v) { return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : 1; }
+function ulColFromVal(v) { return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : v === 'sqqq' ? 7 : 1; }
 
 // Canonical (HTML-default) value of every strategy knob, snapshotted ONCE at
 // load. This must NOT be re-read live: picking a value from a bar-preview
@@ -384,8 +384,11 @@ function resampleByDateClamped(points, labels) {
 const CUSTOM_PROMPT = `You are writing ONE backtest strategy for a charting app. Output a single JavaScript object and nothing else.
 
 === OUTPUT FORMAT (strict) ===
-- Reply with ONLY the object literal. No prose, no explanation, no Markdown, no code fences.
-- Your reply MUST start with the character {  and end with the character }
+- Reply with the object literal inside ONE fenced code block (\`\`\`js ... \`\`\`) and NOTHING
+  else — no prose or explanation before or after the block. The code block matters: chat
+  interfaces mangle bare code (curly "smart" quotes, reflowed lines), and a fenced block is
+  what keeps every character intact for copy-paste.
+- Inside the block: the FIRST character must be {  and the LAST character must be }
 - Do NOT wrap it in parentheses, assign it to a variable, or use module.exports / export default.
 - Pure, synchronous, deterministic JavaScript. NOT allowed: import/require, async/await,
   fetch/XMLHttpRequest, setTimeout/setInterval, DOM access, Math.random, or any global other than
@@ -430,7 +433,8 @@ Concretely, DO NOT add unless I mentioned it:
 
 WHAT DOES BECOME A PARAM:
 1. The traded fund. If I named one, it is the DEFAULT and the options are just the sensible
-   alternatives (tqqq, qld, spxl, sso, qqq, spy). In run() index by the chosen id:
+   alternatives (tqqq, qld, spxl, sso, qqq, spy — plus sqqq when hedging/inverse exposure fits
+   the described strategy). In run() index by the chosen id:
      const px = data[p.asset];   (NOT data.tqqq)
 2. What is held when OUT — only if the strategy has an out-state. Options must include "cash":
      options: ["cash", "qqq", "spy", "sso", "qld"], default: "cash".
@@ -472,20 +476,21 @@ data.sqqq  : daily closing price of SQQQ  (-3x Nasdaq-100 INVERSE — rises when
 
 === INPUTS: p ===
 p.initial       : starting cash, available at p.startIdx (number)
-p.contributions : { "YYYY-MM-DD": amount } — every day new cash lands. Usually one entry
-                  per calendar month (the classic monthly-DCA case), but when the user has
-                  uploaded their OWN real transaction history it's whatever real dates and
-                  amounts they actually deposited — could be irregular, could skip months,
-                  could land mid-month. THIS is the source of truth for contributions, not a
-                  formula you compute yourself. On each day you simulate:
+p.contributions : { "YYYY-MM-DD": amount } — every day new cash lands. Always an object
+                  (empty {} when the user contributes nothing at all — never null). Usually
+                  one entry per calendar month (the classic monthly-DCA case), but when the
+                  user has uploaded their OWN real transaction history it's whatever real
+                  dates and amounts they actually deposited — could be irregular, could skip
+                  months, could land mid-month. THIS is the source of truth for
+                  contributions, not a formula you compute yourself. On each day you simulate:
                     var amt = p.contributions[data.dates[i]] || 0;
                     if (amt > 0) { cash += amt; contributed = amt; action = "contribution"; }
-p.monthly, p.annualRaise : the SAME contributions, pre-collapsed into "amount per month" +
-                  "% growth per year" — kept only for strategies that want a quick read of the
-                  overall shape (e.g. to size something proportionally). Do not use these to
-                  recompute contribution amounts yourself; p.contributions already has the
-                  exact real number for every date and is always correct, including when it
-                  doesn't follow a flat-plus-growth pattern.
+p.monthly, p.annualRaise : the sidebar's "monthly contribution" + "% raise per year"
+                  SLIDER SETTINGS (numbers). When the user has uploaded a real transaction
+                  history these do NOT describe it — they keep their slider values while
+                  p.contributions carries the real deposits. Never use them to compute
+                  contribution amounts; p.contributions already has the exact number for
+                  every date and is the only source that's always correct.
 p.startIdx      : first index to simulate (inclusive)
 p.endIdx        : last index to simulate (inclusive)
 p.entryDate     : equals data.dates[p.startIdx];   p.exitDate equals data.dates[p.endIdx]
@@ -859,7 +864,13 @@ function customWorkerMain() {
     return mod;
   }
   function coerce(sp, raw) {
-    if (sp.type === 'bool' || sp.type === 'boolean') return raw === true || raw === 'true' || raw === '1' || raw === 1;
+    // options: [true, false] declares a toggle (CUSTOM_PROMPT's documented
+    // shape) — without this check the string branch below turned the value
+    // into "true"/"false", both truthy, so `if (p.myToggle)` was always on.
+    var boolish = (sp.type === 'bool' || sp.type === 'boolean') ||
+      (Array.isArray(sp.options) && typeof sp.options[0] === 'boolean') ||
+      (typeof sp.default === 'boolean');
+    if (boolish) return raw === true || raw === 'true' || raw === '1' || raw === 1;
     var numeric = (sp.type === 'number') || ('min' in sp) || ('max' in sp) || ('step' in sp) || (Array.isArray(sp.options) && typeof sp.options[0] === 'number') || (typeof sp.default === 'number');
     if (numeric) { var n = Number(raw); return isFinite(n) ? n : (sp.default != null ? sp.default : 0); }
     return raw != null ? String(raw) : (sp.default != null ? String(sp.default) : '');
@@ -1139,7 +1150,13 @@ function onCustomWorkerMessage(e) {
 function getCustomSchema(cfg) { return (window._customSchemas || {})[cfg.id] || []; }
 // Coerce a stored/raw param value to the type implied by its schema entry.
 function coerceCustomVal(sp, raw) {
-  if (sp.type === 'bool' || sp.type === 'boolean') return raw === true || raw === 'true' || raw === '1' || raw === 1;
+  // Mirrors the worker's coerce() (customWorkerMain above) — keep the two in
+  // sync, including the options:[true,false] toggle detection: without it a
+  // declared boolean arrived as the string "true"/"false" (both truthy).
+  const boolish = (sp.type === 'bool' || sp.type === 'boolean')
+    || (Array.isArray(sp.options) && typeof sp.options[0] === 'boolean')
+    || (typeof sp.default === 'boolean');
+  if (boolish) return raw === true || raw === 'true' || raw === '1' || raw === 1;
   const numericHint = (sp.type === 'number') || ('min' in sp) || ('max' in sp) || ('step' in sp)
     || (Array.isArray(sp.options) && typeof sp.options[0] === 'number')
     || (typeof sp.default === 'number');
@@ -1295,7 +1312,7 @@ function computeConfigSeries(cfg, ctx) {
   // Multi-asset drawdown control points (SMA can hold leveraged + out-asset +
   // cash at once). When set, takes precedence over the single-asset path.
   let ddMulti = null;
-  const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl' };
+  const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl', 7: 'sqqq' };
 
   if (cfg.type === '9sig') {
     const cd = +pget(p, 'select-9sig-crashdrop', 30);
@@ -1361,7 +1378,7 @@ function computeConfigSeries(cfg, ctx) {
     };
     ddControls = (r.log || []).map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: l.cash }));
     ddKey = UL_KEY[opts.underlyingCol] || 'tqqq';
-    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: '9sig', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints };
+    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: '9sig', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints, sqqqPoints: r.sqqqPoints };
     const _sigLast = (r.log && r.log.length) ? r.log[r.log.length - 1] : null;
     if (_sigLast && typeof daily !== 'undefined' && daily && daily.length) {
       const _sigShares = _sigLast.price > 0 ? _sigLast.tqqqVal / _sigLast.price : 0;
@@ -1425,13 +1442,15 @@ function computeConfigSeries(cfg, ctx) {
     };
     const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, bhOpts);
     const key = pget(p, 'select-bh-underlying', 'tqqq');
-    const rawArr = key === 'qqq' ? r.qqqPoints
+    const rawArr = key === 'sqqq' ? (r.sqqqPoints || [])
+              : key === 'qqq' ? r.qqqPoints
               : key === 'spy' ? r.spyPoints
               : key === 'qld' ? (r.qldPoints || [])
               : key === 'sso' ? (r.ssoPoints || [])
               : key === 'spxl' ? (r.spxlPoints || [])
               : r.bhPoints;
-    const sampleArr = key === 'qqq' ? r.qqqSample
+    const sampleArr = key === 'sqqq' ? r.sqqqSample
+              : key === 'qqq' ? r.qqqSample
               : key === 'spy' ? r.spySample
               : key === 'qld' ? r.qldSample
               : key === 'sso' ? r.ssoSample
@@ -1449,8 +1468,8 @@ function computeConfigSeries(cfg, ctx) {
     // Drawdown control needs real per-step share counts, which only the raw
     // (quarterly) points carry — the dense sample rows are value-only.
     ddControls = (rawArr || []).map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 }));
-    ddKey = key === 'qqq' ? 'qqq' : key === 'spy' ? 'spy' : key === 'qld' ? 'qld' : key === 'sso' ? 'sso' : key === 'spxl' ? 'spxl' : 'tqqq';
-    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'bh', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints };
+    ddKey = key === 'qqq' ? 'qqq' : key === 'spy' ? 'spy' : key === 'qld' ? 'qld' : key === 'sso' ? 'sso' : key === 'spxl' ? 'spxl' : key === 'sqqq' ? 'sqqq' : 'tqqq';
+    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'bh', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints, sqqqPoints: r.sqqqPoints };
     const _bhLast = (rawArr && rawArr.length) ? rawArr[rawArr.length - 1] : null;
     if (_bhLast && _bhLast.shares > 0) ydayVal = ydayFromHoldings({ [ddKey]: _bhLast.shares }, 0);
   } else if (cfg.type === 'invested') {

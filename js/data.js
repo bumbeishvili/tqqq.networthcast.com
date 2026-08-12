@@ -124,7 +124,7 @@ let monthlyByQuarter = null;
 // for the named period. Mirrors the existing monthlyData / quarterlyData
 // shape — same columns, same date format. Called once after `daily` loads.
 function buildPeriodData(periodFn) {
-  return lastOfPeriod(daily, periodFn).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);
+  return lastOfPeriod(daily, periodFn).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
 }
 
 // Build the months-in-period index for the given periodData. monthsInPeriod[i]
@@ -204,7 +204,7 @@ function buildEnvelopeQData(period, dayOffset, entryDate, exitDate) {
   if (entryDailyIdx == null) return [];
   const periodDays = PERIOD_DAYS[period] || 63;
   const entryD = daily[entryDailyIdx];
-  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl];
+  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq];
   const result = [rowFor(entryD)];
   let dailyIdx = entryDailyIdx + Math.max(1, dayOffset);
   while (dailyIdx < daily.length) {
@@ -229,7 +229,7 @@ function buildExactRangeQData(period, entryDate, exitDate) {
   const xIdx = dailyDateToIdx.get(exitDate);
   if (eIdx == null || xIdx == null || eIdx >= xIdx) return [];
   const src = (periodDataByName && periodDataByName[period]) || quarterlyData;
-  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl];
+  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq];
   const result = [rowFor(daily[eIdx])];
   for (const p of src) { if (p[0] > entryDate && p[0] < exitDate) result.push(p); }
   result.push(rowFor(daily[xIdx]));
@@ -362,5 +362,5 @@ function precomputeSMASeries() {
   const rsi = makeLazyIndicator(seriesByAsset, toMonthly, rollingRSI);
   rsiAtDailyByKey = rsi.daily; rsiAtMonthlyByKey = rsi.monthly;
 
-  dailyRows = daily.map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl]);
+  dailyRows = daily.map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
 }

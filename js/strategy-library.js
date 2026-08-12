@@ -364,7 +364,7 @@ function slRunPreset(preset, si, ei) {
     // Driven by the same sampleQuarterly flag set above, not by whether
     // samplePoints happens to be non-empty (see js/chart.js's pick()).
     const rows = opts.sampleQuarterly ? r.samplePoints : (r.log || []);
-    const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl' };
+    const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl', 7: 'sqqq' };
     return {
       points: rows.map(l => ({ date: l.date, value: l.total != null ? l.total : l.value })),
       ddControls: (r.log || []).map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: l.cash })),

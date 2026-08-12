@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=277">
+<link rel="stylesheet" href="styles.css?v=280">
 </head>
 <body>
 
@@ -311,7 +311,7 @@
         <option value="qld">QLD</option>
         <option value="tqqq">TQQQ</option>
         <option value="sso">SSO</option>
-        <option value="spxl">SPXL</option>
+        <option value="spxl">SPXL</option><option value="sqqq">SQQQ</option>
       </select>
       <span class="info-icon" tabindex="0" data-tip="By default the safety slice (your cash %) is held as cash, earning the rate below. Pick QQQ/SPY/etc. instead to hold that slice in that fund — new money and rebalances buy into it, and the cash interest stops applying. Picking a leveraged fund leverages both slices.">ⓘ</span>
       and use remaining <span id="9sig-stock-pct">60%</span> to buy
@@ -319,7 +319,7 @@
         <option value="tqqq" selected>TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
-        <option value="spxl">SPXL</option>
+        <option value="spxl">SPXL</option><option value="sqqq">SQQQ</option>
         <option value="qqq">QQQ</option>
         <option value="spy">SPY</option>
       </select>.
@@ -752,7 +752,7 @@
         <option value="qqq">QQQ</option>
         <option value="spy">SPY</option>
         <option value="sso">SSO</option>
-        <option value="spxl">SPXL</option>
+        <option value="spxl">SPXL</option><option value="sqqq">SQQQ</option>
       </select>
       at entry, add each monthly contribution to the position, never sell.
       <span class="info-icon" tabindex="0" data-tip="Initial amount goes in at entry and every monthly contribution adds to the position. Nothing is ever sold.">ⓘ</span>
@@ -769,7 +769,7 @@
         <option value="tqqq" selected>TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
-        <option value="spxl">SPXL</option>
+        <option value="spxl">SPXL</option><option value="sqqq">SQQQ</option>
         <option value="qqq">QQQ</option>
         <option value="spy">SPY</option>
       </select>
@@ -780,7 +780,7 @@
         <option value="tqqq">TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
-        <option value="spxl">SPXL</option>
+        <option value="spxl">SPXL</option><option value="sqqq">SQQQ</option>
       </select>
       closes above its
       <select class="inline-select" id="select-sma-window">
@@ -1120,7 +1120,7 @@
         <option value="tqqq">TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
-        <option value="spxl">SPXL</option>
+        <option value="spxl">SPXL</option><option value="sqqq">SQQQ</option>
       </select>
       instead.
       <span class="info-icon" tabindex="0" data-tip="What you hold after a sell.&#10;&#10;• cash — just waits, earning the interest rate below&#10;• QQQ / SPY — keeps your money in the plain, non-leveraged market: much safer than the 3× fund, but still grows if the market drifts up&#10;&#10;Example: sell TQQQ → sit in QQQ → jump back to TQQQ when the buy signal returns.">ⓘ</span>
@@ -1258,7 +1258,7 @@
         <option value="tqqq" selected>TQQQ</option>
         <option value="qld">QLD</option>
         <option value="sso">SSO</option>
-        <option value="spxl">SPXL</option>
+        <option value="spxl">SPXL</option><option value="sqqq">SQQQ</option>
       </select>
       is
       <select class="inline-select" id="select-sma-bg-gtfo">
@@ -1326,20 +1326,20 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=277"></script>
-<script src="js/utils.js?v=277"></script>
-<script src="js/simulate.js?v=277"></script>
-<script src="js/metrics.js?v=277"></script>
-<script src="js/chart.js?v=277"></script>
-<script src="js/controls.js?v=277"></script>
-<script src="js/date-picker.js?v=277"></script>
-<script src="js/transactions.js?v=277"></script>
-<script src="js/analytics.js?v=277"></script>
-<script src="js/preview-dropdown.js?v=277"></script>
-<script src="js/saved-configs.js?v=277"></script>
-<script src="js/strategy-library-code.js?v=277"></script>
-<script src="js/strategy-library.js?v=277"></script>
-<script src="js/init.js?v=277"></script>
+<script src="js/data.js?v=280"></script>
+<script src="js/utils.js?v=280"></script>
+<script src="js/simulate.js?v=280"></script>
+<script src="js/metrics.js?v=280"></script>
+<script src="js/chart.js?v=280"></script>
+<script src="js/controls.js?v=280"></script>
+<script src="js/date-picker.js?v=280"></script>
+<script src="js/transactions.js?v=280"></script>
+<script src="js/analytics.js?v=280"></script>
+<script src="js/preview-dropdown.js?v=280"></script>
+<script src="js/saved-configs.js?v=280"></script>
+<script src="js/strategy-library-code.js?v=280"></script>
+<script src="js/strategy-library.js?v=280"></script>
+<script src="js/init.js?v=280"></script>
 
 </body>
 </html>
