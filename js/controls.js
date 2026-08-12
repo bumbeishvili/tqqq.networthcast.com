@@ -803,22 +803,40 @@ async function shareConfig() {
     } catch (e) {}
   }
 
-  // Analytics modal state
+  // Analytics modal state. A saved/custom strategy's analyticsStrategy/
+  // Baseline value is 'cfg:<local id>' ('cfg:' matches js/analytics.js's
+  // CFG_KEY_PREFIX, inlined here rather than referenced cross-file since
+  // controls.js loads before analytics.js) — that id only exists in THIS
+  // browser's localStorage. On arrival, importSharedConfigs always mints a
+  // fresh id, so sharing the raw id can never resolve — same problem
+  // spc/resolveSharedConfigId (js/saved-configs.js) already solves for the
+  // open-panel restore, and the same fix: share a POSITION in activeCfgs,
+  // the same array serialized into scz/sc just below, and let js/init.js
+  // resolve it back to a real id after import.
+  const shareAnalyticsKey = (key) => {
+    if (!key || key.indexOf('cfg:') !== 0) return key;
+    const idx = activeCfgs.findIndex(c => c.id === key.slice(4));
+    return idx >= 0 ? 'cfg:' + idx : null; // null = hidden/unresolvable — drop the param
+  };
   if (typeof isAnalyticsOpen === 'function' && isAnalyticsOpen()) {
     params.set('am', '1');
   }
   if (typeof analyticsStrategy !== 'undefined' && analyticsStrategy && analyticsStrategy !== '9sig') {
-    params.set('as', analyticsStrategy);
+    const sharedStrategy = shareAnalyticsKey(analyticsStrategy);
+    if (sharedStrategy) params.set('as', sharedStrategy);
   }
   if (typeof analyticsBaseline !== 'undefined' && analyticsBaseline && analyticsBaseline !== 'compounded') {
-    params.set('ab', analyticsBaseline);
-    // For 'custom' also share the dollar target; for 'custom-pct' share the
-    // growth percentage. Otherwise the receiver falls back to defaults.
-    if (analyticsBaseline === 'custom' && typeof analyticsCustomTarget === 'number' && analyticsCustomTarget > 0) {
-      params.set('act', String(Math.round(analyticsCustomTarget)));
-    }
-    if (analyticsBaseline === 'custom-pct' && typeof analyticsCustomGrowthPct === 'number') {
-      params.set('acp', String(analyticsCustomGrowthPct));
+    const sharedBaseline = shareAnalyticsKey(analyticsBaseline);
+    if (sharedBaseline) {
+      params.set('ab', sharedBaseline);
+      // For 'custom' also share the dollar target; for 'custom-pct' share the
+      // growth percentage. Otherwise the receiver falls back to defaults.
+      if (analyticsBaseline === 'custom' && typeof analyticsCustomTarget === 'number' && analyticsCustomTarget > 0) {
+        params.set('act', String(Math.round(analyticsCustomTarget)));
+      }
+      if (analyticsBaseline === 'custom-pct' && typeof analyticsCustomGrowthPct === 'number') {
+        params.set('acp', String(analyticsCustomGrowthPct));
+      }
     }
   }
   if (typeof analyticsYearMin !== 'undefined' && analyticsYearMin != null) {

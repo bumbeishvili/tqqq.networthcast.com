@@ -141,9 +141,19 @@
   // Exact-day entry/exit override (calendar picker)
   if (params.get('ed') !== null) { const el = document.getElementById('entry-exact-date'); if (el) el.value = params.get('ed'); hasUrlParams = true; }
   if (params.get('xd') !== null) { const el = document.getElementById('exit-exact-date');  if (el) el.value = params.get('xd'); hasUrlParams = true; }
-  // Analytics modal pre-state (modal is opened after render() so the chart exists)
-  if (params.get('as')) analyticsStrategy = params.get('as');
-  if (params.get('ab')) analyticsBaseline = params.get('ab');
+  // Analytics modal pre-state (modal is opened after render() so the chart exists).
+  // as/ab reference a saved/custom strategy as `cfg:<index-into-activeCfgs>`
+  // (js/controls.js's share-builder — same array serialized as scz/sc) rather
+  // than a raw config id: a raw id is only ever valid in the SENDER's own
+  // localStorage (importSharedConfigs always mints a fresh id on import), so
+  // resolving it has to wait until _sharedCfgArr exists further below — same
+  // "id doesn't survive the round-trip" problem spc/resolveSharedConfigId
+  // already solves for the open-panel restore. The plain (non-cfg) case —
+  // '9sig', 'bh-tqqq', 'compounded', 'custom', etc. — needs no resolution and
+  // is set immediately.
+  const asRaw = params.get('as'), abRaw = params.get('ab');
+  if (asRaw && !asRaw.startsWith('cfg:')) analyticsStrategy = asRaw;
+  if (abRaw && !abRaw.startsWith('cfg:')) analyticsBaseline = abRaw;
   if (params.get('act')) {
     const v = parseAmount(params.get('act'));
     if (Number.isFinite(v) && v > 0) analyticsCustomTarget = v;
@@ -226,6 +236,25 @@
       } catch (e) {}
     }
   }
+  // Resolve any cfg:<index> analytics selection (see the asRaw/abRaw comment
+  // above) now that _sharedCfgArr — the same array those indices point
+  // into — and the freshly-imported savedConfigs both exist.
+  const resolveAnalyticsCfgKey = (raw) => {
+    if (!raw || !raw.startsWith('cfg:') || !_sharedCfgArr) return null;
+    const idx = parseInt(raw.slice(4), 10);
+    if (!Number.isInteger(idx) || idx < 0 || idx >= _sharedCfgArr.length) return null;
+    if (typeof resolveSharedConfigId !== 'function') return null;
+    const cid = resolveSharedConfigId(_sharedCfgArr[idx]);
+    return cid ? 'cfg:' + cid : null;
+  };
+  if (asRaw && asRaw.startsWith('cfg:')) {
+    const resolved = resolveAnalyticsCfgKey(asRaw);
+    if (resolved) analyticsStrategy = resolved;
+  }
+  if (abRaw && abRaw.startsWith('cfg:')) {
+    const resolved = resolveAnalyticsCfgKey(abRaw);
+    if (resolved) analyticsBaseline = resolved;
+  }
 
   // Real transaction history (js/transactions.js) — a share link's `txz`/`tx`
   // wins over localStorage, same precedence as the `scz`/`sc` saved-configs
@@ -288,10 +317,12 @@
     } catch(e) {}
   }
   if (params.get('am') === '1') {
-    // toggleAnalytics() below repopulates both sentence dropdowns from the
-    // URL-restored analyticsStrategy / analyticsBaseline, so we only need to
-    // mirror the Custom Target / Growth input visibility (refresh doesn't fire
-    // the baseline change handler that normally does).
+    // refreshAnalyticsPickers() (called inside toggleAnalytics() below)
+    // repopulates both sentence dropdowns from analyticsStrategy/Baseline, so
+    // we only need to mirror the Custom Target / Growth input visibility
+    // here (refresh doesn't fire the baseline change handler that normally
+    // does). skipAutoPick below is what actually keeps the URL-restored
+    // as/ab selection from being overwritten.
     const customInput = document.getElementById('analytics-baseline-custom-input');
     const pctInput    = document.getElementById('analytics-baseline-pct-input');
     if (customInput) customInput.setAttribute('hidden', '');
@@ -308,7 +339,11 @@
         pctDisplay.textContent = (analyticsCustomGrowthPct >= 0 ? '+' : '') + analyticsCustomGrowthPct + '%';
       }
     }
-    toggleAnalytics();
+    // Only skip the chart-based auto-pick when the link actually carried an
+    // explicit selection to preserve — if it didn't (analytics was open on
+    // its own auto-picked default when shared), auto-picking here matches
+    // what would have happened live anyway.
+    toggleAnalytics({ skipAutoPick: !!(asRaw || abRaw) });
   }
 
   // Reopen the strategy sidebar that was open when the link was shared.

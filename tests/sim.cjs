@@ -35,6 +35,17 @@ function install(prices) { // prices: 24 monthly numbers (tqqq=qqq=spy=qld=sso=s
   global.smaAtMonthlyByKey = null; global.rsiAtMonthlyByAsset = null;
 }
 (0, eval)(sim);
+// utils.js (unlike simulate.js) has top-level DOM-touching calls elsewhere in
+// the file (icon setup etc.), so evaling the whole thing breaks under Node —
+// pull out just computeDayChange (the day-over-day change badge's pure math,
+// no DOM) by source instead.
+(function () {
+  const utilsSrc = fs.readFileSync(__dirname + '/../js/utils.js', 'utf8');
+  const m = utilsSrc.match(/function computeDayChange\([\s\S]*?\n}/);
+  if (!m) throw new Error('computeDayChange not found in js/utils.js — did it move/rename?');
+  (0, eval)(m[0]);
+  global.computeDayChange = computeDayChange;
+})();
 
 // metrics.js is a pure module — load it directly for the IRR / daily-drawdown tests.
 const { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, computeDailyMaxDrawdown } = require('../js/metrics.js');
@@ -285,6 +296,39 @@ ck('dailyDD: cash cushions drawdown (25% not 50%)',
   const ddPeriod = computeMaxDrawdown(periodSeries).pct;
   ck('dailyDD >= period-grain DD for volatile holding', ddDaily >= ddPeriod && ddDaily > 0.5, 'daily ' + ddDaily.toFixed(3) + ' period ' + ddPeriod.toFixed(3));
 })();
+
+// ----- Day-change badge mechanism -----
+// js/chart.js's render() / js/saved-configs.js's computeConfigSeries both get
+// "yesterday's" total via a SECOND simulate() call with entryDateOverride/
+// exitDateOverride + a qData subset ending one trading day earlier than the
+// main call — this checks that mechanism produces a shorter-range result
+// consistent with fewer elapsed contributions. (No `daily` array in this
+// harness, so a quarterlyData subset stands in for the real one-trading-day
+// shift chart.js actually uses — same mechanism, coarser granularity.)
+(function () {
+  install(flat);
+  const full = simulate(1000, 100, 0, 0, last, 0, {});
+  const shortQData = quarterlyData.slice(0, 6); // stops 2 quarters before `last`
+  const short = simulate(1000, 100, 0, 0, last, 0, {
+    qData: shortQData,
+    entryDateOverride: quarterlyData[0][0],
+    exitDateOverride: shortQData[shortQData.length - 1][0],
+  });
+  ck('exitDateOverride+qData shift → shorter range invests less than full range',
+     short.totalContributed < full.totalContributed,
+     'short ' + short.totalContributed + ' full ' + full.totalContributed);
+  ck('exitDateOverride+qData shift → shorter range B&H value = totalContributed (flat prices)',
+     approx(short.bhPoints.at(-1).value, short.totalContributed));
+})();
+
+// ----- computeDayChange (js/utils.js) — the day-over-day change badge's math -----
+ck('computeDayChange: 100→110 = {pct:10, abs:10}',
+   (() => { const d = computeDayChange(110, 100); return !!d && approx(d.pct, 10) && approx(d.abs, 10); })());
+ck('computeDayChange: 100→90 = {pct:-10, abs:-10}',
+   (() => { const d = computeDayChange(90, 100); return !!d && approx(d.pct, -10) && approx(d.abs, -10); })());
+ck('computeDayChange: non-finite today → null', computeDayChange(NaN, 100) === null);
+ck('computeDayChange: zero yesterday → null (div-by-zero guard)', computeDayChange(100, 0) === null);
+ck('computeDayChange: negative yesterday → null', computeDayChange(100, -5) === null);
 
 console.log(A.join('\n'));
 console.log(pass ? '\n===== ALL PASS =====' : '\n===== FAILURES =====');

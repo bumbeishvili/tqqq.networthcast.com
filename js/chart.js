@@ -217,6 +217,18 @@ function chartXForDate(c, date) {
   const frac = t1 > t0 ? (t - t0) / (t1 - t0) : 0;
   return x0 + (x1 - x0) * Math.max(0, Math.min(1, frac));
 }
+// Inverse of the above for a plain label index (not an arbitrary date) — the
+// nearest label index for a canvas-relative pixel x, used by the chart's
+// drag-to-select-a-range feature. Category-axis getValueForPixel already
+// returns the nearest index; this just clamps it to a valid range.
+function chartIndexForPixel(c, px) {
+  const labs = c.data.labels;
+  if (!labs || !labs.length) return 0;
+  const xs = c.scales.x;
+  const v = (xs && typeof xs.getValueForPixel === 'function') ? xs.getValueForPixel(px) : 0;
+  const i = Math.round(v);
+  return Math.max(0, Math.min(labs.length - 1, Number.isFinite(i) ? i : 0));
+}
 // Markers cluster wherever trades bunch up (both legs of a switch on one day,
 // or several trades within a few days at nearly the same portfolio value), so
 // they'd stack. Keep x exact and fan the clashing ones vertically: search
@@ -394,6 +406,53 @@ const SUB_LEGEND = {
   0: [1, 5, 6], // 9sig → TQQQ Holding, TQQQ Target, 9sig Cash
 };
 
+// Rounds to n significant figures without ever switching to scientific
+// notation (unlike Number.prototype.toPrecision, which does past a few
+// digits) — used for the range-select label's %, which can span single
+// digits to several thousand percent, so a plain toFixed(k) either shows
+// false decimal precision on a big move or rounds a small one to nothing.
+function roundToSigFigs(v, n) {
+  if (!v) return 0;
+  const magnitude = Math.pow(10, n - Math.ceil(Math.log10(Math.abs(v))));
+  return Math.round(v * magnitude) / magnitude;
+}
+// How much time a drag-selected range spans, in the coarsest units that
+// still read naturally — "1 year 2 months", "1 month", "1 week", "3 days" —
+// rather than a raw day count. Calendar-aware (years/months come from actual
+// calendar fields, not a fixed 365/30-day approximation), so e.g. exactly
+// one calendar year always reads as "1 year" regardless of leap years.
+function formatRangeDuration(fromDate, toDate) {
+  const from = new Date(fromDate + 'T00:00:00Z');
+  const to = new Date(toDate + 'T00:00:00Z');
+  let years = to.getUTCFullYear() - from.getUTCFullYear();
+  let months = to.getUTCMonth() - from.getUTCMonth();
+  if (to.getUTCDate() < from.getUTCDate()) months--;
+  if (months < 0) { years--; months += 12; }
+  const plural = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'}`;
+  if (years > 0) return months > 0 ? `${plural(years, 'year')} ${plural(months, 'month')}` : plural(years, 'year');
+  if (months > 0) return plural(months, 'month');
+  const totalDays = Math.round((to - from) / 86400000);
+  const weeks = Math.floor(totalDays / 7);
+  return weeks > 0 ? plural(weeks, 'week') : plural(Math.max(totalDays, 0), 'day');
+}
+// Drag-to-select-a-range's per-line % change (see chart.canvas's mousedown/
+// mousemove/mouseup handlers, chart creation). EVERY visible line gets a
+// value — not just the 4 LEGEND_ORDER ones (that scoping was v1's mistake:
+// a saved or custom/library-derived strategy's line never got a value even
+// though it's drawn right there on the chart). A hidden line is skipped
+// (nothing to show), and a line missing/non-finite/<=0 data at either
+// endpoint is skipped too (same guard computeDayChange already uses for the
+// day-change badge — reused directly here since the math is identical, just
+// start/end instead of yesterday/today).
+function computeRangeChangeByIdx(c, startIdx, endIdx) {
+  const out = {};
+  c.data.datasets.forEach((ds, i) => {
+    if (!ds || ds._isShift || !c.isDatasetVisible(i)) return;
+    const delta = computeDayChange(ds.data[endIdx], ds.data[startIdx]);
+    if (delta) out[i] = delta;
+  });
+  return out;
+}
 // Build legend-chip HTML for a list of dataset indices. Used by both the
 // main top-of-chart legend and the strategy side-panel's nested chips.
 function buildLegendChipsHtml(indices, opts) {
@@ -401,22 +460,31 @@ function buildLegendChipsHtml(indices, opts) {
   const includeMore = !(opts && opts.noMore);
   const cagrMap = window._cagrByDatasetIdx || {};
   const metrics = window._strategyMetrics || {};
+  // Drag-to-select-a-range override: while a selection is active, the top
+  // row shows that range's % change instead of full-period CAGR (same row,
+  // same positive/negative coloring — just a different source number and
+  // label). Only ever set for LEGEND_ORDER's indices (computeRangeChangeByIdx),
+  // so a sub-chip (e.g. a 9sig sub-series) never picks one up by accident.
+  const rangeMap = window._rangeChangeByIdx || null;
   const out = [];
   for (const i of indices) {
     const ds = chart.data.datasets[i];
     if (!ds || ds._isShift) continue;
     const isHidden = !chart.isDatasetVisible(i);
     const dotColor = typeof ds.borderColor === 'string' ? ds.borderColor : "#7a7aa6";
-    const cagr = cagrMap[i];
-    const m    = metrics[i];
-    // Two-line metrics block: CAGR row on top, max drawdown below. Each
-    // row is "label value" so users can tell them apart at a glance.
-    // Only rendered for main-strategy chips that have computed metrics.
+    const rangeDelta = rangeMap && rangeMap[i];
+    const primaryLabel = rangeDelta ? 'Range' : 'CAGR';
+    const primaryVal = rangeDelta ? rangeDelta.pct : cagrMap[i];
+    const m = metrics[i];
+    // Two-line metrics block: CAGR (or Range, see above) row on top, max
+    // drawdown below. Each row is "label value" so users can tell them apart
+    // at a glance. Only rendered for main-strategy chips that have computed
+    // metrics.
     let metricsHtml = '';
-    if (cagr !== undefined && Number.isFinite(cagr)) {
-      const cagrSign = cagr >= 0 ? '+' : '';
-      const cagrCls  = cagr >= 0 ? 'positive' : 'negative';
-      const cagrStr  = `${cagrSign}${cagr.toFixed(1)}%`;
+    if (primaryVal !== undefined && Number.isFinite(primaryVal)) {
+      const primarySign = primaryVal >= 0 ? '+' : '';
+      const primaryCls  = primaryVal >= 0 ? 'positive' : 'negative';
+      const primaryStr  = `${primarySign}${primaryVal.toFixed(1)}%`;
       let ddRow = '';
       if (m && Number.isFinite(m.maxDD)) {
         const ddStr = fmtDD(m.maxDD);
@@ -432,8 +500,8 @@ function buildLegendChipsHtml(indices, opts) {
       metricsHtml = `
         <div class="legend-metrics">
           <div class="legend-metric-row">
-            <span class="legend-metric-label">CAGR</span>
-            <span class="legend-metric-value ${cagrCls}">${cagrStr}</span>
+            <span class="legend-metric-label">${primaryLabel}</span>
+            <span class="legend-metric-value ${primaryCls}">${primaryStr}</span>
           </div>
           ${ddRow}
         </div>`;
@@ -1660,6 +1728,18 @@ function render() {
   if (entryOverride && exitOverride && entryOverride >= exitOverride) { entryOverride = ''; exitOverride = ''; }
   const entryDateForSim = entryOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]);
   const exitDateForSim  = exitOverride  || (quarterlyData[exitIdx]    && quarterlyData[exitIdx][0]);
+  // Day-over-day change badge (endLabelPlugin) only makes sense when the chart
+  // is actually showing the most recent data — a historical exit date has no
+  // "since yesterday" to speak of. prevTradingDayDate stays null (and the
+  // badge stays off) if there's under 2 days of daily data, or if the entry
+  // date is at/after "yesterday" (buildExactRangeQData's own eIdx>=xIdx guard
+  // would return [] for that range anyway — checked explicitly here instead
+  // of relying on that to degrade gracefully downstream).
+  const prevTradingDayDate = (typeof daily !== 'undefined' && daily && daily.length >= 2)
+    ? daily[daily.length - 2].date : null;
+  let isLatestDaySelected = !!(prevTradingDayDate && typeof daily !== 'undefined' && daily &&
+    exitDateForSim === daily[daily.length - 1].date);
+  if (isLatestDaySelected && entryDateForSim >= prevTradingDayDate) isLatestDaySelected = false;
   const entryPickBtn = document.getElementById('entry-date-pick');
   const exitPickBtn  = document.getElementById('exit-date-pick');
   if (entryPickBtn) entryPickBtn.classList.toggle('is-active', !!entryOverride);
@@ -1874,6 +1954,49 @@ function render() {
     8: retSMA,
   };
 
+  // Day-over-day change badge (drawn by endLabelPlugin, gated on
+  // isLatestDaySelected computed above near exitDateForSim). One extra
+  // simulate() call gives yesterday's 9sig + Invested Compounded + all six
+  // Buy & Hold finals together, same shape as the main call above; one extra
+  // simulateSMA() call gives SMA's. Re-run with exitDateOverride shifted back
+  // one trading day, NOT a reprice of today's final holdings at yesterday's
+  // price — repricing would be wrong on any day a rebalance/contribution
+  // happened between the two dates, which is exactly the case a real delta
+  // badge is most likely to be asked about.
+  window._dayChangeByIdx = {};
+  if (isLatestDaySelected) {
+    const baseDate = labels[0];
+    const defl = inflationOn() ? inflFactor(prevTradingDayDate, baseDate) : 1;
+    const ydayQData = buildExactRangeQData(mainPeriod, entryDateForSim, prevTradingDayDate);
+    if (ydayQData && ydayQData.length >= 2) {
+      const ydayR = simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise,
+        Object.assign({}, sigOpts, {
+          entryDateOverride: entryDateForSim, exitDateOverride: prevTradingDayDate,
+          qData: ydayQData, sampleQuarterly: false, sampleWeekly: false,
+        }));
+      const ydayLog = ydayR.log;
+      if (ydayLog && ydayLog.length) {
+        const yLast = ydayLog[ydayLog.length - 1];
+        const yBhSeries = { tqqq: ydayR.bhPoints, qqq: ydayR.qqqPoints, spy: ydayR.spyPoints,
+          qld: ydayR.qldPoints, sso: ydayR.ssoPoints, spxl: ydayR.spxlPoints }[bhKey] || ydayR.bhPoints;
+        const yBhVal = (yBhSeries && yBhSeries.length) ? yBhSeries[yBhSeries.length - 1].value : null;
+        window._dayChangeByIdx[0] = computeDayChange(finalLog.total, yLast.total * defl);
+        window._dayChangeByIdx[7] = computeDayChange(finalLog.investedCompounded, yLast.investedCompounded * defl);
+        window._dayChangeByIdx[2] = computeDayChange(
+          bhPicked.series[bhPicked.series.length - 1].value,
+          yBhVal != null ? yBhVal * defl : null);
+      }
+    }
+    const ydaySmaR = simulateSMA(initial, monthly, smaCashRate, simEntryIdx, exitIdx, annualRaise,
+      Object.assign({}, smaOpts, {
+        entryDateOverride: entryDateForSim, exitDateOverride: prevTradingDayDate,
+        sampleWeekly: false, emitDD: false,
+      }));
+    if (ydaySmaR.smaPoints && ydaySmaR.smaPoints.length) {
+      window._dayChangeByIdx[8] = computeDayChange(finalSMA, ydaySmaR.smaPoints[ydaySmaR.smaPoints.length - 1].value * defl);
+    }
+  }
+
   // Chart. Series come from the display points (quarter snapshots for a yearly
   // run, else rebalance-grain), step-resampled onto the shared x-axis.
   const totalD = onLabels(sigPts, l => l.total);
@@ -1978,6 +2101,12 @@ function render() {
     // sampleWeekly synthetic snapshots the main line requests above, or its
     // line loses resolution relative to everything else sharing this axis.
     displayGrain,
+    // Day-over-day change badge (see isLatestDaySelected/prevTradingDayDate
+    // above, near exitDateForSim, and endLabelPlugin which draws it) —
+    // entryDateForSim passed unconditionally (not just when an override is
+    // active) since computeConfigSeries needs the exact entry date regardless
+    // to build its own "yesterday" qData.
+    isLatestDaySelected, prevTradingDayDate, entryDateForSim,
   };
   if (chart) {
     // externalTooltip (defined once, at chart creation below) is a stable
@@ -1985,6 +2114,10 @@ function render() {
     // THIS render's displayGrain, so the current value is stashed on the
     // chart instance instead and read fresh from there on each hover.
     chart._displayGrain = displayGrain;
+    // Same "stable callback needs this render's value" reason as
+    // _displayGrain above — endLabelPlugin reads these fresh each draw.
+    chart._isLatestDaySelected = isLatestDaySelected;
+    chart._prevTradingDayDate = prevTradingDayDate;
     // Strip saved-config datasets up front so the envelope length math below
     // (which assumes datasets end at the envelope block) stays correct.
     if (typeof removeConfigDatasets === 'function') removeConfigDatasets(chart);
@@ -2043,6 +2176,17 @@ function render() {
   //  11  B&H SSO       violet      #7c3aed
   //  12  B&H SPXL      rose        #e11d48
   const lineColors = ["#45818e", "#023aff", "#ff2d2e", "#00b929", "#ff708b", "#d9631a", "#b06000", "#bf9000", "#c64eff", "#0891b2", "#7c3aed", "#e11d48"];
+  // Day-over-day change badge colors — mirror styles.css's --green-text/
+  // --red-text. Hardcoded to match this file's existing convention for canvas
+  // colors (lineColors above); there's no CSS-custom-property-reading idiom
+  // anywhere else in this file, and no theme toggle to keep in sync with.
+  const DELTA_POS_COLOR = '#067d21';
+  const DELTA_NEG_COLOR = '#c81e1f';
+  // Range-select midpoint label (rangeSelectPlugin below) — the % draws
+  // bigger than the "(from → to)" part, since it's the number that actually
+  // answers "how much did this move."
+  const RANGE_PCT_FONT = '700 10px "JetBrains Mono", monospace';
+  const RANGE_REST_FONT = '600 8px "JetBrains Mono", monospace';
   const _sub = nineSigSubLabels();
   const lineNames  = [LBL_9SIG, _sub.holding, LBL_BH, 'B&H QQQ', 'B&H SPY', _sub.target, _sub.cash, LBL_INV, LBL_SMA, 'B&H QLD', 'B&H SSO', 'B&H SPXL'];
   // Match the borderDash on the corresponding chart dataset; null = solid.
@@ -2061,12 +2205,34 @@ function render() {
   const isTouchChart = !!(window.matchMedia && window.matchMedia('(hover: none)').matches);
   let chartTooltipPinned = false;
 
+  // Drag-to-select a range on the chart (mouse/desktop only for v1 — a touch
+  // drag would fight the page's own scroll and needs its own deliberate
+  // gesture design, a separate follow-up). rangeSelectStart/End are label
+  // INDICES (not pixels) once resolved. The readout only exists WHILE
+  // rangeSelectDragging is true — releasing the mouse always clears it
+  // (see the mouseup handler below), it's a live preview, not something
+  // that persists until dismissed. null start = no selection at all.
+  let rangeSelectStart = null, rangeSelectEnd = null, rangeSelectDragging = false;
+  let rangeSelectRAF = null;
+  const hasRangeSelection = () => rangeSelectStart != null && rangeSelectEnd != null;
+  const clearRangeSelection = () => {
+    if (!hasRangeSelection() && !rangeSelectDragging) return;
+    rangeSelectStart = null; rangeSelectEnd = null; rangeSelectDragging = false;
+    window._rangeChangeByIdx = null;
+    renderChartLegend();
+    if (chart) chart.update('none');
+  };
+
   const externalTooltip = (context) => {
     const { chart: c, tooltip } = context;
     const el = document.getElementById('custom-tooltip');
     // An action-point marker tooltip takes precedence: while one is up, keep the
     // line hover tooltip hidden so the two never stack on top of each other.
     if (_smaHoverKey !== null) { el.style.display = 'none'; return; }
+    // Same idea for an active/in-progress range selection — its shaded
+    // overlay + legend-chip readout would visually collide with the normal
+    // hover tooltip otherwise.
+    if (rangeSelectDragging || hasRangeSelection()) { el.style.display = 'none'; return; }
     if (tooltip.opacity === 0) {
       if (isTouchChart && chartTooltipPinned) return; // stay open until dismissed
       el.style.display = 'none';
@@ -2187,6 +2353,31 @@ function render() {
   }
 
   // Plugin: draw end-of-line labels directly on canvas
+  // Day-over-day change for dataset i's end label. Native lines (fixed
+  // indices, populated fresh every render() — see window._dayChangeByIdx
+  // above) already carry a precomputed {pct, abs}. Saved/custom configs
+  // instead cache a raw YESTERDAY value keyed by _configId (window.
+  // _configDayChange for saved 9sig/sma/bh/invested configs, window.
+  // _customYesterdayResults for custom/library-derived ones, the latter
+  // filled in asynchronously by a worker round-trip) — diffed against
+  // TODAY's value here, at draw time, so a today-value change between the
+  // yesterday-fetch and this draw self-corrects instead of showing a delta
+  // computed from a stale pairing.
+  const dayChangeFor = (i, ds, todayVal) => {
+    if (window._dayChangeByIdx && window._dayChangeByIdx[i]) return window._dayChangeByIdx[i];
+    const cfgId = ds && ds._configId;
+    if (!cfgId) return null;
+    if (window._configDayChange && (cfgId in window._configDayChange)) {
+      return computeDayChange(todayVal, window._configDayChange[cfgId]);
+    }
+    const cy = window._customYesterdayResults && window._customYesterdayResults[cfgId];
+    if (cy && !cy.error) return computeDayChange(todayVal, cy.value);
+    return null;
+  };
+  const deltaLabelText = (delta) => {
+    const sign = delta.pct >= 0 ? '+' : '';
+    return `(${sign}${delta.pct.toFixed(1)}% · ${sign}${fmtFull(delta.abs)})`;
+  };
   const endLabelPlugin = {
     id: 'endLabels',
     // Size the reserved right margin to whatever the widest current label
@@ -2216,7 +2407,17 @@ function render() {
         maxW = Math.max(maxW, cx.measureText((ds.label || lineNames[i] || '').toUpperCase()).width);
         if (!compact) {
           cx.font = '500 11px "JetBrains Mono", monospace';
-          maxW = Math.max(maxW, cx.measureText(fmtFull(Math.round(val))).width);
+          let rowW = cx.measureText(fmtFull(Math.round(val))).width;
+          // Delta badge draws inline right after the value on the same row —
+          // its width adds to that row's total instead of getting its own line.
+          if (c._isLatestDaySelected) {
+            const delta = dayChangeFor(i, ds, val);
+            if (delta) {
+              cx.font = '600 9px "JetBrains Mono", monospace';
+              rowW += 5 + cx.measureText(deltaLabelText(delta)).width;
+            }
+          }
+          maxW = Math.max(maxW, rowW);
         }
       });
       if (maxW === 0) return;
@@ -2351,7 +2552,23 @@ function render() {
         cx.font = '500 11px "JetBrains Mono", monospace';
         cx.fillStyle = it.color;
         cx.textBaseline = 'top';
-        cx.fillText(fmtFull(Math.round(it.val)), x, it.y + 1);
+        const valStr = fmtFull(Math.round(it.val));
+        cx.fillText(valStr, x, it.y + 1);
+
+        // Day-over-day change badge — inline right after the value, only
+        // when the chart is actually showing the latest available day (a
+        // historical exit date has no "since yesterday" to speak of).
+        if (c._isLatestDaySelected) {
+          const delta = dayChangeFor(it.i, c.data.datasets[it.i], it.val);
+          if (delta) {
+            const valW = cx.measureText(valStr).width;
+            cx.font = '600 9px "JetBrains Mono", monospace';
+            cx.fillStyle = delta.pct >= 0 ? DELTA_POS_COLOR : DELTA_NEG_COLOR;
+            cx.globalAlpha = 0.95;
+            cx.fillText(deltaLabelText(delta), x + valW + 5, it.y + 2);
+            cx.globalAlpha = 1;
+          }
+        }
       });
       cx.restore();
     }
@@ -2520,9 +2737,209 @@ function render() {
     }
   };
 
+  // Shaded overlay for the chart's drag-to-select-a-range feature (see the
+  // mousedown/mousemove/mouseup handlers below, chart creation). Reads the
+  // SAME rangeSelectStart/End closure variables those handlers set — this
+  // plugin only draws, it never computes the selection itself.
+  const rangeSelectPlugin = {
+    id: 'rangeSelect',
+    afterDraw(c) {
+      if (!hasRangeSelection() && !rangeSelectDragging) return;
+      if (rangeSelectStart == null || rangeSelectEnd == null) return;
+      const area = c.chartArea;
+      if (!area) return;
+      const xs = c.scales.x;
+      const lo = Math.min(rangeSelectStart, rangeSelectEnd);
+      const hi = Math.max(rangeSelectStart, rangeSelectEnd);
+      const x1 = xs.getPixelForValue(lo), x2 = xs.getPixelForValue(hi);
+      const cx = c.ctx;
+      cx.save();
+      cx.fillStyle = 'rgba(134, 118, 255, 0.12)'; // same purple family as the app's accent
+      cx.fillRect(Math.min(x1, x2), area.top, Math.abs(x2 - x1) || 1, area.bottom - area.top);
+      cx.strokeStyle = 'rgba(134, 118, 255, 0.5)';
+      cx.lineWidth = 1;
+      cx.beginPath();
+      cx.moveTo(x1, area.top); cx.lineTo(x1, area.bottom);
+      cx.moveTo(x2, area.top); cx.lineTo(x2, area.bottom);
+      cx.stroke();
+      cx.restore();
+
+      // Start/end dates at the top of the shaded region, each pinned to its
+      // OWN boundary line (not one combined label centered over the whole
+      // range) — same pill styling as the per-line labels below, date-only,
+      // so each reads as that boundary's own header. On a narrow selection
+      // the two pills (each naturally centered on x1/x2) would collide —
+      // detected and, if so, spread symmetrically around the range's
+      // midpoint with a fixed gap instead of letting them overlap.
+      cx.save();
+      cx.font = '600 9px "JetBrains Mono", monospace';
+      const rH = 15, rY = area.top + 8, rPadX = 5, rGap = 4;
+      const startLabel = fmtDayMonthYear(c.data.labels[lo]);
+      const endLabel = fmtDayMonthYear(c.data.labels[hi]);
+      const stw = cx.measureText(startLabel).width, etw = cx.measureText(endLabel).width;
+      const srw = stw + rPadX * 2, erw = etw + rPadX * 2;
+      let scx = x1, ecx = x2;
+      if (x1 + srw / 2 + rGap > x2 - erw / 2) {
+        const midX = (x1 + x2) / 2;
+        scx = midX - rGap / 2 - srw / 2;
+        ecx = midX + rGap / 2 + erw / 2;
+      }
+      [[startLabel, stw, srw, scx], [endLabel, etw, erw, ecx]].forEach(([dLabel, dtw, drw, dx]) => {
+        const drx = dx - drw / 2, dry = rY - rH / 2;
+        cx.fillStyle = 'rgba(255,255,255,0.92)';
+        cx.strokeStyle = 'rgba(134, 118, 255, 0.6)';
+        cx.lineWidth = 1;
+        if (typeof cx.roundRect === 'function') {
+          cx.beginPath(); cx.roundRect(drx, dry, drw, rH, 6); cx.fill(); cx.stroke();
+        } else {
+          cx.fillRect(drx, dry, drw, rH); cx.strokeRect(drx, dry, drw, rH);
+        }
+        cx.fillStyle = '#5b4fc4';
+        cx.textAlign = 'center';
+        cx.textBaseline = 'middle';
+        cx.fillText(dLabel, dx, rY + 1);
+      });
+
+      // How much time the range covers ("1 year 2 months", "1 week", …) —
+      // centered under the two date pills, its own row so it never has to
+      // compete with them for horizontal room on a narrow selection.
+      const durLabel = formatRangeDuration(c.data.labels[lo], c.data.labels[hi]);
+      cx.font = '600 9px "JetBrains Mono", monospace';
+      const durMidX = (x1 + x2) / 2;
+      const durTw = cx.measureText(durLabel).width;
+      const durY = rY + rH + 8;
+      const durRx = durMidX - durTw / 2 - rPadX, durRy = durY - rH / 2, durRw = durTw + rPadX * 2;
+      cx.fillStyle = 'rgba(255,255,255,0.92)';
+      cx.strokeStyle = 'rgba(134, 118, 255, 0.6)';
+      cx.lineWidth = 1;
+      if (typeof cx.roundRect === 'function') {
+        cx.beginPath(); cx.roundRect(durRx, durRy, durRw, rH, 6); cx.fill(); cx.stroke();
+      } else {
+        cx.fillRect(durRx, durRy, durRw, rH); cx.strokeRect(durRx, durRy, durRw, rH);
+      }
+      cx.fillStyle = '#5b4fc4';
+      cx.textAlign = 'center';
+      cx.textBaseline = 'middle';
+      cx.fillText(durLabel, durMidX, durY + 1);
+      cx.restore();
+
+      // Per-line readout: a circle where each visible legend line crosses
+      // each boundary (its actual value at the range's start/end), a
+      // straight chord connecting that line's own two circles (the net
+      // move, not the squiggly path between), and that line's own % change
+      // labeled at the chord's midpoint. window._rangeChangeByIdx is kept
+      // fresh by the mousedown/mousemove/mouseup handlers below (recomputed
+      // on every drag tick before this draw runs) — this plugin only draws
+      // it, same "computed elsewhere, read fresh here" split as the shaded
+      // region above.
+      const rangeMap = window._rangeChangeByIdx;
+      if (!rangeMap) return;
+      const ys = c.scales.y;
+      if (!ys) return;
+
+      // Pass 1: chords + circles at each line's REAL value positions (these
+      // must never move — they mark actual data points), while collecting
+      // each label's natural midpoint for pass 2's de-overlap. All labels
+      // share the same x (the range's midpoint), so overlap is a
+      // one-dimensional vertical stacking problem — same push-apart idea
+      // endLabelPlugin already uses for its own end-of-line labels.
+      cx.save();
+      const mx = (x1 + x2) / 2;
+      const items = [];
+      for (const key of Object.keys(rangeMap)) {
+        const i = +key;
+        const delta = rangeMap[i];
+        if (!delta) continue;
+        const ds = c.data.datasets[i];
+        if (!ds || !c.isDatasetVisible(i)) continue;
+        const v1 = ds.data[lo], v2 = ds.data[hi];
+        if (typeof v1 !== 'number' || !isFinite(v1) || typeof v2 !== 'number' || !isFinite(v2)) continue;
+        const py1 = ys.getPixelForValue(v1), py2 = ys.getPixelForValue(v2);
+        if (!isFinite(py1) || !isFinite(py2)) continue; // log scale has no pixel for <=0
+        const color = (typeof ds.borderColor === 'string' ? ds.borderColor : null) || lineColors[i] || '#7a7aa6';
+
+        // Chord: the straight net-change line between this line's own two
+        // circles, distinct from (and drawn over) its actual squiggly path.
+        cx.strokeStyle = color;
+        cx.lineWidth = 1.5;
+        cx.setLineDash([4, 3]);
+        cx.beginPath();
+        cx.moveTo(x1, py1);
+        cx.lineTo(x2, py2);
+        cx.stroke();
+        cx.setLineDash([]);
+
+        // Circles at each boundary crossing.
+        [[x1, py1], [x2, py2]].forEach(([px, py]) => {
+          cx.beginPath();
+          cx.arc(px, py, 4, 0, Math.PI * 2);
+          cx.fillStyle = color;
+          cx.fill();
+          cx.lineWidth = 1.5;
+          cx.strokeStyle = '#fff';
+          cx.stroke();
+        });
+
+        // Label text — leads with the % change at 3 significant figures
+        // (roundToSigFigs above — a plain toFixed(1) either shows false
+        // decimal precision on a big move like 1578.466% or rounds a small
+        // one to nothing; this reads as a clean "1580%"), then the actual
+        // from/to values in brackets, e.g. "+1580% ($205K → $3.4M)". The %
+        // draws in a bigger font than the from/to part — it's the number
+        // that actually answers "how much did this move," the bracket is
+        // supporting detail.
+        const pctSign = delta.pct >= 0 ? '+' : '-';
+        const pctStr = roundToSigFigs(Math.abs(delta.pct), 3);
+        const pctText = `${pctSign}${pctStr}%`;
+        const restText = ` (${fmtFull(v1)} → ${fmtFull(v2)})`;
+        cx.font = RANGE_PCT_FONT;
+        const pctW = cx.measureText(pctText).width;
+        cx.font = RANGE_REST_FONT;
+        const restW = cx.measureText(restText).width;
+        items.push({ my: (py1 + py2) / 2, pctText, pctW, restText, restW, tw: pctW + restW, color, pos: delta.pct >= 0 });
+      }
+
+      // Pass 2: de-overlap the label Y positions, then draw the pills.
+      const LABEL_H = 14, LABEL_GAP = LABEL_H + 2;
+      items.sort((a, b) => a.my - b.my);
+      for (let k = 1; k < items.length; k++) {
+        if (items[k].my - items[k - 1].my < LABEL_GAP) items[k].my = items[k - 1].my + LABEL_GAP;
+      }
+      for (let k = items.length - 1; k >= 0; k--) {
+        const maxY = area.bottom - 5 - (items.length - 1 - k) * LABEL_GAP;
+        if (items[k].my > maxY) items[k].my = maxY;
+      }
+      const padX = 4;
+      items.forEach(it => {
+        const rx = mx - it.tw / 2 - padX, ry = it.my - LABEL_H / 2, rw = it.tw + padX * 2;
+        cx.fillStyle = 'rgba(255,255,255,0.92)';
+        cx.strokeStyle = it.color;
+        cx.lineWidth = 1;
+        if (typeof cx.roundRect === 'function') {
+          cx.beginPath(); cx.roundRect(rx, ry, rw, LABEL_H, 6); cx.fill(); cx.stroke();
+        } else {
+          cx.fillRect(rx, ry, rw, LABEL_H); cx.strokeRect(rx, ry, rw, LABEL_H);
+        }
+        // Text color is green/red by sign (matches the day-change badge's
+        // convention) — the pill's border stays the line's own color so
+        // it's still clear which line a label belongs to when several are
+        // stacked close together.
+        cx.fillStyle = it.pos ? DELTA_POS_COLOR : DELTA_NEG_COLOR;
+        cx.textAlign = 'left';
+        cx.textBaseline = 'middle';
+        const segStartX = mx - it.tw / 2;
+        cx.font = RANGE_PCT_FONT;
+        cx.fillText(it.pctText, segStartX, it.my + 1);
+        cx.font = RANGE_REST_FONT;
+        cx.fillText(it.restText, segStartX + it.pctW, it.my + 1);
+      });
+      cx.restore(); // also resets textAlign/textBaseline for whatever draws next
+    }
+  };
+
   chart = new Chart(ctx, {
     type: 'line',
-    plugins: [endLabelPlugin, smaMarkerPlugin, customMarkerPlugin],
+    plugins: [endLabelPlugin, smaMarkerPlugin, customMarkerPlugin, rangeSelectPlugin],
     data: {
       labels,
       datasets: [
@@ -2774,6 +3191,8 @@ function render() {
   // See the matching assignment in the `if (chart)` branch above — this is
   // the first-creation half of the same stash.
   chart._displayGrain = displayGrain;
+  chart._isLatestDaySelected = isLatestDaySelected;
+  chart._prevTradingDayDate = prevTradingDayDate;
   // First successful chart creation — the loading overlay (index.html) has
   // done its job. This branch only runs once per page load (subsequent
   // render() calls take the `if (chart)` update path above), so no separate
@@ -2791,6 +3210,64 @@ function render() {
     const tt = document.getElementById('marker-tooltip');
     if (tt) tt.style.display = 'none';
     if (_smaHoverKey !== null) { _smaHoverKey = null; if (chart.draw) chart.draw(); }
+  });
+
+  // Drag-to-select a range on the chart: click-drag the plot area to shade a
+  // range and show each visible legend-chip line's % change over exactly
+  // that window (buildLegendChipsHtml's rangeOverride). Mouse/desktop only —
+  // see the isTouchChart comment above for why touch isn't wired up here.
+  // mousedown is canvas-scoped (only a press that actually starts inside the
+  // chart begins a selection); mousemove/mouseup are document-scoped, the
+  // same pattern this file already uses for panel-control dragging
+  // (_onPanelControlDragStart/End) — a drag should keep tracking even if the
+  // pointer leaves the canvas mid-gesture, and definitely finish on mouseup
+  // wherever that lands.
+  chart.canvas.addEventListener('mousedown', (e) => {
+    if (isTouchChart || !chart.chartArea) return;
+    const rect = chart.canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+    const area = chart.chartArea;
+    if (mx < area.left || mx > area.right || my < area.top || my > area.bottom) return;
+    rangeSelectDragging = true;
+    rangeSelectStart = chartIndexForPixel(chart, mx);
+    rangeSelectEnd = rangeSelectStart;
+  });
+  const updateRangeSelectionLive = () => {
+    if (rangeSelectRAF) return;
+    rangeSelectRAF = requestAnimationFrame(() => {
+      rangeSelectRAF = null;
+      if (!hasRangeSelection()) return;
+      window._rangeChangeByIdx = computeRangeChangeByIdx(chart,
+        Math.min(rangeSelectStart, rangeSelectEnd), Math.max(rangeSelectStart, rangeSelectEnd));
+      renderChartLegend();
+      chart.update('none');
+    });
+  };
+  document.addEventListener('mousemove', (e) => {
+    if (!rangeSelectDragging || !chart.chartArea) return;
+    const rect = chart.canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const area = chart.chartArea;
+    const clampedX = Math.max(area.left, Math.min(area.right, mx));
+    // Whether this counts as "a real drag" at mouseup is judged by comparing
+    // the RESOLVED indices (below), not by tracking raw pixel movement here —
+    // robust regardless of how few/coalesced the intermediate mousemove
+    // events turn out to be (a fast real drag, or a testing tool that
+    // synthesizes sparse move events, both still land on the right label).
+    rangeSelectEnd = chartIndexForPixel(chart, clampedX);
+    updateRangeSelectionLive();
+  });
+  // Releasing the mouse always clears the selection — the readout is a
+  // live-while-dragging preview, not a persisted one you have to dismiss.
+  document.addEventListener('mouseup', () => {
+    if (!rangeSelectDragging) return;
+    rangeSelectDragging = false;
+    clearRangeSelection();
+  });
+  // Escape cancels an in-progress drag (released some other way, or the user
+  // just wants out before letting go).
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && rangeSelectDragging) clearRangeSelection();
   });
 
   // Reverse link: hovering a transaction-log row highlights that trade's action

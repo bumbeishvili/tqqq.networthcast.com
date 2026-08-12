@@ -171,6 +171,18 @@ function fmtFull(n) {
   return fmt(n);
 }
 
+// Day-over-day change for the chart's end-label change badge (js/chart.js's
+// endLabelPlugin) — {pct, abs} or null if either side is missing/non-finite/
+// non-positive (a short-history asset with no data yet on one of the last two
+// trading days, or a stale/zero column). Shared between js/chart.js (native
+// lines) and js/saved-configs.js (saved/custom configs) so both compute the
+// "is this delta even meaningful" guard identically.
+function computeDayChange(todayVal, ydayVal) {
+  if (typeof todayVal !== 'number' || !isFinite(todayVal) || todayVal <= 0) return null;
+  if (typeof ydayVal !== 'number' || !isFinite(ydayVal) || ydayVal <= 0) return null;
+  return { pct: (todayVal - ydayVal) / ydayVal * 100, abs: todayVal - ydayVal };
+}
+
 // Pre-render small letter-badge canvases for the Adaptive transition markers:
 // "9" on a cyan circle when switching to 9sig, "T" on a red circle when
 // switching to all-in TQQQ. Chart.js accepts a HTMLCanvasElement as pointStyle.

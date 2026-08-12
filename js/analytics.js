@@ -515,13 +515,18 @@ function isAnalyticsOpen() {
   return m && !m.hasAttribute('hidden');
 }
 
-function toggleAnalytics() {
+function toggleAnalytics(opts) {
   const modal = document.getElementById('analytics-modal');
   const willOpen = modal.hasAttribute('hidden');
   if (willOpen) {
     modal.removeAttribute('hidden');
     document.body.style.overflow = 'hidden';
-    pickAnalyticsDefaultsFromChart(); // default to whatever's actually on the chart right now
+    // Skipped when restoring an explicit as/ab selection from a share link
+    // (js/init.js passes skipAutoPick: true there) — auto-picking here would
+    // immediately overwrite the just-restored analyticsStrategy/Baseline with
+    // "best/worst currently-visible chart line," silently discarding what
+    // was actually shared before refreshAnalyticsPickers() ever reads it.
+    if (!(opts && opts.skipAutoPick)) pickAnalyticsDefaultsFromChart(); // default to whatever's actually on the chart right now
     refreshAnalyticsPickers(); // list built-in + saved strategies in both pickers
     buildHeatmap();
   } else {
