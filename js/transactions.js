@@ -106,11 +106,33 @@ const _TX_ACTUAL_HEADER_RE = /total|balance|portfolio|net.?worth/i;
 // parseTransactionText uses this plus _txAutoDetectCols/_txRowsFromCols below
 // so the modal's column pickers can recompute rows from the same table when
 // the user overrides the auto-detected columns, without re-splitting the text.
+// Delimiter-splitting that respects double-quoted fields — Google Sheets
+// quotes any cell whose formatted value contains the delimiter itself (e.g.
+// a thousands-separated total exported as "95,565"), and a naive
+// line.split(',') cuts straight through it (that exact cell parsed as 95).
+// Doubled quotes inside a quoted field ("") unescape to one quote, per CSV.
+function _txSplitLine(line, sep) {
+  const out = [];
+  let cur = '', inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQ) {
+      if (ch === '"') {
+        if (line[i + 1] === '"') { cur += '"'; i++; }
+        else inQ = false;
+      } else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === sep) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out.map(c => c.trim());
+}
 function _txParseRaw(text) {
   const lines = String(text || '').split(/\r?\n/).map(l => l.trim()).filter(l => l.length);
   if (!lines.length) return { headers: null, dataRows: [] };
   const sep = _txSniffDelimiter(lines[0]);
-  const split = (line) => line.split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
+  const split = (line) => _txSplitLine(line, sep);
   const first = split(lines[0]);
   // A header cell "looks like text" if it doesn't parse as either a date or
   // a number — a genuine data row's cells should parse as one or the other.
@@ -293,7 +315,13 @@ function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol,
   const actualByDate = new Map();
   for (const r of rows) {
     if (r.actual == null || !isFinite(r.actual)) continue;
-    const d = _txSnapToTradingDay(r.date);
+    let d = _txSnapToTradingDay(r.date);
+    // A reading dated past the end of the market data (sheets often carry a
+    // trailing "as of now" calculated row, dated a day or two ahead) is
+    // still the LATEST known value of the account. Unlike a FLOW — which the
+    // sim genuinely can't place on a day the market hasn't traded — a level
+    // just gets clamped back to the last data day instead of dropped.
+    if (d == null && typeof daily !== 'undefined' && daily && daily.length) d = daily[daily.length - 1].date;
     if (d == null) continue;
     actualByDate.set(d, r.actual); // ascending input → last reading per day wins
   }
