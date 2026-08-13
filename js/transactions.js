@@ -92,7 +92,7 @@ function _txParseAmount(s) {
   return neg ? -Math.abs(n) : n;
 }
 
-const _TX_AMOUNT_HEADER_RE = /amount|value|invested|contribution|deposit|cash/i;
+const _TX_AMOUNT_HEADER_RE = /transaction|amount|value|invested|contribution|deposit|cash/i;
 const _TX_DATE_HEADER_RE = /date/i;
 
 // Splits raw text into a table without deciding which column is which —
@@ -209,23 +209,50 @@ function parseTransactionText(text) {
 // carried along purely so a 'sheet' source can re-fetch+re-map its raw CSV
 // later (refreshTxFromSheet, editing) without re-guessing which column is
 // which — `rows` itself no longer has any column concept once mapped.
+// A real transaction can be dated on a weekend or market holiday (payday
+// deposits, bank transfers). Every consumer of the schedule keys strictly off
+// TRADING days (`daily`/`dailyDateToIdx`) — an unsnapped weekend date matches
+// nothing and the money silently vanishes from every engine (this dropped
+// $5,685 of a real user history: Saturday deposits, a Presidents'-Day one, …
+// and made Invested Compounded end BELOW the invested total). Snap to the
+// NEXT trading day — the first day the market could actually see the money —
+// mirroring how a real brokerage sweeps a weekend deposit in on Monday.
+// Returns null for a date past the end of the data (nothing to snap to).
+function _txSnapToTradingDay(dateStr) {
+  if (typeof dailyDateToIdx === 'undefined' || !dailyDateToIdx ||
+      typeof daily === 'undefined' || !daily || !daily.length) return dateStr;
+  if (dailyDateToIdx.has(dateStr)) return dateStr;
+  if (dateStr > daily[daily.length - 1].date) return null;
+  let lo = 0, hi = daily.length - 1, ans = null;
+  while (lo <= hi) {
+    const m = (lo + hi) >> 1;
+    if (daily[m].date >= dateStr) { ans = daily[m].date; hi = m - 1; }
+    else lo = m + 1;
+  }
+  return ans;
+}
 function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol) {
   if (!rows || !rows.length) return null;
   const [first, ...rest] = rows;
   const byDate = new Map(), byMonth = new Map(), list = [], priceDateByMonth = new Map();
   for (const r of rest) {
-    byDate.set(r.date, (byDate.get(r.date) || 0) + r.amount);
-    const month = r.date.slice(0, 7);
+    // Trading-day snap (see _txSnapToTradingDay). Snapping is monotonic, so
+    // ascending order survives; two transactions snapping onto the same
+    // Monday merge via the += below, same as same-day duplicates always did.
+    const d = _txSnapToTradingDay(r.date);
+    if (d == null) continue; // dated past the end of the data — nothing to simulate
+    byDate.set(d, (byDate.get(d) || 0) + r.amount);
+    const month = d.slice(0, 7);
     byMonth.set(month, (byMonth.get(month) || 0) + r.amount);
-    list.push(r);
+    list.push({ date: d, amount: r.amount });
     // `rest` is ascending, so the last write per month wins — the most
     // recent real transaction date in that month is what 9sig's
     // contribDeployPct portion prices at (js/simulate.js applyContribAtPrice).
-    priceDateByMonth.set(month, r.date);
+    priceDateByMonth.set(month, d);
   }
   return {
     initial: first.amount,
-    entryDate: first.date,
+    entryDate: _txSnapToTradingDay(first.date) || first.date,
     rows,
     schedule: { byDate, byMonth, list, priceDateByMonth },
     total: rows.reduce((s, r) => s + r.amount, 0),
