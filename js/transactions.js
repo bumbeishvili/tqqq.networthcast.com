@@ -304,11 +304,14 @@ function closeTxModal() {
   _txSheetUrlValue = '';
   _txModalTab = 'upload';
 }
-function renderTxModal() {
-  const modal = document.getElementById('tx-modal');
-  if (!modal) return;
-  const p = _txParsedPreview;
-  const previewHtml = !p ? '' : (!p.rows.length
+// The parse-dependent parts of the modal (preview + column pickers), built
+// separately from renderTxModal so typing in the paste textarea can refresh
+// JUST these in place (updateTxParsedUI below) without rebuilding the whole
+// modal — a full rebuild recreates the textarea, which threw away the caret
+// and scroll position on every keystroke and dumped the user back at the top
+// of a long paste.
+function _txPreviewHtml(p) {
+  return !p ? '' : (!p.rows.length
     ? `<div class="custom-error">No valid rows found — check the date/amount columns.</div>`
     : `<div class="tx-preview-stats">
          <b>${p.rows.length}</b> row${p.rows.length === 1 ? '' : 's'}
@@ -320,13 +323,15 @@ function renderTxModal() {
          <thead><tr><th>Date</th><th>Amount</th></tr></thead>
          <tbody>${p.rows.slice(0, 200).map(r => `<tr><td>${fmtDayMonthYear(r.date)}</td><td>${fmtFull(Math.round(r.amount))}</td></tr>`).join('')}</tbody>
        </table></div>`);
-  // Lets the user override which parsed column is the date vs. the value —
-  // auto-detection (_txAutoDetectCols) can pick wrong on a sheet with extra
-  // columns (category, notes, running balance, …). Shown whenever there's a
-  // parsed table with 2+ columns, for both a bad guess and a correct one you
-  // just want to confirm.
+}
+// Lets the user override which parsed column is the date vs. the value —
+// auto-detection (_txAutoDetectCols) can pick wrong on a sheet with extra
+// columns (category, notes, running balance, …). Shown whenever there's a
+// parsed table with 2+ columns, for both a bad guess and a correct one you
+// just want to confirm.
+function _txColPickerHtml(p) {
   const colCount = (p && p.dataRows && p.dataRows.length) ? (p.headers ? p.headers.length : p.dataRows[0].length) : 0;
-  const colPickerHtml = colCount < 2 ? '' : `
+  return colCount < 2 ? '' : `
     <div class="tx-col-picker">
       <label>Date column
         <select id="tx-date-col" class="inline-select">
@@ -339,6 +344,24 @@ function renderTxModal() {
         </select>
       </label>
     </div>`;
+}
+// In-place refresh of everything that depends on the parsed preview, leaving
+// the rest of the modal DOM (crucially the paste textarea) untouched.
+function updateTxParsedUI() {
+  const p = _txParsedPreview;
+  const preview = document.getElementById('tx-preview');
+  if (preview) preview.innerHTML = _txPreviewHtml(p);
+  const pickerSlot = document.getElementById('tx-col-picker-slot');
+  if (pickerSlot) pickerSlot.innerHTML = _txColPickerHtml(p);
+  const confirmBtn = document.querySelector('#tx-modal [data-tx-confirm]');
+  if (confirmBtn) confirmBtn.disabled = !(p && p.rows.length);
+}
+function renderTxModal() {
+  const modal = document.getElementById('tx-modal');
+  if (!modal) return;
+  const p = _txParsedPreview;
+  const previewHtml = _txPreviewHtml(p);
+  const colPickerHtml = _txColPickerHtml(p);
   const uploadTabHtml = `
     <div class="builder-help">One transaction per line: date, then amount.<br>The earliest one sets your entry date and starting balance.</div>
     <input type="file" id="tx-file-input" accept=".csv,.tsv,.txt" style="margin-bottom:8px">
@@ -358,7 +381,7 @@ function renderTxModal() {
         <button type="button" class="tx-tab-btn ${_txModalTab === 'sheet' ? 'active' : ''}" data-tx-tab="sheet">Live sheet</button>
       </div>
       ${_txModalTab === 'upload' ? uploadTabHtml : sheetTabHtml}
-      ${colPickerHtml}
+      <div id="tx-col-picker-slot">${colPickerHtml}</div>
       <div id="tx-preview">${previewHtml}</div>
       <div class="builder-actions">
         <button type="button" class="sc-modal-btn" data-tx-cancel>Cancel</button>
@@ -496,8 +519,20 @@ document.addEventListener('click', (e) => {
     if (typeof render === 'function') render();
     return;
   }
-  // Click-outside-to-close for the modal overlay itself.
-  if (e.target.id === 'tx-modal') { closeTxModal(); return; }
+  // Click-outside-to-close for the modal overlay itself — but ONLY when the
+  // press also STARTED on the overlay. When a drag begins inside the content
+  // (resizing the paste textarea by its grip, or selecting text) and the
+  // mouse is released over the dimmed backdrop, the browser dispatches the
+  // click on the overlay (the common ancestor of mousedown/mouseup targets);
+  // without this guard that closed the modal and threw away everything the
+  // user had pasted (closeTxModal clears _txPasteAreaValue).
+  if (e.target.id === 'tx-modal') { if (_txOverlayPressStarted) closeTxModal(); return; }
+});
+// See the outside-click guard above — records whether each press began on
+// the overlay itself (true = a real backdrop click, eligible to close).
+let _txOverlayPressStarted = false;
+document.addEventListener('mousedown', (e) => {
+  _txOverlayPressStarted = !!(e.target && e.target.id === 'tx-modal');
 });
 
 document.addEventListener('input', (e) => {
@@ -506,10 +541,11 @@ document.addEventListener('input', (e) => {
     _txParsedPreview = e.target.value.trim() ? parseTransactionText(e.target.value) : null;
     _txParsedPreviewSource = 'upload';
     _txParsedPreviewUrl = null;
-    renderTxModal();
-    // Re-focus + restore cursor since renderTxModal rebuilds the textarea.
-    const ta = document.getElementById('tx-paste-area');
-    if (ta) { ta.value = e.target.value; ta.focus(); }
+    // In-place refresh of the parse-dependent parts only — a full
+    // renderTxModal() here rebuilt the textarea mid-typing, losing the
+    // caret and scroll position on every keystroke (a long paste dumped
+    // the user back at the top after each edit).
+    updateTxParsedUI();
     return;
   }
   if (e.target.id === 'tx-sheet-url') {
@@ -535,7 +571,9 @@ document.addEventListener('change', (e) => {
     const amountCol = +document.getElementById('tx-amount-col').value;
     const result = _txRowsFromCols(_txParsedPreview.dataRows, dateCol, amountCol);
     _txParsedPreview = { ..._txParsedPreview, ...result, dateCol, amountCol };
-    renderTxModal();
+    // In-place, same as typing — a full renderTxModal() would rebuild the
+    // paste textarea and lose its scroll position under the user.
+    updateTxParsedUI();
   }
 });
 
