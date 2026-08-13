@@ -35,6 +35,8 @@ function persistTransactions() {
         sheetUrl: window._txScheduleStash.sheetUrl || null,
         dateCol: window._txScheduleStash.dateCol,
         amountCol: window._txScheduleStash.amountCol,
+        actualCol: window._txScheduleStash.actualCol,
+        showActual: window._txScheduleStash.showActual !== false,
         active: !!window._txSchedule,
       }));
     } else {
@@ -53,7 +55,7 @@ function loadTransactionsFromStorage() {
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.rows) || !parsed.rows.length) return null;
     return {
-      state: _txStateFromRows(parsed.rows, parsed.source || 'upload', parsed.sheetUrl || null, parsed.dateCol, parsed.amountCol),
+      state: _txStateFromRows(parsed.rows, parsed.source || 'upload', parsed.sheetUrl || null, parsed.dateCol, parsed.amountCol, parsed.actualCol, parsed.showActual),
       active: parsed.active !== false,
     };
   } catch (e) { return null; }
@@ -94,6 +96,11 @@ function _txParseAmount(s) {
 
 const _TX_AMOUNT_HEADER_RE = /transaction|amount|value|invested|contribution|deposit|cash/i;
 const _TX_DATE_HEADER_RE = /date/i;
+// The optional "actual portfolio value" column — a LEVEL (what the account is
+// worth on that date), not a flow. Drawn as the "My portfolio" line so the
+// user can compare what IS against what they contributed and what the
+// strategies say could have been.
+const _TX_ACTUAL_HEADER_RE = /total|balance|portfolio|net.?worth/i;
 
 // Splits raw text into a table without deciding which column is which —
 // parseTransactionText uses this plus _txAutoDetectCols/_txRowsFromCols below
@@ -134,7 +141,15 @@ function _txAutoDetectCols(headers, dataRows) {
     amountCol = _txBestNumericCol(dataRows, dateCol, colCount);
   }
   if (amountCol === dateCol) amountCol = dateCol === 0 ? Math.min(1, colCount - 1) : 0;
-  return { dateCol, amountCol };
+  // Optional actual-portfolio-value column — headers only (a headerless
+  // paste has no way to say which extra number is a running total; the
+  // picker still lets the user choose one manually). null = feature off.
+  let actualCol = null;
+  if (headers) {
+    const idx = headers.findIndex((c, i) => i !== dateCol && i !== amountCol && _TX_ACTUAL_HEADER_RE.test(c));
+    if (idx !== -1) actualCol = idx;
+  }
+  return { dateCol, amountCol, actualCol };
 }
 function _txBestNumericCol(dataRows, dateCol, colCount) {
   let best = -1, bestScore = -1;
@@ -154,18 +169,31 @@ function _txBestNumericCol(dataRows, dateCol, colCount) {
 // manual column-picker override (js/transactions.js's #tx-date-col/
 // #tx-amount-col). rows are aggregated (same-day duplicates summed) and
 // sorted ascending.
-function _txRowsFromCols(dataRows, dateCol, amountCol) {
+function _txRowsFromCols(dataRows, dateCol, amountCol, actualCol) {
   const rows = [];
   let skipped = 0;
   for (const cells of dataRows) {
     const date = _txParseDate(cells[dateCol]);
     const amount = _txParseAmount(cells[amountCol]);
     if (date == null || amount == null) { skipped++; continue; }
-    rows.push({ date, amount });
+    const row = { date, amount };
+    if (actualCol != null) {
+      const actual = _txParseAmount(cells[actualCol]);
+      if (actual != null) row.actual = actual;
+    }
+    rows.push(row);
   }
+  // Same-day merge: amounts SUM (two deposits on one day are both real money);
+  // `actual` takes the LAST reading of the day — it's a level, not a flow.
   const byDate = new Map();
-  for (const r of rows) byDate.set(r.date, (byDate.get(r.date) || 0) + r.amount);
-  const merged = Array.from(byDate, ([date, amount]) => ({ date, amount }))
+  for (const r of rows) {
+    const prev = byDate.get(r.date);
+    const merged = { date: r.date, amount: (prev ? prev.amount : 0) + r.amount };
+    const actual = (r.actual != null) ? r.actual : (prev ? prev.actual : undefined);
+    if (actual != null) merged.actual = actual;
+    byDate.set(r.date, merged);
+  }
+  const merged = Array.from(byDate.values())
     .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   return { rows: merged, skipped, total: merged.reduce((s, r) => s + r.amount, 0) };
 }
@@ -178,15 +206,21 @@ function _txRowsFromCols(dataRows, dateCol, amountCol) {
 // picked" (refreshTxFromSheet, an edit re-fetch) go through, so a stored
 // column choice actually survives a background resync or page reload
 // instead of being silently re-guessed from scratch every time.
-function _txParseWithCols(text, dateCol, amountCol) {
+function _txParseWithCols(text, dateCol, amountCol, actualCol) {
   const { headers, dataRows } = _txParseRaw(text);
-  if (!dataRows.length) return { rows: [], skipped: 0, total: 0, headers: null, dataRows: [], dateCol: 0, amountCol: 1 };
+  if (!dataRows.length) return { rows: [], skipped: 0, total: 0, headers: null, dataRows: [], dateCol: 0, amountCol: 1, actualCol: null };
   const colCount = headers ? headers.length : (dataRows[0] || []).length;
-  let dc = dateCol, ac = amountCol;
+  let dc = dateCol, ac = amountCol, xc = actualCol;
   if (dc == null || ac == null || dc < 0 || ac < 0 || dc >= colCount || ac >= colCount || dc === ac) {
-    ({ dateCol: dc, amountCol: ac } = _txAutoDetectCols(headers, dataRows));
+    ({ dateCol: dc, amountCol: ac, actualCol: xc } = _txAutoDetectCols(headers, dataRows));
   }
-  return { ..._txRowsFromCols(dataRows, dc, ac), headers, dataRows, dateCol: dc, amountCol: ac };
+  // The actual column is optional and validated independently of date/amount —
+  // a stored choice that no longer fits the sheet's layout falls back to
+  // auto-detect rather than silently reading a wrong column.
+  if (xc != null && (xc < 0 || xc >= colCount || xc === dc || xc === ac)) {
+    xc = _txAutoDetectCols(headers, dataRows).actualCol;
+  }
+  return { ..._txRowsFromCols(dataRows, dc, ac, xc), headers, dataRows, dateCol: dc, amountCol: ac, actualCol: xc != null ? xc : null };
 }
 // Parses pasted/uploaded/fetched text into { rows, skipped, total, headers,
 // dataRows, dateCol, amountCol } — the last four let the modal show which
@@ -195,7 +229,7 @@ function _txParseWithCols(text, dateCol, amountCol) {
 // auto-detects columns; _txParseWithCols is the variant that reapplies a
 // previously-chosen column pair instead.
 function parseTransactionText(text) {
-  return _txParseWithCols(text, null, null);
+  return _txParseWithCols(text, null, null, null);
 }
 
 // Turns transaction rows (sorted ascending) into { initial, entryDate, rows,
@@ -231,7 +265,7 @@ function _txSnapToTradingDay(dateStr) {
   }
   return ans;
 }
-function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol) {
+function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol, showActual) {
   if (!rows || !rows.length) return null;
   const [first, ...rest] = rows;
   const byDate = new Map(), byMonth = new Map(), list = [], priceDateByMonth = new Map();
@@ -250,16 +284,34 @@ function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol) {
     // contribDeployPct portion prices at (js/simulate.js applyContribAtPrice).
     priceDateByMonth.set(month, d);
   }
+  // The optional per-row `actual` readings (real portfolio value that day) →
+  // the "My portfolio" chart line (js/saved-configs.js appendConfigDatasets).
+  // Same trading-day snap as the flows; a level's same-day merge is
+  // last-reading-wins. Includes the FIRST row too — unlike the flow schedule
+  // (where row one is the `initial` lump handled separately), a value reading
+  // on day one is a real first point of the line.
+  const actualByDate = new Map();
+  for (const r of rows) {
+    if (r.actual == null || !isFinite(r.actual)) continue;
+    const d = _txSnapToTradingDay(r.date);
+    if (d == null) continue;
+    actualByDate.set(d, r.actual); // ascending input → last reading per day wins
+  }
+  const actualPoints = Array.from(actualByDate, ([date, value]) => ({ date, value }))
+    .sort((a, b) => a.date < b.date ? -1 : a.date > b.date ? 1 : 0);
   return {
     initial: first.amount,
     entryDate: _txSnapToTradingDay(first.date) || first.date,
     rows,
     schedule: { byDate, byMonth, list, priceDateByMonth },
+    actualPoints,
     total: rows.reduce((s, r) => s + r.amount, 0),
     source: source || 'upload',
     sheetUrl: sheetUrl || null,
     dateCol: (dateCol != null ? dateCol : null),
     amountCol: (amountCol != null ? amountCol : null),
+    actualCol: (actualCol != null ? actualCol : null),
+    showActual: showActual !== false,
   };
 }
 
@@ -267,7 +319,9 @@ function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol) {
 // default shape, used to seed the paste textarea when editing an existing
 // upload-sourced history.
 function _txRowsToTsv(rows) {
-  return 'Date\tAmount\n' + rows.map(r => `${r.date}\t${r.amount}`).join('\n');
+  const hasActual = rows.some(r => r.actual != null);
+  if (!hasActual) return 'Date\tAmount\n' + rows.map(r => `${r.date}\t${r.amount}`).join('\n');
+  return 'Date\tAmount\tTotal\n' + rows.map(r => `${r.date}\t${r.amount}\t${r.actual != null ? r.actual : ''}`).join('\n');
 }
 
 function _txColLabel(i, headers) {
@@ -312,7 +366,7 @@ function openTxModal(opts) {
   document.body.appendChild(overlay);
   renderTxModal();
   if (opts.prefillUrl) {
-    _txFetchSheet(opts.prefillUrl, (opts.dateCol != null && opts.amountCol != null) ? { dateCol: opts.dateCol, amountCol: opts.amountCol } : null);
+    _txFetchSheet(opts.prefillUrl, (opts.dateCol != null && opts.amountCol != null) ? { dateCol: opts.dateCol, amountCol: opts.amountCol, actualCol: opts.actualCol } : null);
   } else {
     const ta = overlay.querySelector('#tx-paste-area');
     if (ta) ta.focus();
@@ -338,6 +392,7 @@ function closeTxModal() {
 // and scroll position on every keystroke and dumped the user back at the top
 // of a long paste.
 function _txPreviewHtml(p) {
+  const hasActual = !!(p && p.actualCol != null && p.rows.some(r => r.actual != null));
   return !p ? '' : (!p.rows.length
     ? `<div class="custom-error">No valid rows found — check the date/amount columns.</div>`
     : `<div class="tx-preview-stats">
@@ -347,8 +402,8 @@ function _txPreviewHtml(p) {
          ${fmtDayMonthYear(p.rows[0].date)} → ${fmtDayMonthYear(p.rows[p.rows.length - 1].date)}
        </div>
        <div class="tx-preview-table-wrap"><table class="tx-preview-table">
-         <thead><tr><th>Date</th><th>Amount</th></tr></thead>
-         <tbody>${p.rows.slice(0, 200).map(r => `<tr><td>${fmtDayMonthYear(r.date)}</td><td>${fmtFull(Math.round(r.amount))}</td></tr>`).join('')}</tbody>
+         <thead><tr><th>Date</th><th>Amount</th>${hasActual ? '<th>Portfolio value</th>' : ''}</tr></thead>
+         <tbody>${p.rows.slice(0, 200).map(r => `<tr><td>${fmtDayMonthYear(r.date)}</td><td>${fmtFull(Math.round(r.amount))}</td>${hasActual ? `<td>${r.actual != null ? fmtFull(Math.round(r.actual)) : '—'}</td>` : ''}</tr>`).join('')}</tbody>
        </table></div>`);
 }
 // Lets the user override which parsed column is the date vs. the value —
@@ -368,6 +423,12 @@ function _txColPickerHtml(p) {
       <label>Value column
         <select id="tx-amount-col" class="inline-select">
           ${Array.from({ length: colCount }, (_, i) => `<option value="${i}" ${p.amountCol === i ? 'selected' : ''}>${_txEscHtml(_txColLabel(i, p.headers))}</option>`).join('')}
+        </select>
+      </label>
+      <label>Portfolio value column
+        <select id="tx-actual-col" class="inline-select" title="Optional: a column with your account's ACTUAL total value on that date — drawn as the 'My portfolio' line so you can compare what is against what the strategies say could have been.">
+          <option value="" ${p.actualCol == null ? 'selected' : ''}>— none —</option>
+          ${Array.from({ length: colCount }, (_, i) => `<option value="${i}" ${p.actualCol === i ? 'selected' : ''}>${_txEscHtml(_txColLabel(i, p.headers))}</option>`).join('')}
         </select>
       </label>
     </div>`;
@@ -432,7 +493,7 @@ async function _txFetchSheet(url, preferredCols) {
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const text = await res.text();
-    const parsed = _txParseWithCols(text, preferredCols ? preferredCols.dateCol : null, preferredCols ? preferredCols.amountCol : null);
+    const parsed = _txParseWithCols(text, preferredCols ? preferredCols.dateCol : null, preferredCols ? preferredCols.amountCol : null, preferredCols ? preferredCols.actualCol : null);
     // Only a hard failure when there's no table at all — a wrong column
     // guess (0 valid rows but a real table) still needs to reach the modal
     // so the date/value pickers render and the user can correct it.
@@ -462,6 +523,22 @@ function _txHandlePastedText(text) {
 
 document.addEventListener('click', (e) => {
   if (e.target.closest('#tx-upload-btn')) { openTxModal(); return; }
+  // Eye toggle for the "My portfolio" line (renderTxSummary). Both the live
+  // state and the stash carry the flag so it survives the sliders toggle and
+  // persists via persistTransactions' whitelist.
+  if (e.target.closest('#tx-actual-toggle')) {
+    // Compute the flipped value ONCE — _txSchedule and _txScheduleStash are
+    // usually the SAME object, so flipping each in a loop toggles it twice
+    // (a no-op, which is exactly how v1 of this handler failed).
+    const cur = window._txSchedule || window._txScheduleStash;
+    const next = cur ? cur.showActual === false : true;
+    if (window._txSchedule) window._txSchedule.showActual = next;
+    if (window._txScheduleStash) window._txScheduleStash.showActual = next;
+    persistTransactions();
+    if (typeof render === 'function') render();
+    renderTxSummary();
+    return;
+  }
   // Re-opens the modal pre-filled with the active/stashed history — as pasted
   // rows for an 'upload' source (so you can add/remove/edit lines directly),
   // or as the URL field (auto-loaded) for a 'sheet' source, since raw rows
@@ -469,7 +546,7 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('#tx-edit-btn')) {
     const s = window._txSchedule || window._txScheduleStash;
     if (!s) return;
-    if (s.source === 'sheet' && s.sheetUrl) openTxModal({ prefillUrl: s.sheetUrl, editMode: true, dateCol: s.dateCol, amountCol: s.amountCol });
+    if (s.source === 'sheet' && s.sheetUrl) openTxModal({ prefillUrl: s.sheetUrl, editMode: true, dateCol: s.dateCol, amountCol: s.amountCol, actualCol: s.actualCol });
     else openTxModal({ prefillText: _txRowsToTsv(s.rows), editMode: true });
     return;
   }
@@ -492,7 +569,7 @@ document.addEventListener('click', (e) => {
     if (!_txParsedPreview || !_txParsedPreview.rows.length) return;
     const state = _txStateFromRows(_txParsedPreview.rows, _txParsedPreviewSource,
       _txParsedPreviewSource === 'sheet' ? _txParsedPreviewUrl : null,
-      _txParsedPreview.dateCol, _txParsedPreview.amountCol);
+      _txParsedPreview.dateCol, _txParsedPreview.amountCol, _txParsedPreview.actualCol);
     window._txSchedule = state;
     window._txScheduleStash = state;
     persistTransactions();
@@ -592,12 +669,14 @@ document.addEventListener('change', (e) => {
   }
   // Manual column override — recompute from the already-parsed table rather
   // than re-parsing the text/re-fetching the sheet.
-  if (e.target.id === 'tx-date-col' || e.target.id === 'tx-amount-col') {
+  if (e.target.id === 'tx-date-col' || e.target.id === 'tx-amount-col' || e.target.id === 'tx-actual-col') {
     if (!_txParsedPreview || !_txParsedPreview.dataRows) return;
     const dateCol = +document.getElementById('tx-date-col').value;
     const amountCol = +document.getElementById('tx-amount-col').value;
-    const result = _txRowsFromCols(_txParsedPreview.dataRows, dateCol, amountCol);
-    _txParsedPreview = { ..._txParsedPreview, ...result, dateCol, amountCol };
+    const actualRaw = (document.getElementById('tx-actual-col') || {}).value;
+    const actualCol = (actualRaw === '' || actualRaw == null) ? null : +actualRaw;
+    const result = _txRowsFromCols(_txParsedPreview.dataRows, dateCol, amountCol, actualCol);
+    _txParsedPreview = { ..._txParsedPreview, ...result, dateCol, amountCol, actualCol };
     // In-place, same as typing — a full renderTxModal() would rebuild the
     // paste textarea and lose its scroll position under the user.
     updateTxParsedUI();
@@ -647,8 +726,34 @@ function renderTxSummary() {
   if (!el || !window._txSchedule) return;
   const s = window._txSchedule;
   const n = s.rows.length;
-  const base = `<b>${n}</b> transaction${n === 1 ? '' : 's'} · <b>${fmtFull(Math.round(s.total))}</b> total · since ${fmtDayMonthYear(s.entryDate)}`;
-  el.innerHTML = s.source === 'sheet' ? `${base}<br><span class="tx-sheet-tag">synced from a linked Google Sheet</span>` : base;
+  // Deliberately terse: no "since <date>" (the Entry display under the chart
+  // already shows it) and no heading (the block's content is self-explaining).
+  const rows = [
+    `<span class="tx-summary-row"><b>${n}</b>&nbsp;transactions · <b>${fmtFull(Math.round(s.total))}</b>&nbsp;invested</span>`,
+  ];
+  if (s.source === 'sheet') rows.push(`<span class="tx-summary-row tx-sheet-tag">synced from Google Sheet</span>`);
+  // The "My portfolio" line (the file's actual-value column, drawn on the
+  // chart by js/saved-configs.js's appendConfigDatasets): color dot, its
+  // money-weighted CAGR + flow-adjusted DD (window._actualMetrics), and an
+  // eye toggle — same stroked SVG eye as the legend chips / saved-config
+  // pills, never an emoji glyph (renders as a jarring photorealistic eye).
+  if (s.actualPoints && s.actualPoints.length) {
+    const m = window._actualMetrics;
+    const on = s.showActual !== false;
+    const eyeSvg = on
+      ? '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>'
+      : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
+    const stats = (on && m && Number.isFinite(m.cagr))
+      ? `<span class="tx-actual-stat"><b class="${m.cagr >= 0 ? 'tx-actual-pos' : 'tx-actual-neg'}">${m.cagr >= 0 ? '+' : ''}${m.cagr.toFixed(1)}%</b></span>` +
+        (Number.isFinite(m.maxDD) && m.maxDD > 0 ? `<span class="tx-actual-stat">DD <b class="tx-actual-neg">-${m.maxDD.toFixed(1)}%</b></span>` : '')
+      : '';
+    rows.push(`<span class="tx-summary-row tx-actual-row">
+      <button type="button" id="tx-actual-toggle" class="tx-actual-eye" title="${on ? 'Hide' : 'Show'} the My portfolio line" aria-label="${on ? 'Hide' : 'Show'} the My portfolio line">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${eyeSvg}</svg>
+      </button>
+      <span class="tx-actual-dot"></span><span class="tx-actual-name">My portfolio</span>${stats}</span>`);
+  }
+  el.innerHTML = rows.join('');
   const editBtn = document.getElementById('tx-edit-btn');
   if (editBtn) {
     const label = s.source === 'sheet' ? 'Change the linked sheet' : 'Edit transactions';
@@ -697,9 +802,9 @@ async function refreshTxFromSheet() {
     // (including the one on plain page refresh) re-ran auto-detection from
     // scratch, silently discarding whatever column the user had picked and
     // going back to whichever wrong column auto-detect landed on before.
-    const parsed = _txParseWithCols(text, cur.dateCol, cur.amountCol);
+    const parsed = _txParseWithCols(text, cur.dateCol, cur.amountCol, cur.actualCol);
     if (!parsed.rows.length) throw new Error('empty sheet');
-    const fresh = _txStateFromRows(parsed.rows, 'sheet', cur.sheetUrl, parsed.dateCol, parsed.amountCol);
+    const fresh = _txStateFromRows(parsed.rows, 'sheet', cur.sheetUrl, parsed.dateCol, parsed.amountCol, parsed.actualCol, cur.showActual);
     window._txScheduleStash = fresh;
     persistTransactions();
     if (wasActive) {

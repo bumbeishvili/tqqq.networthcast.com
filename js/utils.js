@@ -183,6 +183,38 @@ function computeDayChange(todayVal, ydayVal) {
   return { pct: (todayVal - ydayVal) / ydayVal * 100, abs: todayVal - ydayVal };
 }
 
+// Max drawdown of a REAL account's value readings, adjusted for external
+// flows (deposits/withdrawals) — a naive peak-to-trough on raw balances
+// counts a withdrawal as a "loss" and a deposit as a "recovery", which is
+// exactly wrong for the "My portfolio" line (a $55K withdrawal is not a 60%
+// drawdown). Builds a time-weighted return index: between consecutive
+// readings, growth = (V_now - netFlowsBetween) / V_prev — flows move the
+// balance but not the index — then takes peak-to-trough on the index.
+// points: [{date, value}] ascending; flows: [{date, amount}] ascending
+// (deposits positive, withdrawals negative; flows on a reading's own date
+// count as landing just before that reading, matching how the readings
+// themselves include same-day deposits). Returns { pct, peakDate, troughDate }.
+function computeFlowAdjustedDrawdown(points, flows) {
+  if (!points || points.length < 2) return { pct: 0, peakDate: null, troughDate: null };
+  let fi = 0;
+  // Skip flows at-or-before the first reading — the index starts there.
+  while (fi < (flows ? flows.length : 0) && flows[fi].date <= points[0].date) fi++;
+  let index = 1, peak = 1, peakDate = points[0].date;
+  let maxDD = 0, ddPeakDate = null, ddTroughDate = null;
+  for (let i = 1; i < points.length; i++) {
+    let flow = 0;
+    while (fi < (flows ? flows.length : 0) && flows[fi].date <= points[i].date) { flow += flows[fi].amount; fi++; }
+    const prevV = points[i - 1].value;
+    if (prevV > 0 && isFinite(points[i].value)) {
+      index *= Math.max(0, (points[i].value - flow) / prevV);
+    } // non-positive/broken reading: hold the index (can't measure growth across it)
+    if (index > peak) { peak = index; peakDate = points[i].date; }
+    const dd = peak > 0 ? 1 - index / peak : 0;
+    if (dd > maxDD) { maxDD = dd; ddPeakDate = peakDate; ddTroughDate = points[i].date; }
+  }
+  return { pct: maxDD, peakDate: ddPeakDate, troughDate: ddTroughDate };
+}
+
 // Marks a holdings snapshot ({assetKey: shares, ...} + cash) at the PREVIOUS
 // trading day's close — the day-change badge's "yesterday" side. This is a
 // deliberate REPRICE of today's end-state holdings, not a second simulation

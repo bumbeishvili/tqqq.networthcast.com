@@ -2888,6 +2888,22 @@
   }
   .tx-summary b { font-family: 'JetBrains Mono', monospace; }
   .tx-sheet-tag { color: var(--text-muted); font-size: 12px; }
+  /* Terse row-per-line tx summary; the "My portfolio" row's dot color
+     mirrors TX_ACTUAL_COLOR (js/saved-configs.js). */
+  .tx-summary-row { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .tx-summary-row + .tx-summary-row { margin-top: 4px; }
+  .tx-actual-row { font-size: 12px; }
+  .tx-actual-name { font-weight: 600; }
+  .tx-actual-stat { color: var(--text-muted); margin-left: 4px; }
+  .tx-actual-dot { width: 10px; height: 10px; border-radius: 50%; background: #0d9488; display: inline-block; flex: 0 0 auto; }
+  .tx-actual-eye {
+    background: none; border: none; cursor: pointer; padding: 0 2px;
+    color: var(--text-muted); display: inline-flex; align-items: center; flex: 0 0 auto;
+  }
+  .tx-actual-eye svg { width: 13px; height: 13px; }
+  .tx-actual-eye:hover { color: var(--accent-text); }
+  .tx-actual-pos { color: var(--green-text); }
+  .tx-actual-neg { color: var(--red-text); }
   .tx-clear-btn {
     width: 100%;
     padding: 9px 10px;

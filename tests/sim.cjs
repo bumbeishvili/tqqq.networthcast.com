@@ -37,14 +37,15 @@ function install(prices) { // prices: 24 monthly numbers (tqqq=qqq=spy=qld=sso=s
 (0, eval)(sim);
 // utils.js (unlike simulate.js) has top-level DOM-touching calls elsewhere in
 // the file (icon setup etc.), so evaling the whole thing breaks under Node —
-// pull out just computeDayChange (the day-over-day change badge's pure math,
-// no DOM) by source instead.
+// pull out just the pure functions under test by source instead.
 (function () {
   const utilsSrc = fs.readFileSync(__dirname + '/../js/utils.js', 'utf8');
-  const m = utilsSrc.match(/function computeDayChange\([\s\S]*?\n}/);
-  if (!m) throw new Error('computeDayChange not found in js/utils.js — did it move/rename?');
-  (0, eval)(m[0]);
-  global.computeDayChange = computeDayChange;
+  for (const name of ['computeDayChange', 'computeFlowAdjustedDrawdown']) {
+    const m = utilsSrc.match(new RegExp('function ' + name + '\\([\\s\\S]*?\\n}'));
+    if (!m) throw new Error(name + ' not found in js/utils.js — did it move/rename?');
+    (0, eval)(m[0]);
+    global[name] = eval(name);
+  }
 })();
 
 // metrics.js is a pure module — load it directly for the IRR / daily-drawdown tests.
@@ -329,6 +330,46 @@ ck('computeDayChange: 100→90 = {pct:-10, abs:-10}',
 ck('computeDayChange: non-finite today → null', computeDayChange(NaN, 100) === null);
 ck('computeDayChange: zero yesterday → null (div-by-zero guard)', computeDayChange(100, 0) === null);
 ck('computeDayChange: negative yesterday → null', computeDayChange(100, -5) === null);
+
+// ----- computeFlowAdjustedDrawdown (js/utils.js) — "My portfolio" DD -----
+// The whole point: withdrawals/deposits move the BALANCE but are not market
+// performance, so they must not register as drawdown/recovery.
+(function () {
+  const P = (arr) => arr.map(([date, value]) => ({ date, value }));
+  const F = (arr) => arr.map(([date, amount]) => ({ date, amount }));
+  // 1. Pure withdrawal, flat market: 100 → withdraw 50 → balance 50. Naive DD = 50%; true DD = 0.
+  let d = computeFlowAdjustedDrawdown(
+    P([['2024-01-01', 100], ['2024-02-01', 50]]),
+    F([['2024-02-01', -50]]));
+  ck('flowDD: withdrawal on flat market → 0% (naive would say 50%)', approx(d.pct, 0));
+  // 2. Pure deposit, flat market: 100 → deposit 100 → 200: no "recovery", no DD.
+  d = computeFlowAdjustedDrawdown(
+    P([['2024-01-01', 100], ['2024-02-01', 200]]),
+    F([['2024-02-01', 100]]));
+  ck('flowDD: deposit on flat market → 0%', approx(d.pct, 0));
+  // 3. Real 50% crash, no flows → 50%.
+  d = computeFlowAdjustedDrawdown(
+    P([['2024-01-01', 100], ['2024-02-01', 50], ['2024-03-01', 80]]), []);
+  ck('flowDD: genuine 50% crash → 50%', approx(d.pct, 0.5));
+  ck('flowDD: crash peak/trough dates', d.peakDate === '2024-01-01' && d.troughDate === '2024-02-01');
+  // 4. Crash MASKED by a deposit: 100 → (deposit 60, market halves: 50+60=110).
+  //    Naive sees balance UP (no DD); true market DD = 50%.
+  d = computeFlowAdjustedDrawdown(
+    P([['2024-01-01', 100], ['2024-02-01', 110]]),
+    F([['2024-02-01', 60]]));
+  ck('flowDD: crash hidden under a deposit → 50% (naive would say 0%)', approx(d.pct, 0.5));
+  // 5. Withdrawal DURING a real crash: 100 → market -30% and withdraw 20 (70-20=50).
+  //    True DD 30%, not 50%.
+  d = computeFlowAdjustedDrawdown(
+    P([['2024-01-01', 100], ['2024-02-01', 50]]),
+    F([['2024-02-01', -20]]));
+  ck('flowDD: withdrawal during a 30% crash → 30%, not 50%', approx(d.pct, 0.3));
+  // 6. Flows at-or-before the first reading are ignored (index starts there).
+  d = computeFlowAdjustedDrawdown(
+    P([['2024-01-01', 100], ['2024-02-01', 100]]),
+    F([['2024-01-01', 100]]));
+  ck('flowDD: flow at the first reading ignored → 0%', approx(d.pct, 0));
+})();
 
 console.log(A.join('\n'));
 console.log(pass ? '\n===== ALL PASS =====' : '\n===== FAILURES =====');

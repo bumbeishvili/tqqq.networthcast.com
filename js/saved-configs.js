@@ -1562,6 +1562,62 @@ function appendConfigDatasets(chart, ctx) {
       }
     }
   }
+  appendActualPortfolioDataset(chart, ctx);
+}
+
+// The "My portfolio" line — the ACTUAL account value readings carried in the
+// user's transaction file (the optional third column, js/transactions.js's
+// state.actualPoints). What IS, drawn next to what was contributed (Invested
+// Compounded) and what could have been (every strategy). Flagged _configLine
+// so removeConfigDatasets strips it each render and the index-keyed
+// hidden-list persistence skips it, exactly like saved-config lines; the
+// endLabelPlugin / tooltip / range-select all pick it up generically.
+const TX_ACTUAL_COLOR = '#0d9488'; // mirrored by styles.css's .tx-actual-dot
+function appendActualPortfolioDataset(chart, ctx) {
+  window._actualMetrics = null;
+  const s = window._txSchedule;
+  if (!s || !s.actualPoints || !s.actualPoints.length || s.showActual === false) return;
+  const pts = s.actualPoints;
+  // Forward-fill via resampleByDate, but null out labels BEFORE the first
+  // real reading — back-filling would draw a flat line through history the
+  // account didn't exist in. After the last reading the forward-fill stands:
+  // the latest known value carries to the right edge, so the end label and
+  // the "what is, today" comparison exist.
+  const series = resampleByDate(pts, ctx.labels);
+  const firstDate = pts[0].date;
+  for (let i = 0; i < ctx.labels.length && ctx.labels[i] < firstDate; i++) series[i] = null;
+  const finalV = pts[pts.length - 1].value;
+  // FLOW-ADJUSTED drawdown (js/utils.js computeFlowAdjustedDrawdown) — a
+  // naive peak-to-trough on raw balances counted a big withdrawal as a
+  // "drawdown" (the initial version showed -70% where the real market DD was
+  // far less). Flows = the initial lump + every later transaction.
+  const flows = [{ date: s.entryDate, amount: s.initial }, ...s.schedule.list];
+  const dd = (typeof computeFlowAdjustedDrawdown === 'function')
+    ? computeFlowAdjustedDrawdown(pts, flows)
+    : { pct: 0, peakDate: null, troughDate: null };
+  window._actualMetrics = {
+    cagr: cfgMoneyWeightedCAGR(ctx, finalV),
+    maxDD: dd.pct * 100, ddPeak: dd.peakDate, ddTrough: dd.troughDate,
+    start: pts[0].value, end: finalV,
+  };
+  chart.data.datasets.push({
+    label: 'My portfolio',
+    data: series,
+    borderColor: TX_ACTUAL_COLOR,
+    backgroundColor: 'transparent',
+    fill: false,
+    tension: 0.3,
+    pointRadius: 0,
+    pointHitRadius: 10,
+    borderWidth: 2.5, // the user's REAL line — visually primary
+    _configLine: true,
+    _actualLine: true,
+  });
+  chart.setDatasetVisibility(chart.data.datasets.length - 1, true);
+  // The sidebar summary shows these metrics — but its usual triggers
+  // (toggleContribMode etc.) run BEFORE render() gets here, when
+  // _actualMetrics was still null. Refresh it now that they exist.
+  if (typeof renderTxSummary === 'function') renderTxSummary();
 }
 
 // --- naming -------------------------------------------------------------
