@@ -343,6 +343,86 @@ function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol,
   };
 }
 
+// Re-derives the transaction view for an arbitrary chart ENTRY date without
+// touching the underlying data. Three cases, per the user's spec:
+//  - entry ≤ first transaction: the run starts with $0 at the entry and every
+//    transaction (the former `initial` included) lands as a dated flow when
+//    its day comes — lines sit at zero until real money arrives.
+//  - entry mid-history: everything before the entry is absorbed into ONE
+//    initial lump at the entry, valued at the PORTFOLIO's actual reading
+//    there (forward-filled from the latest reading at-or-before it); with no
+//    actual-value column, the Invested-Compounded balance at the cutoff
+//    (contributions compounded at `baselineAnnualRate`, mirroring
+//    js/simulate.js's once-per-month `investedCompounded` stepping) stands
+//    in. Transactions after the entry stay dated flows.
+//  - the default (entry == first transaction's day) reproduces the schedule
+//    byte-for-byte: initial = first amount, flows = the rest.
+// Returns { initial, schedule, actualPoints, entryDate } — the same shapes
+// _txStateFromRows produces, so every consumer swaps in transparently.
+function txEffectiveForEntry(state, entryDate, baselineAnnualRate) {
+  if (!state) return null;
+  const E = entryDate || state.entryDate;
+  const buildSchedule = (rows) => {
+    const byDate = new Map(), byMonth = new Map(), list = [], priceDateByMonth = new Map();
+    for (const r of rows) {
+      byDate.set(r.date, (byDate.get(r.date) || 0) + r.amount);
+      const month = r.date.slice(0, 7);
+      byMonth.set(month, (byMonth.get(month) || 0) + r.amount);
+      list.push({ date: r.date, amount: r.amount });
+      priceDateByMonth.set(month, r.date);
+    }
+    return { byDate, byMonth, list, priceDateByMonth };
+  };
+  // All flows on their SNAPPED dates, first row included (as {date, amount}).
+  const allFlows = [{ date: state.entryDate, amount: state.initial }, ...state.schedule.list];
+  if (E < state.entryDate) {
+    // Earlier entry: $0 start, everything is a dated flow.
+    return { initial: 0, schedule: buildSchedule(allFlows), actualPoints: state.actualPoints || [], entryDate: E };
+  }
+  if (E === state.entryDate) {
+    return { initial: state.initial, schedule: state.schedule, actualPoints: state.actualPoints || [], entryDate: E };
+  }
+  // Mid-history entry: initial lump at E.
+  let initial = null;
+  const pts = state.actualPoints || [];
+  if (pts.length && pts[0].date <= E) {
+    // Latest actual reading at-or-before E (forward-fill).
+    let v = null;
+    for (const p of pts) { if (p.date <= E) v = p.value; else break; }
+    initial = v;
+  }
+  if (initial == null) {
+    // Invested-Compounded fallback: balance compounded once per calendar
+    // month (matching the engine's month-row stepping), flows added on their
+    // dates, up to E.
+    const mr = (baselineAnnualRate || 0) / 12;
+    let bal = 0;
+    let month = state.entryDate.slice(0, 7);
+    for (let fi = 0; fi < allFlows.length && allFlows[fi].date <= E; fi++) {
+      const f = allFlows[fi];
+      const fMonth = f.date.slice(0, 7);
+      while (month < fMonth) { bal *= (1 + mr); month = _txNextMonth(month); }
+      bal += f.amount;
+    }
+    const eMonth = E.slice(0, 7);
+    while (month < eMonth) { bal *= (1 + mr); month = _txNextMonth(month); }
+    initial = bal;
+  }
+  const laterFlows = allFlows.filter(f => f.date > E);
+  const laterPts = pts.filter(p => p.date >= E);
+  // Anchor the portfolio line at the cutoff itself so it starts exactly at
+  // the entry with the lump value (when readings existed before E).
+  if (pts.length && pts[0].date <= E && (!laterPts.length || laterPts[0].date !== E)) {
+    laterPts.unshift({ date: E, value: initial });
+  }
+  return { initial, schedule: buildSchedule(laterFlows), actualPoints: laterPts, entryDate: E };
+}
+function _txNextMonth(ym) {
+  let y = +ym.slice(0, 4), m = +ym.slice(5, 7);
+  m++; if (m > 12) { m = 1; y++; }
+  return y + '-' + String(m).padStart(2, '0');
+}
+
 // 'Date\tAmount' + one row per line — the inverse of parseTransactionText's
 // default shape, used to seed the paste textarea when editing an existing
 // upload-sourced history.
@@ -620,9 +700,9 @@ document.addEventListener('click', (e) => {
       const el = document.getElementById('entry-exact-date');
       if (el) el.value = '';
     } else if (window._txScheduleStash) {
-      // -> reactivate the stashed history.
+      // -> reactivate the stashed history. The entry stays wherever the user
+      // has it — txEffectiveForEntry derives the right view for any entry.
       window._txSchedule = window._txScheduleStash;
-      applyTxEntryDate();
     } else {
       return;
     }
@@ -742,12 +822,11 @@ function toggleContribMode() {
   activeEl.hidden = !active;
   if (active) renderTxSummary();
   renderTxModeToggle();
-  // Entry is pinned to the first transaction while a schedule is active — the
-  // exact-day picker would otherwise let it drift away from that date, the
-  // same desync the entry slider lock (js/controls.js's entryLocked()) exists
-  // to prevent.
+  // The entry date is freely adjustable even while a schedule is active —
+  // txEffectiveForEntry re-derives the initial/flows for whatever entry the
+  // user picks — so the exact-day picker stays enabled.
   const entryPickBtn = document.getElementById('entry-date-pick');
-  if (entryPickBtn) entryPickBtn.disabled = active;
+  if (entryPickBtn) entryPickBtn.disabled = false;
 }
 function renderTxSummary() {
   const el = document.getElementById('tx-summary-text');
@@ -837,7 +916,8 @@ async function refreshTxFromSheet() {
     persistTransactions();
     if (wasActive) {
       window._txSchedule = fresh;
-      applyTxEntryDate();
+      // Entry deliberately untouched — a background re-sync must not move
+      // the user's chosen entry (txEffectiveForEntry handles any entry).
       toggleContribMode();
       if (typeof saveSliders === 'function') saveSliders();
       if (typeof render === 'function') render();

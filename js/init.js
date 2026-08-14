@@ -282,7 +282,12 @@
         window._txSchedule = loaded.active ? loaded.state : null;
       }
     }
-    if (window._txSchedule && typeof applyTxEntryDate === 'function') applyTxEntryDate();
+    // NOTE: applyTxEntryDate() deliberately NOT called here — the entry is
+    // freely adjustable in transaction mode now (txEffectiveForEntry), and
+    // the user's chosen entry was already restored above from the URL/saved
+    // sliders; snapping it back to the first transaction would clobber it.
+    // The first-transaction default is still applied ON IMPORT (the modal
+    // confirm / sheet-load paths in js/transactions.js).
     if (typeof toggleContribMode === 'function') toggleContribMode();
   }
   render();

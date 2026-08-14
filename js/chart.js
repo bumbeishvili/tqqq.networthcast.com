@@ -22,8 +22,8 @@ let _logData = null;
 // Each event type gets its own shape + colour so they're tellable apart, and
 // hovering one shows the trade detail. `_smaMarkers` caches on-screen hit-boxes.
 const SMA_EVENT_STYLE = {
-  ENTER:      { color: "#00b929", shape: "triUp",   label: 'Buy' },
-  EXIT:       { color: "#ff2d2e", shape: "triDown", label: 'Sell' },
+  ENTER:      { color: "#00b929", shape: "circle",  label: 'Buy' },
+  EXIT:       { color: "#ff2d2e", shape: "hexagon", label: 'Sell' },
   'BG-GTFO':  { color: "#b06000", shape: "diamond", label: 'Bubble → cash' },
   'BG-CLEAR': { color: "#023aff", shape: "square",  label: 'Bubble over' },
 };
@@ -54,8 +54,8 @@ function toggleSmaLogEase(hide) {
 // "buy — 3 of 5 slices" still reads as a buy. Only the four trade kinds below
 // get a chart symbol; money-in and snapshot rows would just be noise.
 const CUSTOM_EVENT_STYLE = {
-  buy:       { color: "#00b929", shape: "triUp",   label: 'Buy' },
-  sell:      { color: "#ff2d2e", shape: "triDown", label: 'Sell' },
+  buy:       { color: "#00b929", shape: "circle",  label: 'Buy' },
+  sell:      { color: "#ff2d2e", shape: "hexagon", label: 'Sell' },
   switch:    { color: "#023aff", shape: "diamond", label: 'Switch' },
   rebalance: { color: "#b06000", shape: "square",  label: 'Rebalance' },
 };
@@ -187,19 +187,59 @@ function handleSmaMarkerHover(e) {
   else hideSmaMarkerTooltip();
 }
 
-function drawSmaMarker(cx, x, y, style, hovered) {
+// Marker STROKE color encodes the ASSET a trade is about — same asset,
+// same outline, across both the SMA and custom-strategy markers — so a
+// chart full of buys/sells also says WHAT was bought or sold. Fill stays
+// the action (green buy / red sell). Colors chosen to read at 2px stroke
+// against both fills and the light background; 'cash' gets neutral gray;
+// unknown/missing held falls back to the old white outline.
+// Hues chosen for maximum pairwise separation at stroke width — vivid
+// blue / orange / purple / cyan / pink / brown / black / slate — and none
+// close to the green/red fills they wrap.
+const ASSET_STROKE = {
+  tqqq: '#0040ff', qqq: '#ff8c00', spy: '#a020f0', qld: '#00b3e6',
+  sso: '#ff1493', spxl: '#6d4c2f', sqqq: '#000000', cash: '#5a6472',
+};
+// 'TQQQ' / 'tqqq+cash' / 'TQQQ+CASH' → the first known ticker's stroke.
+function assetStrokeFor(held) {
+  if (held == null || held === '') return null;
+  const parts = String(held).toLowerCase().split(/[+/,\s]+/);
+  for (const p of parts) if (ASSET_STROKE[p]) return ASSET_STROKE[p];
+  return null;
+}
+// The asset a log row's marker is ABOUT: a buy/switch is about what it now
+// holds; a sell is about what was just sold — the nearest EARLIER row's
+// held (rows log post-trade state, so the sell row itself says 'cash'/park).
+function markerAssetFor(log, i, isSell) {
+  const heldOf = (r) => (r && r.held != null && r.held !== '') ? String(r.held) : null;
+  if (!isSell) return heldOf(log[i]);
+  const cur = heldOf(log[i]);
+  for (let j = i - 1; j >= 0; j--) {
+    const h = heldOf(log[j]);
+    if (h && h !== cur) return h; // the thing held BEFORE the sell = what was sold
+  }
+  return cur; // never held anything else — color by the destination
+}
+function drawSmaMarker(cx, x, y, style, hovered, strokeColor) {
   const r = hovered ? 7 : 5;
   cx.beginPath();
   switch (style.shape) {
     case 'triUp':   cx.moveTo(x, y - r); cx.lineTo(x - r, y + r * 0.85); cx.lineTo(x + r, y + r * 0.85); cx.closePath(); break;
     case 'triDown': cx.moveTo(x, y + r); cx.lineTo(x - r, y - r * 0.85); cx.lineTo(x + r, y - r * 0.85); cx.closePath(); break;
+    case 'hexagon':
+      for (let k = 0; k < 6; k++) {
+        const a = -Math.PI / 2 + k * Math.PI / 3;
+        const hx = x + r * Math.cos(a), hy = y + r * Math.sin(a);
+        if (k === 0) cx.moveTo(hx, hy); else cx.lineTo(hx, hy);
+      }
+      cx.closePath(); break;
     case 'diamond': cx.moveTo(x, y - r); cx.lineTo(x + r, y); cx.lineTo(x, y + r); cx.lineTo(x - r, y); cx.closePath(); break;
     case 'square':  cx.rect(x - r * 0.8, y - r * 0.8, r * 1.6, r * 1.6); break;
     default:        cx.arc(x, y, r, 0, Math.PI * 2);
   }
   cx.fillStyle = style.color;
-  cx.lineWidth = hovered ? 2 : 1.5;
-  cx.strokeStyle = hovered ? "#383874" : "rgba(255,255,255,0.9)";
+  cx.lineWidth = hovered ? 3 : 2.5;
+  cx.strokeStyle = strokeColor || (hovered ? "#383874" : "rgba(255,255,255,0.9)");
   cx.fill();
   cx.stroke();
 }
@@ -246,7 +286,10 @@ function spreadMarkerY(placed, x, baseY, area) {
   if (!clashes(baseY)) return baseY;
   for (let k = 1; k <= 24; k++) {
     const half = Math.ceil(k / 2) * MIN;
-    const cand = baseY + (k % 2 ? half : -half);
+    // Upward (-y) first: markers draw in date order, so the one being
+    // displaced is the NEWER of the clashing pair — fanning it upward puts
+    // newer above older, instead of the older one sitting on top.
+    const cand = baseY + (k % 2 ? -half : half);
     if (cand < area.top + 5 || cand > area.bottom - 5) continue; // stay on-plot
     if (!clashes(cand)) return cand;
   }
@@ -263,14 +306,15 @@ function smaMarkerLabel(ev, ulName) {
 
 // A mini SVG of the marker's own shape, so the tooltip visually ties to the
 // exact symbol on the chart (same shape + colour).
-function markerShapeSvg(shape, color) {
+function markerShapeSvg(shape, color, stroke) {
   const inner = {
     triUp:   '<polygon points="7,1.5 12.5,11.5 1.5,11.5"/>',
     triDown: '<polygon points="7,12.5 1.5,2.5 12.5,2.5"/>',
+    hexagon: '<polygon points="7,1 12.2,4 12.2,10 7,13 1.8,10 1.8,4"/>',
     diamond: '<polygon points="7,1 13,7 7,13 1,7"/>',
     square:  '<rect x="2" y="2" width="10" height="10" rx="1.5"/>',
   }[shape] || '<circle cx="7" cy="7" r="5.5"/>';
-  return `<svg viewBox="0 0 14 14" width="15" height="15" style="fill:${color};stroke:rgba(56,56,116,0.35);stroke-width:1">${inner}</svg>`;
+  return `<svg viewBox="0 0 14 14" width="15" height="15" style="fill:${color};stroke:${stroke || 'rgba(56,56,116,0.35)'};stroke-width:${stroke ? 1.6 : 1}">${inner}</svg>`;
 }
 // Small stroked row icon for the tooltip metrics.
 function mtIco(paths) {
@@ -302,7 +346,7 @@ function smaMarkerTooltipHtml(m) {
   const pc = profit >= 0 ? 'var(--green)' : 'var(--red)';
   return `
     <div class="mt-head">
-      <span class="mt-shape">${markerShapeSvg(st.shape, st.color)}</span>
+      <span class="mt-shape">${markerShapeSvg(st.shape, st.color, m.stroke)}</span>
       <div class="mt-htext">
         <div class="mt-title" style="color:${st.color}">${info.label}</div>
         <div class="mt-sub">${i >= 0 ? '#' + i + ' · ' : ''}${date}</div>
@@ -359,7 +403,7 @@ function customMarkerTooltipHtml(m) {
   const note = (r.note != null && r.note !== '') ? `<div class="mt-note">${String(r.note).replace(/[<>&]/g, '')}</div>` : '';
   return `
     <div class="mt-head">
-      <span class="mt-shape">${markerShapeSvg(st.shape, st.color)}</span>
+      <span class="mt-shape">${markerShapeSvg(st.shape, st.color, m.stroke)}</span>
       <div class="mt-htext">
         <div class="mt-title" style="color:${st.color}">${customActionLabel(r.action)}</div>
         <div class="mt-sub">#${m.i} · ${date}</div>
@@ -1667,14 +1711,10 @@ function render() {
   let initial = sliderToInitial(+document.getElementById('slider-initial').value);
   const monthly = sliderToMonthly(+document.getElementById('slider-monthly').value);
   const annualRaise = +document.getElementById('slider-raise').value / 100;
-  // A real uploaded transaction history (js/transactions.js) overrides the
-  // Initial Investment slider with its own first (earliest) transaction, and
-  // hands every engine its own real contribution schedule below instead of
-  // the monthly/annualRaise formula. `monthly`/`annualRaise` stay as read —
-  // harmless once `contribSchedule` is passed, since every engine prefers
-  // opts.schedule over recomputing its own formula-based one.
-  if (window._txSchedule) initial = window._txSchedule.initial;
-  const contribSchedule = window._txSchedule ? window._txSchedule.schedule : undefined;
+  // (When a real transaction history is active, `initial` and the schedule
+  // are overridden BELOW, once entryDateForSim is known — the effective view
+  // depends on where the user put the entry.)
+  let contribSchedule = undefined;
   // `rate` is the Invested Compounded baseline rate (the slider in that
   // sidebar). 9sig and SMA each have their own parked-cash rate now.
   const rate = sliderToRate(+document.getElementById('slider-rate').value) / 100;
@@ -1729,6 +1769,23 @@ function render() {
   if (entryOverride && exitOverride && entryOverride >= exitOverride) { entryOverride = ''; exitOverride = ''; }
   const entryDateForSim = entryOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]);
   const exitDateForSim  = exitOverride  || (quarterlyData[exitIdx]    && quarterlyData[exitIdx][0]);
+  // A real uploaded transaction history, re-derived for THIS entry date
+  // (js/transactions.js's txEffectiveForEntry): entry before the first
+  // transaction → $0 start with every transaction as a dated flow; entry
+  // mid-history → the portfolio's actual value at the cutoff (or the
+  // Invested-Compounded balance when no actual column) becomes the initial
+  // lump and only later transactions remain as flows. The underlying data
+  // never changes. Stashed on window so appendActualPortfolioDataset (the
+  // "My portfolio" line) reads the SAME view this render simulated with.
+  window._txEffective = null;
+  if (window._txSchedule && typeof txEffectiveForEntry === 'function') {
+    const eff = txEffectiveForEntry(window._txSchedule, entryDateForSim, rate);
+    if (eff) {
+      initial = eff.initial;
+      contribSchedule = eff.schedule;
+      window._txEffective = eff;
+    }
+  }
   // Day-over-day change badge (endLabelPlugin) only makes sense when the chart
   // is actually showing the most recent data — a historical exit date has no
   // "since yesterday" to speak of. prevTradingDayDate stays null (and the
@@ -2702,7 +2759,9 @@ function render() {
         let py = basePy;
         for (let k = 1; k <= 24 && clashes(py); k++) {
           const half = Math.ceil(k / 2) * MIN;
-          const cand = basePy + (k % 2 ? half : -half); // +MIN, −MIN, +2MIN, −2MIN…
+          // Upward first — the displaced marker is the newer one (date-order
+          // draw), and newer should stack above older, not under it.
+          const cand = basePy + (k % 2 ? -half : half); // −MIN, +MIN, −2MIN, +2MIN…
           if (cand < area.top + 5 || cand > area.bottom - 5) continue; // stay on-plot
           if (!clashes(cand)) { py = cand; break; }
         }
@@ -2710,14 +2769,18 @@ function render() {
         // same-date, same-action (EXIT) legs on the chart, and it matches the
         // table row's data-mkey so row hover can highlight this exact marker.
         const key = String(li);
-        if (key === hoveredKey) hovered = { px, py, st }; // defer — draw on top below
-        else drawSmaMarker(cx, px, py, st, false);
-        _smaMarkers.push({ x: px, y: py, ev, st, ulName, key, i: li });
+        // Outline colored by the asset this trade is about (buy → what was
+        // bought, sell → what was sold) — see ASSET_STROKE.
+        const isSell = ev.action === 'EXIT' || ev.action === 'BG-GTFO';
+        const stroke = assetStrokeFor(markerAssetFor(log, li, isSell));
+        if (key === hoveredKey) hovered = { px, py, st, stroke }; // defer — draw on top below
+        else drawSmaMarker(cx, px, py, st, false, stroke);
+        _smaMarkers.push({ x: px, y: py, ev, st, ulName, key, i: li, stroke });
         placed.push({ x: px, y: py });
       }
       // The highlighted marker draws last (over any overlapping neighbours) and
-      // enlarged with a white outline so it clearly stands out of a cluster.
-      if (hovered) drawSmaMarker(cx, hovered.px, hovered.py, hovered.st, true);
+      // enlarged so it clearly stands out of a cluster.
+      if (hovered) drawSmaMarker(cx, hovered.px, hovered.py, hovered.st, true, hovered.stroke);
       cx.restore();
     }
   };
@@ -2769,12 +2832,14 @@ function render() {
         if (!(basePy >= area.top - 2 && basePy <= area.bottom + 2)) continue;
         const py = spreadMarkerY(placed, px, basePy, area);
         const key = String(ev.i);
-        if (key === hoveredKey) hovered = { px, py, st: ev.st };
-        else drawSmaMarker(cx, px, py, ev.st, false);
-        _smaMarkers.push({ x: px, y: py, st: ev.st, key, i: ev.i, row: ev.row, kind: 'custom' });
+        const isSell = customActionKind(ev.row.action) === 'sell';
+        const stroke = assetStrokeFor(markerAssetFor(log, ev.i, isSell));
+        if (key === hoveredKey) hovered = { px, py, st: ev.st, stroke };
+        else drawSmaMarker(cx, px, py, ev.st, false, stroke);
+        _smaMarkers.push({ x: px, y: py, st: ev.st, key, i: ev.i, row: ev.row, kind: 'custom', stroke });
         placed.push({ x: px, y: py });
       }
-      if (hovered) drawSmaMarker(cx, hovered.px, hovered.py, hovered.st, true);
+      if (hovered) drawSmaMarker(cx, hovered.px, hovered.py, hovered.st, true, hovered.stroke);
       cx.restore();
     }
   };

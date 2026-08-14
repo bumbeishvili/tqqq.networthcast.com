@@ -425,14 +425,14 @@ if (inflPill) inflPill.addEventListener('click', () => {
   function getMax() { return maxVal; }
   function setMax(v) { maxVal = v; updateUI(); }
 
-  // A real uploaded transaction history (js/transactions.js) pins the entry
-  // date to the first transaction and hands every engine that exact date —
-  // dragging the entry thumb away from it would silently desync the chart
-  // from the real schedule (the initial deposit amount and every dated
-  // contribution still assume that fixed start). So the entry side is locked
-  // while a schedule is active; the exit thumb stays fully free, same as
-  // today (exit isn't tied to the transaction data).
-  function entryLocked() { return !!window._txSchedule; }
+  // The entry thumb used to be LOCKED while a real transaction history was
+  // active (the schedule assumed its fixed first-transaction start). The
+  // schedule is now re-derived for whatever entry the user picks
+  // (js/transactions.js's txEffectiveForEntry: earlier entry → $0 start with
+  // transactions landing later; mid-history entry → the portfolio's actual
+  // value at the cutoff becomes the initial lump), so the entry side is free
+  // again. Kept as a function in case a future mode needs to re-lock it.
+  function entryLocked() { return false; }
 
   // The quarter axis is warped so recent quarters get more of the track. Same
   // idea as the monthly-contribution slider's log mapping, just anchored at the

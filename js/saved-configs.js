@@ -508,7 +508,10 @@ log makes a useless table: fill in everything that applies, because each key bec
   value       : TOTAL portfolio value that day = cash + market value of every holding (positive)
   action      : what happened — use the exact vocabulary below, the app keys off it
   note        : free-text detail for the row, e.g. "price 62% over median" or "3 of 5 slices"
-  held        : what you own right after this row, uppercase — "TQQQ", "SPY", "CASH", or "TQQQ+CASH"
+  held        : what you own right after this row, uppercase — "TQQQ", "SPY", "CASH", or "TQQQ+CASH".
+                Fill it on EVERY row: the app also colors each trade marker's outline by this
+                asset (buys by what was bought, sells by what was previously held), so a
+                missing/wrong held makes the chart's markers unreadable.
   price       : close price of the asset in "held" that day (0 / omit on cash rows)
   shares      : share count of that asset after the trade
   holdingsValue : dollar value of everything you hold that isn't cash
@@ -1576,8 +1579,12 @@ const TX_ACTUAL_COLOR = '#0d9488'; // mirrored by styles.css's .tx-actual-dot
 function appendActualPortfolioDataset(chart, ctx) {
   window._actualMetrics = null;
   const s = window._txSchedule;
-  if (!s || !s.actualPoints || !s.actualPoints.length || s.showActual === false) return;
-  const pts = s.actualPoints;
+  // The ENTRY-AWARE view (js/chart.js stashes window._txEffective each
+  // render): a mid-history entry re-anchors the line at the cutoff lump and
+  // drops earlier readings/flows. Falls back to the raw state when absent.
+  const eff = window._txEffective || s;
+  if (!s || !eff || !eff.actualPoints || !eff.actualPoints.length || s.showActual === false) return;
+  const pts = eff.actualPoints;
   // Forward-fill via resampleByDate, but null out labels BEFORE the first
   // real reading — back-filling would draw a flat line through history the
   // account didn't exist in. After the last reading the forward-fill stands:
@@ -1590,8 +1597,8 @@ function appendActualPortfolioDataset(chart, ctx) {
   // FLOW-ADJUSTED drawdown (js/utils.js computeFlowAdjustedDrawdown) — a
   // naive peak-to-trough on raw balances counted a big withdrawal as a
   // "drawdown" (the initial version showed -70% where the real market DD was
-  // far less). Flows = the initial lump + every later transaction.
-  const flows = [{ date: s.entryDate, amount: s.initial }, ...s.schedule.list];
+  // far less). Flows = the (entry-aware) initial lump + every later flow.
+  const flows = [{ date: eff.entryDate || s.entryDate, amount: eff.initial }, ...eff.schedule.list];
   const dd = (typeof computeFlowAdjustedDrawdown === 'function')
     ? computeFlowAdjustedDrawdown(pts, flows)
     : { pct: 0, peakDate: null, troughDate: null };

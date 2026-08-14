@@ -79,15 +79,21 @@
     if (entryOverride && exitOverride && entryOverride >= exitOverride) { entryOverride = ''; exitOverride = ''; }
     // A real uploaded transaction history (js/transactions.js) overrides the
     // Initial Investment slider and hands every preview its own real
-    // contribution schedule — mirrors render()'s same override in chart.js,
-    // so a bar preview never reads a different "initial"/contribution reality
+    // contribution schedule — mirrors render()'s same override in chart.js
+    // (including the entry-aware re-derivation via txEffectiveForEntry), so
+    // a bar preview never reads a different "initial"/contribution reality
     // than what the main line is actually showing.
-    const txActive = !!window._txSchedule;
+    const _entryDateForSim = entryOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]) || null;
+    let txEff = null;
+    if (window._txSchedule && typeof txEffectiveForEntry === 'function') {
+      const _rate = (typeof sliderToRate === 'function' ? sliderToRate(+document.getElementById('slider-rate').value) : 0) / 100;
+      txEff = txEffectiveForEntry(window._txSchedule, _entryDateForSim, _rate);
+    }
     return {
-      initial:     txActive ? window._txSchedule.initial : sliderToInitial(+document.getElementById('slider-initial').value),
+      initial:     txEff ? txEff.initial : sliderToInitial(+document.getElementById('slider-initial').value),
       monthly:     sliderToMonthly(+document.getElementById('slider-monthly').value),
       annualRaise: +document.getElementById('slider-raise').value / 100,
-      schedule:    txActive ? window._txSchedule.schedule : undefined,
+      schedule:    txEff ? txEff.schedule : undefined,
       simEntryIdx,
       exitIdx,
       entryDateOverride: entryOverride || (quarterlyData[simEntryIdx] && quarterlyData[simEntryIdx][0]) || null,
