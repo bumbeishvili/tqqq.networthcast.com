@@ -195,23 +195,6 @@ function _analyticsYearSpan() {
   return { minYear, maxYear, span: maxYear - minYear };
 }
 
-// Position/size the highlighted span between the two year-range handles.
-// Native <input type=range> has no selected-range styling of its own, so this
-// is a plain absolutely-positioned bar driven off the same min/max the thumbs
-// already show — kept in a helper since both the picker refresh and the drag
-// handler need to repaint it.
-function _updateYearRangeFill(minInput, maxInput) {
-  const fill = document.getElementById('analytics-year-range-fill');
-  if (!fill) return;
-  const trackMin = +minInput.min, trackMax = +minInput.max;
-  const span = trackMax - trackMin;
-  if (!(span > 0)) { fill.style.left = '0%'; fill.style.width = '0%'; return; }
-  const loPct = (+minInput.value - trackMin) / span * 100;
-  const hiPct = (+maxInput.value - trackMin) / span * 100;
-  fill.style.left = loPct + '%';
-  fill.style.width = (hiPct - loPct) + '%';
-}
-
 const BASELINE_LABELS = {
   'compounded':  'Compounded Cash',
   'bh-spy':      'B&H SPY',
@@ -284,7 +267,14 @@ function refreshAnalyticsPickers() {
   const configs = (typeof getSavedConfigs === 'function') ? getSavedConfigs() : [];
   const visibleBuiltins = _visibleBuiltinStrategies();
   const mkOpt = (val, label, selectedVal) => `<option value="${escA(val)}"${val === selectedVal ? ' selected' : ''}>${escA(label)}</option>`;
-  const builtinGroup = (selVal) => `<optgroup label="Strategies">${visibleBuiltins.map(([v, l]) => mkOpt(v, l, selVal)).join('')}</optgroup>`;
+  // The B&H "Buys" pill can point a picker at any 'bh-*' variant, not just the
+  // sidebar's ticker — include the selected variant so the picker still shows it.
+  const isBhKey = (k) => typeof k === 'string' && k.indexOf('bh-') === 0 && !!STRATEGY_REGISTRY[k];
+  const builtinGroup = (selVal) => {
+    const list = visibleBuiltins.slice();
+    if (isBhKey(selVal) && !list.some(([k]) => k === selVal)) list.push([selVal, analyticsKeyLabel(selVal)]);
+    return `<optgroup label="Strategies">${list.map(([v, l]) => mkOpt(v, l, selVal)).join('')}</optgroup>`;
+  };
   const savedGroup = (selVal) => configs.length ? `<optgroup label="Saved">${configs.map(c => mkOpt(CFG_KEY_PREFIX + c.id, c.name, selVal)).join('')}</optgroup>` : '';
 
   // ----- "Visualize <X>" — the strategy the grid plots -----
@@ -292,7 +282,7 @@ function refreshAnalyticsPickers() {
   if (stratSel) {
     // Resolve the current strategy to something that exists in the list.
     const exists = isCfgKey(analyticsStrategy) ? !!cfgFromKey(analyticsStrategy)
-                                               : visibleBuiltins.some(([k]) => k === analyticsStrategy);
+                                               : visibleBuiltins.some(([k]) => k === analyticsStrategy) || isBhKey(analyticsStrategy);
     if (!exists) analyticsStrategy = (visibleBuiltins[0] && visibleBuiltins[0][0]) || (configs[0] ? CFG_KEY_PREFIX + configs[0].id : '9sig');
     stratSel.innerHTML = builtinGroup(analyticsStrategy) + savedGroup(analyticsStrategy);
     stratSel.value = analyticsStrategy;
@@ -310,23 +300,8 @@ function refreshAnalyticsPickers() {
     baseSel.value = analyticsBaseline;
   }
 
-  // ----- ", for start years <min>–<max>" — filters which start-year rows the grid draws -----
-  const minInput = document.getElementById('analytics-year-min-input');
-  const maxInput = document.getElementById('analytics-year-max-input');
-  const rangeDisplay = document.getElementById('analytics-year-range-display');
-  const yearSpan = _analyticsYearSpan();
-  if (minInput && maxInput && yearSpan && yearSpan.span >= 1) {
-    if (analyticsYearMin != null && analyticsYearMin < yearSpan.minYear) analyticsYearMin = yearSpan.minYear;
-    if (analyticsYearMax != null && analyticsYearMax > yearSpan.maxYear) analyticsYearMax = yearSpan.maxYear;
-    const lo = analyticsYearMin != null ? analyticsYearMin : yearSpan.minYear;
-    const hi = analyticsYearMax != null ? analyticsYearMax : yearSpan.maxYear;
-    minInput.min = maxInput.min = String(yearSpan.minYear);
-    minInput.max = maxInput.max = String(yearSpan.maxYear);
-    minInput.value = String(lo);
-    maxInput.value = String(hi);
-    if (rangeDisplay) rangeDisplay.textContent = lo + '–' + hi;
-    _updateYearRangeFill(minInput, maxInput);
-  }
+  // (The ", for start years" range slider was removed — the grid always
+  // draws every start-year row; analyticsYearMin/Max stay null.)
 }
 
 // Default the two pickers to whatever is actually on the main chart right
@@ -655,6 +630,19 @@ document.addEventListener('change', (e) => {
   if (!cfg) return;
   cfg.params = cfg.params || {};
   cfg.params[sel.dataset.paramId] = sel.value;
+  // While this config is OPEN FOR EDITING in the sidebar, render() runs
+  // syncEditingConfig(), which captures the SIDEBAR's control values back
+  // over cfg.params — silently reverting the edit just made here (the grid
+  // "worked once then stopped reacting": it reacted only until the config
+  // entered editing mode). Mirror the new value into the sidebar control so
+  // the sync captures the same value instead of the stale one.
+  // Custom configs are exempt: syncEditingConfig() skips them, and their param
+  // ids are schema-defined names, not page element ids — a name that happened
+  // to match some unrelated DOM id would clobber that control.
+  if (cfg.type !== 'custom' && typeof window !== 'undefined' && window._editingConfigId === cfg.id) {
+    const pageEl = document.getElementById(sel.dataset.paramId);
+    if (pageEl) pageEl.value = sel.value;
+  }
   if (typeof persistSavedConfigs === 'function') persistSavedConfigs();
   if (typeof render === 'function') render();
   buildHeatmap();
@@ -725,31 +713,6 @@ document.addEventListener('input', (e) => {
 });
 
 // Year-range dual slider: filters which start-year ROWS the grid draws to
-// [min, max]. Two overlapping native inputs (see .period-dual-range in
-// styles.css) — each handler pushes the other input past it rather than
-// letting them cross, so the range never inverts. Filtering rows (not period
-// columns) is what makes the grid visibly react to every drag — a period-length
-// filter left whole rows empty whenever a recent start year hadn't lived long
-// enough yet to reach the selected holding length.
-document.addEventListener('input', (e) => {
-  const isMin = e.target && e.target.id === 'analytics-year-min-input';
-  const isMax = e.target && e.target.id === 'analytics-year-max-input';
-  if (!isMin && !isMax) return;
-  const minInput = document.getElementById('analytics-year-min-input');
-  const maxInput = document.getElementById('analytics-year-max-input');
-  let lo = parseInt(minInput.value, 10), hi = parseInt(maxInput.value, 10);
-  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return;
-  if (isMin && lo > hi) { hi = lo; maxInput.value = String(hi); }
-  if (isMax && hi < lo) { lo = hi; minInput.value = String(lo); }
-  const yearSpan = _analyticsYearSpan();
-  analyticsYearMin = (yearSpan && lo <= yearSpan.minYear) ? null : lo;
-  analyticsYearMax = (yearSpan && hi >= yearSpan.maxYear) ? null : hi;
-  const display = document.getElementById('analytics-year-range-display');
-  if (display) display.textContent = lo + '–' + hi;
-  _updateYearRangeFill(minInput, maxInput);
-  buildHeatmap();
-});
-
 // Metric dropdowns inside the modal — change feeds back to the underlying
 // page slider/select, dispatches the appropriate event so the main chart
 // updates and localStorage saves, then rebuilds the heatmap.
@@ -767,6 +730,20 @@ document.addEventListener('change', (e) => {
     el.value = String(val);
     el.dispatchEvent(new Event('change', { bubbles: true }));
   };
+  // B&H "Buys" pill: the underlying IS the analytics key ('bh-tqqq' →
+  // 'bh-qqq'), so the pill switches only ITS OWN side's key — strategy and
+  // comparison can hold different B&H tickers (B&H QQQ vs B&H SQQQ). The
+  // sidebar select is deliberately left alone: the grid reads each 'bh-*'
+  // key's own price column, so exploring an underlying here needn't touch
+  // the main chart's B&H line.
+  if (key === 'bu') {
+    const nk = 'bh-' + String(rawValue).toLowerCase();
+    if (e.target.dataset.side === 'baseline') analyticsBaseline = nk;
+    else analyticsStrategy = nk;
+    refreshAnalyticsPickers();
+    buildHeatmap();
+    return;
+  }
   // Strategy-specific pills (tu/td/tw/sa/sw/...) dispatch through the def map.
   const def = STRATEGY_METRIC_DEFS[key];
   if (def) {
@@ -1188,6 +1165,8 @@ const METRIC_OPTS = {
   nh:      [0, 10, 20, 30, 40, 50, 60, 70, 80, 90],
   // SMA: which leveraged ETF the strategy holds when the signal is "in".
   su:      ['tqqq', 'qld', 'sso', 'spxl', 'qqq', 'spy', 'sqqq'],
+  // Buy & Hold: which ETF is bought and held.
+  bu:      ['tqqq', 'qld', 'qqq', 'spy', 'sso', 'spxl', 'sqqq'],
   // Per-strategy parked-cash interest rates (% per year).
   nr:      [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 16, 18, 20],
   scr:     [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 16, 18, 20],
@@ -1225,6 +1204,7 @@ const STRATEGY_METRIC_DEFS = {
   nr: { label: 'Cash rate',  elementId: 'select-9sig-cashrate',  fmt: x => `${x.toFixed(1)}%`,            kind: 'number' },
   nbp:{ label: 'Buy power',  elementId: 'select-9sig-buypower',  fmt: x => `${x}%`,                       kind: 'number' },
   npa:{ label: 'Park as',    elementId: 'select-9sig-park-asset', fmt: v => String(v).toUpperCase(),       kind: 'string' },
+  bu: { label: 'Buys',       elementId: 'select-bh-underlying',  fmt: v => String(v).toUpperCase(),       kind: 'string' },
 };
 
 // Which metric keys each strategy exposes in the analytics settings bar.
@@ -1233,9 +1213,11 @@ const STRATEGY_METRIC_DEFS = {
 const STRATEGY_METRICS = {
   '9sig': ['nu', 'ng', 'np', 'nh', 'nr', 'nc', 'ncw', 'ns', 'nbp', 'npa'],
   'sma':  ['su', 'sa', 'sw', 'scr', 'seb', 'sxb', 'sro', 'src', 'soa', 'sdi', 'sdo', 'sbg', 'sbga'],
+  // All 'bh-*' keys share this entry (builtinParamPillsHtml normalizes the key).
+  'bh':   ['bu'],
 };
 
-function metricSelect(key, label, current, fmt, dim) {
+function metricSelect(key, label, current, fmt, dim, extraAttrs) {
   const def = STRATEGY_METRIC_DEFS[key];
   const isString = def && def.kind === 'string';
   const base = METRIC_OPTS[key].slice();
@@ -1246,7 +1228,7 @@ function metricSelect(key, label, current, fmt, dim) {
     `<option value="${v}"${current != null && same(v, current) ? ' selected' : ''}>${fmt(v)}</option>`
   ).join('');
   const cls = dim ? 'metric metric--dim' : 'metric';
-  return `<span class="${cls}" title="${dim ? 'Not currently affecting the result' : ''}">${label} <select class="metric-select" data-metric-key="${key}">${optionsHtml}</select></span>`;
+  return `<span class="${cls}" title="${dim ? 'Not currently affecting the result' : ''}">${label} <select class="metric-select" data-metric-key="${key}"${extraAttrs || ''}>${optionsHtml}</select></span>`;
 }
 
 // Reverse map: a config-param <select> id → its metric key (for label + options).
@@ -1258,13 +1240,22 @@ const ELEMENT_ID_TO_METRIC = (() => {
 
 // Parameter dropdowns for a BUILT-IN strategy — the existing sidebar-backed
 // metric pills (editing them drives the page selects, like before).
-function builtinParamPillsHtml(key) {
-  return (STRATEGY_METRICS[key] || []).map(k => {
+function builtinParamPillsHtml(key, side) {
+  // Buy & Hold keys carry the underlying ('bh-tqqq', 'bh-qqq', …) — they all
+  // expose the same single pill, so look them up under the shared 'bh' entry.
+  const metricsKey = key.indexOf('bh-') === 0 ? 'bh' : key;
+  return (STRATEGY_METRICS[metricsKey] || []).map(k => {
     const def = STRATEGY_METRIC_DEFS[k];
     const el = def && document.getElementById(def.elementId);
     if (!el) return '';
-    const cur = def.kind === 'string' ? el.value : +el.value;
-    return metricSelect(k, def.label, cur, def.fmt, false);
+    // The B&H underlying lives in the analytics key, so show the key's value,
+    // not the sidebar's — and stamp which side of the sentence the pill sits
+    // on, so its change handler moves only that side's key (letting strategy
+    // and comparison hold two different B&H tickers).
+    const cur = k === 'bu' ? key.slice(3)
+      : def.kind === 'string' ? el.value : +el.value;
+    const attrs = k === 'bu' ? ` data-side="${side || 'strategy'}"` : '';
+    return metricSelect(k, def.label, cur, def.fmt, false, attrs);
   }).join('');
 }
 
@@ -1272,10 +1263,39 @@ function builtinParamPillsHtml(key) {
 // (not the sidebar). Options are cloned from the matching sidebar <select> so
 // each dropdown offers exactly the same choices the sidebar would. Editing one
 // updates cfg.params (see the .cfg-metric-select change handler). Custom-code
-// strategies expose their knobs through the sandbox, not here.
+// strategies build theirs from the schema their code declares — the same one
+// the sidebar's bar-preview dropdowns use.
 function cfgParamPillsHtml(cfg) {
   if (!cfg) return '';
-  if (cfg.type === 'custom') return '<span class="ap-none">custom code</span>';
+  if (cfg.type === 'custom') {
+    // Schema arrives from the sandbox worker after the strategy's first run;
+    // until then there's nothing to render and the bar shows "no parameters".
+    const schema = (typeof getCustomSchema === 'function') ? getCustomSchema(cfg) : [];
+    return schema.map(sp => {
+      if (!sp || sp.id == null) return '';
+      const cur = customParamValue(cfg, sp);
+      const opts = customParamOptions(sp).map(o =>
+        `<option value="${escA(o.value)}"${String(o.value) === String(cur) ? ' selected' : ''}>${escA(o.label)}</option>`
+      ).join('');
+      return `<span class="metric">${escA(sp.label || sp.id)} <select class="metric-select cfg-metric-select" data-cfg-id="${escA(cfg.id)}" data-param-id="${escA(sp.id)}">${opts}</select></span>`;
+    }).join('');
+  }
+  if (cfg.type === 'invested') {
+    // Its one param is the cash interest rate, stored as a POSITION on the
+    // page's rate slider (consumers decode it with sliderToRate). The pill
+    // shows the canonical percent list; option VALUES are slider positions so
+    // the shared cfg-metric-select handler can store them verbatim.
+    const stored = (cfg.params && 'slider-rate' in cfg.params) ? +cfg.params['slider-rate']
+      : +((document.getElementById('slider-rate') || {}).value || 0);
+    const curPct = (typeof sliderToRate === 'function') ? sliderToRate(stored) : 0;
+    const pcts = METRIC_OPTS.rate.slice();
+    if (!pcts.some(p => Math.abs(p - curPct) < 1e-9)) { pcts.push(curPct); pcts.sort((a, b) => a - b); }
+    const fmtPct = (x) => (x % 1 === 0 ? x.toFixed(0) : x.toFixed(1)) + '%';
+    const opts = pcts.map(p =>
+      `<option value="${rateToSlider(p)}"${Math.abs(p - curPct) < 1e-9 ? ' selected' : ''}>${fmtPct(p)}</option>`
+    ).join('');
+    return `<span class="metric">Cash interest rate <select class="metric-select cfg-metric-select" data-cfg-id="${escA(cfg.id)}" data-param-id="slider-rate">${opts}</select></span>`;
+  }
   const ids = (typeof CONFIG_PARAM_IDS !== 'undefined' && CONFIG_PARAM_IDS[cfg.type]) || [];
   const out = [];
   for (const elementId of ids) {
@@ -1293,8 +1313,9 @@ function cfgParamPillsHtml(cfg) {
 }
 
 // Parameter dropdowns for either side of the sentence (built-in or saved).
-function strategyParamPillsHtml(key) {
-  return isCfgKey(key) ? cfgParamPillsHtml(cfgFromKey(key)) : builtinParamPillsHtml(key);
+// side: 'strategy' | 'baseline' — which sentence slot the pills belong to.
+function strategyParamPillsHtml(key, side) {
+  return isCfgKey(key) ? cfgParamPillsHtml(cfgFromKey(key)) : builtinParamPillsHtml(key, side);
 }
 
 // A bare value-dropdown for the investment clause of the sentence ("…the entry
@@ -1325,7 +1346,7 @@ function renderAnalyticsMetrics(initial, monthly, annualRaise, rate, strategy) {
 
   // First strategy's own parameters. (Global investment inputs — Initial /
   // Monthly / Annual raise — live in the sidebar; they're not repeated here.)
-  const stratParams = strategyParamPillsHtml(strategy);
+  const stratParams = strategyParamPillsHtml(strategy, 'strategy');
 
   // Comparison's parameters: a real strategy's knobs, the Compounded-Cash rate,
   // or nothing for the Custom Target/Growth baselines (those edit inline in the
@@ -1333,7 +1354,7 @@ function renderAnalyticsMetrics(initial, monthly, annualRaise, rate, strategy) {
   let compParams = '';
   if (analyticsBaseline === 'compounded') compParams = metricSelect('rate', 'Cash interest rate', rate * 100, pct, dimRate);
   else if (analyticsBaseline === 'custom' || analyticsBaseline === 'custom-pct') compParams = '';
-  else compParams = strategyParamPillsHtml(analyticsBaseline);
+  else compParams = strategyParamPillsHtml(analyticsBaseline, 'baseline');
 
   const sName = escA(analyticsKeyLabel(strategy));
   const cName = escA(analyticsKeyLabel(analyticsBaseline));

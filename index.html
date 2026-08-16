@@ -33,13 +33,16 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=294">
+<link rel="stylesheet" href="styles.css?v=299">
 </head>
 <body>
 
 <div class="header">
   <h1>Strategies Simulator</h1>
-  <p id="data-through" hidden><a href="https://tqqq.networthcast.com/data/" target="_blank" rel="noopener">Data</a> last fetched <span id="data-fetched-at"></span></p>
+  <!-- Links to the repo's README on GitHub, not tqqq.networthcast.com/data/ —
+       that path only existed while Jekyll rendered data/README.md into a page,
+       and .nojekyll (added to skip the pointless build step) removed it. -->
+  <p id="data-through" hidden><a href="https://github.com/bumbeishvili/tqqq.networthcast.com/blob/main/data/README.md" target="_blank" rel="noopener">Data</a> last fetched <span id="data-fetched-at"></span></p>
   <div class="header-actions">
     <a href="https://github.com/bumbeishvili/tqqq.networthcast.com" target="_blank" rel="noopener" class="github-link" id="github-link" title="View source on GitHub" aria-label="View source on GitHub">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.73.5.5 5.73.5 12c0 5.08 3.29 9.39 7.86 10.91.57.1.78-.25.78-.55 0-.27-.01-1.16-.02-2.11-3.2.7-3.88-1.36-3.88-1.36-.52-1.33-1.28-1.68-1.28-1.68-1.04-.71.08-.7.08-.7 1.16.08 1.76 1.19 1.76 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.56-.29-5.25-1.28-5.25-5.7 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11.05 11.05 0 0 1 5.8 0c2.2-1.49 3.18-1.18 3.18-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.43-2.7 5.4-5.27 5.69.41.36.78 1.06.78 2.14 0 1.55-.01 2.79-.01 3.17 0 .3.2.66.79.55A10.52 10.52 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z"/></svg>
@@ -230,13 +233,7 @@
               <span id="analytics-monthly-slot" class="as-slot"></span>
               <span class="as-text">increasing yearly by</span>
               <span id="analytics-raise-slot" class="as-slot"></span>
-              <span class="as-text">, for start years</span>
-              <span class="period-dual-range" id="analytics-year-range">
-                <span class="period-dual-range-fill" id="analytics-year-range-fill"></span>
-                <input type="range" id="analytics-year-min-input" min="2000" max="2026" step="1" value="2000">
-                <input type="range" id="analytics-year-max-input" min="2000" max="2026" step="1" value="2026">
-              </span>
-              <span id="analytics-year-range-display" class="analytics-baseline-pct-display">2000&ndash;2026</span>
+
             </div>
             <div class="analytics-chart-actions">
               <button type="button" class="modal-close" onclick="toggleAnalytics()" aria-label="Close">×</button>
@@ -1325,20 +1322,20 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=294"></script>
-<script src="js/utils.js?v=294"></script>
-<script src="js/simulate.js?v=294"></script>
-<script src="js/metrics.js?v=294"></script>
-<script src="js/chart.js?v=294"></script>
-<script src="js/controls.js?v=294"></script>
-<script src="js/date-picker.js?v=294"></script>
-<script src="js/transactions.js?v=294"></script>
-<script src="js/analytics.js?v=294"></script>
-<script src="js/preview-dropdown.js?v=294"></script>
-<script src="js/saved-configs.js?v=294"></script>
-<script src="js/strategy-library-code.js?v=294"></script>
-<script src="js/strategy-library.js?v=294"></script>
-<script src="js/init.js?v=294"></script>
+<script src="js/data.js?v=299"></script>
+<script src="js/utils.js?v=299"></script>
+<script src="js/simulate.js?v=299"></script>
+<script src="js/metrics.js?v=299"></script>
+<script src="js/chart.js?v=299"></script>
+<script src="js/controls.js?v=299"></script>
+<script src="js/date-picker.js?v=299"></script>
+<script src="js/transactions.js?v=299"></script>
+<script src="js/analytics.js?v=299"></script>
+<script src="js/preview-dropdown.js?v=299"></script>
+<script src="js/saved-configs.js?v=299"></script>
+<script src="js/strategy-library-code.js?v=299"></script>
+<script src="js/strategy-library.js?v=299"></script>
+<script src="js/init.js?v=299"></script>
 
 </body>
 </html>

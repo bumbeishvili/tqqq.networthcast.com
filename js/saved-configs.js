@@ -1146,6 +1146,18 @@ function onCustomWorkerMessage(e) {
   window._customSchemas[pend.cfgId] = msg.schema || [];
   window._customColumns[pend.cfgId] = msg.columns || null;
   window._customSignals[pend.cfgId] = msg.signals || null;
+  // Adopt the name the strategy's own code declares (`name: "…"`) — but only
+  // while the config still wears its auto-generated "Custom strategy" placeholder,
+  // so a name the user typed themselves is never overwritten.
+  const namedCfg = savedConfigs.find(c => c.id === pend.cfgId);
+  if (namedCfg && msg.name && /^Custom strategy( \(\d+\))?$/.test(namedCfg.name)) {
+    const trimmed = String(msg.name).replace(/\s+/g, ' ').trim();
+    if (trimmed) {
+      namedCfg.name = uniqueName(trimmed, namedCfg.id);
+      persistSavedConfigs();
+      if (window._editingConfigId === namedCfg.id && typeof setPanelTitle === 'function') setPanelTitle(namedCfg.name);
+    }
+  }
   if (typeof render === 'function') render(); // now a cache hit → no new run
 }
 

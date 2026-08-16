@@ -1388,8 +1388,13 @@
   }
   .analytics-baseline-custom[hidden] { display: none; }
 
-  .analytics-baseline-pct-slider {
-    width: 130px;
+  /* input[type="range"] (element+attribute) outranks a lone class — the
+     global width:100% rule was silently winning and stretching this slider
+     across the whole sentence row. Match its specificity and cap the width. */
+  input[type="range"].analytics-baseline-pct-slider {
+    width: 200px;
+    max-width: 200px;
+    vertical-align: middle;
     height: 22px;
     -webkit-appearance: none;
     appearance: none;
@@ -3921,6 +3926,9 @@
   #marker-tooltip .mt-ico { opacity: 0.7; flex-shrink: 0; }
   #marker-tooltip .mt-row b { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--text); }
   #marker-tooltip .mt-strong b { font-size: 13px; font-weight: 700; }
+  /* Strategy note line under the rows ("dd 10.8% → tier 5% · …") — without
+     this it renders flush against the tooltip's bottom edge. */
+  #marker-tooltip .mt-note { padding: 0 12px 10px; }
 
   /* Live signal-metrics dashboard inside the SMA strategy panel. */
   .signal-metrics { font-size: 12px; margin-top: 2px; }
