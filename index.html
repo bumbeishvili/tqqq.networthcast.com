@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=299">
+<link rel="stylesheet" href="styles.css?v=300">
 </head>
 <body>
 
@@ -233,7 +233,16 @@
               <span id="analytics-monthly-slot" class="as-slot"></span>
               <span class="as-text">increasing yearly by</span>
               <span id="analytics-raise-slot" class="as-slot"></span>
-
+              <!-- Start-year row filter. Hidden in Custom Growth (% per year)
+                   mode — the spiral has no start-year rows and the percent
+                   slider needs the sentence space. -->
+              <span class="as-text" id="analytics-year-range-label">, for start years</span>
+              <span class="period-dual-range" id="analytics-year-range">
+                <span class="period-dual-range-fill" id="analytics-year-range-fill"></span>
+                <input type="range" id="analytics-year-min-input" min="2000" max="2026" step="1" value="2000">
+                <input type="range" id="analytics-year-max-input" min="2000" max="2026" step="1" value="2026">
+              </span>
+              <span id="analytics-year-range-display" class="analytics-baseline-pct-display">2000&ndash;2026</span>
             </div>
             <div class="analytics-chart-actions">
               <button type="button" class="modal-close" onclick="toggleAnalytics()" aria-label="Close">×</button>
@@ -1322,20 +1331,20 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=299"></script>
-<script src="js/utils.js?v=299"></script>
-<script src="js/simulate.js?v=299"></script>
-<script src="js/metrics.js?v=299"></script>
-<script src="js/chart.js?v=299"></script>
-<script src="js/controls.js?v=299"></script>
-<script src="js/date-picker.js?v=299"></script>
-<script src="js/transactions.js?v=299"></script>
-<script src="js/analytics.js?v=299"></script>
-<script src="js/preview-dropdown.js?v=299"></script>
-<script src="js/saved-configs.js?v=299"></script>
-<script src="js/strategy-library-code.js?v=299"></script>
-<script src="js/strategy-library.js?v=299"></script>
-<script src="js/init.js?v=299"></script>
+<script src="js/data.js?v=300"></script>
+<script src="js/utils.js?v=300"></script>
+<script src="js/simulate.js?v=300"></script>
+<script src="js/metrics.js?v=300"></script>
+<script src="js/chart.js?v=300"></script>
+<script src="js/controls.js?v=300"></script>
+<script src="js/date-picker.js?v=300"></script>
+<script src="js/transactions.js?v=300"></script>
+<script src="js/analytics.js?v=300"></script>
+<script src="js/preview-dropdown.js?v=300"></script>
+<script src="js/saved-configs.js?v=300"></script>
+<script src="js/strategy-library-code.js?v=300"></script>
+<script src="js/strategy-library.js?v=300"></script>
+<script src="js/init.js?v=300"></script>
 
 </body>
 </html>

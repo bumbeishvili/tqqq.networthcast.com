@@ -845,6 +845,12 @@ async function shareConfig() {
       }
     }
   }
+  if (typeof analyticsYearMin !== 'undefined' && analyticsYearMin != null) {
+    params.set('anp', String(analyticsYearMin));
+  }
+  if (typeof analyticsYearMax !== 'undefined' && analyticsYearMax != null) {
+    params.set('amp', String(analyticsYearMax));
+  }
 
   // A pinned chart range-selection (drag-to-select, held with Shift so it
   // stays visible — js/chart.js), snapshotted at the top of this function

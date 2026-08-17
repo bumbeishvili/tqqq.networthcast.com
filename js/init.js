@@ -164,6 +164,14 @@
     const v = parseFloat(params.get('acp'));
     if (Number.isFinite(v)) analyticsCustomGrowthPct = v;
   }
+  if (params.get('anp')) {
+    const v = parseInt(params.get('anp'), 10);
+    if (Number.isFinite(v) && v > 0) analyticsYearMin = v;
+  }
+  if (params.get('amp')) {
+    const v = parseInt(params.get('amp'), 10);
+    if (Number.isFinite(v) && v > 0) analyticsYearMax = v;
+  }
 
   // Skip the localStorage restore when there's an APP_VERSION mismatch — old
   // state can reference controls/values that no longer exist and poison the

@@ -195,6 +195,35 @@ function _analyticsYearSpan() {
   return { minYear, maxYear, span: maxYear - minYear };
 }
 
+// Position/size the highlighted span between the two year-range handles.
+// Native <input type=range> has no selected-range styling of its own, so this
+// is a plain absolutely-positioned bar driven off the same min/max the thumbs
+// already show — kept in a helper since both the picker refresh and the drag
+// handler need to repaint it.
+function _updateYearRangeFill(minInput, maxInput) {
+  const fill = document.getElementById('analytics-year-range-fill');
+  if (!fill) return;
+  const trackMin = +minInput.min, trackMax = +minInput.max;
+  const span = trackMax - trackMin;
+  if (!(span > 0)) { fill.style.left = '0%'; fill.style.width = '0%'; return; }
+  const loPct = (+minInput.value - trackMin) / span * 100;
+  const hiPct = (+maxInput.value - trackMin) / span * 100;
+  fill.style.left = loPct + '%';
+  fill.style.width = (hiPct - loPct) + '%';
+}
+
+// Show/hide the ", for start years <min>–<max>" sentence chunk. Hidden in
+// Custom Growth (% per year) mode: the spiral draws no start-year rows and
+// the percent slider takes the sentence space instead.
+function _setYearRangeVisible(visible) {
+  for (const id of ['analytics-year-range-label', 'analytics-year-range', 'analytics-year-range-display']) {
+    const el = document.getElementById(id);
+    if (!el) continue;
+    if (visible) el.removeAttribute('hidden');
+    else el.setAttribute('hidden', '');
+  }
+}
+
 const BASELINE_LABELS = {
   'compounded':  'Compounded Cash',
   'bh-spy':      'B&H SPY',
@@ -300,8 +329,24 @@ function refreshAnalyticsPickers() {
     baseSel.value = analyticsBaseline;
   }
 
-  // (The ", for start years" range slider was removed — the grid always
-  // draws every start-year row; analyticsYearMin/Max stay null.)
+  // ----- ", for start years <min>–<max>" — filters which start-year rows the grid draws -----
+  const minInput = document.getElementById('analytics-year-min-input');
+  const maxInput = document.getElementById('analytics-year-max-input');
+  const rangeDisplay = document.getElementById('analytics-year-range-display');
+  const yearSpan = _analyticsYearSpan();
+  if (minInput && maxInput && yearSpan && yearSpan.span >= 1) {
+    if (analyticsYearMin != null && analyticsYearMin < yearSpan.minYear) analyticsYearMin = yearSpan.minYear;
+    if (analyticsYearMax != null && analyticsYearMax > yearSpan.maxYear) analyticsYearMax = yearSpan.maxYear;
+    const lo = analyticsYearMin != null ? analyticsYearMin : yearSpan.minYear;
+    const hi = analyticsYearMax != null ? analyticsYearMax : yearSpan.maxYear;
+    minInput.min = maxInput.min = String(yearSpan.minYear);
+    minInput.max = maxInput.max = String(yearSpan.maxYear);
+    minInput.value = String(lo);
+    maxInput.value = String(hi);
+    if (rangeDisplay) rangeDisplay.textContent = lo + '–' + hi;
+    _updateYearRangeFill(minInput, maxInput);
+  }
+  _setYearRangeVisible(analyticsBaseline !== 'custom-pct');
 }
 
 // Default the two pickers to whatever is actually on the main chart right
@@ -682,6 +727,7 @@ document.addEventListener('change', (e) => {
         pctDisplay.textContent = (analyticsCustomGrowthPct >= 0 ? '+' : '') + analyticsCustomGrowthPct + '%';
       }
     }
+    _setYearRangeVisible(analyticsBaseline !== 'custom-pct');
     buildHeatmap();
   }
 });
@@ -713,6 +759,31 @@ document.addEventListener('input', (e) => {
 });
 
 // Year-range dual slider: filters which start-year ROWS the grid draws to
+// [min, max]. Two overlapping native inputs (see .period-dual-range in
+// styles.css) — each handler pushes the other input past it rather than
+// letting them cross, so the range never inverts. Filtering rows (not period
+// columns) is what makes the grid visibly react to every drag — a period-length
+// filter left whole rows empty whenever a recent start year hadn't lived long
+// enough yet to reach the selected holding length.
+document.addEventListener('input', (e) => {
+  const isMin = e.target && e.target.id === 'analytics-year-min-input';
+  const isMax = e.target && e.target.id === 'analytics-year-max-input';
+  if (!isMin && !isMax) return;
+  const minInput = document.getElementById('analytics-year-min-input');
+  const maxInput = document.getElementById('analytics-year-max-input');
+  let lo = parseInt(minInput.value, 10), hi = parseInt(maxInput.value, 10);
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return;
+  if (isMin && lo > hi) { hi = lo; maxInput.value = String(hi); }
+  if (isMax && hi < lo) { lo = hi; minInput.value = String(lo); }
+  const yearSpan = _analyticsYearSpan();
+  analyticsYearMin = (yearSpan && lo <= yearSpan.minYear) ? null : lo;
+  analyticsYearMax = (yearSpan && hi >= yearSpan.maxYear) ? null : hi;
+  const display = document.getElementById('analytics-year-range-display');
+  if (display) display.textContent = lo + '–' + hi;
+  _updateYearRangeFill(minInput, maxInput);
+  buildHeatmap();
+});
+
 // Metric dropdowns inside the modal — change feeds back to the underlying
 // page slider/select, dispatches the appropriate event so the main chart
 // updates and localStorage saves, then rebuilds the heatmap.
