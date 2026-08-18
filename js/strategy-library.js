@@ -8,6 +8,17 @@
 // `reported` = the source's self-reported figure over ITS OWN period (shown in
 // parentheses); not comparable across rows.
 const STRATEGY_LIBRARY = [
+  // --- the app's own canonical base strategies (tag 'app'), listed first so
+  // the two engines behind the sidebar panels are one Try away. Presets, not
+  // code: Try spawns a NATIVE 9sig/SMA config with every knob editable. ---
+  { n: 42, name: '9sig', tag: 'app', runnable: true,
+    rules: 'Jason Kelly\u2019s 9-Sig adapted to TQQQ: hold TQQQ + a 40% cash buffer; each quarter compare the TQQQ holding against a signal line growing 9%/quarter \u2014 above it, sell the excess into cash; below it, buy the shortfall from cash (buying throttled to 90% of the cash pile). A \u201430% crash rule (vs the 2-year peak) pauses selling, and a +100%/quarter spike resets the target to a 60% stock weight. The app\u2019s canonical defaults \u2014 the same engine and settings as the 9sig sidebar panel.',
+    here: '\u2014', reported: 'The app\u2019s own base strategy; numbers are this app\u2019s backtest at canonical defaults',
+    preset: { type: "9sig", params: {"select-9sig-underlying":"tqqq","select-9sig-growth":"9","select-9sig-crashdrop":"30","select-9sig-crashwin":"24","select-9sig-spike":"100","select-9sig-period":"quarterly","select-9sig-cash":"40","select-9sig-cashrate":"4","select-9sig-buypower":"90","select-9sig-deploy":"0","select-9sig-target-compound":"holding","select-9sig-park-asset":"cash","select-9sig-rebalance-point":"0","select-9sig-spike-target":"60","select-9sig-cost":"0.02"} } },
+  { n: 43, name: 'SMA 200', tag: 'app', runnable: true,
+    rules: 'The app\u2019s canonical trend rule: hold TQQQ while QQQ closes above its 200-day moving average, park in cash (earning interest) when it closes below \u2014 checked daily, no buffers, with an RSI(9)>90 overheat exit, an RSI(7)<80 cool-gate re-entry, T+1 settlement and 15-day ease-ins. Same engine and settings as the SMA sidebar panel.',
+    here: '\u2014', reported: 'The app\u2019s own base strategy; numbers are this app\u2019s backtest at canonical defaults',
+    preset: { type: "sma", params: {"select-sma-asset":"qqq","select-sma-window":"200","select-sma-underlying":"tqqq","select-sma-cashrate":"4","select-sma-entry-buf":"0","select-sma-exit-buf":"0","select-sma-rsi-oh":"90","select-sma-rsi-cool":"80","select-sma-rsi-oh-window":"9","select-sma-rsi-cool-window":"7","select-sma-confirm-buy":"0","select-sma-confirm-sell":"0","select-sma-settle":"1","select-sma-out-asset":"cash","select-sma-dca-in":"15","select-sma-dca-to-out":"15","select-sma-bg-gtfo":"40","select-sma-bg-asset":"tqqq","select-sma-bg-window":"200","select-sma-cost":"0.02"} } },
   { n: 1, name: 'Faber 10-month / 200-day Timing Model', tag: 'foundation', runnable: true,
     rules: 'Signal: S&P/QQQ vs 10-mo SMA (≈200-day). Enter: monthly close > SMA → hold. Exit: monthly close < SMA → T-bills. Freq: monthly (last trading day).',
     here: '31.3% / −69.9%', reported: '10.2% vs 9.3% B&H (S&P 1901–2012)', src: 'F' },
@@ -94,6 +105,9 @@ const STRATEGY_LIBRARY = [
   { n: 40, name: 'Median overextension (250d) \u2014 SQQQ park', tag: 'picked', runnable: true,
     rules: 'Hold TQQQ. When it closes 55% above its 250-day median, sell and buy SQQQ. Buy back when it drops under. Checked daily. No stop-loss.',
     here: '82.8% / \u221279.1%', reported: 'Hand-picked; numbers are this app\u2019s own backtest, not an external claim' },
+  { n: 41, name: 'Median overextension with SQQQ and crash exit', tag: 'picked', runnable: true,
+    rules: 'Hold TQQQ. When it closes 55% above its 250-day median, switch to SQQQ. When it closes 28% below the median — and the median itself has stopped rising (slope under +20%/yr, 10+ straight days below the line) — sell to cash. Buy back when the price recovers above the exit line. Checked daily, one trade per day.',
+    here: '\u2014', reported: 'Hand-picked; tuned by sweep on 2010\u20132025, so treat the headline as in-sample. Numbers are this app\u2019s own backtest' },
   // --- optimizer winners (tag 'overfit'): the single top-ranked row from each
   // tab of the 9sig and SMA overfit explorers. These are the BEST-FITTING
   // parameter sets found by sweeping thousands of combinations against a fixed
@@ -706,6 +720,9 @@ function addStrategyFromLibrary(n) {
   // edited config — otherwise the sidebar's current values sync back over
   // cfg.params and the strategy silently reverts to defaults.
   if (entry.preset && typeof applyParams === 'function') applyParams(cfg.type, cfg.params);
+  // Marked as editing so the new line renders emphasized (bold, others dimmed)
+  // — the spotlight the user expects right after Try. A click on the page
+  // background dismisses it (see the document click handler in js/chart.js).
   window._editingConfigId = cfg.id;
   persistSavedConfigs();
   if (typeof renderSavedConfigPills === 'function') renderSavedConfigPills();

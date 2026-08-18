@@ -158,13 +158,16 @@ function customLineShown(cfg, key) { return ((cfg.subShown || {})[key]) !== fals
 // here they get a log y-axis of their own, so a constant-% trigger renders as
 // a constant vertical gap and the crossings the rules fire on are visible.
 // Fixed viewBox geometry, shared with the hover handler below so the
-// crosshair math matches the drawing exactly.
-const MINI_CHART = { W: 320, H: 148, padL: 6, padR: 44, padT: 8, padB: 16 };
+// crosshair math matches the drawing exactly. The SVG scales with the panel
+// (lines and layout grow proportionally); ONLY text is compensated — font
+// sizes are divided by the render scale so labels keep their pixel size at
+// any panel width instead of blowing up on a wide one.
+const MINI_CHART = { W: 320, H: 148, padL: 6, padT: 8, padB: 16 };
 // fmt() rounds sub-$1000 values to whole dollars, which turns the low end of
 // a log axis (TQQQ opened at $0.42) into a "$0" label — keep decimals on
 // small prices instead.
 function _miniFmtPrice(v) { return v >= 1000 ? fmt(v) : '$' + (v < 10 ? v.toFixed(2) : String(Math.round(v))); }
-function buildCustomLinesChartHtml(cfg, lines, log) {
+function buildCustomLinesChartHtml(cfg, lines, log, cw) {
   const series = [];
   lines.forEach((ln, i) => {
     if (!customLineShown(cfg, ln.key)) return;
@@ -179,7 +182,15 @@ function buildCustomLinesChartHtml(cfg, lines, log) {
   window._miniChartHover = null;
   if (!series.length) return '';
 
-  const { W, H, padL, padR, padT, padB } = MINI_CHART;
+  const { W, H, padL, padT, padB } = MINI_CHART;
+  const k = Math.max(1, (cw || W) / W);   // render scale; divide TEXT sizes by it
+  // Right gutter fits "$value  series name" on one line (both descaled, JetBrains
+  // Mono advance ≈ 0.6em), capped so a narrow panel keeps a usable plot area —
+  // when capped, long names clip at the right edge instead of covering lines.
+  const _valTxt = v => v >= 1000 ? fmt(v) : '$' + v.toFixed(2);
+  const valColW = Math.max(...series.map(s => _valTxt(s.pts[s.pts.length - 1].v).length)) * (9 / k) * 0.6;
+  const nameColW = Math.max(...series.map(s => s.label.length)) * (7 / k) * 0.6;
+  const padR = Math.min(4 / k + valColW + 4 / k + nameColW + 2 / k, 0.45 * W);
   let t0 = Infinity, t1 = -Infinity, lo = Infinity, hi = -Infinity;
   for (const s of series) for (const p of s.pts) {
     if (p.t < t0) t0 = p.t; if (p.t > t1) t1 = p.t;
@@ -195,7 +206,7 @@ function buildCustomLinesChartHtml(cfg, lines, log) {
   // Everything the hover handler needs to resolve a cursor position back to
   // per-series values. One custom panel is open at a time, so a single slot
   // (always the most recently built chart) is enough.
-  window._miniChartHover = { series, t0, t1, yLo, yHi };
+  window._miniChartHover = { series, t0, t1, yLo, yHi, W, H, padR, k };
 
   // Horizontal gridlines at three log-spaced levels, labeled with fmt().
   let grid = '';
@@ -203,20 +214,20 @@ function buildCustomLinesChartHtml(cfg, lines, log) {
     const lv = Math.pow(10, yLo + (yHi - yLo) * (0.15 + 0.35 * g));
     const y = yAt(lv).toFixed(1);
     grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(122,122,166,0.14)" stroke-width="0.5"/>
-      <text x="${padL + 1}" y="${(+y - 2).toFixed(1)}" font-family="JetBrains Mono" font-size="8" fill="rgba(122,122,166,0.75)" stroke="rgba(255,255,255,0.95)" stroke-width="2" stroke-linejoin="round" paint-order="stroke">${fmtP(lv)}</text>`;
+      <text x="${padL + 1}" y="${(+y - 2).toFixed(1)}" font-family="JetBrains Mono" font-size="${(8 / k).toFixed(2)}" fill="rgba(122,122,166,0.75)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${fmtP(lv)}</text>`;
   }
   // Year ticks along the bottom, sampled to at most ~6. Label centers are
   // clamped inside the viewBox so the first/last year never render half-cut
   // at the edges ("010" instead of "2010").
   const y0 = new Date(t0).getUTCFullYear(), y1 = new Date(t1).getUTCFullYear();
   const step = Math.max(1, Math.ceil((y1 - y0) / 6));
-  const halfLbl = 10; // ≈ half the width of "2010" at font-size 8
+  const halfLbl = 10 / k; // ≈ half the (descaled) width of "2010"
   let xAxis = '';
   for (let y = y0 + 1; y <= y1; y += step) {
     const t = Date.parse(y + '-01-01');
     if (t <= t0 || t >= t1) continue;
     const lx = Math.max(halfLbl, Math.min(W - halfLbl, xAt(t)));
-    xAxis += `<text x="${lx.toFixed(1)}" y="${H - 4}" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="rgba(122,122,166,0.75)">${y}</text>`;
+    xAxis += `<text x="${lx.toFixed(1)}" y="${H - 4}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(8 / k).toFixed(2)}" fill="rgba(122,122,166,0.75)">${y}</text>`;
   }
 
   // Polylines + right-edge end labels (pushed apart when endpoints collide).
@@ -227,18 +238,45 @@ function buildCustomLinesChartHtml(cfg, lines, log) {
     for (const p of s.pts) d += (d ? 'L' : 'M') + xAt(p.t).toFixed(1) + ',' + yAt(p.v).toFixed(1);
     paths += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="0.45"/>`;
     const last = s.pts[s.pts.length - 1];
-    ends.push({ y: yAt(last.v), v: last.v, color: s.color });
+    ends.push({ y: yAt(last.v), v: last.v, color: s.color, name: s.label });
   }
+  // One line per series in the gutter: value column, then the name beside it,
+  // both on the same baseline so neither ever covers the plot.
   ends.sort((a, b) => a.y - b.y);
-  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 10) ends[i].y = ends[i - 1].y + 10;
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 10 / k) ends[i].y = ends[i - 1].y + 10 / k;
   let endLabels = '';
   for (const e of ends) {
-    endLabels += `<text x="${W - padR + 4}" y="${(e.y + 3).toFixed(1)}" font-family="JetBrains Mono" font-size="9" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="2.5" stroke-linejoin="round" paint-order="stroke">${e.v >= 1000 ? fmt(e.v) : "$" + e.v.toFixed(2)}</text>`;
+    endLabels += `<text x="${(W - padR + 4 / k).toFixed(1)}" y="${(e.y + 3 / k).toFixed(1)}" font-family="JetBrains Mono" font-size="${(9 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2.5 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_valTxt(e.v)}</text>
+      <text x="${(W - padR + 8 / k + valColW).toFixed(1)}" y="${(e.y + 3 / k).toFixed(1)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(e.name)}</text>`;
   }
 
 
   return `<svg class="custom-lines-chart" viewBox="0 0 ${W} ${H}">${grid}${paths}${endLabels}${xAxis}</svg>`;
 }
+
+// The panel opens through a width transition (and can be resized), so the
+// signal chart's first render can measure a stale width — leaving its
+// width-compensated text scaled wrong. This observer re-renders JUST the
+// chart svg (nothing else in the panel) once the body's real width settles.
+const _miniChartResizeObs = (typeof ResizeObserver !== 'undefined') ? new ResizeObserver(() => {
+  clearTimeout(window._miniChartResizeT);
+  window._miniChartResizeT = setTimeout(() => {
+    const id = window._openCustomCfgId;
+    if (!id) return;
+    const body = document.getElementById('strategy-panel-body');
+    if (!body || !body.clientWidth) return;
+    const svg = body.querySelector('.custom-lines-chart');
+    if (!svg) return;
+    const cfg = savedConfigs.find(c => c.id === id);
+    const auxLines = (window._customLines || {})[id] || [];
+    if (!cfg || !auxLines.length) return;
+    const html = buildCustomLinesChartHtml(cfg, auxLines, (window._customLogs || {})[id] || [], body.clientWidth);
+    if (!html) return;
+    const tpl = document.createElement('div');
+    tpl.innerHTML = html;
+    svg.replaceWith(tpl.firstElementChild);
+  }, 150);
+}) : null;
 
 // --- signal mini chart hover: crosshair + per-line value tooltip ---------
 function _miniChartTipEl() {
@@ -270,13 +308,13 @@ function _miniNearestPt(pts, t) {
 function _miniAnchorFromEvent(svg, e, data) {
   const M = MINI_CHART;
   const rect = svg.getBoundingClientRect();
-  const x = (e.clientX - rect.left) / (rect.width / M.W);
-  const frac = Math.max(0, Math.min(1, (x - M.padL) / (M.W - M.padL - M.padR)));
+  const x = (e.clientX - rect.left) / (rect.width / data.W);
+  const frac = Math.max(0, Math.min(1, (x - M.padL) / (data.W - M.padL - data.padR)));
   return _miniNearestPt(data.series[0].pts, data.t0 + frac * (data.t1 - data.t0));
 }
 function _miniXAt(data, t) {
   const M = MINI_CHART;
-  return M.padL + (t - data.t0) / (data.t1 - data.t0) * (M.W - M.padL - M.padR);
+  return M.padL + (t - data.t0) / (data.t1 - data.t0) * (data.W - M.padL - data.padR);
 }
 // Exact-value formatter for readouts: two decimals below $1000.
 function _miniFmtExact(v) { return v >= 1000 ? fmt(v) : '$' + v.toFixed(2); }
@@ -319,7 +357,7 @@ document.addEventListener('mousemove', (e) => {
   const data = window._miniChartHover;
   if (!data || !data.series.length) return;
   const M = MINI_CHART;
-  const yAt = v => M.padT + (data.yHi - Math.log10(v)) / (data.yHi - data.yLo) * (M.H - M.padT - M.padB);
+  const yAt = v => M.padT + (data.yHi - Math.log10(v)) / (data.yHi - data.yLo) * (data.H - M.padT - M.padB);
   const anchor = _miniAnchorFromEvent(svg, e, data);
   const g = _miniHoverGroup(svg);
   const tip = _miniChartTipEl();
@@ -331,9 +369,9 @@ document.addEventListener('mousemove', (e) => {
     if (hi.t < lo.t) { lo = anchor; hi = drag; }
     const xA = _miniXAt(data, lo.t), xB = _miniXAt(data, hi.t);
     const spans = data.series.map(s => ({ ...s, p0: _miniNearestPt(s.pts, lo.t), p1: _miniNearestPt(s.pts, hi.t) }));
-    g.innerHTML = `<rect x="${xA.toFixed(1)}" y="${M.padT}" width="${(xB - xA).toFixed(1)}" height="${M.H - M.padT - M.padB}" fill="rgba(134,118,255,0.10)"/>`
-      + `<line x1="${xA.toFixed(1)}" y1="${M.padT}" x2="${xA.toFixed(1)}" y2="${M.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
-      + `<line x1="${xB.toFixed(1)}" y1="${M.padT}" x2="${xB.toFixed(1)}" y2="${M.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
+    g.innerHTML = `<rect x="${xA.toFixed(1)}" y="${M.padT}" width="${(xB - xA).toFixed(1)}" height="${data.H - M.padT - M.padB}" fill="rgba(134,118,255,0.10)"/>`
+      + `<line x1="${xA.toFixed(1)}" y1="${M.padT}" x2="${xA.toFixed(1)}" y2="${data.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
+      + `<line x1="${xB.toFixed(1)}" y1="${M.padT}" x2="${xB.toFixed(1)}" y2="${data.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
       + spans.map(s => {
           const y0 = yAt(s.p0.v).toFixed(1), y1 = yAt(s.p1.v).toFixed(1);
           return `<line x1="${xA.toFixed(1)}" y1="${y0}" x2="${xB.toFixed(1)}" y2="${y1}" stroke="${s.color}" stroke-width="0.5" stroke-dasharray="2,1.5"/>
@@ -352,7 +390,7 @@ document.addEventListener('mousemove', (e) => {
           return mids.map(m => {
             const txt = (m.pct >= 0 ? '+' : '') + m.pct.toFixed(1) + '%';
             const col = m.pct >= 0 ? '#00b929' : '#dc2626';
-            const tw = txt.length * 1.6;                      // ~mono glyph width at font-size 2.6
+            const tw = txt.length * 1.6;                  // ~mono glyph width at font-size 2.6
             return `<rect x="${(xM - tw / 2 - 1.5).toFixed(1)}" y="${(m.y - 3.1).toFixed(1)}" width="${(tw + 3).toFixed(1)}" height="4.1" rx="2" fill="#fff" stroke="${col}" stroke-width="0.25"/>
               <text x="${xM.toFixed(1)}" y="${m.y.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="2.6" font-weight="700" fill="${col}">${txt}</text>`;
           }).join('');
@@ -371,7 +409,7 @@ document.addEventListener('mousemove', (e) => {
   // Plain hover: crosshair + values at the snapped day.
   const cx = _miniXAt(data, anchor.t);
   const hits = data.series.map(s => ({ ...s, pt: _miniNearestPt(s.pts, anchor.t) }));
-  g.innerHTML = `<line x1="${cx.toFixed(1)}" y1="${M.padT}" x2="${cx.toFixed(1)}" y2="${M.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
+  g.innerHTML = `<line x1="${cx.toFixed(1)}" y1="${M.padT}" x2="${cx.toFixed(1)}" y2="${data.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
     + hits.map(h => `<circle cx="${cx.toFixed(1)}" cy="${yAt(h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join('');
   tip.innerHTML = `<div class="mct-date">${fmtLogDate(anchor.d)}</div>`
     + hits.map(h => `<div class="mct-row"><span class="mct-dot" style="background:${h.color}"></span>${_escHtml(h.label)}<b>${_miniFmtPrice(h.pt.v)}</b></div>`).join('');
@@ -663,6 +701,8 @@ Shape:  { id, label, options: [...], default: <one of the options> }
   ({ value: "tqqq", label: "TQQQ" } shows a label but passes "tqqq"). Keep labels PLAIN — the bare
   ticker. Do not decorate them ("TQQQ · 3x Nasdaq" is noise; write "TQQQ").
 - For an on/off toggle use options: [true, false].
+- A long list scans badly — group it: insert { section: "Label" } entries (no id) between params
+  and they render as sub-headers ("Holdings", "Signal lines", "Execution & costs").
 
 *** THE TEST EVERY PARAM MUST PASS ***
 Point at the words in my description that this knob comes from. If you cannot, DO NOT ADD IT.
@@ -2637,7 +2677,10 @@ function customOptionLabel(sp, val) {
 function buildCustomControlsHtml(cfg, schema) {
   if (!schema || !schema.length) return '';
   const rows = schema.map(sp => {
-    if (!sp || sp.id == null) return '';
+    if (!sp) return '';
+    // { section: "Label" } entries (no id) group the params under sub-headers
+    // so a long settings list reads in blocks instead of one flat scan.
+    if (sp.id == null) return sp.section ? `<div class="custom-param-group">${_escHtml(sp.section)}</div>` : '';
     const label = _escHtml(sp.label || sp.id);
     const curLabel = _escHtml(customOptionLabel(sp, customParamValue(cfg, sp)));
     return `<div class="custom-param-row">
@@ -3066,7 +3109,7 @@ function renderCustomPanelBody(cfgId) {
     const auxLog = (window._customLogs || {})[cfgId] || [];
     html += `<div class="strategy-panel-section-label" style="margin-top:14px">Signal chart</div>
       <div class="legend-chip-group">${buildCustomLineChipsHtml(cfg, auxLines)}</div>
-      ${buildCustomLinesChartHtml(cfg, auxLines, auxLog)}`;
+      ${buildCustomLinesChartHtml(cfg, auxLines, auxLog, body.clientWidth)}`;
   }
 
   // Live signal dashboard (whatever the strategy reported in `signals`), then
@@ -3078,6 +3121,12 @@ function renderCustomPanelBody(cfgId) {
 
   body.innerHTML = html;
   body.scrollTop = _scrollTop;
+  // Width changes (open transition, drag-resize) re-render the signal chart
+  // so its text descale always matches the real width — see _miniChartResizeObs.
+  if (_miniChartResizeObs && !body._miniObserved) {
+    _miniChartResizeObs.observe(body);
+    body._miniObserved = true;
+  }
 }
 
 // --- styled delete confirmation (replaces the native confirm()) --------

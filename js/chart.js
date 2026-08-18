@@ -422,8 +422,12 @@ function customMarkerTooltipHtml(m) {
 // supporting lines (TQQQ holding / target / cash) live inside the 9sig
 // side-panel instead — see SUB_LEGEND below.
 const LEGEND_ORDER = [
-  0,  // 9sig
-  8,  // SMA
+  // 9sig (0) and SMA (8) no longer get top-row chips: their home is the
+  // Strategy Library ("app canonical" presets, listed first), which spawns
+  // them as normal saved strategies. Their datasets/engines stay for the
+  // analytics builtins, the overfit explorers and saved presets; init.js
+  // force-hides the base lines so a stale localStorage visibility can't
+  // resurrect a line that no longer has a chip to toggle it off.
   2,  // Buy & Hold — dataset 2's label + data swap based on
       // #select-bh-underlying (TQQQ / QQQ / SPY).
   7,  // Invested Compounded
@@ -1359,6 +1363,22 @@ function applyPanelEmphasis(doUpdate) {
   });
   if (doUpdate !== false && chart.update) chart.update('none');
 }
+
+// A library "Try" marks the new config as editing WITHOUT opening the sidebar,
+// so its line renders emphasized (bold, others dimmed). With no panel open
+// there was previously no way out of that state short of opening and closing
+// the sidebar — a click on the page background now dismisses it. Clicks inside
+// panels, modals, pills, chips or form controls are left alone (and the Try
+// click itself lands inside the library modal, so it can't self-dismiss).
+document.addEventListener('click', (e) => {
+  if (!window._editingConfigId) return;
+  const panel = document.getElementById('strategy-panel');
+  if (panel && panel.classList.contains('is-open')) return; // panel flows own the state
+  const t = e.target;
+  if (t && t.closest && t.closest('#strategy-panel, #saved-configs, #strategy-library-modal, .modal, .sc-modal-overlay, button, .legend-chip, select, input, label')) return;
+  window._editingConfigId = null;
+  applyPanelEmphasis();
+});
 
 function openStrategyPanel(idx) {
   const panel = document.getElementById('strategy-panel');

@@ -784,7 +784,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
       lines: [
         { key: "assetPrice", label: A + " price" },
         { key: "medianPrice", label: W + "-day " + CN },
-        { key: "sellLevel", label: "Sell trigger (+" + (p.threshold || 0) + "%)" }
+        { key: "sellLevel", label: "Overextended (+" + (p.threshold || 0) + "%)" }
       ],
       signals: {
         cards: [
@@ -852,7 +852,8 @@ CODE[39] = `{
     { key: "signalPrice", label: "Signal", tip: "Closing price of the fund the overheat signal is read from (SSO by default) — not necessarily the fund you trade." },
     { key: "signalSma", label: "Center", tip: "The signal fund's center line (moving average or median, per the Center line setting) over your chosen window. The strategy compares the signal price against this line." },
     { key: "abovePct", label: "Above line", tip: "How far the signal price sits above (+) or below (−) its center line. When this exceeds your sell threshold, the strategy sells; while it is at or below the threshold, it holds the traded fund." },
-    { key: "assetPrice", label: "Fund price", tip: "Closing price of the traded fund that day, shown even on days you are parked, so you can see what you are in or out of." }
+    { key: "assetPrice", label: "Fund price", tip: "Closing price of the traded fund that day, shown even on days you are parked, so you can see what you are in or out of." },
+    { key: "triggerLine", label: "Trigger", tip: "The signal price sitting exactly your sell threshold above its center line — the signal closing above it parks, back below it re-buys." }
   ],
   run(data, p) {
     const log = [];
@@ -922,7 +923,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: px, shares: shares, holdingsValue: stockVal,
           cash: cash, contributed: contributed, invested: invested, fee: fee,
-          signalPrice: sig[i], signalSma: sma, abovePct: above * 100, assetPrice: px0[i]
+          signalPrice: sig[i], signalSma: sma, abovePct: above * 100, assetPrice: px0[i],
+          triggerLine: sma * (1 + thr)
         });
       }
     }
@@ -933,6 +935,12 @@ ${WEEKLY_MONTH_END_SNIPPET}
     const K = p.park === "cash" ? "cash" : p.park.toUpperCase();
     return {
       log: log,
+      lines: [
+        { key: "assetPrice", label: A + " price" },
+        { key: "signalPrice", label: S + " price" },
+        { key: "signalSma", label: W + "-day " + (useMed ? "median" : "avg") },
+        { key: "triggerLine", label: "Sell trigger (+" + (p.stretch || 0) + "%)" }
+      ],
       signals: {
         cards: [
           { label: S + " vs " + p.window + "-day " + CN,
@@ -1178,7 +1186,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
       lines: [
         { key: "assetPrice", label: A + " price" },
         { key: "medianPrice", label: W + "-day " + CN },
-        { key: "triggerPrice", label: "Sell trigger (+" + (p.overPct || 0) + "%)" }
+        { key: "triggerPrice", label: "Overextended (+" + (p.overPct || 0) + "%)" }
       ],
       signals: {
         cards: [
@@ -1211,6 +1219,349 @@ ${WEEKLY_MONTH_END_SNIPPET}
           reasons: [
             { name: "Overextension", val: A + " " + pctStr + " vs " + W + "d " + CN, tag: stretched ? "out · " + K : "in · " + A, lean: stretched ? (p.park === "cash" ? "cash" : "out") : "buy" },
             { name: "Trigger level", val: "+" + (over * 100).toFixed(1) + "% = " + trigger.toFixed(2), tag: stretched ? "breached" : roomStr + " away", lean: stretched ? "out" : "hold" }
+          ]
+        }
+      }
+    };
+  }
+}`;
+
+// #41 Median overextension with SQQQ and crash exit. #40's overextension
+// rule plus a DEEP, CONFIRMED crash exit — the structure a 9-family research
+// program (megaresearch, 2026-08) converged on from three directions: leave
+// only at −28% below the median AND only while the median's own slope has
+// stalled under +20%/yr with ≥10 straight days below the line; re-enter on
+// recovery above the exit line. Validated three ways: arc-preserving
+// bootstrap (74–76% of resampled out-of-sample segments beat the plain −8%
+// exit, median 2.5× ratio), walk-forward 17/27 folds, and era tables —
+// 2010–2025 $10K → $158.7M (DD 60%) and 1990–2025 → $804M (survives dot-com)
+// vs $23M / $27M for the ungated −8% exit. Shallow exits, velocity exits,
+// RSI exits and bounce/bail all FAILED the same validation. In-sample
+// caveats still apply to the exact thresholds.
+CODE[41] = `{
+  name: "Median overextension with SQQQ and crash exit",
+  params: [
+    { section: "Fund & signal" },
+    { id: "asset", label: "Fund traded", default: "tqqq", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" },
+      { value: "sso", label: "SSO" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "stat", label: "Center line", default: "median", options: [
+      { value: "median", label: "Median" }, { value: "sma", label: "Moving average" },
+      { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
+    { id: "window", label: "Window (days)", default: 250, options: [
+      5,7,10,14,20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { section: "Overextended — sell the melt-up" },
+    { id: "overPct", label: "Above line (%)", default: 55, options: [
+      2,4,5,6,8,10,12,15,18,20,22,25,28,30,32,35,38,40,42.5,45,47.5,50,52.5,55,57.5,60,62.5,65,67.5,70,72.5,75,80,85,90,95,100,110,120,125,130,140,150,160,175,200,225,250,300] },
+    { id: "park", label: "Then hold", default: "sqqq", options: [
+      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
+      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
+    { section: "Crash signal — the exit measures against this" },
+    { id: "crashStat", label: "Center line", default: "same", options: [
+      { value: "same", label: "Same as main" }, { value: "median", label: "Median" },
+      { value: "sma", label: "Moving average" }, { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
+    { id: "crashWindow", label: "Window (days)", default: 0, options: [
+      { value: 0, label: "Same as main" },
+      5,7,10,14,20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { section: "Crash exit — leave when it breaks down" },
+    { id: "exitPct", label: "Below line (%)", default: -28, options: [
+      10,8,6,5,4,3,2,1,0,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12,-13,-14,-15,-16,-17,-18,-19,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
+    { id: "crashAsset", label: "Then hold", default: "cash", options: [
+      { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
+      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
+      { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
+    { id: "slopeGate", label: "Only if line slope below (%/yr)", default: 20, options: [
+      { value: 999, label: "Off" }, { value: -40, label: "-40" }, { value: -20, label: "-20" },
+      { value: -10, label: "-10" }, { value: 0, label: "0" }, { value: 10, label: "10" },
+      { value: 20, label: "20" }, { value: 30, label: "30" }, { value: 40, label: "40" },
+      { value: 60, label: "60" }, { value: 80, label: "80" }, { value: 120, label: "120" } ] },
+    { id: "belowGate", label: "Only after days below line", default: 10, options: [
+      { value: 0, label: "Off" }, 1,2,3,5,8,10,15,20,30] },
+    { section: "Execution & costs" },
+    { id: "splitDays", label: "One trade per day", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "cashRate", label: "Cash interest (%/yr)", default: 4, options: [
+      0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
+    { id: "tradeCost", label: "Trading cost (%)", default: 0.02, options: [
+      0,0.01,0.02,0.03,0.04,0.05,0.06,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,1] }
+  ],
+  columns: [
+    { key: "assetPrice", label: "Fund", tip: "Closing price of the traded fund." },
+    { key: "medianPrice", label: "Center", tip: "The main center line in price dollars — median or moving average of the last N closes, or the RSI-implied center (price x 50 / RSI) when the signal is RSI. Price crossing a band drawn off this line is exactly the trigger." },
+    { key: "crashCenter", label: "Crash ctr", tip: "The center line the crash-side bands (exit, bounce, bail) measure against. Equals the main center unless the crash-bands signal is set to its own window or statistic." },
+    { key: "abovePct", label: "vs line", tip: "How far the main signal (price, or the RSI reading) sits above (+) or below (−) its center, in percent. This number decides the overextension band." },
+    { key: "crashAbovePct", label: "vs crash", tip: "The same stretch reading measured on the crash-bands signal — this one decides the exit, bounce and bail bands." },
+    { key: "zone", label: "Band", tip: "Which band the close landed in: overextended (park), normal (hold), or crash (out)." },
+    { key: "fee", label: "Fee", tip: "Trading cost paid on this row's trade." }
+  ],
+  run(data, p) {
+    const log = [];
+    const px = data[p.asset] || data.tqqq;
+    const W = Math.max(2, p.window || 250);
+    const over = (p.overPct || 0) / 100;
+    const exitB = (p.exitPct || 0) / 100;
+    const cost = (p.tradeCost || 0) / 100;
+    const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
+    const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
+    const crashAsset = p.crashAsset || "cash";
+
+    // Signal abstraction: each side is either PRICE vs a rolling center line
+    // (median / moving average) or the RSI reading vs its constant 50 midline
+    // — so "+55%" means RSI 77.5 and "-30%" means RSI 35, and every band
+    // threshold keeps its meaning across statistics. The crash side defaults
+    // to "same", reusing the main signal exactly.
+    const useMed = p.stat !== "sma";
+    const mainRsi = p.stat === "rsi";
+    const crashSame = p.crashStat === "same" || p.crashStat == null;
+    const crashRsi = crashSame ? mainRsi : p.crashStat === "rsi";
+    const W2raw = +p.crashWindow || 0;
+    const W2 = W2raw > 0 ? Math.max(2, W2raw) : W;
+    const useMedC = crashSame ? useMed : p.crashStat !== "sma";
+    const sameLine = W2 === W && crashRsi === mainRsi && (crashRsi || useMedC === useMed);
+
+    // Rolling center line: sorted window + running sum, one in one out per day.
+    const mkRoll = (Wn) => {
+      const win = []; let sum = 0;
+      const lb = (v) => { let lo = 0, hi = win.length; while (lo < hi) { const m = (lo + hi) >> 1; if (win[m] < v) lo = m + 1; else hi = m; } return lo; };
+      const warmFrom = Math.max(0, p.startIdx - Wn + 1);
+      return {
+        warmFrom, Wn,
+        ins(v) { win.splice(lb(v), 0, v); sum += v; },
+        rem(v) { const k = lb(v); if (k < win.length && win[k] === v) { win.splice(k, 1); sum -= v; } },
+        center(m) { const n = win.length; return n === 0 ? 0 : (m ? (n % 2 ? win[(n - 1) >> 1] : (win[n / 2 - 1] + win[n / 2]) / 2) : sum / n); }
+      };
+    };
+    // Wilder RSI, seeded from up to 4 windows of pre-start history.
+    const mkRsi = (Wn) => {
+      let ag = 0, al = 0, cnt = 0;
+      const upd = (i) => {
+        if (!(px[i] > 0 && px[i - 1] > 0)) return;
+        const d = px[i] - px[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
+        if (cnt < Wn) { ag += g; al += l; cnt++; if (cnt === Wn) { ag /= Wn; al /= Wn; } }
+        else { ag = (ag * (Wn - 1) + g) / Wn; al = (al * (Wn - 1) + l) / Wn; }
+      };
+      for (let k = Math.max(1, p.startIdx - 4 * Wn); k < p.startIdx; k++) upd(k);
+      return { step: upd, val() { return cnt < Wn ? 0 : (al === 0 ? 100 : 100 - 100 / (1 + ag / al)); } };
+    };
+    const rollM = mainRsi ? null : mkRoll(W);
+    const rollC = crashRsi ? null : (sameLine ? rollM : mkRoll(W2));
+    const rsiM = mainRsi ? mkRsi(W) : null;
+    const rsiC = crashRsi ? (mainRsi && W2 === W ? rsiM : mkRsi(W2)) : null;
+    if (rollM) for (let k = rollM.warmFrom; k < p.startIdx; k++) if (px[k] > 0) rollM.ins(px[k]);
+    if (rollC && rollC !== rollM) for (let k = rollC.warmFrom; k < p.startIdx; k++) if (px[k] > 0) rollC.ins(px[k]);
+
+    // Slope gate needs 63 days of crash-center history BEFORE the start, so
+    // the confirmed-breakdown exit is live from day one. A throwaway roll
+    // replays the 63 pre-start days recording the crash center. (With an RSI
+    // crash signal the center is the constant 50, slope 0 — the gate passes
+    // any positive threshold and should be set Off for negative ones.)
+    const slopeGate = p.slopeGate == null ? 999 : +p.slopeGate;
+    const belowGate = +p.belowGate || 0;
+    const preC = new Float64Array(63);
+    if (!crashRsi && slopeGate !== 999) {
+      const pre = mkRoll(W2);
+      const pf = Math.max(0, p.startIdx - 63 - W2 + 1);
+      for (let k = pf; k < p.startIdx - 63; k++) if (px[k] > 0) pre.ins(px[k]);
+      for (let j = 0; j < 63; j++) {
+        const k = p.startIdx - 63 + j;
+        if (k >= 0 && px[k] > 0) pre.ins(px[k]);
+        const dropK = k - W2;
+        if (dropK >= pf && px[dropK] > 0) pre.rem(px[dropK]);
+        preC[j] = k >= 0 ? pre.center(useMedC) : 0;
+      }
+    }
+    const histC = new Float64Array(64);
+    let belowC = 0, slopeC = 0;
+
+    let cash = p.initial, shares = 0, held = "cash";
+    let state = "normal", invested = p.initial, feeTotal = 0;
+    let med = 0, medC = 0, above = 0, aboveC = 0, zone = "normal";
+    let sigM = 0, sigC = 0;
+    // Decision-support stats (observation only — nothing here feeds a trade):
+    // the crash signal's historical stretch range + exit stints, and the
+    // traded fund's drawdown from its running high.
+    let minAC = Infinity, maxAC = -Infinity;
+    let stints = [], inCrash = false, stintLen = 0;
+    let peakPx = 0, peakDate = "", ddNow = 0, maxDdSeen = 0;
+    const y0 = parseInt(data.dates[p.startIdx].slice(0, 4), 10);
+
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      if (px[i] > 0) {
+        if (rollM) rollM.ins(px[i]);
+        if (rollC && rollC !== rollM) rollC.ins(px[i]);
+      }
+      if (rollM) { const drop = i - W; if (drop >= rollM.warmFrom && px[drop] > 0) rollM.rem(px[drop]); }
+      if (rollC && rollC !== rollM) { const dropC = i - W2; if (dropC >= rollC.warmFrom && px[dropC] > 0) rollC.rem(px[dropC]); }
+      if (rsiM && i > 0) rsiM.step(i);
+      if (rsiC && rsiC !== rsiM && i > 0) rsiC.step(i);
+      med = mainRsi ? 50 : rollM.center(useMed);
+      sigM = mainRsi ? rsiM.val() : px[i];
+      medC = sameLine ? med : (crashRsi ? 50 : rollC.center(useMedC));
+      sigC = sameLine ? sigM : (crashRsi ? rsiC.val() : px[i]);
+      above = med > 0 && sigM > 0 ? sigM / med - 1 : 0;
+      aboveC = medC > 0 && sigC > 0 ? sigC / medC - 1 : 0;
+      // Confirmation gates: the crash center's annualized 63d slope, and the
+      // count of consecutive days the crash signal has spent below its center.
+      const dayN = i - p.startIdx;
+      const prevC = crashRsi ? 50 : (dayN >= 63 ? histC[(dayN - 63) % 64] : preC[dayN] || 0);
+      slopeC = prevC > 0 && medC > 0 ? (Math.pow(medC / prevC, 4) - 1) * 100 : 0;
+      histC[dayN % 64] = medC;
+      belowC = (medC > 0 && sigC > 0 && sigC < medC) ? belowC + 1 : 0;
+      if (medC > 0 && sigC > 0) {
+        if (aboveC < minAC) minAC = aboveC;
+        if (aboveC > maxAC) maxAC = aboveC;
+      }
+      if (px[i] > 0) {
+        if (px[i] > peakPx) { peakPx = px[i]; peakDate = data.dates[i]; }
+        ddNow = peakPx > 0 ? px[i] / peakPx - 1 : 0;
+        if (-ddNow > maxDdSeen) maxDdSeen = -ddNow;
+      }
+      const month = data.dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "", fee = 0;
+      if (held === "cash") cash *= 1 + dayRate;
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+      }
+
+      if (med > 0 && medC > 0 && sigM > 0 && sigC > 0 && px[i] > 0) {
+        const pOver = med * (1 + over), pExit = medC * (1 + exitB);
+        if (state === "normal" || state === "over") {
+          if (sigM > pOver) state = "over";
+          else if (sigC < pExit
+            && (slopeGate === 999 || slopeC < slopeGate)
+            && (belowGate === 0 || belowC >= belowGate)) state = "crashCash";
+          else state = "normal";
+        } else if (sigC > pExit) state = "normal";
+        zone = state === "over" ? "overextended" : state === "normal" ? "normal" : "crash";
+        let want = state === "normal" ? p.asset
+          : state === "over" ? p.park
+          : crashAsset;
+        if (p.splitDays && want !== held && held !== "cash" && want !== "cash") want = "cash"; // leg 1 today, buy re-checks next bar
+        if (want !== held) {
+          const oldPx = priceOf(held, i);
+          if (held !== "cash" && oldPx > 0) {
+            const gross = shares * oldPx, f = gross * cost;
+            cash += gross - f; fee += f; shares = 0;
+          }
+          const newPx = priceOf(want, i);
+          if (want === "cash" || newPx > 0) {
+            if (want !== "cash") { const f = cash * cost; shares = (cash - f) / newPx; fee += f; cash = 0; }
+            action = held === "cash" ? "buy" : want === "cash" ? "sell" : "switch";
+            note = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs line — " + zone;
+            held = want;
+          }
+        } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
+          const f = cash * cost;
+          shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
+          if (action === "contribution") note = "contribution deployed";
+        }
+      }
+      const wasCrash = inCrash;
+      inCrash = state === "crashCash";
+      if (inCrash) stintLen++;
+      if (wasCrash && !inCrash) { stints.push(stintLen); stintLen = 0; }
+      feeTotal += fee;
+      // Plot-space centers: an RSI signal draws as its IMPLIED center in
+      // price dollars (price x 50 / RSI) — price crossing a band line off
+      // this center is exactly the RSI trigger, so the chart reads the same
+      // in every mode and the hover shows real dollar levels.
+      const medPlot = mainRsi ? (sigM > 0 ? px[i] * 50 / sigM : 0) : med;
+      const medCPlot = sameLine ? medPlot : (crashRsi ? (sigC > 0 ? px[i] * 50 / sigC : 0) : medC);
+      const hp = priceOf(held, i);
+      const stockVal = shares * hp;
+${WEEKLY_MONTH_END_SNIPPET}
+      if (i === p.startIdx) action = "start";
+      if (i === p.endIdx) action = "end";
+      if (contributed !== 0 || monthEnd || action !== "hold") {
+        log.push({
+          date: data.dates[i], value: stockVal + cash, action: action, note: note,
+          held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
+          cash: cash, contributed: contributed, invested: invested, fee: fee,
+          assetPrice: px[i] || 0, medianPrice: medPlot, abovePct: above * 100, zone: zone,
+          crashCenter: medCPlot, crashAbovePct: aboveC * 100,
+          mainSignal: sigM, crashSignal: sigC,
+          overLine: medPlot * (1 + over), exitLine: medCPlot * (1 + exitB)
+        });
+      }
+    }
+
+    const A = p.asset.toUpperCase(), K = p.park === "cash" ? "cash" : p.park.toUpperCase();
+    const lbl = id => id === "cash" ? "cash" : id.toUpperCase();
+    const zoneHold = zone === "normal" ? A : zone === "overextended" ? K : lbl(crashAsset);
+    const CN = mainRsi ? "RSI(" + W + ")" : (useMed ? "median" : "avg");
+    const CNc = crashRsi ? "RSI(" + W2 + ")" : (useMedC ? "median" : "avg");
+    const pctStr = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(2) + "%";
+    const zoneTone = zone === "normal" ? "good" : "bad";
+    const holdTxt = held === "cash" ? "cash" : held.toUpperCase();
+    // Signal-chart lines (bounce/bail levels intentionally not drawn — they
+    // cluttered the chart; the exit line anchors the downside visually).
+    const chartLines = [
+      { key: "assetPrice", label: A + " price" },
+      mainRsi ? { key: "medianPrice", label: "RSI(" + W + ") line" } : { key: "medianPrice", label: W + "-day " + CN },
+    ];
+    if (!sameLine) chartLines.push(crashRsi ? { key: "crashCenter", label: "RSI(" + W2 + ") crash line" } : { key: "crashCenter", label: W2 + "-day " + CNc + " crash" });
+    chartLines.push(
+      { key: "exitLine", label: "Crash exit (" + (p.exitPct || 0) + "%" + (sameLine ? "" : " @ " + CNc) + ")" },
+      { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)" }
+    );
+    if (inCrash && stintLen > 0) stints.push(stintLen);   // still out on the last day
+    const stintsSorted = stints.slice().sort((a, b) => a - b);
+    const medianStint = stintsSorted.length ? stintsSorted[(stintsSorted.length - 1) >> 1] : 0;
+    const exitReachable = minAC < Infinity && minAC * 100 <= (p.exitPct || 0);
+    const roomPts = aboveC * 100 - (p.exitPct || 0);
+    return {
+      log: log,
+      lines: chartLines,
+      signals: {
+        cards: [
+          { label: mainRsi ? "RSI(" + W + ") vs 50" : A + " vs " + W + "-day " + CN,
+            value: (above >= 0 ? "▲ " : "▼ ") + pctStr,
+            tone: zoneTone,
+            icon: above >= 0 ? "trendUp" : "trendDown",
+            sub: (mainRsi ? sigM.toFixed(1) + " vs 50" : (px[p.endIdx] || 0).toFixed(2) + " vs " + med.toFixed(2) + " " + CN),
+            tip: "The stretch reading the overextension rule uses: the " + (mainRsi ? "RSI against its 50 midline" : "close against the " + W + "-day " + CN) + ". Above +" + (p.overPct || 0) + "% parks in " + K + "; the crash exit reads " + (sameLine ? "the same signal" : "its own signal (" + CNc + ")") + " and leaves for " + lbl(crashAsset) + " below " + (p.exitPct || 0) + "%." },
+          { label: "Current band",
+            value: zone,
+            tone: zoneTone,
+            icon: "sliders",
+            sub: "holding " + holdTxt,
+            tip: "Which of the three bands the last close landed in, and what is held there: overextended (park), normal (hold the fund), crash (out until the signal recovers above the exit line)." },
+          { label: "Crash exit",
+            value: (p.exitPct || 0) + "%",
+            icon: "shield",
+            sub: "then hold " + lbl(crashAsset)
+              + (slopeGate !== 999 ? " · needs slope<" + slopeGate : "")
+              + (belowGate > 0 ? " · " + belowGate + "d below" : "")
+              + (sameLine ? "" : " — vs " + CNc),
+            tip: "The confirmed-breakdown exit: the signal must fall this far below its center AND pass the confirmation gates (center-line slope stalled, days spent below the line) before " + A + " is sold to " + lbl(crashAsset) + "; it is bought back as soon as the signal recovers above the exit line. A 9-family validation study picked deep-and-confirmed over shallow-and-fast: gates cut the whipsaws that made a plain −8% exit a tax." },
+          { label: "Crash signal range",
+            value: (minAC < Infinity ? (minAC >= 0 ? "+" : "") + (minAC * 100).toFixed(1) + "% … +" + (maxAC * 100).toFixed(1) + "%" : "—"),
+            tone: exitReachable ? "good" : "bad",
+            icon: "activity",
+            sub: exitReachable ? stints.length + " exit stint" + (stints.length === 1 ? "" : "s") + ", median " + medianStint + "d out" : "your " + (p.exitPct || 0) + "% exit line was NEVER reached",
+            tip: "The full range the crash signal's stretch has covered over this run. If your exit threshold sits below the bottom of this range it can never fire and the crash exit is effectively off — slow RSI windows compress the range hard (RSI(250) barely leaves ±10%), so deep thresholds need fast windows." },
+          { label: "Room to crash exit",
+            value: (roomPts >= 0 ? "+" : "") + roomPts.toFixed(1) + " pts",
+            tone: roomPts >= 0 ? "good" : "bad",
+            icon: "shield",
+            sub: "signal " + (aboveC >= 0 ? "+" : "") + (aboveC * 100).toFixed(1) + "% vs " + (p.exitPct || 0) + "% line",
+            tip: "How much further the crash signal can fall before the exit fires (positive), or how far past the line it already is (negative). The single most direct read on 'am I about to be sold out'." },
+          { label: A + " drawdown",
+            value: (ddNow * 100).toFixed(1) + "%",
+            tone: ddNow > -0.15 ? "good" : "bad",
+            icon: "trendDown",
+            sub: "from " + peakPx.toFixed(2) + " high (" + peakDate + "); worst " + (-maxDdSeen * 100).toFixed(0) + "%",
+            tip: "The traded fund's fall from its running high. The strategy never reads this number directly — it acts on the signal-vs-line stretch — but comparing the two tells you whether the exit rule actually engages in the declines that hurt: a deep drawdown with the exit never firing means the crash signal is configured too slow or too deep." }
+        ],
+        decision: {
+          action: zoneHold === "cash" ? "Stay in cash"
+            : zone === "normal" ? "Buy " + zoneHold : "Hold " + zoneHold,
+          note: "signal is " + pctStr + " vs the " + CN + " — " + zone + " band",
+          tone: zoneTone,
+          reasons: [
+            { name: "Band", val: A + " " + pctStr + " vs " + CN, tag: zone + " · " + holdTxt,
+              lean: zone === "normal" ? "buy" : zoneHold === "cash" ? "cash" : "out" }
           ]
         }
       }

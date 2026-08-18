@@ -3071,6 +3071,23 @@
     justify-content: space-between;
     gap: 10px;
   }
+  /* { section: "Label" } schema entries — sub-headers dividing a long
+     settings list into logical blocks. */
+  .custom-param-group {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--text-muted);
+    margin: 14px 0 2px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(122, 122, 166, 0.14);
+  }
+  .custom-params .custom-param-group:first-child {
+    margin-top: 2px;
+    padding-top: 0;
+    border-top: 0;
+  }
   .custom-param-row label { font-size: 12px; color: var(--text); }
   .custom-param-row .inline-select,
   .custom-param-row .custom-text-input {

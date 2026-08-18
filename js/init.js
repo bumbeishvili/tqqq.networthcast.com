@@ -303,9 +303,13 @@
   const applyHiddenList = (hiddenList) => {
     if (!chart || !Array.isArray(hiddenList)) return;
     const hiddenSet = new Set(hiddenList.map(Number).filter(Number.isFinite));
+    // 9sig (0, + subs 1/5/6) and SMA (8) have no legend chips anymore — the
+    // Strategy Library is their home — so a stored "visible" state must not
+    // resurrect a line the user can no longer toggle off.
+    const CHIPLESS_BASE = new Set([0, 1, 5, 6, 8]);
     chart.data.datasets.forEach((ds, i) => {
       if (ds._isShift || ds._configLine) return; // saved-config visibility comes from config.hidden
-      chart.setDatasetVisibility(i, !hiddenSet.has(i));
+      chart.setDatasetVisibility(i, !CHIPLESS_BASE.has(i) && !hiddenSet.has(i));
     });
     chart.update();
     if (typeof refreshAllLegends === 'function') refreshAllLegends();
