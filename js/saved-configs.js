@@ -125,19 +125,265 @@ function configSubLabel(def, cfg) {
   if (def.key === 'cash')    return park === 'cash' ? 'Cash' : park.toUpperCase();
   return def.label;
 }
-// Sub-series chips for a saved 9sig (toggle cfg.subShown[key], persisted).
-function buildConfigSubChipsHtml(cfg) {
-  const sv = cfg.subShown || {};
+// One eye-toggle chip bound to cfg.subShown[key] (the shared .cfg-sub-chip
+// click handler flips it, persists, and re-renders). `defaultOn` is what an
+// unset key means: 9sig breakdown lines start hidden (main-chart clutter),
+// a custom strategy's signal chart starts fully shown (it's contained).
+function _configSubChipHtml(cfg, key, label, dotColor, defaultOn, lineSwatch) {
+  const sv = (cfg.subShown || {})[key];
+  const on = sv == null ? !!defaultOn : !!sv;
   const eyeOpen = '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
   const eyeOff = '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
-  return CONFIG_SUB_DEFS.map(def => {
-    const on = !!sv[def.key];
-    return `<div class="legend-chip cfg-sub-chip${on ? '' : ' legend-hidden'}" data-config-id="${cfg.id}" data-config-sub="${def.key}" role="button" tabindex="0" title="Show / hide on chart">
-      <svg class="legend-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${on ? eyeOpen : eyeOff}</svg>
-      <span class="legend-dot" style="background:${cfg.color}"></span>
-      <span class="legend-name">${configSubLabel(def, cfg)}</span>
-    </div>`;
-  }).join('');
+  return `<div class="legend-chip cfg-sub-chip${on ? '' : ' legend-hidden'}" data-config-id="${cfg.id}" data-config-sub="${_escHtml(key)}" role="button" tabindex="0" title="Show / hide">
+    <svg class="legend-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${on ? eyeOpen : eyeOff}</svg>
+    <span class="${lineSwatch ? 'legend-line-swatch' : 'legend-dot'}" style="background:${dotColor || cfg.color}"></span>
+    <span class="legend-name">${_escHtml(label)}</span>
+  </div>`;
+}
+// Sub-series chips for a saved 9sig (toggle cfg.subShown[key], persisted).
+function buildConfigSubChipsHtml(cfg) {
+  return CONFIG_SUB_DEFS.map(def => _configSubChipHtml(cfg, def.key, configSubLabel(def, cfg), null, false)).join('');
+}
+// Chips for a CUSTOM strategy's declared signal lines — dots match the mini
+// chart's per-series colors, and unset keys count as VISIBLE.
+function buildCustomLineChipsHtml(cfg, lines) {
+  return lines.map((ln, i) => _configSubChipHtml(cfg, ln.key, ln.label, customLineColor(cfg, i), true, true)).join('');
+}
+// Whether a custom signal line is currently shown (unset = shown).
+function customLineShown(cfg, key) { return ((cfg.subShown || {})[key]) !== false; }
+
+// The signal mini chart: the strategy's declared lines drawn in the sidebar
+// panel on their own scale. These are price-scale values ($50–$80) that would
+// be squashed unreadably under six-figure portfolio lines on the main chart —
+// here they get a log y-axis of their own, so a constant-% trigger renders as
+// a constant vertical gap and the crossings the rules fire on are visible.
+// Fixed viewBox geometry, shared with the hover handler below so the
+// crosshair math matches the drawing exactly.
+const MINI_CHART = { W: 320, H: 148, padL: 6, padR: 44, padT: 8, padB: 16 };
+// fmt() rounds sub-$1000 values to whole dollars, which turns the low end of
+// a log axis (TQQQ opened at $0.42) into a "$0" label — keep decimals on
+// small prices instead.
+function _miniFmtPrice(v) { return v >= 1000 ? fmt(v) : '$' + (v < 10 ? v.toFixed(2) : String(Math.round(v))); }
+function buildCustomLinesChartHtml(cfg, lines, log) {
+  const series = [];
+  lines.forEach((ln, i) => {
+    if (!customLineShown(cfg, ln.key)) return;
+    const pts = [];
+    for (const r of log) {
+      if (r && r.date != null && typeof r[ln.key] === 'number' && isFinite(r[ln.key]) && r[ln.key] > 0) {
+        pts.push({ t: Date.parse(r.date), v: r[ln.key], d: String(r.date) });
+      }
+    }
+    if (pts.length > 1) series.push({ label: ln.label, color: customLineColor(cfg, i), pts });
+  });
+  window._miniChartHover = null;
+  if (!series.length) return '';
+
+  const { W, H, padL, padR, padT, padB } = MINI_CHART;
+  let t0 = Infinity, t1 = -Infinity, lo = Infinity, hi = -Infinity;
+  for (const s of series) for (const p of s.pts) {
+    if (p.t < t0) t0 = p.t; if (p.t > t1) t1 = p.t;
+    if (p.v < lo) lo = p.v; if (p.v > hi) hi = p.v;
+  }
+  if (!(t1 > t0) || !(hi > 0)) return '';
+  const l0 = Math.log10(lo), l1 = Math.log10(hi);
+  const lPad = Math.max((l1 - l0) * 0.05, 0.01);
+  const yLo = l0 - lPad, yHi = l1 + lPad;
+  const xAt = t => padL + (t - t0) / (t1 - t0) * (W - padL - padR);
+  const yAt = v => padT + (yHi - Math.log10(v)) / (yHi - yLo) * (H - padT - padB);
+  const fmtP = _miniFmtPrice;
+  // Everything the hover handler needs to resolve a cursor position back to
+  // per-series values. One custom panel is open at a time, so a single slot
+  // (always the most recently built chart) is enough.
+  window._miniChartHover = { series, t0, t1, yLo, yHi };
+
+  // Horizontal gridlines at three log-spaced levels, labeled with fmt().
+  let grid = '';
+  for (let g = 0; g < 3; g++) {
+    const lv = Math.pow(10, yLo + (yHi - yLo) * (0.15 + 0.35 * g));
+    const y = yAt(lv).toFixed(1);
+    grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(122,122,166,0.14)" stroke-width="0.5"/>
+      <text x="${padL + 1}" y="${(+y - 2).toFixed(1)}" font-family="JetBrains Mono" font-size="8" fill="rgba(122,122,166,0.75)" stroke="rgba(255,255,255,0.95)" stroke-width="2" stroke-linejoin="round" paint-order="stroke">${fmtP(lv)}</text>`;
+  }
+  // Year ticks along the bottom, sampled to at most ~6. Label centers are
+  // clamped inside the viewBox so the first/last year never render half-cut
+  // at the edges ("010" instead of "2010").
+  const y0 = new Date(t0).getUTCFullYear(), y1 = new Date(t1).getUTCFullYear();
+  const step = Math.max(1, Math.ceil((y1 - y0) / 6));
+  const halfLbl = 10; // ≈ half the width of "2010" at font-size 8
+  let xAxis = '';
+  for (let y = y0 + 1; y <= y1; y += step) {
+    const t = Date.parse(y + '-01-01');
+    if (t <= t0 || t >= t1) continue;
+    const lx = Math.max(halfLbl, Math.min(W - halfLbl, xAt(t)));
+    xAxis += `<text x="${lx.toFixed(1)}" y="${H - 4}" text-anchor="middle" font-family="JetBrains Mono" font-size="8" fill="rgba(122,122,166,0.75)">${y}</text>`;
+  }
+
+  // Polylines + right-edge end labels (pushed apart when endpoints collide).
+  let paths = '';
+  const ends = [];
+  for (const s of series) {
+    let d = '';
+    for (const p of s.pts) d += (d ? 'L' : 'M') + xAt(p.t).toFixed(1) + ',' + yAt(p.v).toFixed(1);
+    paths += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="0.45"/>`;
+    const last = s.pts[s.pts.length - 1];
+    ends.push({ y: yAt(last.v), v: last.v, color: s.color });
+  }
+  ends.sort((a, b) => a.y - b.y);
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 10) ends[i].y = ends[i - 1].y + 10;
+  let endLabels = '';
+  for (const e of ends) {
+    endLabels += `<text x="${W - padR + 4}" y="${(e.y + 3).toFixed(1)}" font-family="JetBrains Mono" font-size="9" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="2.5" stroke-linejoin="round" paint-order="stroke">${e.v >= 1000 ? fmt(e.v) : "$" + e.v.toFixed(2)}</text>`;
+  }
+
+
+  return `<svg class="custom-lines-chart" viewBox="0 0 ${W} ${H}">${grid}${paths}${endLabels}${xAxis}</svg>`;
+}
+
+// --- signal mini chart hover: crosshair + per-line value tooltip ---------
+function _miniChartTipEl() {
+  let el = document.getElementById('mini-chart-tip');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'mini-chart-tip';
+    el.setAttribute('hidden', '');
+    document.body.appendChild(el);
+  }
+  return el;
+}
+function _miniChartClearHover() {
+  const g = document.querySelector('.custom-lines-chart .mini-hover');
+  if (g) g.remove();
+  const tip = document.getElementById('mini-chart-tip');
+  if (tip) tip.setAttribute('hidden', '');
+  window._miniHoverActive = false;
+}
+// Nearest point to time t (pts are in date order — binary search).
+function _miniNearestPt(pts, t) {
+  let lo = 0, hi = pts.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pts[m].t <= t) lo = m; else hi = m; }
+  return (t - pts[lo].t) <= (pts[hi].t - t) ? pts[lo] : pts[hi];
+}
+// Cursor position → the first series' nearest logged day. Every readout
+// (hover and drag-range alike) snaps to this anchor so all rows describe
+// the same real trading date.
+function _miniAnchorFromEvent(svg, e, data) {
+  const M = MINI_CHART;
+  const rect = svg.getBoundingClientRect();
+  const x = (e.clientX - rect.left) / (rect.width / M.W);
+  const frac = Math.max(0, Math.min(1, (x - M.padL) / (M.W - M.padL - M.padR)));
+  return _miniNearestPt(data.series[0].pts, data.t0 + frac * (data.t1 - data.t0));
+}
+function _miniXAt(data, t) {
+  const M = MINI_CHART;
+  return M.padL + (t - data.t0) / (data.t1 - data.t0) * (M.W - M.padL - M.padR);
+}
+// Exact-value formatter for readouts: two decimals below $1000.
+function _miniFmtExact(v) { return v >= 1000 ? fmt(v) : '$' + v.toFixed(2); }
+function _miniHoverGroup(svg) {
+  let g = svg.querySelector('.mini-hover');
+  if (!g) {
+    g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', 'mini-hover');
+    svg.appendChild(g);
+  }
+  return g;
+}
+function _miniPlaceTip(tip, e) {
+  tip.removeAttribute('hidden');
+  let left = e.clientX + 14, top = e.clientY + 12;
+  if (left + tip.offsetWidth > window.innerWidth - 8) left = e.clientX - tip.offsetWidth - 12;
+  if (top + tip.offsetHeight > window.innerHeight - 8) top = e.clientY - tip.offsetHeight - 10;
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+}
+// Drag-to-select a range, like the main chart's: while dragging, the overlay
+// shades the span, draws each line's chord between its two endpoints, and the
+// tooltip shows every line's % change with the exact from → to values.
+// Auto-clears on release.
+document.addEventListener('mousedown', (e) => {
+  const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
+  const data = window._miniChartHover;
+  if (!svg || !data || !data.series.length) return;
+  window._miniDragAnchor = _miniAnchorFromEvent(svg, e, data);
+  e.preventDefault(); // no text selection while dragging
+});
+document.addEventListener('mouseup', () => {
+  if (!window._miniDragAnchor) return;
+  window._miniDragAnchor = null;
+  _miniChartClearHover();
+});
+document.addEventListener('mousemove', (e) => {
+  const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
+  if (!svg) { if (window._miniHoverActive && !window._miniDragAnchor) _miniChartClearHover(); return; }
+  const data = window._miniChartHover;
+  if (!data || !data.series.length) return;
+  const M = MINI_CHART;
+  const yAt = v => M.padT + (data.yHi - Math.log10(v)) / (data.yHi - data.yLo) * (M.H - M.padT - M.padB);
+  const anchor = _miniAnchorFromEvent(svg, e, data);
+  const g = _miniHoverGroup(svg);
+  const tip = _miniChartTipEl();
+
+  const drag = window._miniDragAnchor;
+  if (drag && drag.t !== anchor.t) {
+    // Range mode: shaded span + per-series chords, % change in the tooltip.
+    let lo = drag, hi = anchor;
+    if (hi.t < lo.t) { lo = anchor; hi = drag; }
+    const xA = _miniXAt(data, lo.t), xB = _miniXAt(data, hi.t);
+    const spans = data.series.map(s => ({ ...s, p0: _miniNearestPt(s.pts, lo.t), p1: _miniNearestPt(s.pts, hi.t) }));
+    g.innerHTML = `<rect x="${xA.toFixed(1)}" y="${M.padT}" width="${(xB - xA).toFixed(1)}" height="${M.H - M.padT - M.padB}" fill="rgba(134,118,255,0.10)"/>`
+      + `<line x1="${xA.toFixed(1)}" y1="${M.padT}" x2="${xA.toFixed(1)}" y2="${M.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
+      + `<line x1="${xB.toFixed(1)}" y1="${M.padT}" x2="${xB.toFixed(1)}" y2="${M.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
+      + spans.map(s => {
+          const y0 = yAt(s.p0.v).toFixed(1), y1 = yAt(s.p1.v).toFixed(1);
+          return `<line x1="${xA.toFixed(1)}" y1="${y0}" x2="${xB.toFixed(1)}" y2="${y1}" stroke="${s.color}" stroke-width="0.5" stroke-dasharray="2,1.5"/>
+            <circle cx="${xA.toFixed(1)}" cy="${y0}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>
+            <circle cx="${xB.toFixed(1)}" cy="${y1}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>`;
+        }).join('')
+      // % change at each chord's midpoint — just the percent, green/red by
+      // sign, pushed apart when chords run close together.
+      + (() => {
+          const mids = spans.map(s => {
+            const pct = s.p0.v > 0 ? (s.p1.v / s.p0.v - 1) * 100 : 0;
+            return { y: (yAt(s.p0.v) + yAt(s.p1.v)) / 2 - 2, pct };
+          }).sort((a, b) => a.y - b.y);
+          for (let i = 1; i < mids.length; i++) if (mids[i].y - mids[i - 1].y < 5) mids[i].y = mids[i - 1].y + 5;
+          const xM = (xA + xB) / 2;
+          return mids.map(m => {
+            const txt = (m.pct >= 0 ? '+' : '') + m.pct.toFixed(1) + '%';
+            const col = m.pct >= 0 ? '#00b929' : '#dc2626';
+            const tw = txt.length * 1.6;                      // ~mono glyph width at font-size 2.6
+            return `<rect x="${(xM - tw / 2 - 1.5).toFixed(1)}" y="${(m.y - 3.1).toFixed(1)}" width="${(tw + 3).toFixed(1)}" height="4.1" rx="2" fill="#fff" stroke="${col}" stroke-width="0.25"/>
+              <text x="${xM.toFixed(1)}" y="${m.y.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="2.6" font-weight="700" fill="${col}">${txt}</text>`;
+          }).join('');
+        })();
+    tip.innerHTML = `<div class="mct-date">${fmtLogDate(lo.d)} – ${fmtLogDate(hi.d)}</div>`
+      + spans.map(s => {
+          const pct = s.p0.v > 0 ? (s.p1.v / s.p0.v - 1) * 100 : 0;
+          const cls = pct >= 0 ? 'mct-pos' : 'mct-neg';
+          return `<div class="mct-row"><span class="mct-dot" style="background:${s.color}"></span>${_escHtml(s.label)}<b class="${cls}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</b><span class="mct-range">${_miniFmtExact(s.p0.v)} → ${_miniFmtExact(s.p1.v)}</span></div>`;
+        }).join('');
+    _miniPlaceTip(tip, e);
+    window._miniHoverActive = true;
+    return;
+  }
+
+  // Plain hover: crosshair + values at the snapped day.
+  const cx = _miniXAt(data, anchor.t);
+  const hits = data.series.map(s => ({ ...s, pt: _miniNearestPt(s.pts, anchor.t) }));
+  g.innerHTML = `<line x1="${cx.toFixed(1)}" y1="${M.padT}" x2="${cx.toFixed(1)}" y2="${M.H - M.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
+    + hits.map(h => `<circle cx="${cx.toFixed(1)}" cy="${yAt(h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join('');
+  tip.innerHTML = `<div class="mct-date">${fmtLogDate(anchor.d)}</div>`
+    + hits.map(h => `<div class="mct-row"><span class="mct-dot" style="background:${h.color}"></span>${_escHtml(h.label)}<b>${_miniFmtPrice(h.pt.v)}</b></div>`).join('');
+  _miniPlaceTip(tip, e);
+  window._miniHoverActive = true;
+});
+// Series colors for the signal mini chart: the strategy's own color for the
+// first declared line (usually the traded fund's price), then fixed hues
+// picked to stay distinguishable against it.
+const CUSTOM_MINI_COLORS = ['#e11d48', '#0284c7', '#059669', '#a16207', '#7c3aed'];
+function customLineColor(cfg, i) {
+  return i === 0 ? cfg.color : (CUSTOM_MINI_COLORS[(i - 1) % CUSTOM_MINI_COLORS.length]);
 }
 // Colour the sidebar picker should show: the saved strategy's colour when one
 // is being edited, otherwise the base strategy's (override or default).
@@ -402,6 +648,7 @@ const CUSTOM_PROMPT = `You are writing ONE backtest strategy for a charting app.
   name: "Short human name",
   params:  [ ... ],   // the sidebar dropdowns — see PARAMS
   columns: [ ... ],   // labels + tooltips for your log's columns — see COLUMNS
+  lines:   [ ... ],   // toggleable chart lines for your computed levels — see LINES
   run(data, p) {
     // build the portfolio value over time — see RETURN — and report where the
     // rules stand on the final day — see SIGNALS
@@ -422,6 +669,15 @@ Point at the words in my description that this knob comes from. If you cannot, D
 A short description gets a short settings list. Five well-chosen knobs beat eleven.
 Never invent a mechanism just to have something to tune — every added knob is a rule I did not ask
 for, silently changing what my strategy does.
+
+*** ONE EXCEPTION — median and moving average are interchangeable ***
+Whenever a rule uses a rolling MEDIAN or a MOVING AVERAGE, add one extra param that lets the user
+swap the statistic, defaulting to whichever one the description names:
+  { id: "stat", label: "Center line", options: [
+    { value: "sma", label: "Moving average" }, { value: "median", label: "Median" } ], default: "sma" }
+Compute the level with the chosen statistic over the SAME window (the example below shows a rolling
+window kept as a running sum AND a sorted array, so both are cheap). This knob is wanted even though
+the description names only one of the two.
 
 Concretely, DO NOT add unless I mentioned it:
 - a re-entry / buy-back threshold  → if I gave one exit rule, re-entry is simply that rule going
@@ -560,6 +816,19 @@ code: what the number means, when it's blank, and how it relates to the other co
 has tips for the standard keys (date, value, action, held, price, shares, cash, invested, contributed,
 fee) — describe those only if your strategy uses them unusually, and always describe your own keys.
 
+=== LINES: the signal mini chart for your computed levels ===
+When a rule compares the price to a level you compute (a moving average, a median, an overextension
+band, a stop), declare that level as a line so the user can SEE the trigger:
+  lines: [ { key: "median", label: "Median (250d)" }, { key: "upper", label: "Median +55%" } ]
+- "key" names a numeric field you add to every log row once the value exists (median: 405.2 — the raw
+  number, same units you compare against). Rows before the warm-up simply omit the key; the line
+  starts where the data does.
+- Declared lines draw together in a small "Signal chart" inside the strategy's side panel, on their
+  own scale — never on the main portfolio chart — each with an eye-toggle (all shown by default).
+  Max 6; declare only levels a rule actually uses, in raw units, no rescaling.
+- Also declare the price being compared (the traded fund's own close) as the FIRST line, so the user
+  can watch it cross your levels: { key: "assetPrice", label: "TQQQ price" }.
+
 === SIGNALS: the live dashboard (do this — it is what users check first) ===
 Return a "signals" object alongside your log describing WHERE EVERY RULE STANDS ON THE FINAL DAY of
 the run, so the user can see what the strategy would do with fresh money today without reading the log.
@@ -625,9 +894,13 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
       { value: "spy",  label: "SPY" },  { value: "sso", label: "SSO" } ] },
     { id: "signal", label: "Signal read from", default: "qqq", options: [
       { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }, { value: "tqqq", label: "TQQQ" } ] },
-    { id: "window", label: "SMA window (days)", default: 200, options: [
+    { id: "window", label: "Window (days)", default: 200, options: [
       20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,
       210,220,230,240,250,260,270,280,300,320,350,400] },
+    // The one always-wanted extra knob (see PARAMS): median and moving average
+    // are interchangeable center lines, defaulting to what the description names.
+    { id: "stat", label: "Center line", options: [
+      { value: "sma", label: "Moving average" }, { value: "median", label: "Median" } ], default: "sma" },
     { id: "band", label: "Cross buffer (%)", default: 1, options: [
       0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,3.5,4,4.5,5,6,7,8,10] },
     { id: "cashRate", label: "Cash interest (%/yr)", default: 4, options: [
@@ -637,8 +910,11 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
   ],
   columns: [
     { key: "signalPrice", label: "Signal", tip: "Closing price of the fund the trend signal is read from — the plain index, not the leveraged fund you trade." },
-    { key: "signalSma", label: "SMA", tip: "The moving average of the signal fund over your chosen window. Above it means in-trend, below means out." },
-    { key: "abovePct", label: "Above SMA", tip: "How far the signal sits above (+) or below (−) its moving average. The trade fires once this passes your cross buffer." }
+    { key: "signalSma", label: "Center", tip: "The center line of the signal fund over your chosen window — moving average or median, per the Center line setting. Above it means in-trend, below means out." },
+    { key: "abovePct", label: "Above line", tip: "How far the signal sits above (+) or below (−) its center line. The trade fires once this passes your cross buffer." }
+  ],
+  lines: [
+    { key: "signalSma", label: "Center line" }  // the level the trend rule compares against — see LINES
   ],
   run(data, p) {
     const log = [];
@@ -651,14 +927,21 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
     let sma = 0, above = 0;                                   // last bar's readings, for the signals block
     let invested = p.initial, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4), 10);
-    // Rolling SMA: seed once from the warm-up window, then add/drop one day at a time.
+    // Rolling center line: seed once from the warm-up window, then add/drop one
+    // day at a time. The window lives as a running sum (the average) AND a
+    // sorted array (the median) so the Center line param is free either way.
+    const useMed = p.stat === "median";
     let sum = 0, n = 0;
-    for (let k = Math.max(0, p.startIdx - W + 1); k <= p.startIdx; k++) if (sig[k] > 0) { sum += sig[k]; n++; }
+    const win = [];
+    const lb = (v) => { let lo = 0, hi = win.length; while (lo < hi) { const m = (lo + hi) >> 1; if (win[m] < v) lo = m + 1; else hi = m; } return lo; };
+    const ins = (v) => { win.splice(lb(v), 0, v); sum += v; n++; };
+    const rem = (v) => { const k = lb(v); if (k < win.length && win[k] === v) { win.splice(k, 1); sum -= v; n--; } };
+    for (let k = Math.max(0, p.startIdx - W + 1); k <= p.startIdx; k++) if (sig[k] > 0) ins(sig[k]);
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       if (i > p.startIdx) {
-        if (sig[i] > 0) { sum += sig[i]; n++; }
+        if (sig[i] > 0) ins(sig[i]);
         const out = i - W;
-        if (out >= 0 && sig[out] > 0) { sum -= sig[out]; n--; }
+        if (out >= 0 && sig[out] > 0) rem(sig[out]);
       }
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "", fee = 0;
@@ -668,7 +951,7 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
         cash += amt; contributed = amt; invested += amt; action = "contribution";
       }
       prevMonth = month;
-      sma = n > 0 ? sum / n : 0;                              // hoisted: the signals block below reads the last bar's values
+      sma = n > 0 ? (useMed ? (n % 2 ? win[(n - 1) >> 1] : (win[n / 2 - 1] + win[n / 2]) / 2) : sum / n) : 0; // hoisted: the signals block below reads the last bar's values
       above = sma > 0 ? sig[i] / sma - 1 : 0;
       let want = held;
       if (sma > 0) {
@@ -687,7 +970,7 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
           shares = (cash - f) / newPx; fee += f; cash = 0;
         }
         action = held === "cash" ? "buy" : want === "cash" ? "sell" : "switch";
-        note = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs SMA";
+        note = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs " + (useMed ? "median" : "SMA");
         held = want;
       } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
         const f = cash * cost;                                // deploying new cash is a buy
@@ -715,10 +998,10 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
       log: log,
       signals: {
         cards: [
-          { label: p.signal.toUpperCase() + " vs " + p.window + "-day avg",
+          { label: p.signal.toUpperCase() + " vs " + p.window + "-day " + (useMed ? "median" : "avg"),
             value: (inTrend ? "▲ " : "▼ ") + pctStr, tone: inTrend ? "good" : "bad",
             icon: inTrend ? "trendUp" : "trendDown",
-            sub: sig[p.endIdx].toFixed(2) + " vs " + sma.toFixed(2) + " avg",
+            sub: sig[p.endIdx].toFixed(2) + " vs " + sma.toFixed(2) + (useMed ? " median" : " avg"),
             tip: "The signal fund's last close against its " + p.window + "-day moving average. Above the average means hold " + A + "; below means move to " + K + "." },
           { label: "Cross buffer", value: "±" + (p.band || 0) + "%", icon: "sliders",
             sub: p.band ? "dead zone around the average" : "no buffer — trades on any cross",
@@ -791,7 +1074,7 @@ function customWorkerMain() {
   }
   function asMod(m) {
     if (typeof m === 'function') return { name: null, run: m, params: undefined };
-    if (m && typeof m.run === 'function') return { name: m.name || null, run: m.run, params: m.params, columns: m.columns };
+    if (m && typeof m.run === 'function') return { name: m.name || null, run: m.run, params: m.params, columns: m.columns, lines: m.lines };
     return null;
   }
   // Column metadata ({ key, label, tip }) the strategy declares for its log —
@@ -810,6 +1093,23 @@ function customWorkerMain() {
         label: c.label != null ? String(c.label) : null,
         tip: c.tip != null ? String(c.tip) : (c.tooltip != null ? String(c.tooltip) : null),
       });
+    }
+    return out.length ? out : null;
+  }
+  // Auxiliary chart lines ({ key, label }) the strategy declares — each key
+  // names a numeric field its log rows carry (e.g. a signal line like a
+  // median and its overextension threshold). Toggled from the strategy's
+  // panel like 9sig's Holding/Target/Cash. Same sanitize-to-primitives rule
+  // as readColumns; capped so a runaway declaration can't flood the chart.
+  function readLines(raw) {
+    if (!Array.isArray(raw)) return null;
+    var out = [];
+    for (var i = 0; i < raw.length && out.length < 6; i++) {
+      var l = raw[i];
+      if (!l) continue;
+      if (typeof l === 'string') { out.push({ key: l, label: l }); continue; }
+      if (l.key == null) continue;
+      out.push({ key: String(l.key), label: l.label != null ? String(l.label) : String(l.key) });
     }
     return out.length ? out : null;
   }
@@ -907,6 +1207,7 @@ function customWorkerMain() {
       out = { reqId: msg.reqId, schema: schema, name: mod.name || null, log: log,
               columns: readColumns(res && res.columns) || readColumns(mod.columns),
               signals: readSignals(res && res.signals),
+              lines: readLines(res && res.lines) || readLines(mod.lines),
               totalContributed: (res && typeof res.totalContributed === 'number') ? res.totalContributed : null };
     } catch (err) {
       out = { reqId: msg.reqId, error: (err && err.message) ? err.message : String(err) };
@@ -920,6 +1221,7 @@ window._customLogs = window._customLogs || {};
 window._customErrors = window._customErrors || {};
 window._customSchemas = window._customSchemas || {};
 window._customColumns = window._customColumns || {}; // cfgId -> [{ key, label, tip }] the strategy declared
+window._customLines = window._customLines || {};     // cfgId -> [{ key, label }] auxiliary chart lines the strategy declared
 window._customSignals = window._customSignals || {}; // cfgId -> { cards, decision } live signal dashboard
 window._customResults = window._customResults || {}; // cfgId -> { sig, log, schema, name, error, totalContributed }
 window._customYesterdayResults = window._customYesterdayResults || {}; // cfgId -> { sig, value, error } — day-over-day change badge, see scheduleCustomYesterdayRun
@@ -1139,13 +1441,14 @@ function onCustomWorkerMessage(e) {
   }
   window._customResults[pend.cfgId] = {
     sig: pend.sig, log: msg.log || [], schema: msg.schema || [],
-    columns: msg.columns || null, signals: msg.signals || null,
+    columns: msg.columns || null, signals: msg.signals || null, lines: msg.lines || null,
     name: msg.name || null, error: msg.error || null,
     totalContributed: (typeof msg.totalContributed === 'number') ? msg.totalContributed : null,
   };
   window._customSchemas[pend.cfgId] = msg.schema || [];
   window._customColumns[pend.cfgId] = msg.columns || null;
   window._customSignals[pend.cfgId] = msg.signals || null;
+  window._customLines[pend.cfgId] = msg.lines || null;
   // Adopt the name the strategy's own code declares (`name: "…"`) — but only
   // while the config still wears its auto-generated "Custom strategy" placeholder,
   // so a name the user typed themselves is never overwritten.
@@ -1256,6 +1559,7 @@ function computeCustomSeries(cfg, ctx) {
     window._customSchemas[cfg.id] = cached.schema || [];
     window._customColumns[cfg.id] = cached.columns || null;
     window._customSignals[cfg.id] = cached.signals || null;
+    window._customLines[cfg.id] = cached.lines || null;
     // Today's line is settled — safe to also fetch yesterday's for the
     // day-over-day change badge (endLabelPlugin), sequenced behind it.
     scheduleCustomYesterdayRun(cfg, ctx);
@@ -1576,6 +1880,12 @@ function appendConfigDatasets(chart, ctx) {
         chart.setDatasetVisibility(chart.data.datasets.length - 1, !cfg.hidden);
       }
     }
+
+    // A custom strategy's declared signal lines (`lines: [{key,label}]`)
+    // deliberately do NOT join the main chart: they're price-scale values
+    // ($50–$80) squashed unreadably under six-figure portfolio lines. They
+    // render as a mini chart inside the strategy's own panel instead — see
+    // buildCustomLinesChartHtml.
   }
   appendActualPortfolioDataset(chart, ctx);
 }
@@ -2749,6 +3059,16 @@ function renderCustomPanelBody(cfgId) {
   const controls = buildCustomControlsHtml(cfg, getCustomSchema(cfg));
   if (controls) html += `<div class="strategy-panel-section-label" style="margin-top:14px">Settings</div>${controls}`;
 
+  // The signal mini chart: the lines the strategy declares (`lines:` in its
+  // code) drawn on their own scale in the panel, with per-line eye chips.
+  const auxLines = (window._customLines || {})[cfgId] || null;
+  if (auxLines && auxLines.length) {
+    const auxLog = (window._customLogs || {})[cfgId] || [];
+    html += `<div class="strategy-panel-section-label" style="margin-top:14px">Signal chart</div>
+      <div class="legend-chip-group">${buildCustomLineChipsHtml(cfg, auxLines)}</div>
+      ${buildCustomLinesChartHtml(cfg, auxLines, auxLog)}`;
+  }
+
   // Live signal dashboard (whatever the strategy reported in `signals`), then
   // its own log — with the column labels/tooltips it declared in `columns`.
   const _cLog = (window._customLogs || {})[cfgId] || [];
@@ -2846,7 +3166,10 @@ document.addEventListener('click', (e) => {
     const key = subChip.getAttribute('data-config-sub');
     if (cfg && key) {
       cfg.subShown = cfg.subShown || {};
-      cfg.subShown[key] = !cfg.subShown[key];
+      // Flip from the chip's RENDERED state, not the stored flag — an unset
+      // key defaults differently per chip kind (9sig lines start hidden, a
+      // custom signal chart starts shown), and the chip already knows which.
+      cfg.subShown[key] = subChip.classList.contains('legend-hidden');
       persistSavedConfigs();
       if (typeof render === 'function') render();
     }

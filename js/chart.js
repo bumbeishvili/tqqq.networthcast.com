@@ -2464,6 +2464,10 @@ function render() {
     if (window._ydayValueByIdx && (i in window._ydayValueByIdx)) {
       return computeDayChange(todayVal, window._ydayValueByIdx[i]);
     }
+    // Sub-series (9sig Holding/Target/Cash, a custom strategy's declared
+    // lines) share their parent's _configId — without this guard they'd diff
+    // their own value against the PARENT line's cached yesterday total.
+    if (ds && ds._configSub) return null;
     const cfgId = ds && ds._configId;
     if (!cfgId) return null;
     if (window._configDayChange && (cfgId in window._configDayChange)) {

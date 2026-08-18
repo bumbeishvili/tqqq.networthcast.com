@@ -2104,6 +2104,14 @@
     border-radius: 50%;
     flex-shrink: 0;
   }
+  /* Signal-chart chips: the swatch is a line segment, not a dot — these
+     chips ARE the chart's legend and each toggles one drawn line. */
+  .legend-chip .legend-line-swatch {
+    width: 16px;
+    height: 2.5px;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
   .legend-chip .legend-name {
     color: var(--text);
     overflow: hidden;
@@ -2996,6 +3004,55 @@
     flex-wrap: wrap;
   }
   .custom-stat { display: flex; flex-direction: column; gap: 2px; }
+  /* Signal mini chart: a custom strategy's declared lines on their own scale.
+     No background/border of its own — it sits on the panel like every other
+     section. */
+  .custom-lines-chart {
+    display: block; width: 100%; height: auto; margin-top: 8px;
+    cursor: crosshair;
+  }
+  /* Its hover tooltip: date + one colored row per visible line. */
+  #mini-chart-tip {
+    position: fixed;
+    z-index: 200;
+    pointer-events: none;
+    background: var(--surface);
+    border: 1px solid rgba(134, 118, 255, 0.4);
+    border-radius: 6px;
+    padding: 8px 10px;
+    box-shadow: var(--shadow-lg);
+    font-family: 'Open Sans', sans-serif;
+    font-size: 11.5px;
+    color: var(--text);
+  }
+  #mini-chart-tip .mct-date {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+  #mini-chart-tip .mct-row {
+    display: flex; align-items: center; gap: 6px;
+    line-height: 1.7;
+  }
+  #mini-chart-tip .mct-row b {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 600;
+    margin-left: auto;
+    padding-left: 12px;
+  }
+  #mini-chart-tip .mct-dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  /* Drag-range readout: colored % change + exact from → to values. */
+  #mini-chart-tip .mct-pos { color: var(--green, #00b929); }
+  #mini-chart-tip .mct-neg { color: var(--red-text, #dc2626); }
+  #mini-chart-tip .mct-range {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+    padding-left: 8px;
+  }
   .custom-stat span { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
   .custom-stat b { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text); }
   .custom-stat b.positive { color: var(--green-text); }
