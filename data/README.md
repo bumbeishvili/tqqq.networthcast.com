@@ -16,6 +16,23 @@ Everything before a fund's launch date is reconstructed. The script walks the lo
 
 > **The price files start January 2, 1953.** The rate files go back further; `short-rates.tsv` starts in 1934. 1953 is where daily data gets clean, since the NYSE ran Saturday sessions before then. That start date lives in the committed TSVs themselves. `update_data.py` has no trimming step, and its daily refresh copies whatever pre-IPO prefix is already on disk.
 
+## "How do you approximate TQQQ before it existed?"
+
+The most-asked question about this dataset. The copy-paste answer:
+
+> **Short version: the real Nasdaq-100 history with TQQQ's actual daily costs applied.** TQQQ delivers 3× the index's *daily* move. For each day before the fund existed, take that day's index return, multiply by 3, and subtract the running costs: the 0.88%/yr management fee, plus interest on the borrowed 2× at that day's real short-term rate + 0.65% swap spread. The interest is the larger cost. At 1980s rates it ran 15–35 percentage points a year, and that drag is what a plain "3× the index" backtest misses.
+>
+> Underlying data, era by era:
+>
+> - **2010 → now:** real TQQQ prices (Yahoo Finance). No reconstruction.
+> - **1999–2010:** real Nasdaq-100 including dividends. Checked within 0.2%/yr against Nasdaq's official total-return index (XNDX, on FRED).
+> - **1985–1999:** real Nasdaq-100, price-only (Yahoo `^NDX`). Dividends are missing, so a 3× fund runs about 2%/yr light.
+> - **1971–1985:** the Nasdaq-100 didn't exist yet. This stretch comes from Stooq's back-extension, which matches the real Nasdaq Composite (FRED) within 0.01%/yr over the full 14 years, so it is the measured Composite carrying an NDX label.
+> - **1953–1971:** no Nasdaq index of any kind existed. This part is Stooq's own construction, undocumented, with nothing real to check it against. Treat it as a hypothetical.
+> - **Interest rates for the financing cost:** Fed Funds daily from 1954, 3-month T-bills back to 1934 (both FRED).
+>
+> Sanity check: the same formula run from 2010 onward tracks the real fund. That overlap is what calibrated the 0.65% swap spread.
+
 ## The files
 
 | File | Real history starts | Synthesized portion |
@@ -31,7 +48,9 @@ Everything before a fund's launch date is reconstructed. The script walks the lo
 | **t-bill-3mo.tsv** | Monthly, January 1934 onward. | None. FRED series `TB3MS`. The pre-Fed-Funds-market short-rate proxy for 1934–1953. |
 | **short-rates.tsv** | Daily, January 2, 1934 onward. | Derived: `DFF` where it exists, `TB3MS` forward-filled where it doesn't. The only rate file the synthesis reads. |
 
-Yahoo's `^NDX` history starts in 1985, which is also when the Nasdaq-100 index itself began. `update_data.py` reaches further back by merging a local `^ndx_d.csv` from Stooq, and **that file is not committed to this repo**. Without it, `read_ndx_csv()` returns nothing and a from-scratch `--rebuild` stops where Yahoo stops. The 1953-onward history in the committed TSVs was generated while the CSV was present. Anything before 1985 is the data provider's own back-reconstruction of an index that did not yet exist, so read pre-1985 QQQ, QLD, TQQQ, and SQQQ as rough hypotheticals.
+Yahoo's `^NDX` history starts in 1985, which is also when the Nasdaq-100 index itself began. `update_data.py` reaches further back by merging a local `^ndx_d.csv` from Stooq, and **that file is not committed to this repo**. Without it, `read_ndx_csv()` returns nothing and a from-scratch `--rebuild` stops where Yahoo stops. The 1953-onward history in the committed TSVs was generated while the CSV was present.
+
+The pre-1985 prefix splits into two very different stretches. **1971–1985 is real data in disguise**: checked against the actual Nasdaq Composite (FRED series `NASDAQCOM`, daily from the index's first day in February 1971), the Stooq reconstruction tracks it to within 0.01 pp/yr CAGR over the full 14 years and never diverges more than 0.3% over any rolling year — it is effectively the measured Composite wearing an NDX label. **Before 1971 no Nasdaq index of any kind existed** (the market traded OTC), so the 1953–1971 stretch is Stooq's own undocumented construction with nothing real to check it against. Read that stretch, and only that stretch, as a rough hypothetical.
 
 ## The financing-cost correction
 
@@ -67,7 +86,7 @@ TQQQ's spread is calibrated: regress the no-spread synthesis against the real fu
 
 Four biases survive the financing-cost correction.
 
-**1. Nasdaq dividends before 1999.** For pre-1999 QQQ, QLD, TQQQ, and SQQQ there is only `^NDX`, which is price-only. Yahoo lists `^XNDX` (NDX Total Return) but serves no history for it, and NASDAQ.com's API, NASDAQ Data Link, Stooq, Tiingo, EODHD, and Alpha Vantage all gate it. Dividends contributed 0.690 pp/year to QQQ from its 1999 launch to today, so pre-1999 synthetic QQQ runs about 0.7 %/year light and synthetic TQQQ about 2 %/year (3 × that).
+**1. Nasdaq dividends before 1999.** For pre-1999 QQQ, QLD, TQQQ, and SQQQ there is only `^NDX`, which is price-only. The official NDX Total Return index (`^XNDX`) only begins March 4, 1999 — **FRED serves its full daily history free** (series [`NASDAQXNDX`](https://fred.stlouisfed.org/data/NASDAQXNDX); Yahoo lists the symbol but returns no history, and NASDAQ.com's API, NASDAQ Data Link, Stooq, Tiingo, EODHD, and Alpha Vantage all gate it) — so no total-return series reaches before 1999 outside institutional data like CRSP. Dividends contributed 0.690 pp/year to QQQ from its 1999 launch to today, so pre-1999 synthetic QQQ runs about 0.7 %/year light and synthetic TQQQ about 2 %/year (3 × that).
 
 **2. S&P dividends before 1988.** SPY, SSO, and SPXL run on price-only `^GSPC` from the files' 1953 start to 1988-01-04. How big that gap is depends on the window you measure `^SP500TR` against `^GSPC` over, because the S&P dividend yield has fallen steadily:
 
@@ -92,6 +111,16 @@ Net direction on TQQQ before 2010, against what real TQQQ would have done had it
 - **High-rate eras** (1970s–80s): the rate effect is corrected now, leaving the operational component at 2–3 pp/year high.
 
 From 2010 (TQQQ, SQQQ), 2008 (SPXL), 2006 (QLD, SSO), 1999 (QQQ), and 1993 (SPY) onward the prices are real and dividend-adjusted. Backtests confined to the last 15–30 years carry no synthesis bias at all.
+
+### Checked against official sources (August 2026)
+
+Three independent audits against series this dataset does not use:
+
+- **QQQ vs the official NDX Total Return index** (FRED `NASDAQXNDX`), March 1999 – August 2026: our QQQ series lags XNDX by **−0.208 %/yr** over 27.4 years — QQQ's 0.20 % expense ratio, to within a basis point. The dividend adjustment is verified.
+- **synthetic-tqqq 1999–2010 vs an official-XNDX rebuild**: re-running the documented formula on FRED's official total-return index instead of the derived NDX-TR lands within **0.16 %/yr**, worst cumulative divergence 2.3 % across the decade.
+- **The pre-1985 prefix vs the real Nasdaq Composite** (FRED `NASDAQCOM`), 1971–1985: CAGR gap **0.01 pp/yr**, no rolling 1-year window diverging more than 0.3 % (details in the section above).
+
+None of these moved anything, which is the point: where the synthesis can be checked against an official series, it matches.
 
 ## How to use the data
 
