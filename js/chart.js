@@ -1833,6 +1833,7 @@ function render() {
   document.getElementById('disp-rate').textContent = rv.toFixed(1) + '%';
   document.getElementById('disp-entry').textContent = entryOverride ? fmtDayMonthYear(entryOverride) : qLabel(quarterlyData[entryIdx][0]);
   document.getElementById('disp-exit').textContent  = exitOverride  ? fmtDayMonthYear(exitOverride)  : qLabel(quarterlyData[exitIdx][0]);
+  if (window.refreshPeriodThumbLabels) refreshPeriodThumbLabels();
 
   // Per-strategy underlying + 9sig signal-growth from their side-panel selects.
   // SMA has its own selector because its only relationship to the leveraged

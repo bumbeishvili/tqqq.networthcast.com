@@ -1930,13 +1930,35 @@
 
   .dual-range {
     position: relative;
-    height: 32px;
+    height: 64px;
     user-select: none;
     touch-action: none;
   }
+  /* The Entry/Exit caption + value + calendar-button groups ride above their
+     thumbs (positioned by updateUI in js/controls.js, which also pushes them
+     apart when the thumbs converge). The track-click handler is scoped to
+     .track, so these stay fully interactive. */
+  .dual-range .thumb-disp {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    white-space: nowrap;
+    z-index: 3;
+  }
+  .dual-range .thumb-disp > label {
+    margin-bottom: 1px;
+  }
+  .dual-range .thumb-disp-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
   .dual-range .track {
     position: absolute;
-    top: 13px;
+    top: 45px;
     left: 0;
     right: 0;
     height: 5px;
@@ -1945,7 +1967,7 @@
   }
   .dual-range .fill {
     position: absolute;
-    top: 13px;
+    top: 45px;
     height: 5px;
     background: var(--accent2);
     border-radius: 3px;
@@ -1954,7 +1976,7 @@
   .dual-range .fill:active { cursor: grabbing; }
   .dual-range .thumb {
     position: absolute;
-    top: 7px;
+    top: 39px;
     width: 18px;
     height: 18px;
     border-radius: 50%;

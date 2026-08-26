@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=348">
+<link rel="stylesheet" href="styles.css?v=352">
 </head>
 <body>
 
@@ -163,29 +163,29 @@
       <div id="marker-tooltip"></div>
 
       <div class="control-group" style="margin-top:18px;margin-bottom:0">
-        <div style="display:flex;justify-content:space-between;align-items:baseline">
-          <div><label>Entry</label>
-            <div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
-              <div class="value-display period" id="disp-entry">Q1 1999</div>
-              <button type="button" class="date-pick-btn" id="entry-date-pick" title="Pick exact entry day" aria-label="Pick exact entry day">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              </button>
-            </div>
-          </div>
-          <div style="text-align:right"><label>Exit</label>
-            <div style="display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-bottom:6px">
-              <div class="value-display period" id="disp-exit">Q1 2026</div>
-              <button type="button" class="date-pick-btn" id="exit-date-pick" title="Pick exact exit day" aria-label="Pick exact exit day">
-                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
         <div style="display:flex;align-items:center;gap:8px">
           <button type="button" class="period-play" id="period-play-left" aria-pressed="false" title="Step / play backward">◀</button>
           <div class="dual-range" id="period-range" style="flex:1">
             <div class="track"></div>
             <div class="fill"></div>
+            <div class="thumb-disp" id="thumb-disp-entry">
+              <label>Entry</label>
+              <div class="thumb-disp-row">
+                <div class="value-display period" id="disp-entry">Q1 1999</div>
+                <button type="button" class="date-pick-btn" id="entry-date-pick" title="Pick exact entry day" aria-label="Pick exact entry day">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="thumb-disp" id="thumb-disp-exit">
+              <label>Exit</label>
+              <div class="thumb-disp-row">
+                <div class="value-display period" id="disp-exit">Q1 2026</div>
+                <button type="button" class="date-pick-btn" id="exit-date-pick" title="Pick exact exit day" aria-label="Pick exact exit day">
+                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                </button>
+              </div>
+            </div>
             <div class="thumb" data-handle="entry"></div>
             <div class="thumb" data-handle="exit"></div>
           </div>
@@ -1331,20 +1331,20 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=348"></script>
-<script src="js/utils.js?v=348"></script>
-<script src="js/simulate.js?v=348"></script>
-<script src="js/metrics.js?v=348"></script>
-<script src="js/chart.js?v=348"></script>
-<script src="js/controls.js?v=348"></script>
-<script src="js/date-picker.js?v=348"></script>
-<script src="js/transactions.js?v=348"></script>
-<script src="js/analytics.js?v=348"></script>
-<script src="js/preview-dropdown.js?v=348"></script>
-<script src="js/saved-configs.js?v=348"></script>
-<script src="js/strategy-library-code.js?v=348"></script>
-<script src="js/strategy-library.js?v=348"></script>
-<script src="js/init.js?v=348"></script>
+<script src="js/data.js?v=352"></script>
+<script src="js/utils.js?v=352"></script>
+<script src="js/simulate.js?v=352"></script>
+<script src="js/metrics.js?v=352"></script>
+<script src="js/chart.js?v=352"></script>
+<script src="js/controls.js?v=352"></script>
+<script src="js/date-picker.js?v=352"></script>
+<script src="js/transactions.js?v=352"></script>
+<script src="js/analytics.js?v=352"></script>
+<script src="js/preview-dropdown.js?v=352"></script>
+<script src="js/saved-configs.js?v=352"></script>
+<script src="js/strategy-library-code.js?v=352"></script>
+<script src="js/strategy-library.js?v=352"></script>
+<script src="js/init.js?v=352"></script>
 
 </body>
 </html>

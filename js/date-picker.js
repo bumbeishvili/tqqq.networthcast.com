@@ -29,7 +29,10 @@
   }
   function positionPopup(popup, trigger) {
     const r = trigger.getBoundingClientRect();
-    const pw = 240;
+    // Measure the real width — the popup is already in the DOM when this runs,
+    // and it renders wider than the old 240 guess, which let it clip past the
+    // right viewport edge now that the exit trigger rides near the track's end.
+    const pw = popup.offsetWidth || 240;
     let left = r.left;
     if (left + pw > window.innerWidth - 8) left = window.innerWidth - 8 - pw;
     if (left < 8) left = 8;

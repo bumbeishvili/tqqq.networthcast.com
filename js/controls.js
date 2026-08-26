@@ -473,7 +473,40 @@ if (inflPill) inflPill.addEventListener('click', () => {
     fill.style.width = (xp - ep) + '%';
     entryThumb.classList.toggle('thumb-locked', entryLocked());
     entryThumb.title = entryLocked() ? 'Entry is set by your uploaded transactions — clear them to adjust' : '';
+    positionThumbLabels(ep, xp);
   }
+
+  // The Entry/Exit value+calendar groups ride above their thumbs. When the
+  // thumbs converge, the groups are pushed apart symmetrically; at a track
+  // edge the free side takes the shift.
+  function positionThumbLabels(ep, xp) {
+    const eL = document.getElementById('thumb-disp-entry');
+    const xL = document.getElementById('thumb-disp-exit');
+    if (!eL || !xL) return;
+    const w = container.clientWidth;
+    if (!w) return;
+    let ex = ep / 100 * w, xx = xp / 100 * w;
+    const ew = eL.offsetWidth, xw = xL.offsetWidth;
+    const GAP = 8;
+    const minSep = (ew + xw) / 2 + GAP;
+    const overlap = minSep - (xx - ex);
+    if (overlap > 0) { ex -= overlap / 2; xx += overlap / 2; }
+    ex = Math.min(Math.max(ex, ew / 2), w - ew / 2);
+    xx = Math.min(Math.max(xx, xw / 2), w - xw / 2);
+    if (xx - ex < minSep) {
+      if (ex - ew / 2 <= 0) xx = Math.min(ex + minSep, w - xw / 2);
+      else if (xx + xw / 2 >= w) ex = Math.max(xx - minSep, ew / 2);
+    }
+    eL.style.left = ex + 'px';
+    xL.style.left = xx + 'px';
+  }
+  // chart.js calls this right after it rewrites #disp-entry / #disp-exit —
+  // new text changes the groups' widths, so they need re-centering; also
+  // re-run on resize (px positions).
+  window.refreshPeriodThumbLabels = function () {
+    positionThumbLabels(valToPercent(+entryInput.value), valToPercent(+exitInput.value));
+  };
+  window.addEventListener('resize', window.refreshPeriodThumbLabels);
 
   // `side` identifies which thumb actually moved this time ('entry' or
   // 'exit') — only THAT side's exact-day override (js/date-picker.js) gets
