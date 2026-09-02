@@ -23,6 +23,7 @@ async function loadSeries(file) {
 }
 
 async function loadQQQDaily()  { return loadSeries('synthetic-qqq.tsv'); }
+async function loadNFCIWeekly() { return loadSeries('nfci.tsv'); }
 async function loadQLDDaily()  { return loadSeries('synthetic-qld.tsv'); }
 async function loadTQQQDaily() { return loadSeries('synthetic-tqqq.tsv'); }
 async function loadSPYDaily()  { return loadSeries('spy.tsv'); }
@@ -62,6 +63,27 @@ function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily
 }
 
 let daily; // populated by init()
+
+// Chicago Fed NFCI (weekly) aligned to daily trading days. Each weekly value
+// becomes usable 7 calendar days after its observation date (the Fed publishes
+// the following Wednesday for the week ending Friday), then forward-fills
+// until the next release — so a backtest never reads a number before the
+// market could have known it. NaN before the first usable release (1971).
+let nfciDaily = null; // populated by init()
+function buildNfciDaily(dailyArr, nfciRows) {
+  const avail = nfciRows.map(([d, v]) => {
+    const t = new Date(d + 'T00:00:00Z');
+    t.setUTCDate(t.getUTCDate() + 7);
+    return [t.toISOString().slice(0, 10), v];
+  });
+  const out = new Array(dailyArr.length);
+  let j = 0, cur = NaN;
+  for (let i = 0; i < dailyArr.length; i++) {
+    while (j < avail.length && avail[j][0] <= dailyArr[i].date) { cur = avail[j][1]; j++; }
+    out[i] = cur;
+  }
+  return out;
+}
 
 // === Derive quarterly and monthly from daily ===
 function lastOfPeriod(daily, periodFn) {

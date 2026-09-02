@@ -8,7 +8,7 @@ Two modes. The default (no flags, what the cron runs) is an incremental
 refresh: replace the post-IPO tail of the seven price TSVs with fresh
 yfinance bars, copy the committed pre-IPO synthesized prefix through
 untouched, never touch FRED. --rebuild runs the full synthesis below.
---refresh-rates re-pulls the three FRED rate TSVs; nothing else does.
+--refresh-rates re-pulls the FRED TSVs (three rate files + nfci.tsv); nothing else does.
 
 Pre-IPO history is fabricated by walking actual daily index values backward
 from each ETF's first real trading day, applying the leveraged-return-minus-
@@ -522,8 +522,9 @@ def incremental_refresh():
     the post-IPO real-data tail with fresh yfinance bars (and pick up any
     Yahoo backfill corrections to existing real rows).
 
-    No FRED, no ^NDX, no ^SOX, no synthesis logic — those are bootstrap-only
-    concerns (use --rebuild). Daily runs touch only the 5 ETFs."""
+    No rate-file FRED pulls, no ^NDX, no ^SOX, no synthesis logic — those are
+    bootstrap-only concerns (use --rebuild). Daily runs touch the ETF TSVs
+    plus one failure-tolerant NFCI refresh (a live strategy input; see below)."""
     data_dir = os.path.join(basedir, DATA_DIR)
     for ticker, filename in tickers:
         path = os.path.join(data_dir, filename)
@@ -541,6 +542,18 @@ def incremental_refresh():
         last = real_df.index[-1].strftime('%Y-%m-%d')
         print(f"  {filename}: {len(prefix_pairs)} preserved + {len(real_df)} real, through {last}")
 
+    # NFCI (weekly) is a LIVE decision input for the credit-veto strategy, so
+    # the cron keeps it current — unlike the historical rate files, which only
+    # refresh via --refresh-rates. FRED downtime must never break the price
+    # refresh above, so any failure leaves the committed TSV untouched.
+    try:
+        nfci = fetch_fred('NFCI', '1971-01-01', force_remote=True)
+        if nfci:
+            write_rate_tsv(os.path.join(data_dir, 'nfci.tsv'), nfci)
+            print(f"  nfci.tsv: {len(nfci)} weekly rows, through {nfci[-1][0].strftime('%Y-%m-%d')}")
+    except Exception as e:
+        print(f"  nfci.tsv: FRED unreachable ({e}); leaving committed TSV untouched")
+
 
 # === CLI =================================================================
 # Default mode: incremental refresh (fast, yfinance-only, no FRED). Used by
@@ -555,11 +568,11 @@ _argp.add_argument('--rebuild', action='store_true',
                         'default — historical rates do not change). Default is '
                         'incremental yfinance refresh.')
 _argp.add_argument('--refresh-rates', action='store_true',
-                   help='Re-fetch FRED DFF + TB3MS from the network and overwrite '
-                        'data/fed-funds-effective.tsv + data/t-bill-3mo.tsv + '
-                        'data/short-rates.tsv. Use to refresh the committed rate '
-                        'data; not needed for synthesis (historical rates do not '
-                        'change).')
+                   help='Re-fetch FRED DFF + TB3MS + NFCI from the network and '
+                        'overwrite data/fed-funds-effective.tsv + data/t-bill-3mo.tsv + '
+                        'data/short-rates.tsv + data/nfci.tsv. Use to refresh the '
+                        'committed rate/signal data; not needed for synthesis '
+                        '(historical rates do not change).')
 _args = _argp.parse_args()
 
 if not _args.rebuild:
@@ -594,6 +607,10 @@ gspc_clipped    = [(d, c) for d, c in df_to_pairs(gspc_df) if d >= ndx_start]
 # data; the synthesis just falls back to the naive formula until next run.
 dff_pairs       = fetch_fred('DFF',   DFF_START,  fallback_path=os.path.join(basedir, DATA_DIR, 'fed-funds-effective.tsv'), force_remote=_args.refresh_rates)  # daily 1954+
 tbms_pairs      = fetch_fred('TB3MS', TBMS_START, fallback_path=os.path.join(basedir, DATA_DIR, 't-bill-3mo.tsv'),           force_remote=_args.refresh_rates)  # monthly 1934+
+# Chicago Fed NFCI (weekly, 1971+). Not a synthesis input — it feeds the
+# NFCI-credit-veto strategy in the app (js/data.js aligns it to trading days
+# with a 7-day publication lag). Refreshed alongside the rate files.
+nfci_pairs      = fetch_fred('NFCI',  '1971-01-01', fallback_path=os.path.join(basedir, DATA_DIR, 'nfci.tsv'),               force_remote=_args.refresh_rates)  # weekly 1971+
 combined_rates  = build_combined_rates(dff_pairs, tbms_pairs)
 rate_map        = dict(combined_rates)                      # Timestamp → percent
 
@@ -820,8 +837,10 @@ for ticker, filename in tickers:
 write_rate_tsv(os.path.join(data_dir, 'fed-funds-effective.tsv'), dff_pairs)
 write_rate_tsv(os.path.join(data_dir, 't-bill-3mo.tsv'),          tbms_pairs)
 write_rate_tsv(os.path.join(data_dir, 'short-rates.tsv'),         combined_rates)
+write_rate_tsv(os.path.join(data_dir, 'nfci.tsv'),                nfci_pairs)
 print(f"  fed-funds-effective.tsv: {len(dff_pairs)} daily rows, {dff_pairs[0][0].strftime('%Y-%m-%d')} to {dff_pairs[-1][0].strftime('%Y-%m-%d')}")
 print(f"  t-bill-3mo.tsv:          {len(tbms_pairs)} monthly rows, {tbms_pairs[0][0].strftime('%Y-%m-%d')} to {tbms_pairs[-1][0].strftime('%Y-%m-%d')}")
 print(f"  short-rates.tsv:         {len(combined_rates)} daily rows, {combined_rates[0][0].strftime('%Y-%m-%d')} to {combined_rates[-1][0].strftime('%Y-%m-%d')}")
+print(f"  nfci.tsv:                {len(nfci_pairs)} weekly rows, {nfci_pairs[0][0].strftime('%Y-%m-%d')} to {nfci_pairs[-1][0].strftime('%Y-%m-%d')}")
 
 print("Done.")

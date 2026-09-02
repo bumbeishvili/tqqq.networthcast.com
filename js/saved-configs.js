@@ -765,6 +765,10 @@ data.qld   : daily closing price of QLD   (2x Nasdaq-100, ProShares Ultra QQQ)
 data.sso   : daily closing price of SSO   (2x S&P 500, ProShares Ultra S&P500)
 data.spxl  : daily closing price of SPXL  (3x S&P 500, Direxion Daily S&P500 Bull 3x)
 data.sqqq  : daily closing price of SQQQ  (-3x Nasdaq-100 INVERSE — rises when QQQ falls), synthesized back to 1953
+data.nfci  : Chicago Fed National Financial Conditions Index, weekly since 1971, forward-filled onto
+             trading days with a 7-day publication lag (no look-ahead). NOT a price: a z-score-like
+             level where above 0 = tighter-than-average financial conditions, above +0.5 = credit
+             stress. NaN before 1971 — ALWAYS guard with isFinite() before comparing.
 - data[id] works for any of those ids, which is how an asset dropdown gets used.
 - Prices are positive numbers; a few of the earliest values may be 0 (missing history) — guard divisions.
 - The arrays span the FULL history. You MAY read indices before p.startIdx for warm-up (e.g. to seed a
@@ -1083,6 +1087,10 @@ function buildCustomData() {
     sso:   daily.map(d => d.sso),
     spxl:  daily.map(d => d.spxl),
     sqqq:  daily.map(d => d.sqqq || 0),
+    // Chicago Fed NFCI (weekly, aligned to daily with a 7-day publication
+    // lag in js/data.js). NaN before 1971 or if the fetch failed — strategy
+    // code must treat non-finite as "no signal".
+    nfci:  (typeof nfciDaily !== 'undefined' && nfciDaily) ? nfciDaily : daily.map(() => NaN),
   };
   return _customDataCache;
 }

@@ -108,6 +108,9 @@ const STRATEGY_LIBRARY = [
   { n: 41, name: 'Median overextension with SQQQ and crash exit', tag: 'picked', runnable: true,
     rules: 'Hold TQQQ. When it closes 55% above its 250-day median, switch to SQQQ. When it closes 28% below the median — and the median itself has stopped rising (slope under +20%/yr, 10+ straight days below the line) — sell to cash. Buy back when the price recovers above the exit line. Checked daily, one trade per day.',
     here: '\u2014', reported: 'Hand-picked; tuned by sweep on 2010\u20132025, so treat the headline as in-sample. Numbers are this app\u2019s own backtest' },
+  { n: 44, name: 'NFCI veto, med stretch with SQQQ and med crash exit', tag: 'picked', runnable: true,
+    rules: 'The strategy above, plus one override from outside the price data: when the Chicago Fed\u2019s National Financial Conditions Index crosses +0.4 \u2014 a genuine credit crunch \u2014 everything goes to cash, whatever the price bands say. The veto lifts when the index calms, or earlier if the price side fires its own crash exit and then recovers while vetoed (the market re-earned entry). It only ever removes leverage, has fired solely in real credit crises (1973\u201375, the Volcker squeeze, 1987, the GFC), and not once since July 2009.',
+    here: '\u2014', reported: 'The veto leg was validated separately: era tables from 1973, 52-window walk-forward, arc-preserving bootstrap (87% of resampled paths), Fed vintage data, and a placebo test. Its edge is episodic \u2014 a handful of credit crises carry it' },
   // --- optimizer winners (tag 'overfit'): the single top-ranked row from each
   // tab of the 9sig and SMA overfit explorers. These are the BEST-FITTING
   // parameter sets found by sweeping thousands of combinations against a fixed
