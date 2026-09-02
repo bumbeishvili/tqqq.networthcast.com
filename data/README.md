@@ -47,7 +47,7 @@ The most-asked question about this dataset. The copy-paste answer:
 | **fed-funds-effective.tsv** | Daily, July 1, 1954 onward. | None. FRED series `DFF`. Supplies the financing cost on the leveraged leg from 1954. |
 | **t-bill-3mo.tsv** | Monthly, January 1934 onward. | None. FRED series `TB3MS`. The pre-Fed-Funds-market short-rate proxy for 1934–1953. |
 | **short-rates.tsv** | Daily, January 2, 1934 onward. | Derived: `DFF` where it exists, `TB3MS` forward-filled where it doesn't. The only rate file the synthesis reads. |
-| **nfci.tsv** | Weekly, January 8, 1971 onward. | None. FRED series `NFCI` — the Chicago Fed National Financial Conditions Index, a 105-input composite where above 0 means tighter-than-average conditions. Not a synthesis input: it feeds the NFCI-credit-veto strategy in the app, which aligns it to trading days with a 7-day publication lag. Refreshed by the daily cron (failure-tolerant) and by `--refresh-rates`. |
+| **nfci.tsv** | Weekly, January 8, 1971 onward. | None. FRED series `NFCI` — the Chicago Fed National Financial Conditions Index, a 105-input composite where above 0 means tighter-than-average conditions.  It feeds the NFCI-credit-veto strategy in the app, which aligns it to trading days with a 7-day publication lag. Refreshed by the daily cron (failure-tolerant) and by `--refresh-rates`. |
 
 Yahoo's `^NDX` history starts in 1985, which is also when the Nasdaq-100 index itself began. `update_data.py` reaches further back by merging a local `^ndx_d.csv` from Stooq, and **that file is not committed to this repo**. Without it, `read_ndx_csv()` returns nothing and a from-scratch `--rebuild` stops where Yahoo stops. The 1953-onward history in the committed TSVs was generated while the CSV was present.
 
