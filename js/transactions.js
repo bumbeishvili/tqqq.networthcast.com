@@ -719,6 +719,16 @@ document.addEventListener('click', (e) => {
     if (window._txSchedule && typeof refreshTxFromSheet === 'function') refreshTxFromSheet();
     return;
   }
+  // Snap the entry date back to the first transaction. Same move the import
+  // confirm makes; here it is on demand, since the entry stays freely
+  // adjustable in transaction mode and startup restores whatever was chosen.
+  if (e.target.closest('#tx-first-date-btn')) {
+    if (!window._txSchedule) return;
+    applyTxEntryDate();
+    if (typeof saveSliders === 'function') saveSliders();
+    if (typeof render === 'function') render();
+    return;
+  }
   // Permanent delete — the only action that actually discards the stash.
   if (e.target.closest('#tx-delete-btn')) {
     window._txSchedule = null;
@@ -866,6 +876,12 @@ function renderTxSummary() {
     const label = s.source === 'sheet' ? 'Change the linked sheet' : 'Edit transactions';
     editBtn.title = label;
     editBtn.setAttribute('aria-label', label);
+  }
+  const firstBtn = document.getElementById('tx-first-date-btn');
+  if (firstBtn) {
+    const label = `Move the entry date to your first transaction (${s.entryDate})`;
+    firstBtn.title = label;
+    firstBtn.setAttribute('aria-label', label);
   }
 }
 // Single shared slider-mode <-> transaction-history toggle (index.html's

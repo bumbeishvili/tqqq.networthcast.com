@@ -464,6 +464,37 @@ function roundToSigFigs(v, n) {
   const magnitude = Math.pow(10, n - Math.ceil(Math.log10(Math.abs(v))));
   return Math.round(v * magnitude) / magnitude;
 }
+// Range-select label numbers: exactly three digits shown for every value —
+// "$43.6K", "$775K", "$1.10M", "+52.0%" — so the stacked labels read as one
+// table, instead of the app-wide fmt()'s four figures ("$43.58K") next to a
+// % that drops its trailing zero ("+52%"). Trailing zeros are kept on purpose:
+// the digit count is what keeps the columns lined up.
+function toSigDigits(v, sig) {
+  if (!v) return (0).toFixed(sig - 1);
+  const rounded = roundToSigFigs(v, sig);
+  const decimals = Math.max(0, sig - Math.floor(Math.log10(Math.abs(rounded))) - 1);
+  return rounded.toFixed(decimals);
+}
+const RANGE_MONEY_UNITS = [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'K']];
+function fmtRangeMoney(v, sig = 3) {
+  const sign = v < 0 ? '-' : '';
+  // Round first, then pick the unit: $999,600 at three digits is $1.00M, not $1000K.
+  const abs = roundToSigFigs(Math.abs(v), sig);
+  const unit = RANGE_MONEY_UNITS.find(([scale]) => abs >= scale);
+  return unit ? `${sign}$${toSigDigits(abs / unit[0], sig)}${unit[1]}` : `${sign}$${toSigDigits(abs, sig)}`;
+}
+function fmtRangePct(p, sig = 3) {
+  return toSigDigits(p, sig);
+}
+// The from → to pair gains digits only when both ends would otherwise print
+// as the same value ("$43.6K → $43.6K" says nothing; "$43.58K → $43.62K" does).
+function fmtRangeMoneyPair(v1, v2) {
+  for (let sig = 3; sig < 6; sig++) {
+    const a = fmtRangeMoney(v1, sig), b = fmtRangeMoney(v2, sig);
+    if (a !== b || v1 === v2) return [a, b];
+  }
+  return [fmtRangeMoney(v1, 5), fmtRangeMoney(v2, 5)];
+}
 // How much time a drag-selected range spans, in the coarsest units that
 // still read naturally — "1 year 2 months", "1 month", "1 week", "3 days" —
 // rather than a raw day count. Calendar-aware (years/months come from actual
@@ -3012,18 +3043,19 @@ function render() {
           cx.stroke();
         });
 
-        // Label text — leads with the % change at 3 significant figures
-        // (roundToSigFigs above — a plain toFixed(1) either shows false
-        // decimal precision on a big move like 1578.466% or rounds a small
-        // one to nothing; this reads as a clean "1580%"), then the actual
-        // from/to values in brackets, e.g. "+1580% ($205K → $3.4M)". The %
-        // draws in a bigger font than the from/to part — it's the number
-        // that actually answers "how much did this move," the bracket is
-        // supporting detail.
+        // Label text — leads with the % change, then the from/to values and
+        // the signed difference in brackets, e.g. "+52.0% ($43.6K → $66.3K,
+        // +$22.7K)". Every number shows three digits (fmtRangeMoney/
+        // fmtRangePct: 168.3 → 168, 57.2 stays) so stacked labels line up
+        // digit for digit; the from/to pair only gains digits when it would
+        // otherwise print as the same value.
+        // The % draws in a bigger font than the bracket part — it's the
+        // number that actually answers "how much did this move," the bracket
+        // is supporting detail.
         const pctSign = delta.pct >= 0 ? '+' : '-';
-        const pctStr = roundToSigFigs(Math.abs(delta.pct), 3);
-        const pctText = `${pctSign}${pctStr}%`;
-        const restText = ` (${fmtFull(v1)} → ${fmtFull(v2)})`;
+        const pctText = `${pctSign}${fmtRangePct(Math.abs(delta.pct))}%`;
+        const [fromStr, toStr] = fmtRangeMoneyPair(v1, v2);
+        const restText = ` (${fromStr} → ${toStr}, ${pctSign}${fmtRangeMoney(Math.abs(delta.abs))})`;
         cx.font = RANGE_PCT_FONT;
         const pctW = cx.measureText(pctText).width;
         cx.font = RANGE_REST_FONT;
@@ -3041,9 +3073,16 @@ function render() {
         const maxY = area.bottom - 5 - (items.length - 1 - k) * LABEL_GAP;
         if (items[k].my > maxY) items[k].my = maxY;
       }
+      // Every pill takes the same width and the same two columns — the % is
+      // right-aligned in the first column, the bracket starts at one shared x
+      // in the second — so the stack reads top-down like a table: same
+      // position, same meaning, on every line.
       const padX = 4;
+      const pctColW = Math.max(...items.map(it => it.pctW));
+      const restColW = Math.max(...items.map(it => it.restW));
+      const tableW = pctColW + restColW;
       items.forEach(it => {
-        const rx = mx - it.tw / 2 - padX, ry = it.my - LABEL_H / 2, rw = it.tw + padX * 2;
+        const rx = mx - tableW / 2 - padX, ry = it.my - LABEL_H / 2, rw = tableW + padX * 2;
         cx.fillStyle = 'rgba(255,255,255,0.92)';
         cx.strokeStyle = it.color;
         cx.lineWidth = 1;
@@ -3057,13 +3096,14 @@ function render() {
         // it's still clear which line a label belongs to when several are
         // stacked close together.
         cx.fillStyle = it.pos ? DELTA_POS_COLOR : DELTA_NEG_COLOR;
-        cx.textAlign = 'left';
         cx.textBaseline = 'middle';
-        const segStartX = mx - it.tw / 2;
+        const tableStartX = mx - tableW / 2;
+        cx.textAlign = 'right';
         cx.font = RANGE_PCT_FONT;
-        cx.fillText(it.pctText, segStartX, it.my + 1);
+        cx.fillText(it.pctText, tableStartX + pctColW, it.my + 1);
+        cx.textAlign = 'left';
         cx.font = RANGE_REST_FONT;
-        cx.fillText(it.restText, segStartX + it.pctW, it.my + 1);
+        cx.fillText(it.restText, tableStartX + pctColW, it.my + 1);
       });
       cx.restore(); // also resets textAlign/textBaseline for whatever draws next
     }
