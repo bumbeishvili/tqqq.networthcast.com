@@ -2412,66 +2412,95 @@ function render() {
       .sort((a, b) => b.v - a.v);
     const maxV = Math.max(0, ...items.map(it => it.v));
 
-    const rows = items.map(({ n, v, col, dash }) => {
+    // One card per visible line, each anchored at its own point on the
+    // hovered date. Every card gets the same width, so the tinted fill
+    // (value / max) reads as a bar chart across cards, the way the rows did
+    // in the old single box. The width is the widest card's natural width,
+    // capped at TT_CARD_MAX; longer names ellipsize.
+    const TT_CARD_MAX = 320, TT_CARD_GAP = 4, TT_CARD_LEAD = 16;
+    const panelRect = c.canvas.closest('.panel').getBoundingClientRect();
+    const canvasRect = c.canvas.getBoundingClientRect();
+    const toPanelX = x => x + canvasRect.left - panelRect.left;
+    const toPanelY = y => y + canvasRect.top - panelRect.top;
+    const hoverX = toPanelX(tooltip.caretX);
+    const areaTop = toPanelY(c.chartArea.top), areaBottom = toPanelY(c.chartArea.bottom);
+
+    const cards = items.map(({ i, n, v, col, dash }) => {
       const pct = maxV > 0 ? Math.max(0, (v / maxV) * 100) : 0;
       const dashAttr = dash ? `stroke-dasharray="${dash.join(',')}"` : '';
       const sample = `<svg width="20" height="4" style="flex-shrink:0;overflow:visible">
         <line x1="0" y1="2" x2="20" y2="2" stroke="${col}" stroke-width="2" stroke-linecap="round" ${dashAttr}/>
       </svg>`;
-      return `
-        <div class="tt-row" style="position:relative">
-          <div style="position:absolute;left:0;top:2px;bottom:2px;width:${pct}%;background:${rgba(col, 0.20)};border-radius:3px;pointer-events:none"></div>
-          <div class="tt-row-left" style="position:relative;z-index:1">
-            ${sample}
-            <span class="tt-name">${n}</span>
+      const pointY = toPanelY(c.getDatasetMeta(i).data[idx].y);
+      const html = `
+        <div class="tt-card">
+          <div class="tt-fill" style="width:${pct}%;background:${rgba(col, 0.20)}"></div>
+          <div class="tt-row">
+            <div class="tt-row-left">${sample}<span class="tt-name" title="${n}">${n}</span></div>
+            <span class="tt-val">${fmtFull(Math.round(v))}</span>
           </div>
-          <span class="tt-val" style="position:relative;z-index:1">${fmtFull(Math.round(v))}</span>
-        </div>
-      `;
-    }).join('');
+        </div>`;
+      return { html, pointY, col };
+    });
 
-    // A quarter label collapses every weekly (or monthly) point in the same
-    // quarter down to the same "Q# YYYY" text, hiding exactly the date detail
-    // the finer axis exists to show — use the real date whenever the shared
-    // axis is finer than quarterly; qLabel stays for the genuinely
-    // quarter-grain case, where each point really is a quarter boundary.
-    // Reads c._displayGrain (stashed fresh each render), NOT the displayGrain
-    // closed over at chart-creation time — externalTooltip itself is only
-    // ever defined once, so a closed-over value would stay frozen at
-    // whatever it was on the very first render.
+    // See the ttDateLabel note in git history: quarter labels collapse finer
+    // points, so use the real date unless the shared axis really is quarterly.
+    // Reads c._displayGrain (stashed fresh each render), not a closed-over one.
     const ttDateLabel = c._displayGrain === 'quarterly' ? qLabel(date) : fmtDayMonthYear(date);
-    el.innerHTML = `<button class="tt-close" type="button" aria-label="Close" data-tt-close>&times;</button><div class="tt-date">${ttDateLabel}</div>${rows}`;
-
+    el.innerHTML = `
+      <svg class="tt-leaders" width="${panelRect.width}" height="${panelRect.height}"></svg>
+      <div class="tt-date-chip">${ttDateLabel}<button class="tt-close" type="button" aria-label="Close" data-tt-close>&times;</button></div>
+      ${cards.map(card => card.html).join('')}`;
     el.style.display = 'block';
-    const panelRect = c.canvas.closest('.panel').getBoundingClientRect();
-    const canvasRect = c.canvas.getBoundingClientRect();
-    // Measured, not assumed: the box has no max-width and a long strategy
-    // name (e.g. "Median overextension (250d) — SQQQ park") can render wider
-    // than the 240px this math used to assume, so the "does it overflow"
-    // check was sometimes wrong on its own terms even before the missing
-    // left-edge clamp below.
-    const ttWidth = el.offsetWidth || 240;
-    const ttHeight = el.offsetHeight || 0;
-    let left = tooltip.caretX + canvasRect.left - panelRect.left + 14;
-    let top = tooltip.caretY + canvasRect.top - panelRect.top - 40;
-    if (left + ttWidth > panelRect.width) left = tooltip.caretX + canvasRect.left - panelRect.left - ttWidth - 14;
-    // The flip above assumes there's room to the LEFT of the tap point too —
-    // on a narrow mobile panel there often isn't, and this had no floor, so
-    // the box could render with a chunk of itself past the left edge of the
-    // screen (this is what "tooltip goes outside of screen" was: not
-    // clipped/scrollable, just genuinely positioned off-viewport).
-    if (left < 10) left = 10;
-    if (top < 0) top = 10;
-    // Same idea vertically: with many visible lines the row list can get tall
-    // enough that the tooltip's bottom edge lands past the viewport — and
-    // since it's absolutely positioned (not clipped), that grows the PAGE's
-    // scrollable height instead of just being an offscreen tooltip. Clamp
-    // against the viewport (converted into panel-relative coords, since
-    // `top` is measured from the panel), not just the panel's own bounds.
-    const viewportBottomInPanel = window.innerHeight - panelRect.top - 10;
-    if (top + ttHeight > viewportBottomInPanel) top = Math.max(10, viewportBottomInPanel - ttHeight);
-    el.style.left = left + 'px';
-    el.style.top = top + 'px';
+
+    // Shared width from the widest natural card, then lay the cards out.
+    const cardEls = Array.from(el.querySelectorAll('.tt-card'));
+    // Fractional width, rounded up: offsetWidth truncates, and a card set
+    // half a pixel narrower than its text ellipsizes the last letter.
+    const naturalWidth = Math.ceil(Math.max(...cardEls.map(card => card.getBoundingClientRect().width)));
+    const cardWidth = Math.min(TT_CARD_MAX, naturalWidth);
+    cardEls.forEach(card => { card.style.width = cardWidth + 'px'; });
+    const cardHeight = cardEls[0]?.offsetHeight || 0;
+
+    // Cards go right of the hover line, or left when that would overflow.
+    let cardLeft = hoverX + TT_CARD_LEAD;
+    if (cardLeft + cardWidth > panelRect.width - 8) cardLeft = hoverX - TT_CARD_LEAD - cardWidth;
+    if (cardLeft < 8) cardLeft = 8;
+
+    // Each card wants to centre on its point. Sort by that, push overlapping
+    // cards down, then pull the stack back up if it runs past the plot's
+    // bottom edge. Points near each other end up as a tidy stack with leader
+    // lines back to their dots.
+    const order = cards.map((card, k) => ({ k, top: card.pointY - cardHeight / 2 })).sort((a, b) => a.top - b.top);
+    order.forEach((o, j) => { if (j) o.top = Math.max(o.top, order[j - 1].top + cardHeight + TT_CARD_GAP); });
+    for (let j = order.length - 1; j >= 0; j--) {
+      const bound = j === order.length - 1 ? areaBottom - cardHeight : order[j + 1].top - cardHeight - TT_CARD_GAP;
+      order[j].top = Math.min(order[j].top, bound);
+    }
+    if (order.length && order[0].top < areaTop) {
+      const shift = areaTop - order[0].top;
+      order.forEach(o => { o.top += shift; });
+    }
+
+    const leaders = el.querySelector('.tt-leaders');
+    const attachX = cardLeft > hoverX ? cardLeft : cardLeft + cardWidth;
+    order.forEach(({ k, top }) => {
+      cardEls[k].style.left = cardLeft + 'px';
+      cardEls[k].style.top = top + 'px';
+      const cardMidY = top + cardHeight / 2;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', hoverX); line.setAttribute('y1', cards[k].pointY);
+      line.setAttribute('x2', attachX); line.setAttribute('y2', cardMidY);
+      line.setAttribute('stroke', cards[k].col);
+      leaders.appendChild(line);
+    });
+
+    // Date chip sits just below the plot, over the x-axis labels and centred
+    // on the hover line like a crosshair readout, kept inside the panel.
+    const chip = el.querySelector('.tt-date-chip');
+    const chipWidth = chip.offsetWidth;
+    chip.style.left = Math.max(8, Math.min(panelRect.width - chipWidth - 8, hoverX - chipWidth / 2)) + 'px';
+    chip.style.top = (areaBottom + 4) + 'px';
   };
 
   // Wire the tooltip's close button and outside-tap dismissal once. The

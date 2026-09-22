@@ -4040,44 +4040,96 @@
   .signal-metrics .positive { color: var(--green, #00b929); }
   .signal-metrics .negative { color: var(--red-text); }
 
+  /* Main-chart hover: a positioning root over the panel (no box of its own),
+     holding one .tt-card per visible line, a date chip above the plot and an
+     SVG of leader lines from each point to its card. Built in externalTooltip
+     (js/chart.js). */
   #custom-tooltip {
     display: none;
     position: absolute;
+    left: 0;
+    top: 0;
+    width: 0;
+    height: 0;
+    overflow: visible;
     /* The tooltip follows the cursor, so it MUST ignore pointer events — if it
        caught them, the cursor landing on it would fire mouseleave on the canvas
        (hiding the tooltip), then re-enter the canvas (showing it again), in a
        flicker loop. The close × re-enables pointer events on itself for touch. */
     pointer-events: none;
+    z-index: 20;
+  }
+  #custom-tooltip .tt-leaders {
+    position: absolute;
+    left: 0;
+    top: 0;
+    overflow: visible;
+  }
+  #custom-tooltip .tt-leaders line {
+    stroke-width: 1;
+    stroke-opacity: 0.55;
+  }
+  #custom-tooltip .tt-card {
+    position: absolute;
+    box-sizing: border-box;
     background: #ffffff;
     border: 1px solid #dbdff1;
-    border-radius: 10px;
-    padding: 14px 16px;
-    z-index: 20;
-    min-width: 220px;
-    max-width: calc(100vw - 24px);
-    /* Backstop for the pathological case (content taller than the whole
-       viewport) — the JS repositioning in externalTooltip (js/chart.js)
-       handles the normal "many visible lines" case by moving the tooltip up
-       so it fits; this just guarantees it can never itself grow the page's
-       scrollable height even if that math is somehow insufficient. */
-    max-height: calc(100vh - 20px);
-    overflow-y: auto;
+    border-radius: 8px;
+    padding: 5px 10px;
     box-shadow: var(--shadow-lg);
+    white-space: nowrap;
+    overflow: hidden;
   }
-  /* Close × inside the main-chart tooltip. Hidden on desktop (hover/leave
-     handles dismissal automatically) and shown on touch / narrow viewports
-     where the tooltip stays pinned until explicitly dismissed. */
-  #custom-tooltip .tt-close {
+  #custom-tooltip .tt-fill {
     position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 26px;
-    height: 26px;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    border-radius: 0;
+    pointer-events: none;
+  }
+  #custom-tooltip .tt-card .tt-row {
+    position: relative;
+    padding: 0;
+    gap: 12px;
+  }
+  #custom-tooltip .tt-card .tt-row-left {
+    min-width: 0;
+  }
+  #custom-tooltip .tt-card .tt-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #custom-tooltip .tt-card .tt-val {
+    flex-shrink: 0;
+  }
+  #custom-tooltip .tt-date-chip {
+    position: absolute;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 3px 10px;
+    background: #ffffff;
+    border: 1px solid #dbdff1;
+    border-radius: 6px;
+    box-shadow: var(--shadow-lg);
+    font-family: 'Open Sans', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  /* Close × on the date chip. Hidden on desktop (hover/leave handles
+     dismissal automatically) and shown on touch / narrow viewports where the
+     tooltip stays pinned until explicitly dismissed. */
+  #custom-tooltip .tt-close {
+    width: 22px;
+    height: 22px;
     border-radius: 4px;
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: 15px;
     line-height: 1;
     cursor: pointer;
     /* Re-enable pointer events (parent is none) so touch users can dismiss. */
@@ -4092,9 +4144,6 @@
   }
   @media (hover: none), (max-width: 600px) {
     #custom-tooltip .tt-close { display: inline-flex; }
-    /* Reserve right padding on the date row so the close button doesn't
-       collide with it. */
-    #custom-tooltip .tt-date { padding-right: 30px; }
   }
 
   .tt-date {

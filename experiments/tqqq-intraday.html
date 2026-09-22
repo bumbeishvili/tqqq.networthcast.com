@@ -27,6 +27,8 @@
   *{box-sizing:border-box}
   body{margin:0;min-height:100vh;display:flex;align-items:center;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
   .wrap{width:100%;max-width:1200px;margin:0 auto;padding:16px}
+  .back-link{display:inline-block;margin:0 0 10px;font-size:12.5px;color:var(--muted);text-decoration:none}
+  .back-link:hover{color:var(--cyan)}
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px}
   .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
   .legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:var(--muted)}
@@ -86,6 +88,7 @@
 </head>
 <body>
 <div class="wrap">
+  <a class="back-link" href="../">← Back to the backtesting platform</a>
   <div class="panel">
     <div class="toolbar">
       <div class="legend"><span class="mean">Mean of all days</span><span class="median">Median of all days</span></div>
