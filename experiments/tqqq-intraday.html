@@ -243,45 +243,134 @@ const ANNOTATION_RULES = [
   { kind: 'sell', anchor: 'mean',   pick: a => d3.greatest(a, d => d.positiveShare),  label: d => `${Math.round(d.positiveShare * 100)}% up` },
 ];
 
-// Label geometry. Labels are LABEL_WIDTH wide and sit LABEL_PADDING past the
-// connector's horizontal leg ("gutter"). GUTTER_BASE is the first level's
-// distance from the point; each further level is one label height further
-// out. Levels are limited so a label never wanders far from its dot.
-const LABEL_WIDTH = 120, LABEL_LEAD = 24, LABEL_PADDING = 6, LABEL_EST_HEIGHT = 36;
-const GUTTER_BASE = 40, LEVEL_STEP = LABEL_EST_HEIGHT + LABEL_PADDING * 2 + 6, MAX_LEVELS = 4, LABEL_CLEARANCE = 6;
+// Label geometry. Labels are LABEL_WIDTH wide; their height depends on how
+// many lines the text wraps to. A stacked label sits LABEL_PADDING past the
+// connector's horizontal leg ("gutter"), GUTTER_BASE from the point on the
+// first level and one label step further out per level. A side label sits
+// beside its point, centred on it, with only a horizontal leg.
+const LABEL_WIDTH = 120, LABEL_LEAD = 24, LABEL_PADDING = 6, LABEL_CLEARANCE = 6;
+const LABEL_LINE_HEIGHT = 12, LABEL_CHROME = 9, LABEL_CHARS_PER_LINE = 17;
+const GUTTER_BASE = 40, LEVEL_STEP = 60, MAX_LEVELS = 4;
+const SIDE_COST = 1.5 * LEVEL_STEP;       // beside the point: after the first stacked level, before the second
+const SIDE_FLIP_COST = 2 * LEVEL_STEP;    // the wrong side of the line costs two levels
+const ROUTE_BEND_COST = 10;               // slight preference for dropping first
+const SEARCH_CANDIDATES = 24, SEARCH_BUDGET = 20000;   // per-label spots kept for the search, and how many steps it may take
 
-// Places one side's labels as close to their points as possible. Each label
-// wants to sit just right of its point (left of it near the right edge) on
-// the first level. Candidates are every level crossed with a few horizontal
-// spots: the preferred one, the near side of the point, and just past each
-// placed box. They are tried cheapest first, where cost is levels out plus
-// pixels sideways, so a cluster of nearby points stacks vertically and only
-// slides along a row when stacking has run out. A spot is free when no
-// placed label shares its row within reach and no connector, this one's or a
-// placed one's, would cross a label box.
-function layoutLabels(items, x, chartWidth) {
-  const placed = [];
-  const spansX = (o, a, b) => o.left < b + LABEL_CLEARANCE && a - LABEL_CLEARANCE < o.right;
-  return items.map(p => {
-    const px = x(p.minute);
-    const preferred = px + LABEL_LEAD + LABEL_WIDTH <= chartWidth ? px + LABEL_LEAD : px - LABEL_LEAD - LABEL_WIDTH;
-    const lefts = [preferred, px - LABEL_LEAD - LABEL_WIDTH]
-      .concat(placed.map(o => o.right + LABEL_CLEARANCE))
-      .filter(l => l >= 0 && l + LABEL_WIDTH <= chartWidth);
-    const free = (level, left) => {
-      const right = left + LABEL_WIDTH;
-      return placed.every(o => {
-        if (o.level === level && spansX(o, left, right)) return false;        // same row, side by side
-        if (o.level < level && spansX(o, px, px)) return false;                // my drop passes its box
-        if (o.level > level && o.px >= left - LABEL_CLEARANCE && o.px <= right + LABEL_CLEARANCE) return false; // its drop passes my box
-        return true;
-      });
+// Title line plus however many lines the reasons wrap to.
+const labelHeight = p => LABEL_CHROME + LABEL_LINE_HEIGHT * (1 + Math.ceil(p.reasons.join(', ').length / LABEL_CHARS_PER_LINE));
+
+// Places every label as close to its point as it can, all at once. Each
+// label wants to sit just past its point on the first stacked level of its
+// preferred side. Candidates are: every stacked level on either side, crossed
+// with a few horizontal spots (the preferred one, the near side of the point,
+// just past each placed box); plus a side spot on either side of the point.
+// They are ranked cheapest first: levels out, then pixels sideways, then the
+// side spot, then the wrong side of the line. A spot is valid when its box
+// stays inside the plot, does not sit on the highlighted line, and neither
+// its box nor its connector touches any other label's box or connector.
+//
+// A bounded depth-first search assigns every label a valid spot, trying
+// cheaper spots first and backing up when a later label is boxed in by an
+// earlier choice. If the search runs out of budget, a greedy pass places the
+// labels one by one, relaxing the constraints in order (off the line, then
+// clear of others, then inside the plot) and taking the cheapest spot as a
+// last resort.
+function layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits) {
+  const C = LABEL_CLEARANCE;
+  const overlaps = (a, b) => a.left < b.right + C && b.left < a.right + C && a.top < b.bottom + C && b.top < a.bottom + C;
+  const segHits = (seg, box) => seg.x1 < box.right + C && box.left - C < seg.x2 && seg.y1 < box.bottom + C && box.top - C < seg.y2;
+  // Two ways to route the L from the point to the box's near corner: drop
+  // first (down from the point, then across at the gutter) or leg first
+  // (across at the point's height, then down at the box's edge). The second
+  // gets past a box that sits directly under the point.
+  const stacked = (px, py, h, sign, level, left, route) => {
+    const gutterY = py + sign * (GUTTER_BASE + level * LEVEL_STEP);
+    const top = sign > 0 ? gutterY + LABEL_PADDING : gutterY - LABEL_PADDING - h;
+    const dropX = route === 'dropFirst' ? px : left;
+    const legY = route === 'dropFirst' ? gutterY : py;
+    return {
+      mode: 'stacked', route, dx: left - px, dy: gutterY - py,
+      box: { left, right: left + LABEL_WIDTH, top, bottom: top + h },
+      drop: { x1: dropX, x2: dropX, y1: Math.min(py, gutterY), y2: Math.max(py, gutterY) },
+      leg: { x1: Math.min(px, left), x2: Math.max(px, left), y1: legY, y2: legY },
     };
-    const candidates = d3.range(MAX_LEVELS).flatMap(level => lefts.map(left => ({ level, left, cost: level * LEVEL_STEP + Math.abs(left - preferred) })));
-    const spot = d3.sort(candidates, c => c.cost).find(c => free(c.level, c.left)) || { level: 0, left: preferred };
-    placed.push({ px, left: spot.left, right: spot.left + LABEL_WIDTH, level: spot.level });
-    return { p, left: spot.left, gutter: GUTTER_BASE + spot.level * LEVEL_STEP };
+  };
+  const beside = (px, py, h, dir) => {
+    const left = dir > 0 ? px + LABEL_LEAD + LABEL_PADDING : px - LABEL_LEAD - LABEL_PADDING - LABEL_WIDTH;
+    return {
+      mode: 'side', dx: dir * LABEL_LEAD, dy: 0,
+      box: { left, right: left + LABEL_WIDTH, top: py - h / 2, bottom: py + h / 2 },
+      drop: { x1: px, x2: px, y1: py, y2: py },
+      leg: { x1: Math.min(px, px + dir * LABEL_LEAD), x2: Math.max(px, px + dir * LABEL_LEAD), y1: py, y2: py },
+    };
+  };
+  const clearOf = (g, others) => others.every(o =>
+    !overlaps(g.box, o.box) && !segHits(g.drop, o.box) && !segHits(g.leg, o.box) && !segHits(o.drop, g.box) && !segHits(o.leg, g.box));
+  const inside = g => g.box.top >= 0 && g.box.bottom <= chartHeight && g.box.left >= 0 && g.box.right <= chartWidth;
+  const offLine = g => !lineHits(g.box);
+
+  // Every candidate spot for a point, cheapest first. extraLefts lets the
+  // greedy pass add spots just past boxes it has already placed.
+  const candidatesFor = (p, extraLefts = []) => {
+    const px = x(p.minute), py = yOf(p), h = labelHeight(p);
+    const preferredSide = sideOf(p);
+    const preferredLeft = px + LABEL_LEAD + LABEL_WIDTH <= chartWidth ? px + LABEL_LEAD : px - LABEL_LEAD - LABEL_WIDTH;
+    const lefts = [preferredLeft, px - LABEL_LEAD - LABEL_WIDTH]
+      .concat(extraLefts)
+      .concat(d3.range(1, 4).flatMap(k => [px + LABEL_LEAD + k * (LABEL_WIDTH + C), px - LABEL_LEAD - (k + 1) * LABEL_WIDTH - k * C]))
+      .filter(l => l >= 0 && l + LABEL_WIDTH <= chartWidth);
+    const candidates = [preferredSide, -preferredSide].flatMap(sign =>
+      d3.range(MAX_LEVELS).flatMap(level => lefts.flatMap(left => ['dropFirst', 'legFirst'].map(route => ({
+        g: stacked(px, py, h, sign, level, left, route),
+        cost: level * LEVEL_STEP + Math.abs(left - preferredLeft) + (sign === preferredSide ? 0 : SIDE_FLIP_COST) + (route === 'legFirst' ? ROUTE_BEND_COST : 0),
+      })))))
+      .concat([1, -1].map(dir => ({ g: beside(px, py, h, dir), cost: SIDE_COST + (dir > 0 ? 0 : LABEL_WIDTH) })));
+    return d3.sort(candidates, c => c.cost).map(c => c.g);
+  };
+
+  // Search: valid spots only, cheapest first, backing up when stuck.
+  const valid = points.map(p => candidatesFor(p).filter(g => inside(g) && offLine(g)).slice(0, SEARCH_CANDIDATES));
+  const chosen = [];
+  let budget = SEARCH_BUDGET;
+  const search = i => {
+    if (i === points.length) return true;
+    for (const g of valid[i]) {
+      if (--budget < 0) return false;
+      if (!clearOf(g, chosen)) continue;
+      chosen.push(g);
+      if (search(i + 1)) return true;
+      chosen.pop();
+    }
+    return false;
+  };
+  if (search(0)) return points.map((p, i) => ({ p, ...chosen[i] }));
+
+  // Greedy fallback with relaxed constraints.
+  const placed = [];
+  return points.map(p => {
+    const ordered = candidatesFor(p, placed.map(o => o.box.right + C));
+    const pick = ordered.find(g => inside(g) && clearOf(g, placed) && offLine(g))
+      || ordered.find(g => inside(g) && clearOf(g, placed))
+      || ordered.find(g => inside(g))
+      || ordered[0];
+    placed.push(pick);
+    return { p, ...pick };
   });
+}
+
+// Does the segment from a to b pass through the box? Liang–Barsky clipping
+// of the segment against the box's four edges.
+function segmentHitsBox(a, b, box) {
+  const dx = b.x - a.x, dy = b.y - a.y;
+  let t0 = 0, t1 = 1;
+  const edges = [[-dx, a.x - box.left], [dx, box.right - a.x], [-dy, a.y - box.top], [dy, box.bottom - a.y]];
+  for (const [p, q] of edges) {
+    if (p === 0) { if (q < 0) return false; continue; }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+    else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return true;
 }
 
 function buildAnnotationPoints(aggregates) {
@@ -316,7 +405,7 @@ function weightedDistance(a, b) {
 // the same minutes by weighted distance and the closest KEEP_SHARE of them
 // is kept (at least one day). A day missing any of those minutes (a half
 // session shorter than the reference) is left out.
-const KEEP_SHARE = 0.04;
+const KEEP_SHARE = 0.08;
 function similarDays(days, reference) {
   const refByMinute = new Map(reference.points.map(p => [p.minute, p.pct]));
   const cutoff = reference.points[reference.points.length - 1].minute;
@@ -495,91 +584,59 @@ class IntradayOverlayChart {
     const { chart, aggregates, x, y, chartWidth, minuteOffset, zoneLabel } = this.getState();
     const KIND_TITLE = { buy: 'Buy', sell: 'Sell' };
     const points = d3.sort(buildAnnotationPoints(aggregates), p => p.minute);
-    // Buys go below the line, sells above, except that a label whose row
-    // would leave the plot (a sell near the top edge, a buy near the bottom)
-    // takes the other side. Sides are settled before packing so a flipped
-    // label shares its new row's layout instead of landing on top of it.
+    // Buys prefer the space below the line, sells above; layoutLabels may
+    // move one across when its own side has no room.
     const { chartHeight } = this.getState();
-    const sideOf = p => {
-      const py = y(p.agg[p.anchor]);
-      const sign = p.kind === 'buy' ? 1 : -1;
-      if (sign < 0 && py - GUTTER_BASE - LABEL_EST_HEIGHT < 0) return 1;
-      if (sign > 0 && py + GUTTER_BASE + LABEL_EST_HEIGHT > chartHeight) return -1;
-      return sign;
-    };
-    const sides = [1, -1].map(sign => ({ sign, items: points.filter(p => sideOf(p) === sign) }));
-    const annotations = sides.flatMap(({ sign, items }) => layoutLabels(items, x, chartWidth).map(({ p, left, gutter }) => {
-      const px = x(p.minute), py = y(p.agg[p.anchor]);
-      const dy = sign * gutter;
+    const yOf = p => y(p.agg[p.anchor]);
+    const sideOf = p => p.kind === 'buy' ? 1 : -1;
+    const lineHits = this.highlightedLineHitTest();
+    const annotations = layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits).map(({ p, mode, route, dx, dy }) => {
+      const px = x(p.minute), py = yOf(p);
+      const stacked = mode === 'stacked';
       return {
-        x: px, y: py, dx: left - px, dy,
+        x: px, y: py, dx, dy,
         className: p.kind,
         subject: { radius: 5 },
-        // Vertical drop from the point to the gutter, then horizontal to the
-        // label's left edge. No diagonal legs.
-        connector: { type: 'curve', curve: d3.curveLinear, points: [[0, dy]] },
+        // Stacked: an L from the point to the label's near corner, bending
+        // at the gutter (drop first) or at the point's height (leg first).
+        // Side: the horizontal leg only. No diagonal legs either way.
+        connector: stacked
+          ? { type: 'curve', curve: d3.curveLinear, points: [route === 'dropFirst' ? [0, dy] : [dx, 0]] }
+          : { type: 'line' },
         note: {
           // The zone suffix only when times are New York's; in the viewer's
           // own time the clock needs no qualifier.
           title: `${KIND_TITLE[p.kind]} ${fmtClock(p.minute + minuteOffset)}${minuteOffset === 0 ? ` ${zoneLabel}` : ''}`,
           label: p.reasons.join(', '),
-          align: 'left',
+          orientation: stacked ? 'topBottom' : 'leftRight',
+          align: stacked ? 'left' : 'middle',
           lineType: 'none',
-          wrap: LABEL_WIDTH,
+          wrap: LABEL_WIDTH - 14,      // text + 5px padding each side stays inside the LABEL_WIDTH box the layout assumes
           bgPadding: { top: 3, left: 5, right: 5, bottom: 3 },
         },
       };
-    }));
-    this.keepLabelsOffToday(annotations);
+    });
     const g = chart._add('g.annotations');
     g.selectAll('*').remove();          // d3-annotation owns this subtree; rebuild it each render
     g.call(d3.annotation().type(d3.annotationCalloutCircle).notePadding(LABEL_PADDING).annotations(annotations));
   }
 
-  // Today's line is the thing to read, so no label may sit on it. Each label
-  // box is tested against today's points (a 5-minute bar is ~14px wide, so
-  // the box is padded by that much). A box on the line is pushed outward in
-  // steps; if it runs out of plot it flips to the other side and tries again
-  // from there. A flip that would land on another label is not taken.
-  keepLabelsOffToday(annotations) {
-    const { data, x, y, chartHeight, todayId } = this.getState();
-    const today = data.find(d => d.id === todayId);
-    if (!today) return;
-    const PAD = 8, STEP = 24, MAX_TRIES = 6;
-    const todayPts = today.points.map(p => ({ x: x(p.minute), y: y(p.pct) }));
-    const boxOf = a => {
-      const left = a.x + a.dx, right = left + LABEL_WIDTH;
-      const top = a.dy > 0 ? a.y + a.dy + LABEL_PADDING : a.y + a.dy - LABEL_PADDING - LABEL_EST_HEIGHT;
-      return { left, right, top, bottom: top + LABEL_EST_HEIGHT };
+  // The highlighted line is the thing to read, so no label may sit on it:
+  // today's path when it is in view, else the reference day of the
+  // similar-days filter. Returns a test of a label box, padded a little,
+  // against every segment of that line.
+  highlightedLineHitTest() {
+    const { data, x, y, todayId, referenceId } = this.getState();
+    const line = data.find(d => d.id === todayId) || data.find(d => d.id === referenceId);
+    if (!line) return () => false;
+    const PAD = 8;
+    const pts = line.points.map(p => ({ x: x(p.minute), y: y(p.pct) }));
+    return b => {
+      const box = { left: b.left - PAD, right: b.right + PAD, top: b.top - PAD, bottom: b.bottom + PAD };
+      return pts.some((p, i) => i > 0 && segmentHitsBox(pts[i - 1], p, box));
     };
-    const touchesToday = b => todayPts.some(p =>
-      p.x > b.left - PAD && p.x < b.right + PAD && p.y > b.top - PAD && p.y < b.bottom + PAD);
-    const boxesOverlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-    const insidePlot = b => b.top >= 0 && b.bottom <= chartHeight;
-    const clearOfOthers = (a, b) => annotations.every(o => o === a || !boxesOverlap(b, boxOf(o)));
-
-    annotations.forEach(a => {
-      if (!touchesToday(boxOf(a))) return;
-      const startDy = a.dy;
-      for (const sign of [Math.sign(startDy), -Math.sign(startDy)]) {
-        let dy = sign === Math.sign(startDy) ? startDy : -startDy;
-        for (let i = 0; i < MAX_TRIES; i++) {
-          const candidate = { ...a, dy };
-          const b = boxOf(candidate);
-          if (!insidePlot(b)) break;
-          if (!touchesToday(b) && clearOfOthers(a, b)) {
-            a.dy = dy;
-            a.connector.points = [[0, dy]];
-            return;
-          }
-          dy += sign * STEP;
-        }
-      }
-    });
   }
 
-  // Vertical marker at the current time while the session is open. Called
-  // from render() and again on a timer so it walks across the chart.
   drawNow() {
     const { chart, x, chartHeight, minuteOffset, zoneLabel } = this.getState();
     const minute = marketMinuteNow();
