@@ -761,12 +761,15 @@ function setupPeriodSlider(allDays, onChange) {
 }
 
 // On/off switches whose state survives reloads, one localStorage key each.
-// localStorage can be missing or throw (private mode, blocked storage); the
-// switch then just starts off.
+// With nothing saved, or when localStorage is missing or throws (private
+// mode, blocked storage), the switch takes its default.
 const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
 const LOCAL_TZ_STORAGE_KEY = 'tqqq-intraday-local-time';
-function readSavedSwitch(key) {
-  try { return localStorage.getItem(key) === '1'; } catch { return false; }
+function readSavedSwitch(key, fallback = false) {
+  try {
+    const saved = localStorage.getItem(key);
+    return saved === null ? fallback : saved === '1';
+  } catch { return fallback; }
 }
 function writeSavedSwitch(key, on) {
   try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* storage unavailable */ }
@@ -808,7 +811,7 @@ d3.tsv(DATA_URL).then(rows => {
   const localLabel = shortZoneName(LOCAL_TZ);
   d3.select('#tz-switch-label').text(`Show in my time (${localLabel})`);
   const applyLocalTime = on => chart.minuteOffset(on ? localOffset : 0).zoneLabel(on ? localLabel : 'ET');
-  const localTimeOn = readSavedSwitch(LOCAL_TZ_STORAGE_KEY);
+  const localTimeOn = readSavedSwitch(LOCAL_TZ_STORAGE_KEY, true);
   applyLocalTime(localTimeOn);
   d3.select('#toggle-local-tz').property('checked', localTimeOn).on('change', function () {
     writeSavedSwitch(LOCAL_TZ_STORAGE_KEY, this.checked);
