@@ -119,7 +119,10 @@ def fetch_alpaca(start):
     params = {
         'symbols': TICKER, 'timeframe': f'{BAR_MINUTES}Min',
         'start': start.strftime('%Y-%m-%dT%H:%M:%SZ'),
-        'limit': ALPACA_PAGE_LIMIT, 'adjustment': 'raw', 'feed': 'sip', 'sort': 'asc',
+        # Split-adjusted, so a day's open compares with the previous close
+        # across a split (TQQQ split 2-for-1 on 2025-11-20). A split after
+        # the stored history needs a full re-pull to stay consistent.
+        'limit': ALPACA_PAGE_LIMIT, 'adjustment': 'split', 'feed': 'sip', 'sort': 'asc',
     }
     bars = {}
     page = 0

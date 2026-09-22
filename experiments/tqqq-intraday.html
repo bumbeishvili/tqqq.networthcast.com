@@ -26,11 +26,29 @@
   .wrap{width:100%;max-width:1200px;margin:0 auto;padding:16px}
   .back-link{display:inline-block;margin:0 0 10px;font-size:12.5px;color:var(--muted);text-decoration:none}
   .back-link:hover{color:var(--accent)}
-  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px}
-  .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
-  .legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:var(--muted)}
-  .period{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:280px}
-  .coverage{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:12px 16px 8px}
+  .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 28px;margin:0 0 4px}
+  /* Metric filters: one block per day statistic, each a labelled brushable
+     histogram. Fixed sizes so the row never moves. */
+  /* The two histograms share the room between the toggle and the period
+     block equally; each is measured once, after layout, so bars and brush
+     match the width it got. */
+  .metric{display:flex;flex-direction:column;gap:3px;flex:1 1 0;min-width:160px;max-width:420px;padding-bottom:12px;font-family:var(--mono);font-size:11.5px}
+  .metric-head{display:flex;align-items:center;justify-content:space-between;gap:8px;height:18px;white-space:nowrap}
+  .metric-name{font-family:var(--sans);font-size:12.5px;color:var(--muted)}
+  .metric-range{color:var(--faint)}
+  .metric-hist{display:block;width:100%;overflow:visible;box-sizing:border-box;background:var(--bg);border:1px solid var(--border);border-radius:4px}
+  .metric-hist .bar{fill:var(--border2)}
+  .metric-hist .bar.in{fill:var(--accent)}
+  .metric-hist .zero{stroke:var(--faint);stroke-width:1}
+  .metric-hist .selection{fill:var(--accent);fill-opacity:.12;stroke:var(--accent);stroke-width:1}
+  .metric-hist .handle{fill:var(--panel);stroke:var(--accent);stroke-width:1.5}
+  .metric-hist .overlay{cursor:crosshair}
+  .metric-hist .handle-label{font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--accent);dominant-baseline:hanging}
+  /* Fixed width in mono characters, enough for the longest coverage line, so
+     the block and its slider never resize as the dates and day count change. */
+  .period{margin-left:auto;display:flex;flex-direction:column;align-items:stretch;gap:3px;flex:0 0 auto;width:42ch;font-family:var(--mono);font-size:11.5px}
+  .coverage{color:var(--faint);white-space:nowrap;text-align:right}
   .coverage b{color:var(--muted);font-weight:500}
   /* Two native sliders stacked on one track; only the thumbs take pointer events. */
   .range{position:relative;width:100%;height:16px}
@@ -49,9 +67,6 @@
   .switch input:checked+.track{background:var(--accent)}
   .switch input:checked+.track::after{transform:translateX(14px)}
   .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
-  .legend span::before{content:"";display:inline-block;width:18px;height:0;border-top:2px solid var(--c);vertical-align:middle;margin-right:6px}
-  .legend .mean{--c:var(--mean)} .legend .median{--c:var(--orange)}
-  .filters{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:0 0 8px;font-size:12.5px;color:var(--muted)}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
   #chart{position:relative;min-height:520px}
   #chart svg{display:block}
@@ -75,6 +90,8 @@
   .today-label .up{fill:var(--green)} .today-label .down{fill:var(--red)}
   .mean-path{fill:none;stroke:var(--mean);stroke-width:2.5}
   .median-path{fill:none;stroke:var(--orange);stroke-width:2;stroke-dasharray:6 4}
+  .line-label{font-family:var(--mono);font-size:10.5px;font-weight:600;dominant-baseline:middle;pointer-events:none}
+  .line-label.mean{fill:var(--mean)} .line-label.median{fill:var(--orange)}
   .hover-rule{stroke:var(--faint);stroke-width:1;stroke-dasharray:3 3;pointer-events:none}
   .now-line{stroke:var(--faint);stroke-width:1;stroke-dasharray:2 4;pointer-events:none}
   .now-label{font-family:var(--mono);font-size:10.5px;fill:var(--faint);pointer-events:none}
@@ -85,16 +102,20 @@
   .annotation text{font-family:var(--mono);font-size:10px;fill:var(--muted)}
   .annotation .annotation-note-title{font-weight:600;fill:var(--c)}
   .annotation.buy{--c:var(--green)} .annotation.sell{--c:var(--red)}
-  .readout{position:absolute;top:8px;right:8px;background:var(--panel);border:1px solid var(--border2);border-radius:8px;
-    padding:8px 10px;font-family:var(--mono);font-size:12px;pointer-events:none;line-height:1.6;min-width:180px}
-  .readout .t{color:var(--text);font-weight:600}
-  .readout .s{color:var(--faint);font-size:11px;margin-bottom:4px}
-  .readout .r{display:flex;justify-content:space-between;gap:14px;color:var(--muted)}
-  .readout .r b{color:var(--text);font-weight:500}
-  .readout .r span::before{content:"";display:inline-block;width:10px;height:0;border-top:2px solid var(--c, transparent);vertical-align:middle;margin-right:6px}
-  .readout .r.mean{--c:var(--mean)} .readout .r.median{--c:var(--orange)} .readout .r.median span::before{border-top-style:dashed}
-  .readout .r.day{--c:var(--hover);margin-top:4px;padding-top:4px;border-top:1px solid var(--border)}
-  .readout .r.day span{color:var(--hover)}
+  /* Hover marks, drawn in the plot: a time chip on the axis, values where the
+     crosshair crosses the mean, median and hovered day, and the hovered day's
+     end. Text carries a panel-coloured halo so it reads over the fan. */
+  .hover-marks{pointer-events:none}
+  .hover-marks text{font-family:var(--mono);font-size:10.5px;font-weight:600;paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round}
+  .hover-time-bg{fill:var(--panel);stroke:var(--faint);stroke-width:1;rx:4}
+  .hover-time{fill:var(--text);text-anchor:middle;dominant-baseline:middle;stroke:none}
+  .hover-cross circle{stroke-width:2;fill:var(--panel)}
+  .hover-cross.mean circle{stroke:var(--mean)} .hover-cross.mean text{fill:var(--mean)}
+  .hover-cross.median circle{stroke:var(--orange)} .hover-cross.median text{fill:var(--orange)}
+  .hover-cross.day circle{stroke:var(--hover)} .hover-cross.day text{fill:var(--hover)}
+  .hover-cross text{dominant-baseline:middle}
+  text.hover-end{fill:var(--hover)}
+  text.hover-end .dim{font-weight:400;fill:var(--muted)}
 </style>
 </head>
 <body>
@@ -102,7 +123,19 @@
   <a class="back-link" href="../">← Back to the backtesting platform</a>
   <div class="panel">
     <div class="toolbar">
-      <div class="legend"><span class="mean">Mean of all days</span><span class="median">Median of all days</span></div>
+      <label class="switch" id="similar-switch">
+        <input type="checkbox" id="toggle-similar">
+        <span class="track"></span>
+        <span class="switch-label">Similar days only</span>
+      </label>
+      <div class="metric" data-metric="open" title="Open vs the previous session's close. Drag across the bars to keep only days in that range. Double-click to clear.">
+        <div class="metric-head"><span class="metric-name">Open</span><span class="metric-range"></span></div>
+        <svg class="metric-hist" height="28"></svg>
+      </div>
+      <div class="metric" data-metric="close" title="Close vs the previous session's close. Drag across the bars to keep only days in that range. Double-click to clear.">
+        <div class="metric-head"><span class="metric-name">Close</span><span class="metric-range"></span></div>
+        <svg class="metric-hist" height="28"></svg>
+      </div>
       <div class="period">
         <div class="coverage" id="coverage"></div>
         <div class="range" id="period-range">
@@ -112,18 +145,6 @@
           <input type="range" id="range-end" min="0" value="0" step="1" aria-label="Period end">
         </div>
       </div>
-      <label class="switch" id="tz-switch">
-        <input type="checkbox" id="toggle-local-tz">
-        <span class="track"></span>
-        <span class="switch-label" id="tz-switch-label"></span>
-      </label>
-    </div>
-    <div class="filters">
-      <label class="switch" id="similar-switch">
-        <input type="checkbox" id="toggle-similar">
-        <span class="track"></span>
-        <span class="switch-label">Similar days only</span>
-      </label>
     </div>
     <div id="chart"></div>
   </div>
@@ -134,7 +155,13 @@ const DATA_URL = '../data/intraday/tqqq-5m.tsv';
 const SESSION_OPEN_MIN = 9 * 60 + 30;
 const SESSION_CLOSE_MIN = 16 * 60;
 const BAR_MINUTES = 5;
-const DAY_OPACITY = 0.05;
+// Day lines are faint so 750 of them read as a fan; with few days shown the
+// same opacity vanishes, so it scales up: 5% for hundreds of days, 35% for
+// a dozen. The count is the days that pass the period and histogram filters,
+// before the similar-days pick, so switching that pick on does not recolour
+// the lines.
+const DAY_OPACITY_MIN = 0.05, DAY_OPACITY_MAX = 0.35, DAY_OPACITY_SCALE = 4;
+const dayOpacity = count => Math.min(DAY_OPACITY_MAX, Math.max(DAY_OPACITY_MIN, DAY_OPACITY_SCALE / Math.max(1, count)));
 // Symlog is linear inside a band around zero and logarithmic beyond it, so the
 // crowded region gets room while big days still fit. A plain log scale cannot
 // hold zero or negative moves. Ticks come from this ladder, starting at the
@@ -183,6 +210,11 @@ function marketMinuteNow() {
 
 const NOW_REFRESH_MS = 30 * 1000;
 const NOW_TICK_SHARE = 0.05;             // the "now" tick spans this share of the plot height, from the top
+const LINE_LABEL_MIN_GAP = 13;           // px between the mean and median end labels
+const HOVER_LABEL_GAP = 14;              // px between stacked crosshair value labels
+const HOVER_LABEL_ROOM = 150;            // px from the right edge inside which hover labels flip to the left
+const HOVER_END_HEIGHT = 26;             // px the two-line end label needs
+const HOVER_END_CLEARANCE = 20;          // px the end label keeps from the mean / median names
 
 // Calendar date in New York, as the data's day timestamps are midnight ET.
 const marketDateNow = () => new Intl.DateTimeFormat('en-CA', { timeZone: MARKET_TZ }).format(new Date());
@@ -195,9 +227,10 @@ const shortZoneName = timeZone =>
 // % change of the bar's close vs the day's first open, placed at bar end time.
 function buildDays(rows) {
   const byDay = d3.groups(rows, r => d3.timeDay.floor(parseStamp(r.Date)).getTime());
-  return byDay.map(([dayMs, bars]) => {
+  const days = byDay.map(([dayMs, bars]) => {
     const sorted = d3.sort(bars, r => parseStamp(r.Date));
     const open = +sorted[0].Open;
+    const lastClose = +sorted[sorted.length - 1].Close;
     const points = [{ minute: SESSION_OPEN_MIN, pct: 0 }].concat(sorted.map(r => {
       const t = parseStamp(r.Date);
       return { minute: t.getHours() * 60 + t.getMinutes() + BAR_MINUTES, pct: (+r.Close / open - 1) * 100 };
@@ -207,10 +240,21 @@ function buildDays(rows) {
       id: dayMs,
       date: new Date(dayMs),
       points,
-      closePct: last.pct,
+      open,
+      lastClose,
       complete: last.minute === SESSION_CLOSE_MIN,
     };
   });
+  // Open and close vs the previous session's close, the figures a quote
+  // screen reports. Both include the overnight gap, unlike the chart's
+  // open-relative lines.
+  const ordered = d3.sort(days, d => d.date);
+  ordered.forEach((d, i) => {
+    const prevClose = i ? ordered[i - 1].lastClose : null;
+    d.openVsPrevPct = prevClose ? (d.open / prevClose - 1) * 100 : null;
+    d.closeVsPrevPct = prevClose ? (d.lastClose / prevClose - 1) * 100 : null;
+  });
+  return ordered;
 }
 
 // Mean and median of every day's % at each minute of the session.
@@ -430,9 +474,9 @@ class IntradayOverlayChart {
       id: 'ID' + Math.floor(Math.random() * 1000000),
       svgWidth: 400,
       svgHeight: 600,
-      marginTop: 12,
+      marginTop: 8,
       marginBottom: 32,
-      marginRight: 16,
+      marginRight: 108,         // room for the mean / median labels and the hovered day's date at the line ends
       marginLeft: 52,
       container: 'body',
       defaultFont: 'inherit',
@@ -443,11 +487,13 @@ class IntradayOverlayChart {
       firstRender: true,
       yScaleType: 'symlog',
       symlogLinearPct: 0.1,
+      yLimit: null,             // fixed |%| extent of the y-axis, set once from all days so filtering never rescales
       minuteOffset: 0,          // added to New York minutes for axis and readout labels
       zoneLabel: 'ET',
       referenceId: null,        // day drawn as the reference when the similar-days filter is on
       matchCutoff: null,        // last matched minute; shades the window when set
       todayId: null,            // the latest day in the file, drawn on its own layer on top
+      opacityCount: null,       // days the opacity is tuned for; defaults to the days drawn
     };
     this.getState = () => attrs;
     this.setState = d => Object.assign(attrs, d);
@@ -490,7 +536,7 @@ class IntradayOverlayChart {
     const allPct = data.flatMap(d => d.points.map(p => p.pct));
     const x = d3.scaleLinear().domain([SESSION_OPEN_MIN, SESSION_CLOSE_MIN]).range([0, chartWidth]);
     const [lo, hi] = d3.extent(allPct);
-    const limit = Math.ceil(Math.max(-lo, hi));
+    const limit = this.getState().yLimit || Math.ceil(Math.max(-lo, hi));
     const y = (yScaleType === 'symlog'
       ? d3.scaleSymlog().constant(symlogLinearPct)
       : d3.scaleLinear()).domain([-limit, limit]).range([chartHeight, 0]);
@@ -530,11 +576,13 @@ class IntradayOverlayChart {
       .attr('x', x(SESSION_OPEN_MIN)).attr('y', 0)
       .attr('width', matchCutoff === null ? 0 : x(matchCutoff) - x(SESSION_OPEN_MIN))
       .attr('height', chartHeight);
-    const { todayId } = this.getState();
-    chart._add('g.days')._add('path.day-path', data.filter(d => d.id !== todayId))
+    const { todayId, opacityCount } = this.getState();
+    const faint = data.filter(d => d.id !== todayId);
+    const opacity = dayOpacity(opacityCount ?? faint.length);
+    chart._add('g.days')._add('path.day-path', faint)
       .attr('d', d => line(d.points))
       .classed('reference', d => d.id === referenceId)
-      .style('opacity', d => d.id === referenceId ? 1 : DAY_OPACITY);
+      .style('opacity', d => d.id === referenceId ? 1 : opacity);
   }
 
   // Today's path on its own layer above the aggregates and labels. The line
@@ -557,18 +605,22 @@ class IntradayOverlayChart {
         .on('end', () => path.attr('stroke-dasharray', null).attr('stroke-dashoffset', null));
     }
     const cx = x(last.minute), cy = y(last.pct);
-    g._add('g.today-rings', live ? [0, 1] : []).attr('transform', `translate(${cx},${cy})`)
-      ._add('circle.today-ring', k => [k]).attr('r', 5).classed('second', k => k === 1);
+    // The rings group always exists; its circles are joined to two items
+    // while live and to none otherwise, so an empty join never has to chain
+    // off an empty selection.
+    g._add('g.today-rings').attr('transform', `translate(${cx},${cy})`)
+      ._add('circle.today-ring', live ? [0, 1] : []).attr('r', 5).classed('second', k => k === 1);
     g._add('circle.today-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
     const nearRightEdge = cx > chartWidth - 110;
-    // "today" and its running change vs the open, beside the dot and below
-    // it so sell labels above the line stay clear. The pulsing rings, not the
-    // word, say whether the session is open.
+    // The latest day's change vs its open, beside the dot and below it so
+    // sell labels above the line stay clear. While the session is open this
+    // is "today" with pulsing rings; once it has closed, or on a day with no
+    // session, the same line stays as the previous close.
     const tone = last.pct > 0 ? 'up' : last.pct < 0 ? 'down' : '';
     g._add('text.today-label')
       .attr('x', cx + (nearRightEdge ? -10 : 10)).attr('y', cy + 18)
       .attr('text-anchor', nearRightEdge ? 'end' : 'start')
-      .html(`today <tspan class="${tone}">${fmtPct(last.pct)}</tspan>`);
+      .html(`${live ? 'today' : 'prev close'} <tspan class="${tone}">${fmtPct(last.pct)}</tspan>`);
   }
 
   drawAggregates() {
@@ -578,6 +630,25 @@ class IntradayOverlayChart {
     const g = chart._add('g.aggregates');
     g._add('path.median-path').attr('d', medianLine(aggregates));
     g._add('path.mean-path').attr('d', meanLine(aggregates));
+
+    // Name each line at its right-hand end instead of a legend. When the two
+    // end within a label's height of each other, push them apart.
+    const last = aggregates[aggregates.length - 1];
+    const labels = [
+      { id: 'mean', text: 'mean', y: y(last.mean) },
+      { id: 'median', text: 'median', y: y(last.median) },
+    ];
+    const gap = labels[0].y - labels[1].y;
+    if (Math.abs(gap) < LINE_LABEL_MIN_GAP) {
+      const push = (LINE_LABEL_MIN_GAP - Math.abs(gap)) / 2;
+      labels[0].y += gap >= 0 ? push : -push;
+      labels[1].y += gap >= 0 ? -push : push;
+    }
+    g._add('text.line-label', labels)
+      .attr('class', d => `line-label ${d.id}`)
+      .attr('x', x(last.minute) + 6).attr('y', d => d.y)
+      .text(d => d.text);
+    this.setState({ lineLabelYs: labels.map(l => l.y) });   // the hover end label steers around these
   }
 
   drawAnnotations() {
@@ -604,9 +675,7 @@ class IntradayOverlayChart {
           ? { type: 'curve', curve: d3.curveLinear, points: [route === 'dropFirst' ? [0, dy] : [dx, 0]] }
           : { type: 'line' },
         note: {
-          // The zone suffix only when times are New York's; in the viewer's
-          // own time the clock needs no qualifier.
-          title: `${KIND_TITLE[p.kind]} ${fmtClock(p.minute + minuteOffset)}${minuteOffset === 0 ? ` ${zoneLabel}` : ''}`,
+          title: `${KIND_TITLE[p.kind]} ${fmtClock(p.minute + minuteOffset)}`,
           label: p.reasons.join(', '),
           orientation: stacked ? 'topBottom' : 'leftRight',
           align: stacked ? 'left' : 'middle',
@@ -654,12 +723,14 @@ class IntradayOverlayChart {
   }
 
   drawHover() {
-    const { chart, d3Container, aggregates, data, x, chartWidth, chartHeight, minuteOffset, zoneLabel, referenceId } = this.getState();
-    const restOpacity = d => d.id === referenceId ? 1 : DAY_OPACITY;
+    const { chart, d3Container, aggregates, data, x, y, chartWidth, chartHeight, minuteOffset, referenceId } = this.getState();
+    const { todayId, opacityCount } = this.getState();
+    const opacity = dayOpacity(opacityCount ?? data.filter(d => d.id !== todayId).length);
+    const restOpacity = d => d.id === referenceId ? 1 : opacity;
     const rule = chart._add('line.hover-rule')
       .attr('y1', 0).attr('y2', chartHeight)
       .style('display', 'none');
-    const readout = d3Container._add('div.readout').style('display', 'none');
+    const marks = chart._add('g.hover-marks').style('display', 'none');
     const dayPaths = chart.selectAll('path.day-path');
     const bisectMinute = d3.bisector(a => a.minute).center;
     const bisectPoint = d3.bisector(p => p.minute).center;
@@ -673,7 +744,7 @@ class IntradayOverlayChart {
         rule.style('display', null).attr('x1', x(agg.minute)).attr('x2', x(agg.minute));
 
         // The day whose path is nearest the cursor gets highlighted.
-        const cursorPct = this.getState().y.invert(d3.pointer(event)[1]);
+        const cursorPct = y.invert(d3.pointer(event)[1]);
         const nearest = d3.least(data, d => {
           const p = d.points[bisectPoint(d.points, agg.minute)];
           return p.minute === agg.minute ? Math.abs(p.pct - cursorPct) : Infinity;
@@ -681,17 +752,58 @@ class IntradayOverlayChart {
         dayPaths.classed('hover', d => d === nearest).style('opacity', d => d === nearest ? 1 : restOpacity(d));
         const nearestPct = nearest.points[bisectPoint(nearest.points, agg.minute)].pct;
 
-        readout.style('display', null).html(`
-          <div class="t">${fmtClock(agg.minute + minuteOffset)} ${zoneLabel}</div>
-          <div class="s">change vs 9:30 open, ${agg.n} days</div>
-          <div class="r mean"><span>mean day</span><b>${fmtPct(agg.mean)}</b></div>
-          <div class="r median"><span>median day</span><b>${fmtPct(agg.median)}</b></div>
-          <div class="r"><span>days above open</span><b>${Math.round(agg.positiveShare * 100)}%</b></div>
-          <div class="r day"><span>${d3.timeFormat('%b %-d, %Y')(nearest.date)}</span><b>${fmtPct(nearestPct)}</b></div>`);
+        marks.style('display', null);
+        const hx = x(agg.minute);
+        const onRight = hx > chartWidth - HOVER_LABEL_ROOM;
+
+        // Time chip on the axis under the crosshair.
+        const timeText = fmtClock(agg.minute + minuteOffset);
+        const chipW = timeText.length * 6.6 + 12, chipH = 16;
+        const chip = marks._add('g.hover-time-chip')
+          .attr('transform', `translate(${Math.max(chipW / 2, Math.min(chartWidth - chipW / 2, hx))},${chartHeight + 10})`);
+        chip._add('rect.hover-time-bg').attr('x', -chipW / 2).attr('y', -chipH / 2).attr('width', chipW).attr('height', chipH);
+        chip._add('text.hover-time').text(timeText);
+
+        // Values where the crosshair crosses each line, pushed apart when
+        // two would sit on top of each other.
+        const crossings = [
+          { id: 'mean', text: `mean ${fmtPct(agg.mean)}`, y: y(agg.mean) },
+          { id: 'median', text: `median ${fmtPct(agg.median)}`, y: y(agg.median) },
+          { id: 'day', text: fmtPct(nearestPct), y: y(nearestPct) },
+        ];
+        const ordered = d3.sort(crossings, c => c.y);
+        ordered.forEach(c => { c.ly = c.y; });
+        for (let i = 1; i < ordered.length; i++) ordered[i].ly = Math.max(ordered[i].ly, ordered[i - 1].ly + HOVER_LABEL_GAP);
+        for (let i = ordered.length - 2; i >= 0; i--) ordered[i].ly = Math.min(ordered[i].ly, ordered[i + 1].ly - HOVER_LABEL_GAP);
+        const cross = marks._add('g.hover-cross', crossings)
+          .attr('class', c => `hover-cross ${c.id}`)
+          .attr('transform', c => `translate(${hx},0)`);
+        cross._add('circle.hover-dot').attr('cy', c => c.y).attr('r', 3.5);
+        cross._add('text.hover-value')
+          .attr('x', onRight ? -9 : 9).attr('y', c => c.ly)
+          .attr('text-anchor', onRight ? 'end' : 'start')
+          .text(c => c.text);
+
+        // The hovered day's end, in the right margin beside the plot like the
+        // mean and median names: its date, then its final change and the time
+        // of that bar. Two lines, placed at the line's end unless that would
+        // sit on the mean or median name, in which case it moves up or down.
+        const last = nearest.points[nearest.points.length - 1];
+        const ey = y(last.pct);
+        const { lineLabelYs = [] } = this.getState();
+        const clearOfNames = cy => lineLabelYs.every(ly => Math.abs(cy - ly) > HOVER_END_CLEARANCE);
+        const inPlot = cy => cy - HOVER_END_HEIGHT / 2 >= 0 && cy + HOVER_END_HEIGHT / 2 <= chartHeight;
+        const endY = [ey, ey - HOVER_END_HEIGHT, ey + HOVER_END_HEIGHT, ey - 2 * HOVER_END_HEIGHT, ey + 2 * HOVER_END_HEIGHT]
+          .find(cy => inPlot(cy) && clearOfNames(cy)) ?? ey;
+        const endLabel = marks._add('text.hover-end')
+          .attr('x', chartWidth + 6).attr('y', endY).attr('text-anchor', 'start')
+          .attr('class', 'hover-end');
+        endLabel.html(`<tspan x="${chartWidth + 6}" dy="-0.35em">${d3.timeFormat('%b %-d, %Y')(nearest.date)}</tspan>` +
+          `<tspan x="${chartWidth + 6}" dy="1.2em" class="dim">${fmtPct(last.pct)} at ${fmtClock(last.minute + minuteOffset)}</tspan>`);
       })
       .on('mouseleave', () => {
         rule.style('display', 'none');
-        readout.style('display', 'none');
+        marks.style('display', 'none');
         dayPaths.classed('hover', false).style('opacity', restOpacity);
       });
   }
@@ -756,8 +868,7 @@ class IntradayOverlayChart {
 function renderCoverage(days) {
   const fmtDate = d3.timeFormat('%b %-d, %Y');
   d3.select('#coverage').html(
-    `TQQQ ${BAR_MINUTES}-min bars, <b>${days.length}</b> trading days, ` +
-    `<b>${fmtDate(days[0].date)}</b> to <b>${fmtDate(days[days.length - 1].date)}</b>`);
+    `<b>${days.length}</b> days, <b>${fmtDate(days[0].date)}</b> to <b>${fmtDate(days[days.length - 1].date)}</b>`);
 }
 
 // The slider position survives reloads. A thumb resting on an edge is saved
@@ -818,7 +929,6 @@ function setupPeriodSlider(allDays, onChange) {
 // With nothing saved, or when localStorage is missing or throws (private
 // mode, blocked storage), the switch takes its default.
 const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
-const LOCAL_TZ_STORAGE_KEY = 'tqqq-intraday-local-time';
 function readSavedSwitch(key, fallback = false) {
   try {
     const saved = localStorage.getItem(key);
@@ -829,9 +939,104 @@ function writeSavedSwitch(key, on) {
   try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* storage unavailable */ }
 }
 
-// Similar-days control: just the toggle.
+// Metric filters: keep days whose open and whose close, both vs the previous
+// session's close, fall inside brushed ranges. Each metric is a
+// small histogram over all days with the same number of bins, spanning the
+// metric's full extent rounded to 0.1%. The brush starts at the full extent,
+// handles showing, so the control reads as a range from the first look; at
+// the full extent nothing is filtered. The latest day is never filtered out:
+// it is the reference the similar-days filter compares against. Each brush
+// is saved; a bound at an extreme is saved as 'edge' so it keeps following
+// the data.
+const METRICS = {
+  open: { value: d => d.openVsPrevPct },
+  close: { value: d => d.closeVsPrevPct },
+};
+const METRIC_STEP = 0.1;
+const METRIC_BINS = 30;
+const HANDLE_LABEL_GAP = 6;              // px kept between a histogram's two bound labels
+const metricStorageKey = key => `tqqq-intraday-metric-${key}`;
+function readSavedRange(key) {
+  try { return JSON.parse(localStorage.getItem(metricStorageKey(key))) || {}; } catch { return {}; }
+}
+function writeSavedRange(key, range) {
+  try { localStorage.setItem(metricStorageKey(key), JSON.stringify(range)); } catch { /* storage unavailable */ }
+}
+
+// One brushable histogram. Returns { pass(day) } for the current range.
+function setupMetricHistogram(key, allDays, onChange) {
+  const block = d3.select(`.metric[data-metric="${key}"]`);
+  const svg = block.select('svg.metric-hist'), rangeLabel = block.select('.metric-range');
+  const round = v => +v.toFixed(1);
+  const values = allDays.map(METRICS[key].value).filter(v => v !== null);
+  const min = round(Math.floor(d3.min(values) / METRIC_STEP) * METRIC_STEP);
+  const max = round(Math.ceil(d3.max(values) / METRIC_STEP) * METRIC_STEP);
+  const state = { lo: min, hi: max };
+
+  // Measured after layout, then pinned, so the brush extent and the bars
+  // always agree with the box even if the row later reflows.
+  svg.selectAll('*').remove();                       // a data refresh rebuilds the histogram
+  const width = svg.node().clientWidth, height = svg.node().clientHeight;   // inside the frame
+  svg.style('width', `${width + 2}px`).style('flex', 'none');
+  const x = d3.scaleLinear().domain([min, max]).range([0, width]);
+  const bins = d3.bin().domain([min, max]).thresholds(d3.range(1, METRIC_BINS).map(i => min + (max - min) * i / METRIC_BINS))(values);
+  const y = d3.scaleLinear().domain([0, d3.max(bins, b => b.length)]).range([height, 2]);
+  const bars = svg.append('g').attr('class', 'bars').selectAll('rect.bar').data(bins).join('rect').attr('class', 'bar')
+    .attr('x', b => x(b.x0) + 0.5).attr('width', b => Math.max(1, x(b.x1) - x(b.x0) - 1))
+    .attr('y', b => y(b.length)).attr('height', b => height - y(b.length));
+  svg.append('line').attr('class', 'zero').attr('x1', x(0)).attr('x2', x(0)).attr('y1', 0).attr('y2', height);
+  const brush = d3.brushX().extent([[0, 0], [width, height]]).handleSize(6);
+  const brushG = svg.append('g').attr('class', 'brush').call(brush);
+  const handleLabels = svg.append('g').attr('class', 'handle-labels');
+  const fullRange = () => [x(min), x(max)];
+  svg.on('dblclick', () => brushG.call(brush.move, fullRange()));
+
+  const apply = selection => {
+    // A cleared brush (dragging it away) means the full range again.
+    if (!selection) { brushG.call(brush.move, fullRange()); return; }
+    const [a, b] = selection.map(v => round(x.invert(v)));
+    state.lo = a; state.hi = b;
+    const active = a > min || b < max;
+    bars.classed('in', bin => !active || (bin.x1 > a && bin.x0 < b));
+    rangeLabel.text(active ? '' : 'any');
+    // The bounds sit under their handles, centred, then clamped by their
+    // measured width so neither leaves the box and the two never touch: the
+    // lower label yields leftwards, the upper rightwards.
+    const labels = [{ v: a, px: x(a) }, { v: b, px: x(b) }];
+    const texts = handleLabels.selectAll('text.handle-label').data(labels).join('text').attr('class', 'handle-label')
+      .attr('y', height + 3).attr('text-anchor', 'start').text(d => fmtPct(d.v, 1));
+    const widths = texts.nodes().map(n => n.getComputedTextLength());
+    let left0 = Math.max(0, Math.min(width - widths[0], labels[0].px - widths[0] / 2));
+    let left1 = Math.max(0, Math.min(width - widths[1], labels[1].px - widths[1] / 2));
+    const overlap = left0 + widths[0] + HANDLE_LABEL_GAP - left1;
+    if (overlap > 0) {
+      left0 = Math.max(0, left0 - overlap / 2);
+      left1 = Math.min(width - widths[1], left0 + widths[0] + HANDLE_LABEL_GAP);
+      left0 = Math.max(0, Math.min(left0, left1 - widths[0] - HANDLE_LABEL_GAP));   // the upper may have hit the edge
+    }
+    texts.attr('x', (d, i) => i === 0 ? left0 : left1);
+    writeSavedRange(key, { lo: a > min ? a : 'edge', hi: b < max ? b : 'edge' });
+    onChange();
+  };
+  brush.on('brush end', event => { if (event.sourceEvent || event.type === 'end') apply(event.selection); });
+
+  const saved = readSavedRange(key);
+  brushG.call(brush.move, [x(typeof saved.lo === 'number' ? Math.max(min, saved.lo) : min), x(typeof saved.hi === 'number' ? Math.min(max, saved.hi) : max)]);
+
+  state.pass = d => { const v = METRICS[key].value(d); return v !== null && v >= state.lo && v <= state.hi; };
+  return state;
+}
+
+function setupMetricFilters(allDays, latestId, onChange) {
+  const filters = Object.keys(METRICS).map(key => setupMetricHistogram(key, allDays, onChange));
+  return { filter: days => days.filter(d => d.id === latestId || filters.every(f => f.pass(d))) };
+}
+
+// Similar-days control: just the toggle. With nothing saved it starts on
+// while a session is open, when "days like today so far" is the question,
+// and off outside market hours, when the reference would be a finished day.
 function setupSimilarFilter(onChange) {
-  const state = { on: readSavedSwitch(SIMILAR_STORAGE_KEY) };
+  const state = { on: readSavedSwitch(SIMILAR_STORAGE_KEY, marketMinuteNow() !== null) };
   d3.select('#toggle-similar').property('checked', state.on).on('change', function () {
     state.on = this.checked;
     writeSavedSwitch(SIMILAR_STORAGE_KEY, state.on);
@@ -840,41 +1045,50 @@ function setupSimilarFilter(onChange) {
   return state;
 }
 
-d3.tsv(DATA_URL).then(rows => {
-  const allDays = d3.sort(buildDays(rows), d => d.date);
-  const chart = new IntradayOverlayChart().container('#chart');
-  let periodDays = allDays;
+// One chart for the page's life; every load, first or refresh, rebuilds the
+// controls and data around it. The controls read their saved state on each
+// setup, so a refresh keeps the period, the brushes and the toggle as they
+// were, with edge-pinned thumbs following the new data.
+const chart = new IntradayOverlayChart().container('#chart')
+  .minuteOffset(localOffsetFromMarket()).zoneLabel(shortZoneName(LOCAL_TZ));
+const DATA_REFRESH_MS = 10 * 60 * 1000;
 
-  const refresh = () => {
-    let days = periodDays, cutoff = null, reference = null;
-    if (similar.on) {
-      reference = periodDays[periodDays.length - 1];
-      ({ days, cutoff } = similarDays(periodDays, reference));
-    }
-    renderCoverage(days);
-    chart.data(days).aggregates(buildAggregates(days))
-      .referenceId(reference ? reference.id : null).matchCutoff(cutoff)
-      .todayId(allDays[allDays.length - 1].id)
-      .render();
-  };
-  const similar = setupSimilarFilter(refresh);
+function loadData() {
+  return d3.tsv(DATA_URL, { cache: 'no-cache' }).then(rows => {
+    const allDays = buildDays(rows);
+    const allPct = allDays.flatMap(d => d.points.map(p => p.pct));
+    // The y extent only ever grows, so a refresh never rescales the plot.
+    chart.yLimit(Math.max(chart.yLimit() || 0, Math.ceil(Math.max(-d3.min(allPct), d3.max(allPct)))));
+    const latestId = allDays[allDays.length - 1].id;
+    let periodDays = allDays;
 
-  // Timezone switch. Applied before the first render so a saved "on" state
-  // draws local times from the start.
-  const localOffset = localOffsetFromMarket();
-  const localLabel = shortZoneName(LOCAL_TZ);
-  d3.select('#tz-switch-label').text(`Show in my time (${localLabel})`);
-  const applyLocalTime = on => chart.minuteOffset(on ? localOffset : 0).zoneLabel(on ? localLabel : 'ET');
-  const localTimeOn = readSavedSwitch(LOCAL_TZ_STORAGE_KEY, true);
-  applyLocalTime(localTimeOn);
-  d3.select('#toggle-local-tz').property('checked', localTimeOn).on('change', function () {
-    writeSavedSwitch(LOCAL_TZ_STORAGE_KEY, this.checked);
-    applyLocalTime(this.checked).render();
+    const refresh = () => {
+      const filtered = metric.filter(periodDays);
+      let days = filtered, cutoff = null, reference = null;
+      if (similar.on) {
+        reference = filtered[filtered.length - 1];
+        ({ days, cutoff } = similarDays(filtered, reference));
+      }
+      renderCoverage(days);
+      chart.data(days).aggregates(buildAggregates(days))
+        .referenceId(reference ? reference.id : null).matchCutoff(cutoff)
+        .todayId(latestId)
+        .opacityCount(filtered.filter(d => d.id !== latestId).length)
+        .render();
+    };
+    let ready = false;                                 // one render once every control is wired
+    const guarded = () => { if (ready) refresh(); };
+    const metric = setupMetricFilters(allDays, latestId, guarded);
+    const similar = setupSimilarFilter(guarded);
+    setupPeriodSlider(allDays, days => { periodDays = days; guarded(); });
+    ready = true;
+    refresh();
   });
+}
 
-  setupPeriodSlider(allDays, days => { periodDays = days; refresh(); });
-
+loadData().then(() => {
   setInterval(() => chart.drawNow(), NOW_REFRESH_MS);
+  setInterval(loadData, DATA_REFRESH_MS);            // the pipeline appends bars through the day
 });
 </script>
 </body>
