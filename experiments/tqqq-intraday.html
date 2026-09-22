@@ -7,28 +7,25 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-annotation/2.5.1/d3-annotation.min.js"></script>
 <style>
+  /* Same Orion light theme as the main page (see styles.css): Open Sans for
+     UI text, JetBrains Mono for figures, purple accent, night-blue type. */
+  @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
   :root{
-    --bg:#080b12; --panel:#0e131e; --border:#1d2637; --border2:#2a3852;
-    --text:#e7ecf4; --muted:#8a97ab; --faint:#5c6982;
-    --cyan:#38bdf8; --green:#a3e635; --red:#fb7185; --amber:#f5b544; --violet:#a78bfa;
-    --shadow:0 1px 0 rgba(255,255,255,.02), 0 8px 30px rgba(0,0,0,.35);
-    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
-    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
-  }
-  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
-    --bg:#eef1f6; --panel:#ffffff; --border:#dde3ec; --border2:#c6d0de;
-    --text:#0f1826; --muted:#5a6678; --faint:#8b97a8;
-    --shadow:0 1px 3px rgba(20,30,50,.08),0 8px 24px rgba(20,30,50,.06);
-  }}
-  :root[data-theme="light"]{
-    --bg:#eef1f6; --panel:#ffffff; --border:#dde3ec; --border2:#c6d0de;
-    --text:#0f1826; --muted:#5a6678; --faint:#8b97a8;
+    --bg:#fafafd; --panel:#ffffff; --border:#dbdff1; --border2:#c5c1ec;
+    --text:#383874; --muted:#8484a0; --faint:#9292c1;
+    --accent:#8676ff; --orange:#e8890b; --violet:#c64eff;
+    --mean:#0a9fbe;   /* teal: clearly apart from today's purple and the orange median */
+    --hover:#c2185b;  /* Orion pink, darkened for text: the hovered day, again apart from today */
+    --green:#067d21; --red:#c81e1f;
+    --shadow:0 3px 2px rgba(108,73,172,.02), 0 7px 5px rgba(108,73,172,.03), 0 13px 10px rgba(108,73,172,.04), 0 22px 18px rgba(108,73,172,.04), 0 42px 33px rgba(108,73,172,.05);
+    --mono:'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+    --sans:'Open Sans',-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
   }
   *{box-sizing:border-box}
   body{margin:0;min-height:100vh;display:flex;align-items:center;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
   .wrap{width:100%;max-width:1200px;margin:0 auto;padding:16px}
   .back-link{display:inline-block;margin:0 0 10px;font-size:12.5px;color:var(--muted);text-decoration:none}
-  .back-link:hover{color:var(--cyan)}
+  .back-link:hover{color:var(--accent)}
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px}
   .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
   .legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:var(--muted)}
@@ -38,22 +35,24 @@
   /* Two native sliders stacked on one track; only the thumbs take pointer events. */
   .range{position:relative;width:100%;height:16px}
   .range-track{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--border2)}
-  .range-fill{position:absolute;top:6px;height:4px;border-radius:2px;background:var(--cyan)}
+  .range-fill{position:absolute;top:6px;height:4px;border-radius:2px;background:var(--accent)}
   .range input{position:absolute;left:0;top:0;width:100%;height:16px;margin:0;appearance:none;-webkit-appearance:none;background:none;pointer-events:none}
   .range input::-webkit-slider-runnable-track{background:none;height:16px}
   .range input::-moz-range-track{background:none;height:16px}
-  .range input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:14px;height:14px;margin-top:1px;border-radius:50%;background:var(--panel);border:2px solid var(--cyan);cursor:grab}
-  .range input::-moz-range-thumb{pointer-events:auto;width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--cyan);cursor:grab}
-  .range input:focus-visible::-webkit-slider-thumb{outline:2px solid var(--cyan);outline-offset:2px}
+  .range input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:14px;height:14px;margin-top:1px;border-radius:50%;background:var(--panel);border:2px solid var(--accent);cursor:grab}
+  .range input::-moz-range-thumb{pointer-events:auto;width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--accent);cursor:grab}
+  .range input:focus-visible::-webkit-slider-thumb{outline:2px solid var(--accent);outline-offset:2px}
   .switch{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
   .switch input{position:absolute;opacity:0;width:0;height:0}
   .switch .track{position:relative;width:32px;height:18px;border-radius:9px;background:var(--border2);transition:background .15s;flex:none}
   .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--panel);transition:transform .15s}
-  .switch input:checked+.track{background:var(--cyan)}
+  .switch input:checked+.track{background:var(--accent)}
   .switch input:checked+.track::after{transform:translateX(14px)}
-  .switch input:focus-visible+.track{outline:2px solid var(--cyan);outline-offset:2px}
+  .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
   .legend span::before{content:"";display:inline-block;width:18px;height:0;border-top:2px solid var(--c);vertical-align:middle;margin-right:6px}
-  .legend .mean{--c:var(--cyan)} .legend .median{--c:var(--amber)}
+  .legend .mean{--c:var(--mean)} .legend .median{--c:var(--orange)}
+  .filters{display:flex;flex-wrap:wrap;align-items:center;gap:14px;margin:0 0 8px;font-size:12.5px;color:var(--muted)}
+  .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
   #chart{position:relative;min-height:520px}
   #chart svg{display:block}
   .axis text{fill:var(--muted);font-family:var(--mono);font-size:11px}
@@ -61,17 +60,28 @@
   .grid line{stroke:var(--border);stroke-dasharray:2 3}
   .zero{stroke:var(--faint);stroke-width:1}
   .day-path{fill:none;stroke:var(--text);stroke-width:1;opacity:.05}
-  .day-path.hover{opacity:1;stroke:var(--violet);stroke-width:1.5}
-  .mean-path{fill:none;stroke:var(--cyan);stroke-width:2.5}
-  .median-path{fill:none;stroke:var(--amber);stroke-width:2;stroke-dasharray:6 4}
+  .day-path.hover{opacity:1;stroke:var(--hover);stroke-width:1.5}
+  .day-path.reference{opacity:1;stroke:var(--violet);stroke-width:2}
+  /* Today's path: on top of every other layer, glowing, with a live pulse at
+     its last bar while the session is open. */
+  .today{pointer-events:none}
+  .today-glow{fill:none;stroke:var(--violet);stroke-width:9;stroke-linejoin:round;stroke-linecap:round;opacity:.14}
+  .today-path{fill:none;stroke:var(--violet);stroke-width:2.25;stroke-linejoin:round;stroke-linecap:round}
+  .today-dot{fill:var(--violet);stroke:var(--panel);stroke-width:2}
+  .today-ring{fill:none;stroke:var(--violet);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:live-pulse 1.8s ease-out infinite}
+  .today-ring.second{animation-delay:.9s}
+  @keyframes live-pulse{0%{transform:scale(.5);opacity:.8}100%{transform:scale(3.2);opacity:0}}
+  .today-label{font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--violet)}
+  .mean-path{fill:none;stroke:var(--mean);stroke-width:2.5}
+  .median-path{fill:none;stroke:var(--orange);stroke-width:2;stroke-dasharray:6 4}
   .hover-rule{stroke:var(--faint);stroke-width:1;stroke-dasharray:3 3;pointer-events:none}
   .now-line{stroke:var(--faint);stroke-width:1;stroke-dasharray:2 4;pointer-events:none}
   .now-label{font-family:var(--mono);font-size:10.5px;fill:var(--faint);pointer-events:none}
   .annotations{pointer-events:none}
-  .annotation path{fill:none;stroke:var(--c);stroke-width:1.2}
+  .annotation path{fill:none;stroke:var(--c);stroke-width:1;stroke-opacity:.6}
   .annotation .annotation-subject path{stroke-width:2;fill:var(--panel)}
   .annotation .annotation-note-bg{fill:var(--panel);fill-opacity:.9;stroke:var(--border2);stroke-width:1;rx:5}
-  .annotation text{font-family:var(--mono);font-size:11px;fill:var(--muted)}
+  .annotation text{font-family:var(--mono);font-size:10px;fill:var(--muted)}
   .annotation .annotation-note-title{font-weight:600;fill:var(--c)}
   .annotation.buy{--c:var(--green)} .annotation.sell{--c:var(--red)}
   .readout{position:absolute;top:8px;right:8px;background:var(--panel);border:1px solid var(--border2);border-radius:8px;
@@ -81,9 +91,9 @@
   .readout .r{display:flex;justify-content:space-between;gap:14px;color:var(--muted)}
   .readout .r b{color:var(--text);font-weight:500}
   .readout .r span::before{content:"";display:inline-block;width:10px;height:0;border-top:2px solid var(--c, transparent);vertical-align:middle;margin-right:6px}
-  .readout .r.mean{--c:var(--cyan)} .readout .r.median{--c:var(--amber)} .readout .r.median span::before{border-top-style:dashed}
-  .readout .r.day{--c:var(--violet);margin-top:4px;padding-top:4px;border-top:1px solid var(--border)}
-  .readout .r.day span{color:var(--violet)}
+  .readout .r.mean{--c:var(--mean)} .readout .r.median{--c:var(--orange)} .readout .r.median span::before{border-top-style:dashed}
+  .readout .r.day{--c:var(--hover);margin-top:4px;padding-top:4px;border-top:1px solid var(--border)}
+  .readout .r.day span{color:var(--hover)}
 </style>
 </head>
 <body>
@@ -105,6 +115,13 @@
         <input type="checkbox" id="toggle-local-tz">
         <span class="track"></span>
         <span class="switch-label" id="tz-switch-label"></span>
+      </label>
+    </div>
+    <div class="filters">
+      <label class="switch" id="similar-switch">
+        <input type="checkbox" id="toggle-similar">
+        <span class="track"></span>
+        <span class="switch-label">Similar days only</span>
       </label>
     </div>
     <div id="chart"></div>
@@ -164,6 +181,10 @@ function marketMinuteNow() {
 }
 
 const NOW_REFRESH_MS = 30 * 1000;
+const NOW_TICK_SHARE = 0.05;             // the "now" tick spans this share of the plot height, from the top
+
+// Calendar date in New York, as the data's day timestamps are midnight ET.
+const marketDateNow = () => new Intl.DateTimeFormat('en-CA', { timeZone: MARKET_TZ }).format(new Date());
 
 const shortZoneName = timeZone =>
   new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(new Date())
@@ -210,48 +231,55 @@ function buildAggregates(days) {
 // Each rule picks one minute of the session for its own reason. Rules of the
 // same kind that land on the same minute merge into one label. The 9:30 point
 // is excluded because every day is 0% there by construction.
+// Label text is two tokens per rule: what was measured and its value. The
+// Buy/Sell title already says which extreme it is.
 const ANNOTATION_RULES = [
-  { kind: 'buy',  reason: 'cheapest on average',    anchor: 'mean',   pick: a => d3.least(a, d => d.mean),              detail: d => `${fmtPct(d.mean)} mean` },
-  { kind: 'buy',  reason: 'cheapest typical day',   anchor: 'median', pick: a => d3.least(a, d => d.median),            detail: d => `${fmtPct(d.median)} median` },
-  { kind: 'buy',  reason: 'fewest days above open', anchor: 'mean',   pick: a => d3.least(a, d => d.positiveShare),     detail: d => `${Math.round(d.positiveShare * 100)}% of days up` },
-  { kind: 'sell', reason: 'dearest on average',     anchor: 'mean',   pick: a => d3.greatest(a, d => d.mean),           detail: d => `${fmtPct(d.mean)} mean` },
-  { kind: 'sell', reason: 'dearest typical day',    anchor: 'median', pick: a => d3.greatest(a, d => d.median),         detail: d => `${fmtPct(d.median)} median` },
-  { kind: 'sell', reason: 'most days above open',   anchor: 'mean',   pick: a => d3.greatest(a, d => d.positiveShare),  detail: d => `${Math.round(d.positiveShare * 100)}% of days up` },
+  { kind: 'buy',  anchor: 'mean',   pick: a => d3.least(a, d => d.mean),              label: d => `mean ${fmtPct(d.mean)}` },
+  { kind: 'buy',  anchor: 'median', pick: a => d3.least(a, d => d.median),            label: d => `median ${fmtPct(d.median)}` },
+  { kind: 'buy',  anchor: 'mean',   pick: a => d3.least(a, d => d.positiveShare),     label: d => `${Math.round(d.positiveShare * 100)}% up` },
+  { kind: 'sell', anchor: 'mean',   pick: a => d3.greatest(a, d => d.mean),           label: d => `mean ${fmtPct(d.mean)}` },
+  { kind: 'sell', anchor: 'median', pick: a => d3.greatest(a, d => d.median),         label: d => `median ${fmtPct(d.median)}` },
+  { kind: 'sell', anchor: 'mean',   pick: a => d3.greatest(a, d => d.positiveShare),  label: d => `${Math.round(d.positiveShare * 100)}% up` },
 ];
 
-// Label geometry. Labels in a row are LABEL_WIDTH wide and sit LABEL_PADDING
-// past the connector's horizontal leg ("gutter"). GUTTER_BASE is the first
-// gutter's distance from the line; each covering level and each later label
-// in a level moves the gutter so connectors never cross another label.
-const LABEL_WIDTH = 210, LABEL_GAP = 10, LABEL_LEAD = 30, LABEL_PADDING = 8;
-const GUTTER_BASE = 56, GUTTER_LEVEL_STEP = 40, GUTTER_STAGGER = 12;
+// Label geometry. Labels are LABEL_WIDTH wide and sit LABEL_PADDING past the
+// connector's horizontal leg ("gutter"). GUTTER_BASE is the first level's
+// distance from the point; each further level is one label height further
+// out. Levels are limited so a label never wanders far from its dot.
+const LABEL_WIDTH = 120, LABEL_LEAD = 24, LABEL_PADDING = 6, LABEL_EST_HEIGHT = 36;
+const GUTTER_BASE = 40, LEVEL_STEP = LABEL_EST_HEIGHT + LABEL_PADDING * 2 + 6, MAX_LEVELS = 4, LABEL_CLEARANCE = 6;
 
-// Places one side's labels left to right, order preserved, no overlap. A
-// forward pass pushes labels right of their point, a backward pass pulls a
-// cluster back inside the right edge. Then each label's gutter distance is
-// chosen so a label that covers another point's x (and therefore its vertical
-// connector) sits farther from the line than that point's own label.
+// Places one side's labels as close to their points as possible. Each label
+// wants to sit just right of its point (left of it near the right edge) on
+// the first level. Candidates are every level crossed with a few horizontal
+// spots: the preferred one, the near side of the point, and just past each
+// placed box. They are tried cheapest first, where cost is levels out plus
+// pixels sideways, so a cluster of nearby points stacks vertically and only
+// slides along a row when stacking has run out. A spot is free when no
+// placed label shares its row within reach and no connector, this one's or a
+// placed one's, would cross a label box.
 function layoutLabels(items, x, chartWidth) {
-  const maxLeft = chartWidth - LABEL_WIDTH;
-  const lefts = [];
-  items.forEach((p, i) => {
-    const preferred = x(p.minute) + LABEL_LEAD;
-    lefts[i] = Math.max(preferred, i ? lefts[i - 1] + LABEL_WIDTH + LABEL_GAP : 0);
-  });
-  for (let i = items.length - 1; i >= 0; i--) {
-    const bound = i === items.length - 1 ? maxLeft : lefts[i + 1] - LABEL_WIDTH - LABEL_GAP;
-    lefts[i] = Math.min(lefts[i], bound);
-  }
-  const covers = (k, i) => k !== i && x(items[i].minute) >= lefts[k] && x(items[i].minute) <= lefts[k] + LABEL_WIDTH;
-  const levels = items.map(() => null);
-  const level = k => {
-    if (levels[k] === null) levels[k] = 1 + d3.max(items.map((_, i) => covers(k, i) ? level(i) : -1));
-    return levels[k];
-  };
-  items.forEach((_, k) => level(k));
-  return items.map((p, i) => {
-    const later = items.filter((_, k) => k > i && levels[k] === levels[i]).length;
-    return { p, left: lefts[i], gutter: GUTTER_BASE + levels[i] * GUTTER_LEVEL_STEP + later * GUTTER_STAGGER };
+  const placed = [];
+  const spansX = (o, a, b) => o.left < b + LABEL_CLEARANCE && a - LABEL_CLEARANCE < o.right;
+  return items.map(p => {
+    const px = x(p.minute);
+    const preferred = px + LABEL_LEAD + LABEL_WIDTH <= chartWidth ? px + LABEL_LEAD : px - LABEL_LEAD - LABEL_WIDTH;
+    const lefts = [preferred, px - LABEL_LEAD - LABEL_WIDTH]
+      .concat(placed.map(o => o.right + LABEL_CLEARANCE))
+      .filter(l => l >= 0 && l + LABEL_WIDTH <= chartWidth);
+    const free = (level, left) => {
+      const right = left + LABEL_WIDTH;
+      return placed.every(o => {
+        if (o.level === level && spansX(o, left, right)) return false;        // same row, side by side
+        if (o.level < level && spansX(o, px, px)) return false;                // my drop passes its box
+        if (o.level > level && o.px >= left - LABEL_CLEARANCE && o.px <= right + LABEL_CLEARANCE) return false; // its drop passes my box
+        return true;
+      });
+    };
+    const candidates = d3.range(MAX_LEVELS).flatMap(level => lefts.map(left => ({ level, left, cost: level * LEVEL_STEP + Math.abs(left - preferred) })));
+    const spot = d3.sort(candidates, c => c.cost).find(c => free(c.level, c.left)) || { level: 0, left: preferred };
+    placed.push({ px, left: spot.left, right: spot.left + LABEL_WIDTH, level: spot.level });
+    return { p, left: spot.left, gutter: GUTTER_BASE + spot.level * LEVEL_STEP };
   });
 }
 
@@ -264,8 +292,49 @@ function buildAnnotationPoints(aggregates) {
     kind: group[0].rule.kind,
     anchor: group[0].rule.anchor,
     agg: group[0].agg,
-    reasons: group.map(p => `${p.rule.reason} (${p.rule.detail(p.agg)})`),
+    reasons: group.map(p => p.rule.label(p.agg)),
   }));
+}
+
+// Weighted Pearson correlation of two equal-length series. Shape only: a day
+// that made the same moves at twice the size scores 1, a mirror image scores
+// -1, a flat series has no shape to compare and scores 0. Weights ramp
+// linearly so the latest bar counts RECENCY_WEIGHT times the first: how the
+// day is going now matters more than how it opened.
+const RECENCY_WEIGHT = 3;
+function correlation(a, b) {
+  const n = a.length;
+  const w = a.map((_, i) => 1 + (n > 1 ? i / (n - 1) : 0) * (RECENCY_WEIGHT - 1));
+  const wsum = d3.sum(w);
+  const ma = d3.sum(a, (v, i) => w[i] * v) / wsum, mb = d3.sum(b, (v, i) => w[i] * v) / wsum;
+  const cov = d3.sum(a, (v, i) => w[i] * (v - ma) * (b[i] - mb));
+  const va = d3.sum(a, (v, i) => w[i] * (v - ma) ** 2), vb = d3.sum(b, (v, i) => w[i] * (v - mb) ** 2);
+  return va === 0 || vb === 0 ? 0 : cov / Math.sqrt(va * vb);
+}
+
+// Similar-days filter. The reference is the latest day, which during a
+// session is today so far. Its path is compared with every other day's over
+// the same minutes by recency-weighted correlation and the best-correlated
+// KEEP_SHARE of them is kept (at least one day), so the match is about shape,
+// not level, with the latest bars counting most. A day missing any of those
+// minutes (a half session shorter than the reference) is left out.
+const KEEP_SHARE = 0.02;
+function similarDays(days, reference) {
+  const refByMinute = new Map(reference.points.map(p => [p.minute, p.pct]));
+  const cutoff = reference.points[reference.points.length - 1].minute;
+  const minutes = d3.range(SESSION_OPEN_MIN + BAR_MINUTES, cutoff + 1, BAR_MINUTES);
+  const refSeries = minutes.map(m => refByMinute.get(m));
+  const scored = days
+    .filter(d => d !== reference)
+    .map(d => {
+      const byMinute = new Map(d.points.map(p => [p.minute, p.pct]));
+      if (!minutes.every(m => byMinute.has(m))) return null;
+      return { day: d, r: correlation(refSeries, minutes.map(m => byMinute.get(m))) };
+    })
+    .filter(Boolean);
+  const keepCount = Math.max(1, Math.round(scored.length * KEEP_SHARE));
+  const kept = d3.sort(scored, d => -d.r).slice(0, keepCount).map(d => d.day);
+  return { days: d3.sort([reference, ...kept], d => d.date), cutoff };
 }
 
 class IntradayOverlayChart {
@@ -289,6 +358,9 @@ class IntradayOverlayChart {
       symlogLinearPct: 0.1,
       minuteOffset: 0,          // added to New York minutes for axis and readout labels
       zoneLabel: 'ET',
+      referenceId: null,        // day drawn as the reference when the similar-days filter is on
+      matchCutoff: null,        // last matched minute; shades the window when set
+      todayId: null,            // the latest day in the file, drawn on its own layer on top
     };
     this.getState = () => attrs;
     this.setState = d => Object.assign(attrs, d);
@@ -312,6 +384,7 @@ class IntradayOverlayChart {
     this.drawAggregates();
     this.drawNow();
     this.drawAnnotations();
+    this.drawToday();
     this.drawHover();
     this.setState({ firstRender: false });
     return this;
@@ -365,10 +438,47 @@ class IntradayOverlayChart {
   }
 
   drawDays() {
-    const { chart, data, line } = this.getState();
-    chart._add('g.days')._add('path.day-path', data)
+    const { chart, data, line, referenceId, matchCutoff, x, chartHeight } = this.getState();
+    chart._add('g.match')._add('rect.match-window')
+      .attr('x', x(SESSION_OPEN_MIN)).attr('y', 0)
+      .attr('width', matchCutoff === null ? 0 : x(matchCutoff) - x(SESSION_OPEN_MIN))
+      .attr('height', chartHeight);
+    const { todayId } = this.getState();
+    chart._add('g.days')._add('path.day-path', data.filter(d => d.id !== todayId))
       .attr('d', d => line(d.points))
-      .style('opacity', DAY_OPACITY);
+      .classed('reference', d => d.id === referenceId)
+      .style('opacity', d => d.id === referenceId ? 1 : DAY_OPACITY);
+  }
+
+  // Today's path on its own layer above the aggregates and labels. The line
+  // draws itself in on the first render; the ring pulses while the session
+  // is open, and rests as a plain dot after the close.
+  drawToday() {
+    const { chart, data, line, x, y, chartWidth, todayId, firstRender } = this.getState();
+    const today = data.find(d => d.id === todayId);
+    const g = chart._add('g.today').style('display', today ? null : 'none');
+    if (!today) return;
+    const last = today.points[today.points.length - 1];
+    const live = marketMinuteNow() !== null && fmtIsoDay(today.date) === marketDateNow();
+    const d = line(today.points);
+    g._add('path.today-glow').attr('d', d);
+    const path = g._add('path.today-path').attr('d', d);
+    if (firstRender) {
+      const length = path.node().getTotalLength();
+      path.attr('stroke-dasharray', `${length} ${length}`).attr('stroke-dashoffset', length)
+        .transition().duration(900).ease(d3.easeCubicOut).attr('stroke-dashoffset', 0)
+        .on('end', () => path.attr('stroke-dasharray', null).attr('stroke-dashoffset', null));
+    }
+    const cx = x(last.minute), cy = y(last.pct);
+    g._add('g.today-rings', live ? [0, 1] : []).attr('transform', `translate(${cx},${cy})`)
+      ._add('circle.today-ring', k => [k]).attr('r', 5).classed('second', k => k === 1);
+    g._add('circle.today-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
+    const nearRightEdge = cx > chartWidth - 110;
+    // "live" beside the dot, below it so sell labels above the line stay clear.
+    g._add('text.today-label')
+      .attr('x', cx + (nearRightEdge ? -10 : 10)).attr('y', cy + 18)
+      .attr('text-anchor', nearRightEdge ? 'end' : 'start')
+      .text(live ? 'live' : 'today');
   }
 
   drawAggregates() {
@@ -384,10 +494,19 @@ class IntradayOverlayChart {
     const { chart, aggregates, x, y, chartWidth, minuteOffset, zoneLabel } = this.getState();
     const KIND_TITLE = { buy: 'Buy', sell: 'Sell' };
     const points = d3.sort(buildAnnotationPoints(aggregates), p => p.minute);
-    const sides = [
-      { sign: 1,  items: points.filter(p => p.kind === 'buy') },   // below the line
-      { sign: -1, items: points.filter(p => p.kind === 'sell') },  // above the line
-    ];
+    // Buys go below the line, sells above, except that a label whose row
+    // would leave the plot (a sell near the top edge, a buy near the bottom)
+    // takes the other side. Sides are settled before packing so a flipped
+    // label shares its new row's layout instead of landing on top of it.
+    const { chartHeight } = this.getState();
+    const sideOf = p => {
+      const py = y(p.agg[p.anchor]);
+      const sign = p.kind === 'buy' ? 1 : -1;
+      if (sign < 0 && py - GUTTER_BASE - LABEL_EST_HEIGHT < 0) return 1;
+      if (sign > 0 && py + GUTTER_BASE + LABEL_EST_HEIGHT > chartHeight) return -1;
+      return sign;
+    };
+    const sides = [1, -1].map(sign => ({ sign, items: points.filter(p => sideOf(p) === sign) }));
     const annotations = sides.flatMap(({ sign, items }) => layoutLabels(items, x, chartWidth).map(({ p, left, gutter }) => {
       const px = x(p.minute), py = y(p.agg[p.anchor]);
       const dy = sign * gutter;
@@ -399,18 +518,63 @@ class IntradayOverlayChart {
         // label's left edge. No diagonal legs.
         connector: { type: 'curve', curve: d3.curveLinear, points: [[0, dy]] },
         note: {
-          title: `${KIND_TITLE[p.kind]} ${fmtClock(p.minute + minuteOffset)} ${zoneLabel}`,
+          // The zone suffix only when times are New York's; in the viewer's
+          // own time the clock needs no qualifier.
+          title: `${KIND_TITLE[p.kind]} ${fmtClock(p.minute + minuteOffset)}${minuteOffset === 0 ? ` ${zoneLabel}` : ''}`,
           label: p.reasons.join(', '),
           align: 'left',
           lineType: 'none',
           wrap: LABEL_WIDTH,
-          bgPadding: { top: 4, left: 6, right: 6, bottom: 4 },
+          bgPadding: { top: 3, left: 5, right: 5, bottom: 3 },
         },
       };
     }));
+    this.keepLabelsOffToday(annotations);
     const g = chart._add('g.annotations');
     g.selectAll('*').remove();          // d3-annotation owns this subtree; rebuild it each render
     g.call(d3.annotation().type(d3.annotationCalloutCircle).notePadding(LABEL_PADDING).annotations(annotations));
+  }
+
+  // Today's line is the thing to read, so no label may sit on it. Each label
+  // box is tested against today's points (a 5-minute bar is ~14px wide, so
+  // the box is padded by that much). A box on the line is pushed outward in
+  // steps; if it runs out of plot it flips to the other side and tries again
+  // from there. A flip that would land on another label is not taken.
+  keepLabelsOffToday(annotations) {
+    const { data, x, y, chartHeight, todayId } = this.getState();
+    const today = data.find(d => d.id === todayId);
+    if (!today) return;
+    const PAD = 8, STEP = 24, MAX_TRIES = 6;
+    const todayPts = today.points.map(p => ({ x: x(p.minute), y: y(p.pct) }));
+    const boxOf = a => {
+      const left = a.x + a.dx, right = left + LABEL_WIDTH;
+      const top = a.dy > 0 ? a.y + a.dy + LABEL_PADDING : a.y + a.dy - LABEL_PADDING - LABEL_EST_HEIGHT;
+      return { left, right, top, bottom: top + LABEL_EST_HEIGHT };
+    };
+    const touchesToday = b => todayPts.some(p =>
+      p.x > b.left - PAD && p.x < b.right + PAD && p.y > b.top - PAD && p.y < b.bottom + PAD);
+    const boxesOverlap = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+    const insidePlot = b => b.top >= 0 && b.bottom <= chartHeight;
+    const clearOfOthers = (a, b) => annotations.every(o => o === a || !boxesOverlap(b, boxOf(o)));
+
+    annotations.forEach(a => {
+      if (!touchesToday(boxOf(a))) return;
+      const startDy = a.dy;
+      for (const sign of [Math.sign(startDy), -Math.sign(startDy)]) {
+        let dy = sign === Math.sign(startDy) ? startDy : -startDy;
+        for (let i = 0; i < MAX_TRIES; i++) {
+          const candidate = { ...a, dy };
+          const b = boxOf(candidate);
+          if (!insidePlot(b)) break;
+          if (!touchesToday(b) && clearOfOthers(a, b)) {
+            a.dy = dy;
+            a.connector.points = [[0, dy]];
+            return;
+          }
+          dy += sign * STEP;
+        }
+      }
+    });
   }
 
   // Vertical marker at the current time while the session is open. Called
@@ -422,7 +586,9 @@ class IntradayOverlayChart {
     if (minute === null) return;
     const px = x(minute);
     const nearRightEdge = px > x(SESSION_CLOSE_MIN) - 90;
-    g._add('line.now-line').attr('x1', px).attr('x2', px).attr('y1', 0).attr('y2', chartHeight);
+    // A short tick at the top rather than a full-height rule: enough to
+    // place "now" without cutting across the paths.
+    g._add('line.now-line').attr('x1', px).attr('x2', px).attr('y1', 0).attr('y2', chartHeight * NOW_TICK_SHARE);
     g._add('text.now-label')
       .attr('x', px + (nearRightEdge ? -6 : 6)).attr('y', 12)
       .attr('text-anchor', nearRightEdge ? 'end' : 'start')
@@ -430,7 +596,8 @@ class IntradayOverlayChart {
   }
 
   drawHover() {
-    const { chart, d3Container, aggregates, data, x, chartWidth, chartHeight, minuteOffset, zoneLabel } = this.getState();
+    const { chart, d3Container, aggregates, data, x, chartWidth, chartHeight, minuteOffset, zoneLabel, referenceId } = this.getState();
+    const restOpacity = d => d.id === referenceId ? 1 : DAY_OPACITY;
     const rule = chart._add('line.hover-rule')
       .attr('y1', 0).attr('y2', chartHeight)
       .style('display', 'none');
@@ -453,7 +620,7 @@ class IntradayOverlayChart {
           const p = d.points[bisectPoint(d.points, agg.minute)];
           return p.minute === agg.minute ? Math.abs(p.pct - cursorPct) : Infinity;
         });
-        dayPaths.classed('hover', d => d === nearest).style('opacity', d => d === nearest ? 1 : DAY_OPACITY);
+        dayPaths.classed('hover', d => d === nearest).style('opacity', d => d === nearest ? 1 : restOpacity(d));
         const nearestPct = nearest.points[bisectPoint(nearest.points, agg.minute)].pct;
 
         readout.style('display', null).html(`
@@ -467,7 +634,7 @@ class IntradayOverlayChart {
       .on('mouseleave', () => {
         rule.style('display', 'none');
         readout.style('display', 'none');
-        dayPaths.classed('hover', false).style('opacity', DAY_OPACITY);
+        dayPaths.classed('hover', false).style('opacity', restOpacity);
       });
   }
 
@@ -535,14 +702,42 @@ function renderCoverage(days) {
     `<b>${fmtDate(days[0].date)}</b> to <b>${fmtDate(days[days.length - 1].date)}</b>`);
 }
 
+// The slider position survives reloads. A thumb resting on an edge is saved
+// as 'edge' so it keeps following the data as days are appended; a thumb in
+// the middle is saved as its date so it lands on the same day next time.
+const PERIOD_STORAGE_KEY = 'tqqq-intraday-period';
+const fmtIsoDay = d3.timeFormat('%Y-%m-%d');
+
+// localStorage can be missing or throw (private mode, blocked storage);
+// the slider then just starts at the edges.
+function readSavedPeriod() {
+  try { return JSON.parse(localStorage.getItem(PERIOD_STORAGE_KEY)) || {}; } catch { return {}; }
+}
+function writeSavedPeriod(period) {
+  try { localStorage.setItem(PERIOD_STORAGE_KEY, JSON.stringify(period)); } catch { /* storage unavailable */ }
+}
+
+// Index of the saved thumb in allDays. 'edge' or a date outside the data
+// falls back to that thumb's own edge; a date with no exact match (a
+// holiday, or a day filtered out later) snaps inward to the nearest day.
+function restoreThumb(saved, allDays, edgeIndex, isStart) {
+  if (!saved || saved === 'edge') return edgeIndex;
+  const days = allDays.map(d => fmtIsoDay(d.date));
+  const exact = days.indexOf(saved);
+  if (exact >= 0) return exact;
+  const inward = isStart ? days.findIndex(d => d > saved) : days.findLastIndex(d => d < saved);
+  return inward >= 0 ? inward : edgeIndex;
+}
+
 // Two-thumb period slider over the loaded trading days. Each thumb is an
 // index into allDays; the thumbs cannot cross. Every move re-filters the
 // days, recomputes the aggregates and rules, and re-renders the chart.
 function setupPeriodSlider(allDays, onChange) {
   const start = d3.select('#range-start'), end = d3.select('#range-end'), fill = d3.select('#range-fill');
   const last = allDays.length - 1;
-  start.attr('max', last).property('value', 0);
-  end.attr('max', last).property('value', last);
+  const saved = readSavedPeriod();
+  start.attr('max', last).property('value', restoreThumb(saved.start, allDays, 0, true));
+  end.attr('max', last).property('value', restoreThumb(saved.end, allDays, last, false));
 
   const apply = () => {
     let lo = +start.property('value'), hi = +end.property('value');
@@ -550,6 +745,10 @@ function setupPeriodSlider(allDays, onChange) {
     start.property('value', lo);
     end.property('value', hi);
     fill.style('left', `${lo / last * 100}%`).style('width', `${(hi - lo) / last * 100}%`);
+    writeSavedPeriod({
+      start: lo === 0 ? 'edge' : fmtIsoDay(allDays[lo].date),
+      end: hi === last ? 'edge' : fmtIsoDay(allDays[hi].date),
+    });
     onChange(allDays.slice(lo, hi + 1));
   };
   start.on('input', apply);
@@ -557,13 +756,43 @@ function setupPeriodSlider(allDays, onChange) {
   apply();
 }
 
+// Similar-days control: just the toggle. Its state survives reloads.
+const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
+function readSavedSimilar() {
+  try { return localStorage.getItem(SIMILAR_STORAGE_KEY) === '1'; } catch { return false; }
+}
+function writeSavedSimilar(on) {
+  try { localStorage.setItem(SIMILAR_STORAGE_KEY, on ? '1' : '0'); } catch { /* storage unavailable */ }
+}
+function setupSimilarFilter(onChange) {
+  const state = { on: readSavedSimilar() };
+  d3.select('#toggle-similar').property('checked', state.on).on('change', function () {
+    state.on = this.checked;
+    writeSavedSimilar(state.on);
+    onChange();
+  });
+  return state;
+}
+
 d3.tsv(DATA_URL).then(rows => {
   const allDays = d3.sort(buildDays(rows), d => d.date);
   const chart = new IntradayOverlayChart().container('#chart');
-  setupPeriodSlider(allDays, days => {
+  let periodDays = allDays;
+
+  const refresh = () => {
+    let days = periodDays, cutoff = null, reference = null;
+    if (similar.on) {
+      reference = periodDays[periodDays.length - 1];
+      ({ days, cutoff } = similarDays(periodDays, reference));
+    }
     renderCoverage(days);
-    chart.data(days).aggregates(buildAggregates(days)).render();
-  });
+    chart.data(days).aggregates(buildAggregates(days))
+      .referenceId(reference ? reference.id : null).matchCutoff(cutoff)
+      .todayId(allDays[allDays.length - 1].id)
+      .render();
+  };
+  const similar = setupSimilarFilter(refresh);
+  setupPeriodSlider(allDays, days => { periodDays = days; refresh(); });
 
   const localOffset = localOffsetFromMarket();
   const localLabel = shortZoneName(LOCAL_TZ);
