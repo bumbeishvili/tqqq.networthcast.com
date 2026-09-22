@@ -297,29 +297,26 @@ function buildAnnotationPoints(aggregates) {
   }));
 }
 
-// Weighted Pearson correlation of two equal-length series. Shape only: a day
-// that made the same moves at twice the size scores 1, a mirror image scores
-// -1, a flat series has no shape to compare and scores 0. Weights ramp
-// linearly so the latest bar counts RECENCY_WEIGHT times the first: how the
-// day is going now matters more than how it opened.
+// Recency-weighted distance between two equal-length % paths: the root mean
+// square gap, with weights ramping linearly so the latest bar counts
+// RECENCY_WEIGHT times the first. Small means the lines sit on top of each
+// other, which is what "looks like today" means on this chart: same level
+// above or below the open, same size of moves, same timing. Shape-only
+// measures (correlation of levels or of 5-minute changes) were tried and
+// ranked days ending 2% away from today near the top.
 const RECENCY_WEIGHT = 3;
-function correlation(a, b) {
+function weightedDistance(a, b) {
   const n = a.length;
   const w = a.map((_, i) => 1 + (n > 1 ? i / (n - 1) : 0) * (RECENCY_WEIGHT - 1));
-  const wsum = d3.sum(w);
-  const ma = d3.sum(a, (v, i) => w[i] * v) / wsum, mb = d3.sum(b, (v, i) => w[i] * v) / wsum;
-  const cov = d3.sum(a, (v, i) => w[i] * (v - ma) * (b[i] - mb));
-  const va = d3.sum(a, (v, i) => w[i] * (v - ma) ** 2), vb = d3.sum(b, (v, i) => w[i] * (v - mb) ** 2);
-  return va === 0 || vb === 0 ? 0 : cov / Math.sqrt(va * vb);
+  return Math.sqrt(d3.sum(a, (v, i) => w[i] * (v - b[i]) ** 2) / d3.sum(w));
 }
 
 // Similar-days filter. The reference is the latest day, which during a
 // session is today so far. Its path is compared with every other day's over
-// the same minutes by recency-weighted correlation and the best-correlated
-// KEEP_SHARE of them is kept (at least one day), so the match is about shape,
-// not level, with the latest bars counting most. A day missing any of those
-// minutes (a half session shorter than the reference) is left out.
-const KEEP_SHARE = 0.02;
+// the same minutes by weighted distance and the closest KEEP_SHARE of them
+// is kept (at least one day). A day missing any of those minutes (a half
+// session shorter than the reference) is left out.
+const KEEP_SHARE = 0.04;
 function similarDays(days, reference) {
   const refByMinute = new Map(reference.points.map(p => [p.minute, p.pct]));
   const cutoff = reference.points[reference.points.length - 1].minute;
@@ -330,11 +327,11 @@ function similarDays(days, reference) {
     .map(d => {
       const byMinute = new Map(d.points.map(p => [p.minute, p.pct]));
       if (!minutes.every(m => byMinute.has(m))) return null;
-      return { day: d, r: correlation(refSeries, minutes.map(m => byMinute.get(m))) };
+      return { day: d, distance: weightedDistance(refSeries, minutes.map(m => byMinute.get(m))) };
     })
     .filter(Boolean);
   const keepCount = Math.max(1, Math.round(scored.length * KEEP_SHARE));
-  const kept = d3.sort(scored, d => -d.r).slice(0, keepCount).map(d => d.day);
+  const kept = d3.sort(scored, d => d.distance).slice(0, keepCount).map(d => d.day);
   return { days: d3.sort([reference, ...kept], d => d.date), cutoff };
 }
 
