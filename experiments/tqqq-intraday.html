@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TQQQ intraday — every day's % path from the open</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3-annotation/2.5.1/d3-annotation.min.js"></script>
+<style>
+  :root{
+    --bg:#080b12; --panel:#0e131e; --border:#1d2637; --border2:#2a3852;
+    --text:#e7ecf4; --muted:#8a97ab; --faint:#5c6982;
+    --cyan:#38bdf8; --green:#a3e635; --red:#fb7185; --amber:#f5b544; --violet:#a78bfa;
+    --shadow:0 1px 0 rgba(255,255,255,.02), 0 8px 30px rgba(0,0,0,.35);
+    --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+    --bg:#eef1f6; --panel:#ffffff; --border:#dde3ec; --border2:#c6d0de;
+    --text:#0f1826; --muted:#5a6678; --faint:#8b97a8;
+    --shadow:0 1px 3px rgba(20,30,50,.08),0 8px 24px rgba(20,30,50,.06);
+  }}
+  :root[data-theme="light"]{
+    --bg:#eef1f6; --panel:#ffffff; --border:#dde3ec; --border2:#c6d0de;
+    --text:#0f1826; --muted:#5a6678; --faint:#8b97a8;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .wrap{width:100%;max-width:1200px;margin:0 auto;padding:16px}
+  .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px}
+  .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;margin:0 0 8px}
+  .legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12.5px;color:var(--muted)}
+  .period{margin-left:auto;display:flex;flex-direction:column;align-items:flex-end;gap:4px;min-width:280px}
+  .coverage{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+  .coverage b{color:var(--muted);font-weight:500}
+  /* Two native sliders stacked on one track; only the thumbs take pointer events. */
+  .range{position:relative;width:100%;height:16px}
+  .range-track{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--border2)}
+  .range-fill{position:absolute;top:6px;height:4px;border-radius:2px;background:var(--cyan)}
+  .range input{position:absolute;left:0;top:0;width:100%;height:16px;margin:0;appearance:none;-webkit-appearance:none;background:none;pointer-events:none}
+  .range input::-webkit-slider-runnable-track{background:none;height:16px}
+  .range input::-moz-range-track{background:none;height:16px}
+  .range input::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:14px;height:14px;margin-top:1px;border-radius:50%;background:var(--panel);border:2px solid var(--cyan);cursor:grab}
+  .range input::-moz-range-thumb{pointer-events:auto;width:10px;height:10px;border-radius:50%;background:var(--panel);border:2px solid var(--cyan);cursor:grab}
+  .range input:focus-visible::-webkit-slider-thumb{outline:2px solid var(--cyan);outline-offset:2px}
+  .switch{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);cursor:pointer;user-select:none}
+  .switch input{position:absolute;opacity:0;width:0;height:0}
+  .switch .track{position:relative;width:32px;height:18px;border-radius:9px;background:var(--border2);transition:background .15s;flex:none}
+  .switch .track::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--panel);transition:transform .15s}
+  .switch input:checked+.track{background:var(--cyan)}
+  .switch input:checked+.track::after{transform:translateX(14px)}
+  .switch input:focus-visible+.track{outline:2px solid var(--cyan);outline-offset:2px}
+  .legend span::before{content:"";display:inline-block;width:18px;height:0;border-top:2px solid var(--c);vertical-align:middle;margin-right:6px}
+  .legend .mean{--c:var(--cyan)} .legend .median{--c:var(--amber)}
+  #chart{position:relative;min-height:520px}
+  #chart svg{display:block}
+  .axis text{fill:var(--muted);font-family:var(--mono);font-size:11px}
+  .axis line,.axis path{stroke:var(--border2)}
+  .grid line{stroke:var(--border);stroke-dasharray:2 3}
+  .zero{stroke:var(--faint);stroke-width:1}
+  .day-path{fill:none;stroke:var(--text);stroke-width:1;opacity:.05}
+  .day-path.hover{opacity:1;stroke:var(--violet);stroke-width:1.5}
+  .mean-path{fill:none;stroke:var(--cyan);stroke-width:2.5}
+  .median-path{fill:none;stroke:var(--amber);stroke-width:2;stroke-dasharray:6 4}
+  .hover-rule{stroke:var(--faint);stroke-width:1;stroke-dasharray:3 3;pointer-events:none}
+  .now-line{stroke:var(--faint);stroke-width:1;stroke-dasharray:2 4;pointer-events:none}
+  .now-label{font-family:var(--mono);font-size:10.5px;fill:var(--faint);pointer-events:none}
+  .annotations{pointer-events:none}
+  .annotation path{fill:none;stroke:var(--c);stroke-width:1.2}
+  .annotation .annotation-subject path{stroke-width:2;fill:var(--panel)}
+  .annotation .annotation-note-bg{fill:var(--panel);fill-opacity:.9;stroke:var(--border2);stroke-width:1;rx:5}
+  .annotation text{font-family:var(--mono);font-size:11px;fill:var(--muted)}
+  .annotation .annotation-note-title{font-weight:600;fill:var(--c)}
+  .annotation.buy{--c:var(--green)} .annotation.sell{--c:var(--red)}
+  .readout{position:absolute;top:8px;right:8px;background:var(--panel);border:1px solid var(--border2);border-radius:8px;
+    padding:8px 10px;font-family:var(--mono);font-size:12px;pointer-events:none;line-height:1.6;min-width:180px}
+  .readout .t{color:var(--text);font-weight:600}
+  .readout .s{color:var(--faint);font-size:11px;margin-bottom:4px}
+  .readout .r{display:flex;justify-content:space-between;gap:14px;color:var(--muted)}
+  .readout .r b{color:var(--text);font-weight:500}
+  .readout .r span::before{content:"";display:inline-block;width:10px;height:0;border-top:2px solid var(--c, transparent);vertical-align:middle;margin-right:6px}
+  .readout .r.mean{--c:var(--cyan)} .readout .r.median{--c:var(--amber)} .readout .r.median span::before{border-top-style:dashed}
+  .readout .r.day{--c:var(--violet);margin-top:4px;padding-top:4px;border-top:1px solid var(--border)}
+  .readout .r.day span{color:var(--violet)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="panel">
+    <div class="toolbar">
+      <div class="legend"><span class="mean">Mean of all days</span><span class="median">Median of all days</span></div>
+      <div class="period">
+        <div class="coverage" id="coverage"></div>
+        <div class="range" id="period-range">
+          <div class="range-track"></div>
+          <div class="range-fill" id="range-fill"></div>
+          <input type="range" id="range-start" min="0" value="0" step="1" aria-label="Period start">
+          <input type="range" id="range-end" min="0" value="0" step="1" aria-label="Period end">
+        </div>
+      </div>
+      <label class="switch" id="tz-switch">
+        <input type="checkbox" id="toggle-local-tz">
+        <span class="track"></span>
+        <span class="switch-label" id="tz-switch-label"></span>
+      </label>
+    </div>
+    <div id="chart"></div>
+  </div>
+</div>
+
+<script>
+const DATA_URL = '../data/intraday/tqqq-5m.tsv';
+const SESSION_OPEN_MIN = 9 * 60 + 30;
+const SESSION_CLOSE_MIN = 16 * 60;
+const BAR_MINUTES = 5;
+const DAY_OPACITY = 0.05;
+// Symlog is linear inside a band around zero and logarithmic beyond it, so the
+// crowded region gets room while big days still fit. A plain log scale cannot
+// hold zero or negative moves. Ticks come from this ladder, starting at the
+// band edge where the log part begins.
+const NICE_PCT_LADDER = [0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 20, 50];
+
+const MARKET_TZ = 'America/New_York';
+const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+const MINUTES_PER_DAY = 24 * 60;
+
+const parseStamp = d3.timeParse('%m/%d/%Y %H:%M:%S');
+const fmtPct = (d, decimals = 2) => (d > 0 ? '+' : '') + d.toFixed(decimals) + '%';
+const fmtAxisPct = d => (d > 0 ? '+' : '') + parseFloat(d.toFixed(2)) + '%';
+const fmtClock = minutes => {
+  const wrapped = ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  const h = Math.floor(wrapped / 60), m = wrapped % 60;
+  return `${h}:${String(m).padStart(2, '0')}`;
+};
+
+// Wall-clock minutes since midnight for an instant in a given zone.
+function minutesOfDayIn(timeZone, date) {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, hour: 'numeric', minute: 'numeric', hour12: false }).formatToParts(date);
+  const get = type => +parts.find(p => p.type === type).value;
+  return (get('hour') % 24) * 60 + get('minute');
+}
+
+// Minutes to add to a New York time to get the viewer's local time, measured
+// today so daylight-saving rules on both sides are the current ones.
+function localOffsetFromMarket() {
+  const now = new Date();
+  let diff = minutesOfDayIn(LOCAL_TZ, now) - minutesOfDayIn(MARKET_TZ, now);
+  if (diff > MINUTES_PER_DAY / 2) diff -= MINUTES_PER_DAY;
+  if (diff <= -MINUTES_PER_DAY / 2) diff += MINUTES_PER_DAY;
+  return diff;
+}
+
+// The current New York minute of day, or null outside a weekday session.
+// Exchange holidays are not known here, so a holiday shows as open.
+function marketMinuteNow() {
+  const now = new Date();
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: MARKET_TZ, weekday: 'short' }).format(now);
+  if (weekday === 'Sat' || weekday === 'Sun') return null;
+  const minute = minutesOfDayIn(MARKET_TZ, now);
+  return minute >= SESSION_OPEN_MIN && minute <= SESSION_CLOSE_MIN ? minute : null;
+}
+
+const NOW_REFRESH_MS = 30 * 1000;
+
+const shortZoneName = timeZone =>
+  new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(new Date())
+    .find(p => p.type === 'timeZoneName').value;
+
+// One row per 5-minute bar -> one series per trading day, each point the
+// % change of the bar's close vs the day's first open, placed at bar end time.
+function buildDays(rows) {
+  const byDay = d3.groups(rows, r => d3.timeDay.floor(parseStamp(r.Date)).getTime());
+  return byDay.map(([dayMs, bars]) => {
+    const sorted = d3.sort(bars, r => parseStamp(r.Date));
+    const open = +sorted[0].Open;
+    const points = [{ minute: SESSION_OPEN_MIN, pct: 0 }].concat(sorted.map(r => {
+      const t = parseStamp(r.Date);
+      return { minute: t.getHours() * 60 + t.getMinutes() + BAR_MINUTES, pct: (+r.Close / open - 1) * 100 };
+    }));
+    const last = points[points.length - 1];
+    return {
+      id: dayMs,
+      date: new Date(dayMs),
+      points,
+      closePct: last.pct,
+      complete: last.minute === SESSION_CLOSE_MIN,
+    };
+  });
+}
+
+// Mean and median of every day's % at each minute of the session.
+function buildAggregates(days) {
+  const minutes = d3.range(SESSION_OPEN_MIN, SESSION_CLOSE_MIN + 1, BAR_MINUTES);
+  const byMinute = days.map(d => new Map(d.points.map(p => [p.minute, p.pct])));
+  return minutes.map(minute => {
+    const values = byMinute.map(m => m.get(minute)).filter(v => v !== undefined);
+    return {
+      minute,
+      mean: d3.mean(values),
+      median: d3.median(values),
+      positiveShare: d3.mean(values, v => v > 0 ? 1 : 0),
+      n: values.length,
+    };
+  });
+}
+
+// Each rule picks one minute of the session for its own reason. Rules of the
+// same kind that land on the same minute merge into one label. The 9:30 point
+// is excluded because every day is 0% there by construction.
+const ANNOTATION_RULES = [
+  { kind: 'buy',  reason: 'cheapest on average',    anchor: 'mean',   pick: a => d3.least(a, d => d.mean),              detail: d => `${fmtPct(d.mean)} mean` },
+  { kind: 'buy',  reason: 'cheapest typical day',   anchor: 'median', pick: a => d3.least(a, d => d.median),            detail: d => `${fmtPct(d.median)} median` },
+  { kind: 'buy',  reason: 'fewest days above open', anchor: 'mean',   pick: a => d3.least(a, d => d.positiveShare),     detail: d => `${Math.round(d.positiveShare * 100)}% of days up` },
+  { kind: 'sell', reason: 'dearest on average',     anchor: 'mean',   pick: a => d3.greatest(a, d => d.mean),           detail: d => `${fmtPct(d.mean)} mean` },
+  { kind: 'sell', reason: 'dearest typical day',    anchor: 'median', pick: a => d3.greatest(a, d => d.median),         detail: d => `${fmtPct(d.median)} median` },
+  { kind: 'sell', reason: 'most days above open',   anchor: 'mean',   pick: a => d3.greatest(a, d => d.positiveShare),  detail: d => `${Math.round(d.positiveShare * 100)}% of days up` },
+];
+
+// Label geometry. Labels in a row are LABEL_WIDTH wide and sit LABEL_PADDING
+// past the connector's horizontal leg ("gutter"). GUTTER_BASE is the first
+// gutter's distance from the line; each covering level and each later label
+// in a level moves the gutter so connectors never cross another label.
+const LABEL_WIDTH = 210, LABEL_GAP = 10, LABEL_LEAD = 30, LABEL_PADDING = 8;
+const GUTTER_BASE = 56, GUTTER_LEVEL_STEP = 40, GUTTER_STAGGER = 12;
+
+// Places one side's labels left to right, order preserved, no overlap. A
+// forward pass pushes labels right of their point, a backward pass pulls a
+// cluster back inside the right edge. Then each label's gutter distance is
+// chosen so a label that covers another point's x (and therefore its vertical
+// connector) sits farther from the line than that point's own label.
+function layoutLabels(items, x, chartWidth) {
+  const maxLeft = chartWidth - LABEL_WIDTH;
+  const lefts = [];
+  items.forEach((p, i) => {
+    const preferred = x(p.minute) + LABEL_LEAD;
+    lefts[i] = Math.max(preferred, i ? lefts[i - 1] + LABEL_WIDTH + LABEL_GAP : 0);
+  });
+  for (let i = items.length - 1; i >= 0; i--) {
+    const bound = i === items.length - 1 ? maxLeft : lefts[i + 1] - LABEL_WIDTH - LABEL_GAP;
+    lefts[i] = Math.min(lefts[i], bound);
+  }
+  const covers = (k, i) => k !== i && x(items[i].minute) >= lefts[k] && x(items[i].minute) <= lefts[k] + LABEL_WIDTH;
+  const levels = items.map(() => null);
+  const level = k => {
+    if (levels[k] === null) levels[k] = 1 + d3.max(items.map((_, i) => covers(k, i) ? level(i) : -1));
+    return levels[k];
+  };
+  items.forEach((_, k) => level(k));
+  return items.map((p, i) => {
+    const later = items.filter((_, k) => k > i && levels[k] === levels[i]).length;
+    return { p, left: lefts[i], gutter: GUTTER_BASE + levels[i] * GUTTER_LEVEL_STEP + later * GUTTER_STAGGER };
+  });
+}
+
+function buildAnnotationPoints(aggregates) {
+  const candidates = aggregates.filter(a => a.minute > SESSION_OPEN_MIN);
+  const picks = ANNOTATION_RULES.map(rule => ({ rule, agg: rule.pick(candidates) }));
+  return d3.groups(picks, p => `${p.rule.kind}@${p.agg.minute}`).map(([id, group]) => ({
+    id,
+    minute: group[0].agg.minute,
+    kind: group[0].rule.kind,
+    anchor: group[0].rule.anchor,
+    agg: group[0].agg,
+    reasons: group.map(p => `${p.rule.reason} (${p.rule.detail(p.agg)})`),
+  }));
+}
+
+class IntradayOverlayChart {
+  constructor() {
+    const attrs = {
+      id: 'ID' + Math.floor(Math.random() * 1000000),
+      svgWidth: 400,
+      svgHeight: 600,
+      marginTop: 12,
+      marginBottom: 32,
+      marginRight: 16,
+      marginLeft: 52,
+      container: 'body',
+      defaultFont: 'inherit',
+      data: null,
+      aggregates: null,
+      chartWidth: null,
+      chartHeight: null,
+      firstRender: true,
+      yScaleType: 'symlog',
+      symlogLinearPct: 0.1,
+      minuteOffset: 0,          // added to New York minutes for axis and readout labels
+      zoneLabel: 'ET',
+    };
+    this.getState = () => attrs;
+    this.setState = d => Object.assign(attrs, d);
+    Object.keys(attrs).forEach(key => {
+      this[key] = function (_) {
+        if (!arguments.length) return attrs[key];
+        attrs[key] = _;
+        return this;
+      };
+    });
+    this.initializeEnterExitUpdatePattern();
+  }
+
+  render() {
+    this.setDynamicContainer();
+    this.calculateProperties();
+    this.drawSvgAndWrappers();
+    this.drawScales();
+    this.drawAxes();
+    this.drawDays();
+    this.drawAggregates();
+    this.drawNow();
+    this.drawAnnotations();
+    this.drawHover();
+    this.setState({ firstRender: false });
+    return this;
+  }
+
+  calculateProperties() {
+    const { marginLeft, marginTop, marginRight, marginBottom, svgWidth, svgHeight } = this.getState();
+    const calc = { chartLeftMargin: marginLeft, chartTopMargin: marginTop };
+    const chartWidth = svgWidth - marginRight - marginLeft;
+    const chartHeight = svgHeight - marginBottom - marginTop;
+    this.setState({ calc, chartWidth, chartHeight });
+  }
+
+  drawScales() {
+    const { data, chartWidth, chartHeight, yScaleType, symlogLinearPct } = this.getState();
+    const allPct = data.flatMap(d => d.points.map(p => p.pct));
+    const x = d3.scaleLinear().domain([SESSION_OPEN_MIN, SESSION_CLOSE_MIN]).range([0, chartWidth]);
+    const [lo, hi] = d3.extent(allPct);
+    const limit = Math.ceil(Math.max(-lo, hi));
+    const y = (yScaleType === 'symlog'
+      ? d3.scaleSymlog().constant(symlogLinearPct)
+      : d3.scaleLinear()).domain([-limit, limit]).range([chartHeight, 0]);
+    const yTicks = yScaleType === 'symlog'
+      ? [0].concat(NICE_PCT_LADDER.filter(t => t >= symlogLinearPct && t <= limit).flatMap(t => [t, -t]))
+      : y.ticks(8);
+    const line = d3.line().x(p => x(p.minute)).y(p => y(p.pct));
+    this.setState({ x, y, yTicks, line });
+  }
+
+  drawAxes() {
+    const { chart, x, y, yTicks, chartWidth, chartHeight, minuteOffset } = this.getState();
+    const isWholeHour = m => ((m + minuteOffset) % 60 + 60) % 60 === 0;
+    const hourTicks = [SESSION_OPEN_MIN, SESSION_CLOSE_MIN]
+      .concat(d3.range(SESSION_OPEN_MIN + 1, SESSION_CLOSE_MIN).filter(isWholeHour));
+    const fmtTick = m => fmtClock(m + minuteOffset);
+
+    chart._add('g.grid')
+      .call(d3.axisLeft(y).tickValues(yTicks).tickSize(-chartWidth).tickFormat(''))
+      .call(g => g.select('.domain').remove());
+
+    chart._add('g.x-axis').classed('axis', true)
+      .attr('transform', `translate(0,${chartHeight})`)
+      .call(d3.axisBottom(x).tickValues(hourTicks).tickFormat(fmtTick).tickSizeOuter(0));
+
+    chart._add('g.y-axis').classed('axis', true)
+      .call(d3.axisLeft(y).tickValues(yTicks).tickFormat(fmtAxisPct).tickSizeOuter(0));
+
+    chart._add('line.zero')
+      .attr('x1', 0).attr('x2', chartWidth)
+      .attr('y1', y(0)).attr('y2', y(0));
+  }
+
+  drawDays() {
+    const { chart, data, line } = this.getState();
+    chart._add('g.days')._add('path.day-path', data)
+      .attr('d', d => line(d.points))
+      .style('opacity', DAY_OPACITY);
+  }
+
+  drawAggregates() {
+    const { chart, aggregates, x, y } = this.getState();
+    const meanLine = d3.line().x(a => x(a.minute)).y(a => y(a.mean));
+    const medianLine = d3.line().x(a => x(a.minute)).y(a => y(a.median));
+    const g = chart._add('g.aggregates');
+    g._add('path.median-path').attr('d', medianLine(aggregates));
+    g._add('path.mean-path').attr('d', meanLine(aggregates));
+  }
+
+  drawAnnotations() {
+    const { chart, aggregates, x, y, chartWidth, minuteOffset, zoneLabel } = this.getState();
+    const KIND_TITLE = { buy: 'Buy', sell: 'Sell' };
+    const points = d3.sort(buildAnnotationPoints(aggregates), p => p.minute);
+    const sides = [
+      { sign: 1,  items: points.filter(p => p.kind === 'buy') },   // below the line
+      { sign: -1, items: points.filter(p => p.kind === 'sell') },  // above the line
+    ];
+    const annotations = sides.flatMap(({ sign, items }) => layoutLabels(items, x, chartWidth).map(({ p, left, gutter }) => {
+      const px = x(p.minute), py = y(p.agg[p.anchor]);
+      const dy = sign * gutter;
+      return {
+        x: px, y: py, dx: left - px, dy,
+        className: p.kind,
+        subject: { radius: 5 },
+        // Vertical drop from the point to the gutter, then horizontal to the
+        // label's left edge. No diagonal legs.
+        connector: { type: 'curve', curve: d3.curveLinear, points: [[0, dy]] },
+        note: {
+          title: `${KIND_TITLE[p.kind]} ${fmtClock(p.minute + minuteOffset)} ${zoneLabel}`,
+          label: p.reasons.join(', '),
+          align: 'left',
+          lineType: 'none',
+          wrap: LABEL_WIDTH,
+          bgPadding: { top: 4, left: 6, right: 6, bottom: 4 },
+        },
+      };
+    }));
+    const g = chart._add('g.annotations');
+    g.selectAll('*').remove();          // d3-annotation owns this subtree; rebuild it each render
+    g.call(d3.annotation().type(d3.annotationCalloutCircle).notePadding(LABEL_PADDING).annotations(annotations));
+  }
+
+  // Vertical marker at the current time while the session is open. Called
+  // from render() and again on a timer so it walks across the chart.
+  drawNow() {
+    const { chart, x, chartHeight, minuteOffset, zoneLabel } = this.getState();
+    const minute = marketMinuteNow();
+    const g = chart._add('g.now').style('display', minute === null ? 'none' : null);
+    if (minute === null) return;
+    const px = x(minute);
+    const nearRightEdge = px > x(SESSION_CLOSE_MIN) - 90;
+    g._add('line.now-line').attr('x1', px).attr('x2', px).attr('y1', 0).attr('y2', chartHeight);
+    g._add('text.now-label')
+      .attr('x', px + (nearRightEdge ? -6 : 6)).attr('y', 12)
+      .attr('text-anchor', nearRightEdge ? 'end' : 'start')
+      .text(`now ${fmtClock(minute + minuteOffset)} ${zoneLabel}`);
+  }
+
+  drawHover() {
+    const { chart, d3Container, aggregates, data, x, chartWidth, chartHeight, minuteOffset, zoneLabel } = this.getState();
+    const rule = chart._add('line.hover-rule')
+      .attr('y1', 0).attr('y2', chartHeight)
+      .style('display', 'none');
+    const readout = d3Container._add('div.readout').style('display', 'none');
+    const dayPaths = chart.selectAll('path.day-path');
+    const bisectMinute = d3.bisector(a => a.minute).center;
+    const bisectPoint = d3.bisector(p => p.minute).center;
+
+    chart._add('rect.hover-target')
+      .attr('width', chartWidth).attr('height', chartHeight)
+      .attr('fill', 'transparent')
+      .on('mousemove', (event) => {
+        const minute = x.invert(d3.pointer(event)[0]);
+        const agg = aggregates[bisectMinute(aggregates, minute)];
+        rule.style('display', null).attr('x1', x(agg.minute)).attr('x2', x(agg.minute));
+
+        // The day whose path is nearest the cursor gets highlighted.
+        const cursorPct = this.getState().y.invert(d3.pointer(event)[1]);
+        const nearest = d3.least(data, d => {
+          const p = d.points[bisectPoint(d.points, agg.minute)];
+          return p.minute === agg.minute ? Math.abs(p.pct - cursorPct) : Infinity;
+        });
+        dayPaths.classed('hover', d => d === nearest).style('opacity', d => d === nearest ? 1 : DAY_OPACITY);
+        const nearestPct = nearest.points[bisectPoint(nearest.points, agg.minute)].pct;
+
+        readout.style('display', null).html(`
+          <div class="t">${fmtClock(agg.minute + minuteOffset)} ${zoneLabel}</div>
+          <div class="s">change vs 9:30 open, ${agg.n} days</div>
+          <div class="r mean"><span>mean day</span><b>${fmtPct(agg.mean)}</b></div>
+          <div class="r median"><span>median day</span><b>${fmtPct(agg.median)}</b></div>
+          <div class="r"><span>days above open</span><b>${Math.round(agg.positiveShare * 100)}%</b></div>
+          <div class="r day"><span>${d3.timeFormat('%b %-d, %Y')(nearest.date)}</span><b>${fmtPct(nearestPct)}</b></div>`);
+      })
+      .on('mouseleave', () => {
+        rule.style('display', 'none');
+        readout.style('display', 'none');
+        dayPaths.classed('hover', false).style('opacity', DAY_OPACITY);
+      });
+  }
+
+  drawSvgAndWrappers() {
+    const { d3Container, svgWidth, svgHeight, defaultFont, calc } = this.getState();
+    const svg = d3Container._add('svg.svg-container')
+      .attr('width', svgWidth)
+      .attr('height', svgHeight)
+      .attr('font-family', defaultFont);
+    const chart = svg._add('g.chart')
+      .attr('transform', `translate(${calc.chartLeftMargin},${calc.chartTopMargin})`);
+    this.setState({ chart, svg });
+  }
+
+  initializeEnterExitUpdatePattern() {
+    d3.selection.prototype._add = function (classSelector, data, params) {
+      const container = this;
+      const split = classSelector.split('.');
+      const elementTag = split[0];
+      const className = split[1] || 'not-good';
+      const exitTransition = params?.exitTransition;
+      const enterTransition = params?.enterTransition;
+
+      let bindData = data;
+      if (typeof data === 'function') bindData = data(container.datum());
+      if (bindData && !Array.isArray(bindData)) bindData = [bindData];
+      if (!bindData) bindData = container.datum() ? d => [d] : [className];
+
+      let selection = container.selectAll(elementTag + '.' + className).data(bindData, (d, i) => {
+        if (typeof d === 'object' && d.id) return d.id;
+        return i;
+      });
+      if (exitTransition) exitTransition(selection); else selection.exit().remove();
+      const enterSelection = selection.enter().append(elementTag);
+      if (enterTransition) enterTransition(enterSelection);
+      selection = enterSelection.merge(selection);
+      selection.attr('class', className);
+      if (className === 'not-good') {
+        selection.attr('stroke', 'red').attr('stroke-width', 10);
+        selection.selectAll('title').data(['not-good']).join('title').text("You don't have a class set for this element!");
+      }
+      return selection;
+    };
+  }
+
+  setDynamicContainer() {
+    const attrs = this.getState();
+    const d3Container = d3.select(attrs.container);
+    const containerRect = d3Container.node().getBoundingClientRect();
+    if (containerRect.width > 0) attrs.svgWidth = containerRect.width;
+    const self = this;
+    d3.select(window).on('resize.' + attrs.id, function () {
+      const rect = d3Container.node().getBoundingClientRect();
+      if (rect.width > 0) attrs.svgWidth = rect.width;
+      self.render();
+    });
+    this.setState({ d3Container });
+  }
+}
+
+function renderCoverage(days) {
+  const fmtDate = d3.timeFormat('%b %-d, %Y');
+  d3.select('#coverage').html(
+    `TQQQ ${BAR_MINUTES}-min bars, <b>${days.length}</b> trading days, ` +
+    `<b>${fmtDate(days[0].date)}</b> to <b>${fmtDate(days[days.length - 1].date)}</b>`);
+}
+
+// Two-thumb period slider over the loaded trading days. Each thumb is an
+// index into allDays; the thumbs cannot cross. Every move re-filters the
+// days, recomputes the aggregates and rules, and re-renders the chart.
+function setupPeriodSlider(allDays, onChange) {
+  const start = d3.select('#range-start'), end = d3.select('#range-end'), fill = d3.select('#range-fill');
+  const last = allDays.length - 1;
+  start.attr('max', last).property('value', 0);
+  end.attr('max', last).property('value', last);
+
+  const apply = () => {
+    let lo = +start.property('value'), hi = +end.property('value');
+    if (lo > hi) [lo, hi] = [hi, lo];
+    start.property('value', lo);
+    end.property('value', hi);
+    fill.style('left', `${lo / last * 100}%`).style('width', `${(hi - lo) / last * 100}%`);
+    onChange(allDays.slice(lo, hi + 1));
+  };
+  start.on('input', apply);
+  end.on('input', apply);
+  apply();
+}
+
+d3.tsv(DATA_URL).then(rows => {
+  const allDays = d3.sort(buildDays(rows), d => d.date);
+  const chart = new IntradayOverlayChart().container('#chart');
+  setupPeriodSlider(allDays, days => {
+    renderCoverage(days);
+    chart.data(days).aggregates(buildAggregates(days)).render();
+  });
+
+  const localOffset = localOffsetFromMarket();
+  const localLabel = shortZoneName(LOCAL_TZ);
+  d3.select('#tz-switch-label').text(`Show in my time (${localLabel})`);
+  d3.select('#toggle-local-tz').on('change', function () {
+    chart.minuteOffset(this.checked ? localOffset : 0)
+      .zoneLabel(this.checked ? localLabel : 'ET')
+      .render();
+  });
+  setInterval(() => chart.drawNow(), NOW_REFRESH_MS);
+});
+</script>
+</body>
+</html>

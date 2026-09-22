@@ -58,12 +58,24 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: python3 update_data.py || (sleep 120 && python3 update_data.py)
 
+      # Two Alpaca requests per run (calendar + bars since the last day on
+      # disk), well inside the free plan's 200/minute. Kept independent of the
+      # daily prices: an Alpaca outage shows as a failed step in the log but
+      # must not block committing the yfinance refresh above.
+      - name: Refresh TQQQ 5-minute bars (Alpaca)
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
+        run: python3 update_intraday.py --source alpaca --incremental
+
       - name: Commit and push if data changed
         if: steps.gate.outputs.run == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- 'data/*.tsv'; then
+          if git diff --quiet -- 'data/*.tsv' 'data/intraday/*.tsv'; then
             echo "No data changes."
             exit 0
           fi
@@ -77,7 +89,7 @@ jobs:
           # it to the viewer's own local time for display.
           stamp_utc="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
           echo "$stamp_utc" > data/last-updated.txt
-          git add 'data/*.tsv' data/last-updated.txt
+          git add 'data/*.tsv' 'data/intraday/*.tsv' data/last-updated.txt
           # Commit message stays ET so the nine same-day commits are told
           # apart at a glance in git log.
           git commit -m "Refresh market data $(TZ=America/New_York date '+%Y-%m-%d %H:%M %Z')"

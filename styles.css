@@ -140,7 +140,7 @@
     align-items: baseline;
     column-gap: 14px;
     row-gap: 2px;
-    padding-right: 140px;
+    padding-right: 250px;
   }
 
   /* Orion uses Poppins for display type; Open Sans carries the UI text. */
@@ -4283,6 +4283,62 @@
     border-color: var(--accent);
   }
 
+  /* Resources dropdown — same quiet treatment as the GitHub link. A native
+     <details>; the inline script in index.html closes it on outside clicks. */
+  .resources-menu {
+    position: relative;
+  }
+  .resources-menu summary {
+    list-style: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 10px;
+    border-radius: 8px;
+    color: var(--text-muted);
+    background: rgba(122, 122, 166, 0.08);
+    border: 1px solid rgba(122, 122, 166, 0.25);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+  }
+  .resources-menu summary::-webkit-details-marker { display: none; }
+  .resources-menu summary:hover,
+  .resources-menu[open] summary {
+    color: var(--accent-text);
+    background: rgba(134, 118, 255, 0.14);
+    border-color: var(--accent);
+  }
+  .resources-menu[open] summary svg { transform: rotate(180deg); }
+  .resources-list {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 200px;
+    padding: 6px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(20, 30, 50, 0.12);
+    z-index: 50;
+  }
+  .resources-list a {
+    display: block;
+    padding: 8px 10px;
+    border-radius: 6px;
+    color: var(--text);
+    font-size: 13px;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .resources-list a:hover {
+    background: rgba(134, 118, 255, 0.12);
+    color: var(--accent-text);
+  }
+
   /* Share button — icon + text on desktop, icon-only on smaller viewports
      (the @media (max-width: 900px) override below hides .share-btn-label). */
   #share-btn {
@@ -4324,6 +4380,7 @@
       padding: 0;
     }
     #share-btn .share-btn-label { display: none; }
+    .resources-menu .resources-label { display: none; }
   }
 
   /* Shown only when localStorage was written by an older APP_VERSION. Pinned
