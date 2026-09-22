@@ -223,38 +223,36 @@ const shortZoneName = timeZone =>
   new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(new Date())
     .find(p => p.type === 'timeZoneName').value;
 
-// One row per 5-minute bar -> one series per trading day, each point the
-// % change of the bar's close vs the day's first open, placed at bar end time.
+// One row per 5-minute bar -> one series per trading day. Every point is the
+// % change of that bar's close against the PREVIOUS session's close, the
+// basis a quote screen uses, so a day starts at its opening gap rather than
+// at zero and the 0% line is where yesterday closed. The first day in the
+// file has no previous close and is dropped.
 function buildDays(rows) {
   const byDay = d3.groups(rows, r => d3.timeDay.floor(parseStamp(r.Date)).getTime());
-  const days = byDay.map(([dayMs, bars]) => {
+  const sessions = d3.sort(byDay.map(([dayMs, bars]) => {
     const sorted = d3.sort(bars, r => parseStamp(r.Date));
-    const open = +sorted[0].Open;
-    const lastClose = +sorted[sorted.length - 1].Close;
-    const points = [{ minute: SESSION_OPEN_MIN, pct: 0 }].concat(sorted.map(r => {
-      const t = parseStamp(r.Date);
-      return { minute: t.getHours() * 60 + t.getMinutes() + BAR_MINUTES, pct: (+r.Close / open - 1) * 100 };
-    }));
-    const last = points[points.length - 1];
     return {
       id: dayMs,
       date: new Date(dayMs),
+      open: +sorted[0].Open,
+      bars: sorted.map(r => { const t = parseStamp(r.Date); return { minute: t.getHours() * 60 + t.getMinutes() + BAR_MINUTES, close: +r.Close }; }),
+    };
+  }), d => d.date);
+  return sessions.slice(1).map((day, i) => {
+    const prevClose = sessions[i].bars[sessions[i].bars.length - 1].close;
+    const pct = price => (price / prevClose - 1) * 100;
+    const points = [{ minute: SESSION_OPEN_MIN, pct: pct(day.open) }].concat(day.bars.map(b => ({ minute: b.minute, pct: pct(b.close) })));
+    const last = points[points.length - 1];
+    return {
+      id: day.id,
+      date: day.date,
       points,
-      open,
-      lastClose,
+      openVsPrevPct: points[0].pct,
+      closeVsPrevPct: last.pct,
       complete: last.minute === SESSION_CLOSE_MIN,
     };
   });
-  // Open and close vs the previous session's close, the figures a quote
-  // screen reports. Both include the overnight gap, unlike the chart's
-  // open-relative lines.
-  const ordered = d3.sort(days, d => d.date);
-  ordered.forEach((d, i) => {
-    const prevClose = i ? ordered[i - 1].lastClose : null;
-    d.openVsPrevPct = prevClose ? (d.open / prevClose - 1) * 100 : null;
-    d.closeVsPrevPct = prevClose ? (d.lastClose / prevClose - 1) * 100 : null;
-  });
-  return ordered;
 }
 
 // Mean and median of every day's % at each minute of the session.
@@ -274,8 +272,7 @@ function buildAggregates(days) {
 }
 
 // Each rule picks one minute of the session for its own reason. Rules of the
-// same kind that land on the same minute merge into one label. The 9:30 point
-// is excluded because every day is 0% there by construction.
+// same kind that land on the same minute merge into one label.
 // Label text is two tokens per rule: what was measured and its value. The
 // Buy/Sell title already says which extreme it is.
 const ANNOTATION_RULES = [
@@ -418,8 +415,7 @@ function segmentHitsBox(a, b, box) {
 }
 
 function buildAnnotationPoints(aggregates) {
-  const candidates = aggregates.filter(a => a.minute > SESSION_OPEN_MIN);
-  const picks = ANNOTATION_RULES.map(rule => ({ rule, agg: rule.pick(candidates) }));
+  const picks = ANNOTATION_RULES.map(rule => ({ rule, agg: rule.pick(aggregates) }));
   return d3.groups(picks, p => `${p.rule.kind}@${p.agg.minute}`).map(([id, group]) => ({
     id,
     minute: group[0].agg.minute,
@@ -453,7 +449,7 @@ const KEEP_SHARE = 0.08;
 function similarDays(days, reference) {
   const refByMinute = new Map(reference.points.map(p => [p.minute, p.pct]));
   const cutoff = reference.points[reference.points.length - 1].minute;
-  const minutes = d3.range(SESSION_OPEN_MIN + BAR_MINUTES, cutoff + 1, BAR_MINUTES);
+  const minutes = d3.range(SESSION_OPEN_MIN, cutoff + 1, BAR_MINUTES);   // the open, now a real value, takes part
   const refSeries = minutes.map(m => refByMinute.get(m));
   const scored = days
     .filter(d => d !== reference)
