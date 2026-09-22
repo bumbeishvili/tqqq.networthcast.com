@@ -278,10 +278,8 @@ function buildAggregates(days) {
 const ANNOTATION_RULES = [
   { kind: 'buy',  anchor: 'mean',   pick: a => d3.least(a, d => d.mean),              label: d => `mean ${fmtPct(d.mean)}` },
   { kind: 'buy',  anchor: 'median', pick: a => d3.least(a, d => d.median),            label: d => `median ${fmtPct(d.median)}` },
-  { kind: 'buy',  anchor: 'mean',   pick: a => d3.least(a, d => d.positiveShare),     label: d => `${Math.round(d.positiveShare * 100)}% up` },
   { kind: 'sell', anchor: 'mean',   pick: a => d3.greatest(a, d => d.mean),           label: d => `mean ${fmtPct(d.mean)}` },
   { kind: 'sell', anchor: 'median', pick: a => d3.greatest(a, d => d.median),         label: d => `median ${fmtPct(d.median)}` },
-  { kind: 'sell', anchor: 'mean',   pick: a => d3.greatest(a, d => d.positiveShare),  label: d => `${Math.round(d.positiveShare * 100)}% up` },
 ];
 
 // Label geometry. Labels are LABEL_WIDTH wide; their height depends on how
