@@ -474,11 +474,12 @@ class IntradayOverlayChart {
       ._add('circle.today-ring', k => [k]).attr('r', 5).classed('second', k => k === 1);
     g._add('circle.today-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
     const nearRightEdge = cx > chartWidth - 110;
-    // "live" beside the dot, below it so sell labels above the line stay clear.
+    // "today" beside the dot, below it so sell labels above the line stay
+    // clear. The pulsing rings, not the word, say whether the session is open.
     g._add('text.today-label')
       .attr('x', cx + (nearRightEdge ? -10 : 10)).attr('y', cy + 18)
       .attr('text-anchor', nearRightEdge ? 'end' : 'start')
-      .text(live ? 'live' : 'today');
+      .text('today');
   }
 
   drawAggregates() {
@@ -756,19 +757,24 @@ function setupPeriodSlider(allDays, onChange) {
   apply();
 }
 
-// Similar-days control: just the toggle. Its state survives reloads.
+// On/off switches whose state survives reloads, one localStorage key each.
+// localStorage can be missing or throw (private mode, blocked storage); the
+// switch then just starts off.
 const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
-function readSavedSimilar() {
-  try { return localStorage.getItem(SIMILAR_STORAGE_KEY) === '1'; } catch { return false; }
+const LOCAL_TZ_STORAGE_KEY = 'tqqq-intraday-local-time';
+function readSavedSwitch(key) {
+  try { return localStorage.getItem(key) === '1'; } catch { return false; }
 }
-function writeSavedSimilar(on) {
-  try { localStorage.setItem(SIMILAR_STORAGE_KEY, on ? '1' : '0'); } catch { /* storage unavailable */ }
+function writeSavedSwitch(key, on) {
+  try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* storage unavailable */ }
 }
+
+// Similar-days control: just the toggle.
 function setupSimilarFilter(onChange) {
-  const state = { on: readSavedSimilar() };
+  const state = { on: readSavedSwitch(SIMILAR_STORAGE_KEY) };
   d3.select('#toggle-similar').property('checked', state.on).on('change', function () {
     state.on = this.checked;
-    writeSavedSimilar(state.on);
+    writeSavedSwitch(SIMILAR_STORAGE_KEY, state.on);
     onChange();
   });
   return state;
@@ -792,16 +798,22 @@ d3.tsv(DATA_URL).then(rows => {
       .render();
   };
   const similar = setupSimilarFilter(refresh);
-  setupPeriodSlider(allDays, days => { periodDays = days; refresh(); });
 
+  // Timezone switch. Applied before the first render so a saved "on" state
+  // draws local times from the start.
   const localOffset = localOffsetFromMarket();
   const localLabel = shortZoneName(LOCAL_TZ);
   d3.select('#tz-switch-label').text(`Show in my time (${localLabel})`);
-  d3.select('#toggle-local-tz').on('change', function () {
-    chart.minuteOffset(this.checked ? localOffset : 0)
-      .zoneLabel(this.checked ? localLabel : 'ET')
-      .render();
+  const applyLocalTime = on => chart.minuteOffset(on ? localOffset : 0).zoneLabel(on ? localLabel : 'ET');
+  const localTimeOn = readSavedSwitch(LOCAL_TZ_STORAGE_KEY);
+  applyLocalTime(localTimeOn);
+  d3.select('#toggle-local-tz').property('checked', localTimeOn).on('change', function () {
+    writeSavedSwitch(LOCAL_TZ_STORAGE_KEY, this.checked);
+    applyLocalTime(this.checked).render();
   });
+
+  setupPeriodSlider(allDays, days => { periodDays = days; refresh(); });
+
   setInterval(() => chart.drawNow(), NOW_REFRESH_MS);
 });
 </script>
