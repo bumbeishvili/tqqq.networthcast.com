@@ -72,6 +72,7 @@
   .today-ring.second{animation-delay:.9s}
   @keyframes live-pulse{0%{transform:scale(.5);opacity:.8}100%{transform:scale(3.2);opacity:0}}
   .today-label{font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--violet)}
+  .today-label .up{fill:var(--green)} .today-label .down{fill:var(--red)}
   .mean-path{fill:none;stroke:var(--mean);stroke-width:2.5}
   .median-path{fill:none;stroke:var(--orange);stroke-width:2;stroke-dasharray:6 4}
   .hover-rule{stroke:var(--faint);stroke-width:1;stroke-dasharray:3 3;pointer-events:none}
@@ -474,12 +475,14 @@ class IntradayOverlayChart {
       ._add('circle.today-ring', k => [k]).attr('r', 5).classed('second', k => k === 1);
     g._add('circle.today-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
     const nearRightEdge = cx > chartWidth - 110;
-    // "today" beside the dot, below it so sell labels above the line stay
-    // clear. The pulsing rings, not the word, say whether the session is open.
+    // "today" and its running change vs the open, beside the dot and below
+    // it so sell labels above the line stay clear. The pulsing rings, not the
+    // word, say whether the session is open.
+    const tone = last.pct > 0 ? 'up' : last.pct < 0 ? 'down' : '';
     g._add('text.today-label')
       .attr('x', cx + (nearRightEdge ? -10 : 10)).attr('y', cy + 18)
       .attr('text-anchor', nearRightEdge ? 'end' : 'start')
-      .text('today');
+      .html(`today <tspan class="${tone}">${fmtPct(last.pct)}</tspan>`);
   }
 
   drawAggregates() {
