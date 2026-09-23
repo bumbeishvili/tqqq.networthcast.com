@@ -69,6 +69,12 @@
   .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
   #chart{position:relative;min-height:520px}
+  /* Same pill as the main chart's log toggle: dim when off, purple when on. */
+  .scale-toggle{position:absolute;left:0;bottom:4px;padding:3px 7px;font:600 10px var(--sans);text-transform:uppercase;letter-spacing:.5px;
+    color:var(--muted);background:rgba(219,223,241,.45);border:1px solid var(--border);border-radius:6px;cursor:pointer;user-select:none;opacity:.6;
+    transition:color .15s,background .15s,border-color .15s,opacity .15s}
+  .scale-toggle:hover{opacity:1}
+  .scale-toggle[aria-pressed="true"]{opacity:1;color:var(--accent);background:var(--panel);border-color:var(--accent)}
   #chart svg{display:block}
   .axis text{fill:var(--muted);font-family:var(--mono);font-size:11px}
   .axis line,.axis path{stroke:var(--border2)}
@@ -146,7 +152,9 @@
         </div>
       </div>
     </div>
-    <div id="chart"></div>
+    <div id="chart">
+      <button type="button" class="scale-toggle" id="scale-toggle" aria-pressed="true" title="Switch the vertical axis between a symmetric log scale and a linear one">log</button>
+    </div>
   </div>
 </div>
 
@@ -469,7 +477,7 @@ class IntradayOverlayChart {
       svgWidth: 400,
       svgHeight: 600,
       marginTop: 8,
-      marginBottom: 32,
+      marginBottom: 50,         // axis labels, then a row for the log toggle beneath them
       marginRight: 108,         // room for the mean / median labels and the hovered day's date at the line ends
       marginLeft: 52,
       container: 'body',
@@ -529,11 +537,14 @@ class IntradayOverlayChart {
     const { data, chartWidth, chartHeight, yScaleType, symlogLinearPct } = this.getState();
     const allPct = data.flatMap(d => d.points.map(p => p.pct));
     const x = d3.scaleLinear().domain([SESSION_OPEN_MIN, SESSION_CLOSE_MIN]).range([0, chartWidth]);
+    // Log: a fixed, symmetric extent from all days, so filtering never
+    // rescales. Linear: the extent of the days on screen, since on a linear
+    // axis the full three-year range would flatten a quiet selection.
     const [lo, hi] = d3.extent(allPct);
     const limit = this.getState().yLimit || Math.ceil(Math.max(-lo, hi));
-    const y = (yScaleType === 'symlog'
-      ? d3.scaleSymlog().constant(symlogLinearPct)
-      : d3.scaleLinear()).domain([-limit, limit]).range([chartHeight, 0]);
+    const y = yScaleType === 'symlog'
+      ? d3.scaleSymlog().constant(symlogLinearPct).domain([-limit, limit]).range([chartHeight, 0])
+      : d3.scaleLinear().domain([Math.min(0, lo), Math.max(0, hi)]).nice(8).range([chartHeight, 0]);
     const yTicks = yScaleType === 'symlog'
       ? [0].concat(NICE_PCT_LADDER.filter(t => t >= symlogLinearPct && t <= limit).flatMap(t => [t, -t]))
       : y.ticks(8);
@@ -779,9 +790,9 @@ class IntradayOverlayChart {
           .text(c => c.text);
 
         // The hovered day's end, in the right margin beside the plot like the
-        // mean and median names: its date, then its final change and the time
-        // of that bar. Two lines, placed at the line's end unless that would
-        // sit on the mean or median name, in which case it moves up or down.
+        // mean and median names: its date, then its close vs the previous
+        // close. Two lines, placed at the line's end unless that would sit on
+        // the mean or median name, in which case it moves up or down.
         const last = nearest.points[nearest.points.length - 1];
         const ey = y(last.pct);
         const { lineLabelYs = [] } = this.getState();
@@ -793,7 +804,7 @@ class IntradayOverlayChart {
           .attr('x', chartWidth + 6).attr('y', endY).attr('text-anchor', 'start')
           .attr('class', 'hover-end');
         endLabel.html(`<tspan x="${chartWidth + 6}" dy="-0.35em">${d3.timeFormat('%b %-d, %Y')(nearest.date)}</tspan>` +
-          `<tspan x="${chartWidth + 6}" dy="1.2em" class="dim">${fmtPct(last.pct)} at ${fmtClock(last.minute + minuteOffset)}</tspan>`);
+          `<tspan x="${chartWidth + 6}" dy="1.2em" class="dim">${fmtPct(last.pct)}</tspan>`);
       })
       .on('mouseleave', () => {
         rule.style('display', 'none');
@@ -923,6 +934,7 @@ function setupPeriodSlider(allDays, onChange) {
 // With nothing saved, or when localStorage is missing or throws (private
 // mode, blocked storage), the switch takes its default.
 const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
+const LOG_SCALE_STORAGE_KEY = 'tqqq-intraday-log-scale';
 function readSavedSwitch(key, fallback = false) {
   try {
     const saved = localStorage.getItem(key);
@@ -1045,6 +1057,21 @@ function setupSimilarFilter(onChange) {
 // were, with edge-pinned thumbs following the new data.
 const chart = new IntradayOverlayChart().container('#chart')
   .minuteOffset(localOffsetFromMarket()).zoneLabel(shortZoneName(LOCAL_TZ));
+
+// Log / linear toggle for the y-axis. Log (symmetric, linear inside ±0.1%)
+// is the default; the choice is remembered.
+const scaleToggle = d3.select('#scale-toggle');
+const applyScale = log => {
+  scaleToggle.attr('aria-pressed', log ? 'true' : 'false');
+  chart.yScaleType(log ? 'symlog' : 'linear');
+};
+applyScale(readSavedSwitch(LOG_SCALE_STORAGE_KEY, true));
+scaleToggle.on('click', () => {
+  const log = scaleToggle.attr('aria-pressed') !== 'true';
+  writeSavedSwitch(LOG_SCALE_STORAGE_KEY, log);
+  applyScale(log);
+  chart.render();
+});
 const DATA_REFRESH_MS = 10 * 60 * 1000;
 
 function loadData() {
