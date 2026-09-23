@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 """
-Fetches 5-minute TQQQ bars and writes them to data/intraday/tqqq-5m.tsv.
+Fetches 5-minute TQQQ bars from Alpaca Market Data and writes them to
+data/intraday/tqqq-5m.tsv. This is the intraday page's only source; the
+daily price files the main chart uses come from Yahoo via update_data.py,
+and the two are kept separate on purpose.
 
-Two sources:
+Alpaca is free with an account and serves bars back to 2016 from the
+consolidated SIP feed, split-adjusted here. It needs ALPACA_API_KEY and
+ALPACA_API_SECRET in the environment or in a .env file next to this script.
+--years sets how far back a full pull goes; --incremental instead starts
+from the last day already in the file (that day is re-fetched so a partial
+session gets completed). The cron uses --incremental: two requests per run.
 
-  --source yahoo   (default)  Yahoo Finance via yfinance. Free, no account,
-                              but only the most recent 60 calendar days.
-  --source alpaca             Alpaca Market Data. Free with an account, bars
-                              back to 2016 from the consolidated SIP feed.
-                              Needs ALPACA_API_KEY and ALPACA_API_SECRET in
-                              the environment or in a .env file next to this
-                              script. --years sets how far back to pull;
-                              --incremental instead starts from the last day
-                              already in the file (that day is re-fetched so a
-                              partial session gets completed). The cron uses
-                              --incremental: two requests per run.
-
-Either way the file on disk is the long-term store: each run merges the fresh
-bars into whatever is already there, fresh bars winning on overlap, so history
-accumulates across runs and across sources.
+The file on disk is the long-term store: each run merges the fresh bars into
+whatever is already there, fresh bars winning on overlap.
 
 Output is tab-separated with one row per regular-session bar (09:30-15:55 ET,
 timestamps are the bar's open time in New York local time):
@@ -29,7 +24,6 @@ timestamps are the bar's open time in New York local time):
 
 import argparse
 import os
-import sys
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -43,7 +37,6 @@ OUT_PATH = os.path.join(BASE_DIR, 'data', 'intraday', 'tqqq-5m.tsv')
 COLUMNS = ['Open', 'High', 'Low', 'Close', 'Volume']
 DATE_FORMAT = '%-m/%-d/%Y %H:%M:%S'
 
-YAHOO_PERIOD = '60d'                       # Yahoo's hard ceiling for 5-minute bars
 ALPACA_BARS_URL = 'https://data.alpaca.markets/v2/stocks/bars'
 ALPACA_CALENDAR_URL = 'https://paper-api.alpaca.markets/v2/calendar'
 ALPACA_PAGE_LIMIT = 10000
@@ -75,23 +68,6 @@ def load_dotenv(path):
                 continue
             key, value = line.split('=', 1)
             os.environ.setdefault(key.strip(), value.strip())
-
-
-def fetch_yahoo():
-    try:
-        import yfinance as yf
-    except ImportError:
-        print("yfinance not installed. Run: pip install yfinance")
-        sys.exit(1)
-    print(f"Fetching {TICKER} {BAR_MINUTES}m bars from Yahoo for the last {YAHOO_PERIOD}...")
-    df = yf.Ticker(TICKER).history(period=YAHOO_PERIOD, interval=f'{BAR_MINUTES}m',
-                                   auto_adjust=False, prepost=False)
-    if df.empty:
-        raise RuntimeError(f"Yahoo returned no {BAR_MINUTES}m rows for {TICKER}")
-    df = df.tz_convert(MARKET_TZ)
-    bars = {ts.to_pydatetime(): {c: row[c] for c in COLUMNS}
-            for ts, row in df.iterrows() if in_regular_session(ts)}
-    return bars, {}          # yfinance already stops at the real close on early-close days
 
 
 def fetch_alpaca_calendar(start, headers):
@@ -189,17 +165,15 @@ def write_tsv(path, rows):
             f.write(date_str + '\t' + '\t'.join(rows[date_str]) + '\n')
 
 
-argp = argparse.ArgumentParser(description=f'Refresh {TICKER} {BAR_MINUTES}-minute bars.')
-argp.add_argument('--source', choices=['yahoo', 'alpaca'], default='yahoo')
-argp.add_argument('--years', type=int, default=3, help='Alpaca only: how many years back to pull')
+argp = argparse.ArgumentParser(description=f'Refresh {TICKER} {BAR_MINUTES}-minute bars from Alpaca.')
+argp.add_argument('--years', type=int, default=3, help='how many years back a full pull goes')
 argp.add_argument('--incremental', action='store_true',
-                  help='Alpaca only: fetch from the last day already in the file instead of --years back')
+                  help='fetch from the last day already in the file instead of --years back')
 args = argp.parse_args()
 
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 existing = read_existing(OUT_PATH)
-fetched, close_by_date = (fetch_alpaca(alpaca_start(existing, args)) if args.source == 'alpaca'
-                          else fetch_yahoo())
+fetched, close_by_date = fetch_alpaca(alpaca_start(existing, args))
 
 fresh = {ts.strftime(DATE_FORMAT): format_row(row) for ts, row in fetched.items()}
 merged = {**existing, **fresh}        # fresh bars win where the two overlap

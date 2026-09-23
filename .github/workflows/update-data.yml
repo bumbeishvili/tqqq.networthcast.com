@@ -68,7 +68,7 @@ jobs:
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
-        run: python3 update_intraday.py --source alpaca --incremental
+        run: python3 update_intraday.py --incremental
 
       - name: Commit and push if data changed
         if: steps.gate.outputs.run == 'true'
