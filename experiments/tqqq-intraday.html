@@ -217,6 +217,10 @@ function marketMinuteNow() {
 }
 
 const NOW_REFRESH_MS = 30 * 1000;
+
+// Is this day today's session, with the market open right now? Only then is
+// it drawn on its own layer; otherwise it is one line among the others.
+const isLiveDay = day => marketMinuteNow() !== null && fmtIsoDay(day.date) === marketDateNow();
 const NOW_TICK_SHARE = 0.05;             // the "now" tick spans this share of the plot height, from the top
 const LINE_LABEL_MIN_GAP = 13;           // px between the mean and median end labels
 const HOVER_LABEL_GAP = 14;              // px between stacked crosshair value labels
@@ -582,12 +586,17 @@ class IntradayOverlayChart {
       .attr('width', matchCutoff === null ? 0 : x(matchCutoff) - x(SESSION_OPEN_MIN))
       .attr('height', chartHeight);
     const { todayId, opacityCount } = this.getState();
-    const faint = data.filter(d => d.id !== todayId);
+    const today = data.find(d => d.id === todayId);
+    const live = today && isLiveDay(today);
+    const faint = live ? data.filter(d => d.id !== todayId) : data;
     const opacity = dayOpacity(opacityCount ?? faint.length);
+    // The similar-days reference is only picked out while the session is
+    // live; after the close the latest day looks like any other.
+    const highlighted = d => live && d.id === referenceId;
     chart._add('g.days')._add('path.day-path', faint)
       .attr('d', d => line(d.points))
-      .classed('reference', d => d.id === referenceId)
-      .style('opacity', d => d.id === referenceId ? 1 : opacity);
+      .classed('reference', highlighted)
+      .style('opacity', d => highlighted(d) ? 1 : opacity);
   }
 
   // Today's path on its own layer above the aggregates and labels. The line
@@ -596,10 +605,10 @@ class IntradayOverlayChart {
   drawToday() {
     const { chart, data, line, x, y, chartWidth, todayId, firstRender } = this.getState();
     const today = data.find(d => d.id === todayId);
-    const g = chart._add('g.today').style('display', today ? null : 'none');
-    if (!today) return;
+    const live = today && isLiveDay(today);
+    const g = chart._add('g.today').style('display', live ? null : 'none');
+    if (!live) return;
     const last = today.points[today.points.length - 1];
-    const live = marketMinuteNow() !== null && fmtIsoDay(today.date) === marketDateNow();
     const d = line(today.points);
     g._add('path.today-glow').attr('d', d);
     const path = g._add('path.today-path').attr('d', d);
@@ -614,18 +623,16 @@ class IntradayOverlayChart {
     // while live and to none otherwise, so an empty join never has to chain
     // off an empty selection.
     g._add('g.today-rings').attr('transform', `translate(${cx},${cy})`)
-      ._add('circle.today-ring', live ? [0, 1] : []).attr('r', 5).classed('second', k => k === 1);
+      ._add('circle.today-ring', [0, 1]).attr('r', 5).classed('second', k => k === 1);
     g._add('circle.today-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
     const nearRightEdge = cx > chartWidth - 110;
-    // The latest day's change vs its open, beside the dot and below it so
-    // sell labels above the line stay clear. While the session is open this
-    // is "today" with pulsing rings; once it has closed, or on a day with no
-    // session, the same line stays as the previous close.
+    // Today's change vs the previous close, beside the dot and below it so
+    // sell labels above the line stay clear.
     const tone = last.pct > 0 ? 'up' : last.pct < 0 ? 'down' : '';
     g._add('text.today-label')
       .attr('x', cx + (nearRightEdge ? -10 : 10)).attr('y', cy + 18)
       .attr('text-anchor', nearRightEdge ? 'end' : 'start')
-      .html(`${live ? 'today' : 'prev close'} <tspan class="${tone}">${fmtPct(last.pct)}</tspan>`);
+      .html(`today <tspan class="${tone}">${fmtPct(last.pct)}</tspan>`);
   }
 
   drawAggregates() {
@@ -700,9 +707,9 @@ class IntradayOverlayChart {
   // similar-days filter. Returns a test of a label box, padded a little,
   // against every segment of that line.
   highlightedLineHitTest() {
-    const { data, x, y, todayId, referenceId } = this.getState();
-    const line = data.find(d => d.id === todayId) || data.find(d => d.id === referenceId);
-    if (!line) return () => false;
+    const { data, x, y, todayId } = this.getState();
+    const line = data.find(d => d.id === todayId);
+    if (!line || !isLiveDay(line)) return () => false;
     const PAD = 8;
     const pts = line.points.map(p => ({ x: x(p.minute), y: y(p.pct) }));
     return b => {
@@ -730,8 +737,10 @@ class IntradayOverlayChart {
   drawHover() {
     const { chart, d3Container, aggregates, data, x, y, chartWidth, chartHeight, minuteOffset, referenceId } = this.getState();
     const { todayId, opacityCount } = this.getState();
-    const opacity = dayOpacity(opacityCount ?? data.filter(d => d.id !== todayId).length);
-    const restOpacity = d => d.id === referenceId ? 1 : opacity;
+    const today = data.find(d => d.id === todayId);
+    const live = today && isLiveDay(today);
+    const opacity = dayOpacity(opacityCount ?? (live ? data.length - 1 : data.length));
+    const restOpacity = d => live && d.id === referenceId ? 1 : opacity;
     const rule = chart._add('line.hover-rule')
       .attr('y1', 0).attr('y2', chartHeight)
       .style('display', 'none');
