@@ -160,6 +160,13 @@
 
 <script>
 const DATA_URL = '../data/intraday/tqqq-5m.tsv';
+// Today's session at 1-minute resolution from Yahoo (update_intraday_today.py).
+// The 5-minute history comes from Alpaca, whose free plan holds back the
+// latest 15 minutes; Yahoo serves the current minute, so today is drawn from
+// this file and the history from the other. Absent until the first run of
+// the day's pipeline, and stale (the last session) outside market days.
+const DATA_URL_TODAY = '../data/intraday/tqqq-today-1m.tsv';
+const TODAY_BAR_MINUTES = 1;
 const SESSION_OPEN_MIN = 9 * 60 + 30;
 const SESSION_CLOSE_MIN = 16 * 60;
 const BAR_MINUTES = 5;
@@ -248,7 +255,10 @@ function buildDays(rows) {
       id: dayMs,
       date: new Date(dayMs),
       open: +sorted[0].Open,
-      bars: sorted.map(r => { const t = parseStamp(r.Date); return { minute: t.getHours() * 60 + t.getMinutes() + BAR_MINUTES, close: +r.Close }; }),
+      // A bar's minute is its END, so a 5-minute bar opening 09:30 lands on
+      // 09:35 and a 1-minute bar opening 09:34 on the same 09:35; the two
+      // resolutions share the minute grid the aggregates and matching use.
+      bars: sorted.map(r => { const t = parseStamp(r.Date); return { minute: t.getHours() * 60 + t.getMinutes() + (r.barMinutes || BAR_MINUTES), close: +r.Close }; }),
     };
   }), d => d.date);
   return sessions.slice(1).map((day, i) => {
@@ -1083,9 +1093,31 @@ scaleToggle.on('click', () => {
 });
 const DATA_REFRESH_MS = 10 * 60 * 1000;
 
+// Today's 1-minute rows replace that day's 5-minute rows when the file holds
+// the current session, or a day the history has not reached yet. A stale
+// file (last session, on a weekend) is ignored so history stays uniform at
+// 5 minutes. Days are compared on the Date column's own "M/D/YYYY" prefix
+// rather than parsing every one of ~90k history rows.
+const dayOf = r => r.Date.split(' ')[0];
+function mergeTodayRows(history, today) {
+  if (!today.length) return history;
+  const todayDay = dayOf(today[0]);
+  const todayDate = parseStamp(today[0].Date);
+  const lastHistoryDate = parseStamp(history[history.length - 1].Date);
+  const isCurrentSession = fmtIsoDay(todayDate) === marketDateNow();
+  if (!isCurrentSession && d3.timeDay.floor(todayDate) <= d3.timeDay.floor(lastHistoryDate)) return history;
+  return history
+    .filter(r => dayOf(r) !== todayDay)
+    .concat(today.map(r => ({ ...r, barMinutes: TODAY_BAR_MINUTES })));
+}
+
 function loadData() {
-  return d3.tsv(DATA_URL, { cache: 'no-cache' }).then(rows => {
-    const allDays = buildDays(rows);
+  return Promise.all([
+    d3.tsv(DATA_URL, { cache: 'no-cache' }),
+    // 404 until the day's first pipeline run has written it.
+    d3.tsv(DATA_URL_TODAY, { cache: 'no-cache' }).catch(() => []),
+  ]).then(([history, today]) => {
+    const allDays = buildDays(mergeTodayRows(history, today));
     const allPct = allDays.flatMap(d => d.points.map(p => p.pct));
     // The y extent only ever grows, so a refresh never rescales the plot.
     chart.yLimit(Math.max(chart.yLimit() || 0, Math.ceil(Math.max(-d3.min(allPct), d3.max(allPct)))));

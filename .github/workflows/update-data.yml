@@ -70,6 +70,14 @@ jobs:
           ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
         run: python3 update_intraday.py --incremental
 
+      # One yfinance request for today's 1-minute bars. Alpaca's free plan
+      # holds back the latest 15 minutes, Yahoo serves the current minute, so
+      # the intraday page draws today from this file and history from Alpaca's.
+      - name: Refresh today's TQQQ 1-minute bars (Yahoo)
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: python3 update_intraday_today.py
+
       - name: Commit and push if data changed
         if: steps.gate.outputs.run == 'true'
         run: |
