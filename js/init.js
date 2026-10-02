@@ -223,6 +223,10 @@
   // Restore set select values directly (no 'change' dispatch) — refresh the
   // preview-dropdown trigger labels so they show the restored values.
   if (typeof window.refreshPreviewTriggers === 'function') window.refreshPreviewTriggers();
+  // Stored custom strategies first, then the link's: both sides of the
+  // duplicate check below must hold the same generation of code (see
+  // upgradeSavedCustomCode in js/saved-configs.js).
+  upgradeSavedCustomCode();
   // Saved strategies carried in a share link (`sc`) — merged in; custom ones
   // are flagged untrusted (their code won't run until the user clicks Run).
   // `scz` is the compressed form (current links); `sc` is the older plain one.
@@ -236,7 +240,8 @@
     else if (sc) { try { json = decodeURIComponent(sc); } catch (e) { json = null; } }
     if (json) {
       try {
-        const arr = JSON.parse(json);
+        const parsed = JSON.parse(json);
+        const arr = Array.isArray(parsed) ? withCurrentCustomCode(parsed) : parsed;
         importSharedConfigs(arr);
         if (Array.isArray(arr)) _sharedCfgArr = arr;
       } catch (e) {}

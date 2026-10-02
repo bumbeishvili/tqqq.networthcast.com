@@ -776,15 +776,21 @@ data.nfci  : Chicago Fed National Financial Conditions Index, weekly since 1971,
 
 === INPUTS: p ===
 p.initial       : starting cash, available at p.startIdx (number)
-p.contributions : { "YYYY-MM-DD": amount } — every day new cash lands. Always an object
+p.contributions : { "YYYY-MM-DD": amount } — every day money moves. Always an object
                   (empty {} when the user contributes nothing at all — never null). Usually
-                  one entry per calendar month (the classic monthly-DCA case), but when the
-                  user has uploaded their OWN real transaction history it's whatever real
-                  dates and amounts they actually deposited — could be irregular, could skip
-                  months, could land mid-month. THIS is the source of truth for
-                  contributions, not a formula you compute yourself. On each day you simulate:
+                  one positive entry per calendar month (the classic monthly-DCA case), but
+                  when the user has uploaded their OWN real transaction history it's whatever
+                  they actually did: irregular dates, skipped months, and NEGATIVE amounts for
+                  withdrawals. THIS is the source of truth for contributions, not a formula
+                  you compute yourself. On each day you simulate:
                     var amt = p.contributions[data.dates[i]] || 0;
-                    if (amt > 0) { cash += amt; contributed = amt; action = "contribution"; }
+                    if (amt !== 0) { cash += amt; contributed = amt; action = "contribution"; }
+                  A withdrawal can leave cash below 0. Settle it the same day, straight after
+                  that line: cash has already paid what it could, so sell just enough of what
+                  you hold at that day's close to bring cash back to 0 (charge your trading
+                  cost on the sale if you model one). If the whole account cannot cover it,
+                  sell everything and set cash to 0. Every day ends with cash at 0 or above.
+                  The example at the bottom shows the block.
 p.monthly, p.annualRaise : the sidebar's "monthly contribution" + "% raise per year"
                   SLIDER SETTINGS (numbers). When the user has uploaded a real transaction
                   history these do NOT describe it — they keep their slider values while
@@ -816,8 +822,8 @@ log makes a useless table: fill in everything that applies, because each key bec
   shares      : share count of that asset after the trade
   holdingsValue : dollar value of everything you hold that isn't cash
   cash        : dollars sitting in cash after this row
-  invested    : cumulative money put in so far (initial + every contribution to date)
-  contributed : new cash added on THIS row (0 when none)
+  invested    : cumulative money put in so far (initial + every contribution to date, withdrawals subtracted)
+  contributed : money added on THIS row — negative for a withdrawal, 0 when none
   fee         : trading cost paid on this row, if you model one (0 when none)
 - Also log the numbers the DECISION was made from, one key per asset/indicator you consulted, so the
   user can see why the rule fired — e.g. signalPrice, signalMedian, assetPrice, parkPrice, abovePct.
@@ -833,7 +839,7 @@ action vocabulary (lowercase, exactly these words; the app draws chart markers a
   "switch"       — swapped one fund straight for another
   "rebalance"    — adjusted an existing mix without fully switching
   "ease-in"      — one slice of a deliberately phased buy (many small rows)
-  "contribution" — a monthly contribution landed, no trade decision
+  "contribution" — money landed or left (a deposit, or a withdrawal with contributed < 0), no trade decision
   "hold"         — periodic snapshot, nothing traded
   "end"          — final snapshot on p.endIdx
 You may append detail after the word ("buy — 3 of 5 slices"); the app matches on the leading word.
@@ -841,7 +847,7 @@ You may append detail after the word ("buy — 3 of 5 slices"); the app matches 
 When to push a row:
 - ALWAYS on p.startIdx ("start") and on p.endIdx ("end").
 - ALWAYS for every trade, every rebalance, and every ease-in slice.
-- ALWAYS for each monthly contribution (action "contribution", contributed = the amount added).
+- ALWAYS for every day in p.contributions, deposit or withdrawal (action "contribution", contributed = that day's amount).
 - Plus at least one "hold" snapshot per month when p.weeklyDisplay is false/undefined — or per WEEK
   when p.weeklyDisplay is true. Skipping this on a weekly run is the single most common way a strategy
   ends up looking "blocky" next to the built-in engines: the chart step-resamples your sparse log onto
@@ -969,8 +975,7 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
     const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : data[id][i];
     let cash = p.initial, shares = 0, held = "cash";
     let sma = 0, above = 0;                                   // last bar's readings, for the signals block
-    let invested = p.initial, prevMonth = null;
-    const y0 = parseInt(data.dates[p.startIdx].slice(0, 4), 10);
+    let invested = p.initial;
     // Rolling center line: seed once from the warm-up window, then add/drop one
     // day at a time. The window lives as a running sum (the average) AND a
     // sorted array (the median) so the Center line param is free either way.
@@ -990,11 +995,11 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "", fee = 0;
       cash *= 1 + dayRate;                                    // idle cash earns interest
-      if (prevMonth !== null && month !== prevMonth && p.monthly > 0) {
-        const amt = p.monthly * Math.pow(1 + (p.annualRaise || 0), parseInt(month.slice(0, 4), 10) - y0);
+      const amt = p.contributions[data.dates[i]] || 0;        // a deposit, or a withdrawal when negative
+      if (amt !== 0) {
         cash += amt; contributed = amt; invested += amt; action = "contribution";
+<<withdrawal rule>>
       }
-      prevMonth = month;
       sma = n > 0 ? (useMed ? (n % 2 ? win[(n - 1) >> 1] : (win[n / 2 - 1] + win[n / 2]) / 2) : sum / n) : 0; // hoisted: the signals block below reads the last bar's values
       above = sma > 0 ? sig[i] / sma - 1 : 0;
       let want = held;
@@ -1025,7 +1030,7 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
-      if (contributed > 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || monthEnd || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: px, shares: shares, holdingsValue: stockVal,
@@ -1068,10 +1073,15 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
 === MY STRATEGY (write code that implements THIS) ===
 <<describe your strategy here>>`;
 
-// Inject the user's plain-English description into the structured prompt.
+// Inject the user's plain-English description into the structured prompt, and
+// the library's own withdrawal block (js/strategy-library-code.js) into the
+// worked example. The example and the library strategies then share one source
+// text for that rule, so what the prompt teaches is what the library runs.
 function buildCustomPrompt(desc) {
   const d = (desc || '').trim();
-  return CUSTOM_PROMPT.replace('<<describe your strategy here>>', d || '<<describe your strategy here>>');
+  return CUSTOM_PROMPT
+    .replace('<<withdrawal rule>>', () => SELL_HELD_TO_COVER)
+    .replace('<<describe your strategy here>>', d || '<<describe your strategy here>>');
 }
 
 let _customDataCache = null;
@@ -2302,6 +2312,29 @@ function initCodeEditor(ta) {
   ta.addEventListener('blur', format);
   if (ta.value.trim()) format(); else paint();
   sync();
+}
+
+// A saved strategy and a share link both carry a custom strategy's code as it
+// was on the day they were made. These two bring that code up to the library's
+// current withdrawal handling (js/strategy-library-code.js's
+// upgradeWithdrawalHandling): upgradeSavedCustomCode for what is already in
+// savedConfigs, withCurrentCustomCode for a share link's entries.
+//
+// They go together. Share-link entries are matched against saved strategies by
+// their code text (importSharedConfigs' duplicate check, resolveSharedConfigId),
+// so upgrading one side alone would import a user's own older link as a
+// duplicate of the strategy they already have. Both are called from js/init.js,
+// which loads after the library code; this file loads before it.
+function upgradeSavedCustomCode() {
+  const outdated = savedConfigs
+    .filter(c => c.type === 'custom' && c.code)
+    .map(c => ({ cfg: c, code: upgradeWithdrawalHandling(c.code) }))
+    .filter(u => u.code !== u.cfg.code);
+  outdated.forEach(u => { u.cfg.code = u.code; });
+  if (outdated.some(u => !u.cfg._transient)) persistSavedConfigs();
+}
+function withCurrentCustomCode(entries) {
+  return entries.map(c => (c && c.type === 'custom' && c.code) ? { ...c, code: upgradeWithdrawalHandling(c.code) } : c);
 }
 
 // Merge saved strategies carried in a share link. Custom code is safe to run

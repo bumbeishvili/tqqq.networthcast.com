@@ -51,6 +51,87 @@ const CENTER_LINE_SNIPPET = `    const useMed = p.stat === "median";
 const STAT_PARAM_SNIPPET = `{ id: "stat", label: "Center line", options: [{ value: "sma", label: "Moving average" }, { value: "median", label: "Median" }], default: "sma" }`;
 const STAT_PARAM_MEDIAN_SNIPPET = `{ id: "stat", label: "Center line", options: [{ value: "median", label: "Median" }, { value: "sma", label: "Moving average" }], default: "median" }`;
 
+// A withdrawal is a negative amount in p.contributions: a real uploaded
+// transaction history has them. Every strategy below adds the day's amount to
+// cash, so a withdrawal larger than the cash on hand used to leave cash
+// negative with every share still held. That is an interest-free loan: the
+// line ran leveraged, 2.4x on the history that exposed it, with no trade row
+// to show for it. The rule now is the one the built-in engines use
+// (js/simulate.js, the `currentMonthly < 0` branches of simulateSMA and
+// simulate): cash pays first, then just enough of what is held is sold at
+// that day's close. A withdrawal bigger than the whole account empties it and
+// the rest is dropped, as it is there.
+//
+// Shared SOURCE like WEEKLY_MONTH_END_SNIPPET, interpolated on the line after
+// each strategy's `cash += amt`. The strategies keep their books in a few
+// different shapes, so `holdings` names each [share-count variable, price
+// expression] pair a strategy can be holding.
+const WITHDRAWAL_RULE = "A withdrawal: cash pays first, then holdings are sold at today's close. The account never goes below zero.";
+const sellToCoverSnippet = (holdings) => [
+  `        // ${WITHDRAWAL_RULE}`,
+  `        if (cash < 0) {`,
+  ...holdings.map(([sh, px]) =>
+    `          { const sold = Math.min(${sh} * (${px} || 0), -cash); if (sold > 0) { ${sh} = Math.max(0, ${sh} - sold / ${px}); cash += sold; } }`),
+  `          cash = 0;`,
+  `        }`,
+].join('\n');
+const SELL_SH_TO_COVER = sellToCoverSnippet([['sh', 'lev[i]']]);
+const SELL_TQQQ_QQQ_TO_COVER = sellToCoverSnippet([['shT', 'data.tqqq[i]'], ['shQ', 'data.qqq[i]']]);
+const SELL_LEV_PARK_TO_COVER = sellToCoverSnippet([['shLev', 'lev[i]'], ['shPark', 'sig[i]']]);
+// The strategies that charge a trading cost pay it on this sale too and say so
+// in the row's note. `tracksTraded` is for the one that totals dollars traded.
+const sellHeldToCoverSnippet = (tracksTraded) => [
+  `        // ${WITHDRAWAL_RULE}`,
+  `        if (cash < 0) {`,
+  `          const heldPx = priceOf(held, i), gross = Math.min(shares * heldPx, -cash / (1 - cost));`,
+  `          if (gross > 0) {`,
+  `            shares = Math.max(0, shares - gross / heldPx); fee += gross * cost;${tracksTraded ? ' traded += gross;' : ''}`,
+  `            note = "withdrawal — sold " + held.toUpperCase();`,
+  `          }`,
+  `          cash = 0;`,
+  `        }`,
+].join('\n');
+const SELL_HELD_TO_COVER = sellHeldToCoverSnippet(false);
+const SELL_HELD_TO_COVER_TRADED = sellHeldToCoverSnippet(true);
+
+// Saved strategies carry their OWN copy of a library entry's code (cfg.code,
+// and the same text inside share links), taken on the day it was added, so
+// the snippets above never reach a copy made before they existed.
+// upgradeWithdrawalHandling puts the matching snippet into such a copy. It
+// only touches code that keeps its books the way a library entry does: each
+// rule lists the declarations that must come before the money line, which is
+// also what guarantees every variable the snippet uses exists by then.
+// Anything else, hand-written and generated code included, comes back
+// unchanged.
+//
+// Matching ignores whitespace because the code editor re-indents and re-wraps
+// on paste and blur (js/saved-configs.js's initCodeEditor), so a saved copy
+// can differ from the library's layout in whitespace alone.
+const sourcePattern = (text) =>
+  new RegExp(text.trim().split(/\s+/).map(token => token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('\\s+'));
+const MONEY_LINE = 'cash += amt; contributed = amt; action = "contribution";';
+const MONEY_LINE_INVESTED = 'cash += amt; contributed = amt; invested += amt; action = "contribution";';
+const FEE_BOOKS = ['const cost =', 'const priceOf =', 'let cash = p.initial, shares = 0, held = "cash"'];
+const WITHDRAWAL_UPGRADES = [
+  { declares: [...FEE_BOOKS, 'note = "", fee = 0, traded = 0'], moneyLine: MONEY_LINE_INVESTED, snippet: SELL_HELD_TO_COVER_TRADED },
+  { declares: [...FEE_BOOKS, 'note = "", fee = 0'], moneyLine: MONEY_LINE_INVESTED, snippet: SELL_HELD_TO_COVER },
+  { declares: ['lev = data', 'sig = data', 'shLev = 0, shPark = 0'], moneyLine: MONEY_LINE, snippet: SELL_LEV_PARK_TO_COVER },
+  { declares: ['shT = 0, shQ = 0'], moneyLine: MONEY_LINE, snippet: SELL_TQQQ_QQQ_TO_COVER },
+  { declares: ['lev = data', 'let cash = p.initial, sh = 0,'], moneyLine: MONEY_LINE, snippet: SELL_SH_TO_COVER },
+];
+function upgradeWithdrawalHandling(code) {
+  if (code.includes(WITHDRAWAL_RULE)) return code;
+  const upgrade = WITHDRAWAL_UPGRADES
+    .map(rule => ({ rule, money: sourcePattern(rule.moneyLine).exec(code) }))
+    .find(({ rule, money }) => money && rule.declares.every(text => {
+      const declared = sourcePattern(text).exec(code);
+      return declared && declared.index < money.index;
+    }));
+  if (!upgrade) return code;
+  const afterMoneyLine = upgrade.money.index + upgrade.money[0].length;
+  return code.slice(0, afterMoneyLine) + '\n' + upgrade.rule.snippet + code.slice(afterMoneyLine);
+}
+
 // #1 Faber 10-month: QQQ vs 200-SMA checked ONLY on the last trading day of each month.
 CODE[1] = `{
   name: "Faber 10-mo / 200-day (monthly) → TQQQ/cash",
@@ -67,6 +148,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const px = lev[i];
@@ -100,6 +182,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
@@ -130,6 +213,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
@@ -161,6 +245,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], s = sig[i];
@@ -194,6 +279,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
@@ -226,6 +312,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
@@ -256,6 +343,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
@@ -286,6 +374,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(lev, W, i, useMed), px = lev[i], bull = sma > 0 && px > sma;
@@ -318,6 +407,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_TQQQ_QQQ_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = sig[i];
@@ -361,6 +451,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
@@ -396,6 +487,7 @@ CODE[17] = `{
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const s = sig[i], px = lev[i];
@@ -431,6 +523,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const px = lev[i];
@@ -466,6 +559,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const maF = centerLine(sig, F, i, useMed), maS = centerLine(sig, S, i, useMed), px = lev[i], bull = maS > 0 && maF > maS;
@@ -495,6 +589,7 @@ CODE[20] = `{
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       const px = lev[i], newMonth = prevMonth === null || month !== prevMonth;
       prevMonth = month;
@@ -536,6 +631,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
@@ -575,6 +671,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
@@ -611,6 +708,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_TQQQ_QQQ_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), q = sig[i], aboveBy = sma > 0 ? (q / sma - 1) * 100 : 0;
@@ -654,6 +752,7 @@ ${CENTER_LINE_SNIPPET}
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
+${SELL_LEV_PARK_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), pxL = lev[i], pxP = sig[i], want = (sma > 0 && sig[i] > sma) ? "lev" : "park";
@@ -739,6 +838,7 @@ CODE[26] = `{
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; invested += amt; action = "contribution";
+${SELL_HELD_TO_COVER}
       }
       prevMonth = month;
       let want = held;
@@ -889,6 +989,7 @@ CODE[39] = `{
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; invested += amt; action = "contribution";
+${SELL_HELD_TO_COVER}
       }
       prevMonth = month;
       sma = n > 0 ? (useMed ? (n % 2 ? win[(n - 1) >> 1] : (win[n / 2 - 1] + win[n / 2]) / 2) : sum / n) : 0;
@@ -1086,6 +1187,7 @@ CODE[40] = `{
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; invested += amt; action = "contribution";
+${SELL_HELD_TO_COVER_TRADED}
       }
       prevMonth = month;
 
@@ -1422,6 +1524,7 @@ CODE[41] = `{
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; invested += amt; action = "contribution";
+${SELL_HELD_TO_COVER}
       }
 
       if (med > 0 && medC > 0 && sigM > 0 && sigC > 0 && px[i] > 0) {
@@ -1766,6 +1869,7 @@ CODE[44] = `{
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; invested += amt; action = "contribution";
+${SELL_HELD_TO_COVER}
       }
 
       if (med > 0 && medC > 0 && sigM > 0 && sigC > 0 && px[i] > 0) {
@@ -1917,4 +2021,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 
 // Browser global + Node export.
 if (typeof window !== 'undefined') window.STRATEGY_CODE = CODE;
-if (typeof module !== 'undefined' && module.exports) module.exports = CODE;
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = CODE;
+  // Reachable from tests without becoming a strategy key.
+  Object.defineProperty(module.exports, 'upgradeWithdrawalHandling', { value: upgradeWithdrawalHandling });
+}
