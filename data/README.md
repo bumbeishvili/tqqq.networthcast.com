@@ -1,6 +1,6 @@
 # Long-history price data for TQQQ, QLD, QQQ, SPY, SSO, SPXL, and SQQQ
 
-Daily closing prices for seven ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://9sig.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
+Daily closing prices for seven ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://tqqq.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
 
 ## ETF launch dates
 
@@ -131,16 +131,16 @@ Fetch any file straight from GitHub:
 
 | File | URL |
 | --- | --- |
-| QQQ  | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-qqq.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-qqq.tsv) |
-| QLD  | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-qld.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-qld.tsv) |
-| TQQQ | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-tqqq.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-tqqq.tsv) |
-| SPY  | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/spy.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/spy.tsv) |
-| SSO  | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-sso.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-sso.tsv) |
-| SPXL | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv) |
-| SQQQ | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv) |
-| Fed Funds Effective Rate (daily, 1954+) | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv) |
-| 3-month T-bill (monthly, 1934+) | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv) |
-| Combined daily short rates (1934+) | [https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/short-rates.tsv](https://raw.githubusercontent.com/bumbeishvili/9sig.networthcast.com/refs/heads/main/data/short-rates.tsv) |
+| QQQ  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-qqq.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-qqq.tsv) |
+| QLD  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-qld.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-qld.tsv) |
+| TQQQ | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-tqqq.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-tqqq.tsv) |
+| SPY  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/spy.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/spy.tsv) |
+| SSO  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sso.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sso.tsv) |
+| SPXL | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv) |
+| SQQQ | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv) |
+| Fed Funds Effective Rate (daily, 1954+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv) |
+| 3-month T-bill (monthly, 1934+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv) |
+| Combined daily short rates (1934+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/short-rates.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/short-rates.tsv) |
 
 `raw.githubusercontent.com` sits behind a CDN with its own cache TTL and enforces GitHub's unauthenticated rate limit. A client polling it in a tight loop will get stale bytes or a 429. Fetch once a day and cache locally.
 
