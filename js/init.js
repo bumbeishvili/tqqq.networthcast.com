@@ -69,8 +69,13 @@
   document.getElementById('slider-entry').value = defaultEntryIdx;
   window._dualRange.setMax(maxQIdx);
 
-  // Restore saved state: URL params > localStorage > defaults
+  // Restore saved state: URL params > localStorage > defaults. The saved
+  // strategies and the transaction history arrive in the fragment (see
+  // SHARE_FRAGMENT_PARAMS in js/controls.js); links made before that carry
+  // them in the query, which is read first and still works.
   const params = new URLSearchParams(window.location.search);
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  SHARE_FRAGMENT_PARAMS.filter(key => fragment.has(key)).forEach(key => params.set(key, fragment.get(key)));
   // A shared link carries the app version it was made with (`v`). Upgrade its
   // params to the current scheme before reading anything, so old links keep
   // resolving correctly. `isSharedLink` (any `v` present) also tells us this

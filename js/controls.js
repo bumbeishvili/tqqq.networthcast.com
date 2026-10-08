@@ -689,6 +689,17 @@ if (inflPill) inflPill.addEventListener('click', () => {
   window._dualRange = { updateUI, setMax, step, stopPlay };
 })();
 
+// The two personal payloads of a share link, saved strategies (`scz`/`sc`)
+// and the real transaction history (`txz`/`tx`), travel in the URL fragment,
+// after `#`. A browser never sends the fragment to the server, and GitHub
+// Pages answers 414 to any request whose query string passes about 8,100
+// characters (measured 2026-10-08): one custom strategy's code plus a real
+// history is already past that. Everything else stays a query param, so
+// migrateSharedLink and the `v` stamp are untouched. js/init.js reads these
+// keys back from the fragment first and the query second, so links made
+// before this change still load.
+const SHARE_FRAGMENT_PARAMS = ['scz', 'sc', 'txz', 'tx'];
+
 // Share: encode the full UI state into URL params so the receiver lands on
 // the exact same view. Includes sliders, strategy params, toggles, envelope
 // opacity, dataset visibility (per-line legend toggles), and the analytics
@@ -895,20 +906,19 @@ async function shareConfig() {
   // positional index.
   if (pinnedRange) { params.set('rf', pinnedRange[0]); params.set('rt', pinnedRange[1]); }
 
-  const url = window.location.origin + window.location.pathname + '?' + params.toString();
+  // Payloads into the fragment (see SHARE_FRAGMENT_PARAMS), the rest stays
+  // a query string the server will accept.
+  const fragment = new URLSearchParams();
+  SHARE_FRAGMENT_PARAMS.filter(key => params.has(key)).forEach(key => { fragment.set(key, params.get(key)); params.delete(key); });
+  const fragmentText = fragment.toString();
+  const url = window.location.origin + window.location.pathname + '?' + params.toString() + (fragmentText ? '#' + fragmentText : '');
 
   const toast = document.getElementById('share-toast');
-  // Servers and chat apps start rejecting URLs around 8k characters. The
-  // payload is compressed, so this only trips with a pile of long custom
-  // strategies — say so rather than handing over a link that 414s.
-  const tooLong = url.length > 8000;
-  if (toast) toast.textContent = tooLong
-    ? 'Link copied — but it is very long (' + Math.round(url.length / 1000) + 'k chars) and some apps may cut it off'
-    : 'Link copied to clipboard';
+  if (toast) toast.textContent = 'Link copied to clipboard';
   navigator.clipboard.writeText(url).then(() => {
     if (!toast) return;
     toast.classList.add('show');
-    setTimeout(() => toast.classList.remove('show'), tooLong ? 4000 : 2000);
+    setTimeout(() => toast.classList.remove('show'), 2000);
   }).catch(() => {
     prompt('Copy this link:', url);
   });
