@@ -153,6 +153,27 @@ function upgradeDailyDisplay(code) {
 // Every upgrade a saved copy may need, in one call for js/saved-configs.js.
 function upgradeSavedCode(code) { return upgradeDailyDisplay(upgradeWithdrawalHandling(code)); }
 
+// Which library entry a saved copy came from, read off the `name:` line of its
+// code — the one line every version of an entry keeps. Former names are listed
+// for entries renamed since copies of them were made. null for code that is not
+// a library copy. Used by js/saved-configs.js to bring unedited copies up to
+// the current library code at load.
+const LIBRARY_FORMER_NAMES = { 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back'] };
+const codeName = code => { const m = /^\s*name:\s*"([^"]+)"/m.exec(String(code || '')); return m ? m[1] : null; };
+function libraryEntryOf(code) {
+  const name = codeName(code);
+  if (!name) return null;
+  for (const n of Object.keys(CODE)) if (codeName(CODE[n]) === name || (LIBRARY_FORMER_NAMES[n] || []).includes(name)) return +n;
+  return null;
+}
+// A short fingerprint of a code text, stored on a copy when it is made so a
+// later load can tell an untouched copy from one the user edited.
+function codeFingerprint(code) {
+  let h = 5381; const t = String(code || '');
+  for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(36) + ':' + t.length;
+}
+
 // #1 Faber 10-month: QQQ vs 200-SMA checked ONLY on the last trading day of each month.
 CODE[1] = `{
   name: "Faber 10-mo / 200-day (monthly) → TQQQ/cash",
@@ -2083,9 +2104,16 @@ CODE[45] = `{
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
       { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
     { id: "confirmDays", label: "Buy back after closes above line", default: 5, options: [1, 2, 3, 4, 5, 6] },
+    { id: "dipReentry", label: "Re-enter a correction", default: 50, options: [
+      { value: 0, label: "At the sell line" }, { value: 25, label: "A quarter of the way back from its low" },
+      { value: 33, label: "A third of the way back from its low" }, { value: 50, label: "Half way back from its low" },
+      { value: 67, label: "Two thirds of the way back from its low" } ] },
     { section: "Buy-back line — after a crash, re-enter here instead of waiting for the sell line; it sells again below it" },
     { id: "bbPct", label: "Below line (%)", default: -34, options: [
       { value: 999, label: "Off" }, -10,-12,-14,-15,-16,-18,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
+    { id: "bbSlice", label: "Buy a slice at the line right away", default: 50, options: [
+      { value: 0, label: "No — wait for the closes above it" }, { value: 25, label: "A quarter of the money" },
+      { value: 33, label: "A third of the money" }, { value: 50, label: "Half of the money" } ] },
     { section: "Execution & costs" },
     { id: "splitDays", label: "One trade per day", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
@@ -2099,7 +2127,9 @@ CODE[45] = `{
     { key: "medianPrice", label: "Center", tip: "The main center line in price dollars — median or moving average of the last N closes, or the RSI-implied center (price x 50 / RSI) when the signal is RSI." },
     { key: "abovePct", label: "vs line", tip: "How far the main signal sits above (+) or below (−) its center, in percent." },
     { key: "zone", label: "Band", tip: "Which band the close landed in — overextended, normal, or sold (below the sell line)." },
-    { key: "closesAbove", label: "Closes above", tip: "While sold out: how many closes in a row the price has made above the line it will buy back at — the buy-back line once a crash is marked, the sell line otherwise. Buying waits for the count in the setting; selling never waits." },
+    { key: "closesAbove", label: "Closes above", tip: "While sold out: how many closes in a row the price has made above the line it will buy back at — the buy-back line once a crash is marked, the re-entry line after a correction, the sell line otherwise. Buying waits for the count in the setting; selling never waits." },
+    { key: "slice", label: "Slice", tip: "The share of the money bought at the first close under the buy-back line without waiting for the closes above it (a setting), while that slice is held. It is sold if the price falls 15% under the price it was bought at, and a new slice needs a fresh close under the line after a close above it." },
+    { key: "reentryLine", label: "Re-entry line", tip: "While sold out after a correction that stayed above the buy-back line: the price the strategy will buy back at, part of the way back from the correction's low toward the center (the setting), never below the buy-back line. Blank in the market, while a crash is marked, and when the setting is off." },
     { key: "fee", label: "Fee", tip: "Trading cost paid on this row's trade." }
   ],
   run(data, p) {
@@ -2144,16 +2174,36 @@ CODE[45] = `{
 
     const bbPct = p.bbPct == null ? 999 : +p.bbPct;
     const bbB = bbPct === 999 ? 0 : bbPct / 100;
+    // A slice of the money at the first close under the buy-back line, without
+    // waiting for the closes above it: the five-close rule enters a V-shaped
+    // recovery (2020, 2025) a long way up from the low, and a slice bought at
+    // the line takes part of that move. It is stopped SLICE_STOP under its own
+    // price, and a new slice needs a fresh cross under the line, so a bear
+    // market costs at most one slice per leg. The rest waits for the buy-back.
+    const sliceF = bbPct === 999 ? 0 : Math.max(0, Math.min(0.5, (+p.bbSlice || 0) / 100)), SLICE_STOP = 0.15;
     // Buying back waits for this many closes in a row above the line; selling
     // acts on the first close. 1 = the first close buys. The asymmetry is the
     // whipsaw defence: in a crash the big up days are the traps, and a sale
     // reversed a day later costs the gap between the two closes.
     const confirmDays = Math.max(1, Math.round(+p.confirmDays) || 1);
+    // Re-entry after a correction. Sold out with the sell line reclaimed only
+    // when the price has climbed all the way back, every such re-entry since
+    // 2010 bought higher than it sold; the corrections that bottomed between
+    // 10% and 34% under the center cost the most, because nothing let the
+    // strategy back in before the line. dipF puts the re-entry line part of
+    // the way back from the correction's low toward the center instead
+    // (never below the buy-back line, whose own rule governs deeper falls).
+    // Such a buy-back behaves like a crash buy-back: the buy-back line is the
+    // sell line until the sell line is reclaimed. 0 = the sell line, as before.
+    const dipF = Math.max(0, Math.min(1, (+p.dipReentry || 0) / 100));
+    const dipText = dipF >= 0.66 ? "two thirds of the way back" : dipF >= 0.5 ? "half way back" : dipF >= 0.33 ? "a third of the way back" : "a quarter of the way back";
     // sellArmed: the normal sell line is live. A buy-back switches it off until the price has closed
     // back above that line; until then the buy-back line is the sell line, so a close back under it
     // sells again. bbArmed: while sold out, the price has closed at or below the buy-back line.
     let sellArmed = true, bbArmed = false;
-    let aboveExit = 0, aboveBB = 0;   // closes in a row above the sell line / the buy-back line
+    let aboveRe = 0, aboveBB = 0;   // closes in a row above the re-entry line / the buy-back line
+    let tr = false, trEntry = 0, trArmed = false, belowPrev = false, _frac = 1, sliceNote = "";   // the slice
+    let lowRel = 0;                   // the sold-out stint's lowest close, as a fraction of the center (≤ 0)
 
     let cash = p.initial, shares = 0, held = "cash";
     let state = "normal", invested = p.initial, feeTotal = 0;
@@ -2185,21 +2235,32 @@ ${SELL_HELD_TO_COVER}
 
       if (med > 0 && sigM > 0 && px[i] > 0) {
         const pOver = med * (1 + over), pExit = med * (1 + exitB), pBuyBack = med * (1 + bbB);
-        aboveExit = sigM > pExit ? aboveExit + 1 : 0;
+        if (state === "crashCash") lowRel = Math.min(lowRel, sigM / med - 1);
+        const pReenter = dipF > 0 ? Math.min(pExit, Math.max(pBuyBack, med * (1 + lowRel * dipF))) : pExit;
+        aboveRe = sigM > pReenter ? aboveRe + 1 : 0;
         aboveBB = sigM > pBuyBack ? aboveBB + 1 : 0;
         if (state === "normal" || state === "over") {
           if (!sellArmed && sigM >= pExit) sellArmed = true;   // back above the sell line: it is live again
           if (sigM > pOver) state = "over";
-          else if (sellArmed && sigM < pExit) state = "crashCash";
+          else if (sellArmed && sigM < pExit) { state = "crashCash"; lowRel = sigM / med - 1; aboveRe = 0; }
           else if (!sellArmed && sigM < pBuyBack) state = "crashCash";   // the second sell line: back under the buy-back line after a buy-back
           else state = "normal";
         } else if (bbArmed && aboveBB >= confirmDays) { state = "normal"; sellArmed = false; }   // crash buy-back: in early, the normal sell on hold
-        else if (aboveExit >= confirmDays) { state = "normal"; sellArmed = true; }
+        else if (aboveRe >= confirmDays) { state = "normal"; sellArmed = pReenter >= pExit * 0.999999; }   // below the sell line: a buy-back, with the buy-back line as the sell line
         bbArmed = state === "crashCash" && bbPct !== 999 && (bbArmed || sigM <= pBuyBack);
         zone = state === "over" ? "overextended" : state === "normal" ? "normal" : "sold";
+        const belowNow = sigM <= pBuyBack;
+        if (sliceF > 0 && state === "crashCash") {
+          if (belowNow && !belowPrev) trArmed = true;
+          if (tr && sigM < trEntry * (1 - SLICE_STOP)) { tr = false; trArmed = false; sliceNote = "slice stopped " + Math.round(SLICE_STOP * 100) + "% under its price"; }
+          else if (!tr && trArmed && belowNow) { tr = true; trEntry = sigM; trArmed = false; sliceNote = Math.round(sliceF * 100) + "% of the money bought at the buy-back line"; }
+        } else { tr = false; trArmed = false; }
+        belowPrev = belowNow;
+        const prevFrac = _frac;
+        _frac = state === "crashCash" ? (tr ? sliceF : 0) : 1;   // share of the money meant to be in the fund
         let want = state === "normal" ? p.asset
           : state === "over" ? p.park
-          : crashAsset;
+          : (_frac > 0 ? p.asset : crashAsset);
         if (p.splitDays && want !== held && held !== "cash" && want !== "cash") want = "cash"; // leg 1 today, buy re-checks next bar
         if (want !== held) {
           const oldPx = priceOf(held, i);
@@ -2209,15 +2270,26 @@ ${SELL_HELD_TO_COVER}
           }
           const newPx = priceOf(want, i);
           if (want === "cash" || newPx > 0) {
-            if (want !== "cash") { const f = cash * cost; shares = (cash - f) / newPx; fee += f; cash = 0; }
+            if (want !== "cash") { const spend = want === p.asset ? cash * _frac : cash; const f = spend * cost; shares = (spend - f) / newPx; fee += f; cash -= spend; }
             action = held === "cash" ? "buy" : want === "cash" ? "sell" : "switch";
-            note = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs line — " + zone;
+            note = sliceNote || (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs line — " + zone;
+            sliceNote = "";
             held = want;
           }
+        } else if (held === p.asset && priceOf(held, i) > 0 && _frac < 1) {
+          // Holding the fund while only a slice is meant to be held. The slice is
+          // bought once and left alone; this sells down to it only on the day a
+          // full position and a slice decision coincide (the sell line and the
+          // buy-back line crossed on the same day), and otherwise lets new money
+          // in only up to the slice's share.
+          const pxh = priceOf(held, i), total = shares * pxh + cash, excess = shares * pxh - total * _frac;
+          if (prevFrac >= 1 && excess > total * 0.02) { const sh = excess / pxh, gross = sh * pxh, f = gross * cost; shares -= sh; cash += gross - f; fee += f; action = "sell"; note = "sold down to a " + Math.round(sliceF * 100) + "% slice at the buy-back line — " + zone; sliceNote = ""; }
+          else if (prevFrac < 1 && -excess > total * 0.02 && cash > 0) { const spend = Math.min(cash, -excess), f = spend * cost; shares += (spend - f) / pxh; cash -= spend; fee += f; }
         } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
           const f = cash * cost;
           shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
-          if (action === "contribution") note = "contribution deployed";
+          if (prevFrac < 1 && _frac >= 1) { action = "buy"; note = "the rest of the money — " + zone; }
+          else if (action === "contribution") note = "contribution deployed";
         }
       }
       const wasCrash = inCrash;
@@ -2238,7 +2310,9 @@ ${WEEKLY_MONTH_END_SNIPPET}
           cash: cash, contributed: contributed, invested: invested, fee: fee,
           assetPrice: px[i] || 0, medianPrice: medPlot, abovePct: above * 100,
           zone: zone,
-          ...(state === "crashCash" ? { closesAbove: Math.min(bbArmed ? aboveBB : aboveExit, confirmDays) } : {}),
+          ...(state === "crashCash" ? { closesAbove: Math.min(bbArmed ? aboveBB : aboveRe, confirmDays) } : {}),
+          ...(tr ? { slice: Math.round(sliceF * 100) + "%" } : {}),
+          ...(dipF > 0 && state === "crashCash" && !bbArmed && lowRel * dipF < exitB ? { reentryLine: medPlot * (1 + Math.max(bbB, lowRel * dipF)) } : {}),
           overLine: medPlot * (1 + over), exitLine: medPlot * (1 + exitB),
           ...(bbPct === 999 ? {} : { buyBackLine: medPlot * (1 + bbB) })
         });
@@ -2258,6 +2332,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
       { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)" }
     ];
     if (bbPct !== 999) chartLines.push({ key: "buyBackLine", label: "Buy-back (" + bbPct + "%)" });
+    if (dipF > 0) chartLines.push({ key: "reentryLine", label: "Re-entry (" + dipText + ")" });
     if (inCrash && stintLen > 0) stints.push(stintLen);
     return {
       log: log,
@@ -2280,17 +2355,25 @@ ${WEEKLY_MONTH_END_SNIPPET}
             value: (p.exitPct || 0) + "%",
             icon: "shield",
             sub: (sellArmed ? "armed" : "on hold until a close above it") + " · then hold " + lbl(crashAsset)
-              + (state === "crashCash" && !bbArmed ? " · " + Math.min(aboveExit, confirmDays) + " of " + confirmDays + " closes above" : confirmDays > 1 ? " · buys back after " + confirmDays + " closes above" : ""),
+              + (state === "crashCash" && !bbArmed ? " · " + Math.min(aboveRe, confirmDays) + " of " + confirmDays + " closes above " + (dipF > 0 && lowRel * dipF < exitB ? "the re-entry line" : "it") : confirmDays > 1 ? " · buys back after " + confirmDays + " closes above" : ""),
             tip: "A close this far below the center sells " + A + " to " + lbl(crashAsset) + ". Bought back after " + confirmDays + (confirmDays > 1 ? " closes in a row" : " close") + " above this line, or earlier at the buy-back line after a crash; after such an early buy-back this line is on hold and the buy-back line sells instead, until the price has closed above this line again." },
           { label: "Buy-back line",
             value: bbPct === 999 ? "off" : bbPct + "%",
             icon: "flag",
             tone: bbArmed ? "good" : "",
             sub: bbPct === 999 ? "re-entry only above the sell line"
-              : bbArmed ? "ARMED — " + (confirmDays > 1 ? Math.min(aboveBB, confirmDays) + " of " + confirmDays + " closes above it; then buys " : "the first close above it buys ") + A
+              : bbArmed ? "ARMED — " + (confirmDays > 1 ? Math.min(aboveBB, confirmDays) + " of " + confirmDays + " closes above it; then buys " : "the first close above it buys ") + A + (tr ? " · " + Math.round(sliceF * 100) + "% already bought at the line, stop " + (trEntry * (1 - SLICE_STOP)).toFixed(2) : "")
               : state === "crashCash" ? "waiting for a close at or below it"
               : sellArmed ? "idle while in the market" : "live — a close under it sells again",
             tip: "After a sell, a close at or below this line marks a crash; " + confirmDays + (confirmDays > 1 ? " closes in a row" : " close") + " back above it buys " + A + " without waiting for the sell line. Until the price has closed above the sell line again, this line sells too: a close back under it puts you out, and the same count of closes above it buys again." },
+          ...(dipF > 0 ? [{ label: "Re-entry line",
+            value: state === "crashCash" && !bbArmed && lowRel * dipF < exitB ? (Math.max(bbB, lowRel * dipF) * 100).toFixed(1) + "%" : "—",
+            icon: "flag",
+            tone: "",
+            sub: state === "crashCash" && !bbArmed
+              ? (lowRel * dipF < exitB ? dipText + " from the low (" + (lowRel * 100).toFixed(0) + "%) · " + Math.min(aboveRe, confirmDays) + " of " + confirmDays + " closes above it" : "the correction is too shallow — the sell line applies")
+              : bbArmed ? "a crash is marked — the buy-back line applies" : "idle while in the market",
+            tip: "After a correction that stays above the buy-back line, the strategy buys back once the price has closed " + confirmDays + (confirmDays > 1 ? " days in a row" : " day") + " above a line " + dipText + " from the correction's low toward the center, instead of waiting for the sell line. After such a buy-back the buy-back line is the sell line until the price has closed above the sell line again." }] : []),
           { label: A + " drawdown",
             value: (ddNow * 100).toFixed(1) + "%",
             tone: ddNow > -0.15 ? "good" : "bad",
@@ -2320,4 +2403,6 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'upgradeWithdrawalHandling', { value: upgradeWithdrawalHandling });
   Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
+  Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });
+  Object.defineProperty(module.exports, 'codeFingerprint', { value: codeFingerprint });
 }

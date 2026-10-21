@@ -23,8 +23,8 @@ const STRATEGY_LIBRARY = [
   // NFCI veto strategy with a tighter sell line and an early buy-back after a
   // crash. Its code is #44's with those two changes (CODE[45]). ---
   { n: 45, name: 'SQQQ stretch, sell line + crash buy-back', tag: 'picked', runnable: true,
-    rules: 'Hold TQQQ. When it closes 55% above its 250-day median, switch to SQQQ; switch back to TQQQ as soon as it closes under that line again. Sell line: 3% below the median. When it closes under that line, sell to cash; buy back once it has closed above the line five days in a row (the count is a setting; 1 means the first close). Buy-back line: 34% below the median. If, while sold out, the price closes at or below it, five closes in a row back above it buy TQQQ without waiting for the sell line. Until the price has closed above the sell line again, the buy-back line is the sell line too: a close back under it sells again, and five closes above it buy again. Selling always acts on the first close; only buying waits, because the big up days inside a crash are the whipsaws. Checked daily, one trade per day. No credit rule: price alone decides.',
-    here: '\u2014', reported: 'Hand-picked; numbers are this app’s own backtest, not an external claim. Same SQQQ rule and costs as the NFCI veto strategy, with the credit veto taken out; the sell line, the buy-back and the five-close re-entry are the differences', },
+    rules: 'Hold TQQQ. When it closes 55% above its 250-day median, switch to SQQQ; switch back to TQQQ as soon as it closes under that line again. Sell line: 3% below the median. When it closes under that line, sell to cash; buy back once it has closed above the line five days in a row (the count is a setting; 1 means the first close). Buy-back line: 34% below the median. If, while sold out, the price closes at or below it, five closes in a row back above it buy TQQQ without waiting for the sell line. Half of the money is bought at the first close under it without waiting (a setting: none, a quarter, a third, half), with a stop 15% under that price and a new slice only after the price has closed above the line again; the rest waits for the five closes. Until the price has closed above the sell line again, the buy-back line is the sell line too: a close back under it sells again, and five closes above it buy again. A correction that stays above the buy-back line is bought back sooner: once the price has closed five days in a row half way back from the correction\u2019s low toward the center line (a setting), with the buy-back line as the sell line until the sell line is reclaimed, as after a crash buy-back. Selling always acts on the first close; only buying waits, because the big up days inside a crash are the whipsaws. Checked daily, one trade per day: a switch between TQQQ and SQQQ sells today and buys tomorrow. No credit rule: price alone decides.',
+    here: '\u2014', reported: 'Hand-picked; numbers are this app’s own backtest, not an external claim. Same SQQQ rule and costs as the NFCI veto strategy, with the credit veto taken out; the sell line, the buy-back, the five-close re-entry, the half-way re-entry after corrections and the slice bought at the buy-back line are the differences', },
   { n: 1, name: 'Faber 10-month / 200-day Timing Model', tag: 'foundation', runnable: true,
     rules: 'Signal: S&P/QQQ vs 10-mo SMA (≈200-day). Enter: monthly close > SMA → hold. Exit: monthly close < SMA → T-bills. Freq: monthly (last trading day).',
     here: '31.3% / −69.9%', reported: '10.2% vs 9.3% B&H (S&P 1901–2012)', src: 'F' },
@@ -723,7 +723,14 @@ function addStrategyFromLibrary(n) {
     color: (typeof nextConfigColor === 'function') ? nextConfigColor() : '#e879f9',
     hidden: false,
   };
-  if (!entry.preset) cfg.code = code;
+  if (!entry.preset) {
+    cfg.code = code;
+    // Where the copy came from and what its code looked like then, so a later
+    // load can refresh it to the current library code unless it was edited
+    // (refreshLibraryCopies in js/saved-configs.js).
+    cfg.libraryN = n;
+    cfg.libraryFingerprint = codeFingerprint(code);
+  }
   savedConfigs.push(cfg);
   // Push a preset's values INTO the sidebar controls before it becomes the
   // edited config — otherwise the sidebar's current values sync back over

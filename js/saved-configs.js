@@ -2742,26 +2742,61 @@ function initCodeEditor(ta) {
 }
 
 // A saved strategy and a share link both carry a custom strategy's code as it
-// was on the day they were made. These two bring that code up to the library's
-// current withdrawal handling and daily-detail logging (js/strategy-library-code.js's
-// upgradeSavedCode): upgradeSavedCustomCode for what is already in
-// savedConfigs, withCurrentCustomCode for a share link's entries.
+// was on the day they were made. These two bring that code up to date:
+// a copy of a library strategy takes the library's current code for that entry
+// (refreshLibraryCopies), and any custom code gets the library's current
+// withdrawal handling and daily-detail logging (js/strategy-library-code.js's
+// upgradeSavedCode). upgradeSavedCustomCode handles what is already in
+// savedConfigs, withCurrentCustomCode a share link's entries.
 //
 // They go together. Share-link entries are matched against saved strategies by
 // their code text (importSharedConfigs' duplicate check, resolveSharedConfigId),
 // so upgrading one side alone would import a user's own older link as a
 // duplicate of the strategy they already have. Both are called from js/init.js,
 // which loads after the library code; this file loads before it.
+//
+// A library copy is recognised by its entry number, stamped when it was added
+// (addStrategyFromLibrary), or for copies made before the stamp existed by the
+// name line of its code (libraryEntryOf). A copy whose code no longer matches
+// the fingerprint taken when it was made was edited by the user and is left
+// alone. The code a refresh replaces is kept on the config as codeBefore.
+function refreshedLibraryCopy(cfg) {
+  if (typeof STRATEGY_CODE === 'undefined' || !cfg || cfg.type !== 'custom' || !cfg.code) return null;
+  const n = cfg.libraryN != null ? +cfg.libraryN : libraryEntryOf(cfg.code);
+  if (n == null || !STRATEGY_CODE[n]) return null;
+  const edited = cfg.libraryN != null && cfg.libraryFingerprint && cfg.libraryFingerprint !== codeFingerprint(cfg.code);
+  if (edited) return null;
+  const code = STRATEGY_CODE[n];
+  const entry = (typeof STRATEGY_LIBRARY !== 'undefined') ? STRATEGY_LIBRARY.find(e => e.n === n) : null;
+  return { n, code, desc: entry ? entry.rules : cfg.desc, changed: code !== cfg.code || cfg.libraryN == null };
+}
+function applyLibraryRefresh(cfg, up) {
+  if (up.code !== cfg.code) { cfg.codeBefore = cfg.code; cfg.code = up.code; cfg.desc = up.desc; }
+  cfg.libraryN = up.n;
+  cfg.libraryFingerprint = codeFingerprint(up.code);
+}
 function upgradeSavedCustomCode() {
+  let changed = false;
+  for (const c of savedConfigs) {
+    const up = refreshedLibraryCopy(c);
+    if (up && up.changed) { applyLibraryRefresh(c, up); if (!c._transient) changed = true; }
+  }
   const outdated = savedConfigs
     .filter(c => c.type === 'custom' && c.code)
     .map(c => ({ cfg: c, code: upgradeSavedCode(c.code) }))
     .filter(u => u.code !== u.cfg.code);
   outdated.forEach(u => { u.cfg.code = u.code; });
-  if (outdated.some(u => !u.cfg._transient)) persistSavedConfigs();
+  if (changed || outdated.some(u => !u.cfg._transient)) persistSavedConfigs();
 }
 function withCurrentCustomCode(entries) {
-  return entries.map(c => (c && c.type === 'custom' && c.code) ? { ...c, code: upgradeSavedCode(c.code) } : c);
+  return entries.map(c => {
+    if (!(c && c.type === 'custom' && c.code)) return c;
+    const copy = { ...c };
+    const up = refreshedLibraryCopy(copy);
+    if (up && up.changed) applyLibraryRefresh(copy, up);
+    copy.code = upgradeSavedCode(copy.code);
+    return copy;
+  });
 }
 
 // Merge saved strategies carried in a share link. Custom code is safe to run
