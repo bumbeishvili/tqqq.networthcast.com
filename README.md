@@ -1,6 +1,6 @@
 # tqqq.networthcast.com
 
-Backtesting platform for TQQQ. Strategies run over a reconstructed daily price history that starts in 1953, on TQQQ and six related funds (QLD, SSO, SPXL, SQQQ, QQQ, SPY): SMA timing, 9Sig, a library of 44 published and hand-picked rules, and custom strategies written in JavaScript, with buy-and-hold and a cash baseline drawn alongside. A real transaction history can be uploaded to put your own portfolio on the same chart, and a separate page follows TQQQ's intraday path day by day.
+Backtesting platform for TQQQ. Strategies run over a reconstructed daily price history that starts in 1953, on TQQQ and six related funds (QLD, SSO, SPXL, SQQQ, QQQ, SPY): SMA timing, 9Sig, a library of 45 published and hand-picked rules, and custom strategies written in JavaScript, with buy-and-hold and a cash baseline drawn alongside. A real transaction history can be uploaded to put your own portfolio on the same chart, and a separate page follows TQQQ's intraday path day by day.
 
 Live: https://tqqq.networthcast.com
 

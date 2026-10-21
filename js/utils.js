@@ -242,6 +242,46 @@ function repriceAtPrevTradingDay(holdings, cash) {
   return total;
 }
 
+// ===== Colour separation (OKLab) ========================================
+// How far apart two colours read, measured the way the dataviz validator
+// measures it: Euclidean distance in OKLab ×100, once as seen ("normal") and
+// once under the Machado, Oliveira and Fernandes (2009) protan and deutan
+// simulations at full severity ("cvd" is the smaller of the two). The
+// validator's floors are 15 normal and 6 cvd. The signal mini chart in
+// js/saved-configs.js uses this to keep its lines apart from the strategy's
+// own colour. Anything that is not a 6-digit hex colour reads as infinitely
+// far, so an odd colour string never changes which colours a chart gets.
+const CVD_SIMULATION = {
+  protan: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
+  deutan: [[0.367322, 0.860646, -0.227968], [0.280085, 0.672501, 0.047413], [-0.011820, 0.042940, 0.968881]],
+};
+function colorSeparation(hexA, hexB) {
+  const linear = (hex) => {
+    const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+    if (!m) return null;
+    return [0, 2, 4].map(i => parseInt(m[1].slice(i, i + 2), 16) / 255)
+      .map(c => c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+  };
+  const simulate = ([r, g, b], M) => M.map(row => Math.max(0, Math.min(1, row[0] * r + row[1] * g + row[2] * b)));
+  const oklab = ([r, g, b]) => {
+    const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+    const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+    const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+    return [
+      0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
+      1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
+      0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s,
+    ];
+  };
+  const a = linear(hexA), b = linear(hexB);
+  if (!a || !b) return { normal: Infinity, cvd: Infinity };
+  const distance = (x, y) => { const p = oklab(x), q = oklab(y); return 100 * Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]); };
+  return {
+    normal: distance(a, b),
+    cvd: Math.min(...Object.values(CVD_SIMULATION).map(M => distance(simulate(a, M), simulate(b, M)))),
+  };
+}
+
 // Pre-render small letter-badge canvases for the Adaptive transition markers:
 // "9" on a cyan circle when switching to 9sig, "T" on a red circle when
 // switching to all-in TQQQ. Chart.js accepts a HTMLCanvasElement as pointStyle.

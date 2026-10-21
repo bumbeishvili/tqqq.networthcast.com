@@ -14,15 +14,19 @@ const CODE = {};
 // hand-duplicate the SOURCE 21 times too. Interpolated into each template
 // literal below at file-load time, so the string actually stored in
 // CODE[n] is byte-identical to writing it out by hand in each one.
-const WEEKLY_MONTH_END_SNIPPET = `      // Weekly-resolution logging when the chart's shared axis is weekly
-      // (a <10y window — js/chart.js's chartDisplayPeriod), so this line
-      // renders as smoothly as the built-in engines instead of a sparse
-      // once-a-month log getting step-resampled onto a much finer axis.
-      // Falls back to the original month-boundary check otherwise —
-      // byte-identical to before whenever p.weeklyDisplay is unset.
-      const monthEnd = p.weeklyDisplay
-        ? (i === p.endIdx || Math.floor((Date.parse(data.dates[i]) / 86400000 + 3) / 7) !== Math.floor((Date.parse(data.dates[i + 1]) / 86400000 + 3) / 7))
-        : (i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month);`;
+const WEEKLY_MONTH_END_SNIPPET = `      // Whether today gets a plain "hold" row in the log. Logging cadence ONLY:
+      // a rule that fires at month end computes its own calendar check (see the
+      // Faber strategy), because this flag follows the display. p.dailyDisplay
+      // is the signal chart's detail run (js/saved-configs.js customDetailLog):
+      // every day, so zooming that chart in shows each day. Otherwise weekly
+      // when the chart's shared axis is weekly (a <10y window — js/chart.js's
+      // chartDisplayPeriod), so this line renders as smoothly as the built-in
+      // engines instead of a sparse once-a-month log getting step-resampled
+      // onto a much finer axis; month end otherwise.
+      const logDay = p.dailyDisplay
+        || (p.weeklyDisplay
+          ? (i === p.endIdx || Math.floor((Date.parse(data.dates[i]) / 86400000 + 3) / 7) !== Math.floor((Date.parse(data.dates[i + 1]) / 86400000 + 3) / 7))
+          : (i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month));`;
 
 // The Center line statistic every rolling-level strategy offers: the moving
 // average (the original arithmetic of the SMA strategies, unchanged) or the
@@ -132,6 +136,23 @@ function upgradeWithdrawalHandling(code) {
   return code.slice(0, afterMoneyLine) + '\n' + upgrade.rule.snippet + code.slice(afterMoneyLine);
 }
 
+// A saved copy made before 2026-10 ignores p.dailyDisplay, so the signal chart's
+// detail run (js/saved-configs.js customDetailLog) shows it no finer than the
+// ordinary run. upgradeDailyDisplay adds the flag to such a copy's row
+// condition: `if (contributed !== 0 ||` is where every library strategy (and
+// the prompt's worked example) decides whether to push a row, and the flag is
+// unset on every run but the detail one, so nothing else changes. Code that
+// already reads p.dailyDisplay is left alone, as is code without the library's
+// `const monthEnd =` cadence line or whose params object is not `p`, since
+// the same condition could be part of a rule there.
+const ROW_CONDITION = new RegExp(sourcePattern('if (contributed !== 0 ||').source, 'g');
+function upgradeDailyDisplay(code) {
+  if (code.includes('dailyDisplay') || !/run\(data,\s*p\)/.test(code) || !sourcePattern('const monthEnd =').test(code)) return code;
+  return code.replace(ROW_CONDITION, 'if (contributed !== 0 || p.dailyDisplay ||');
+}
+// Every upgrade a saved copy may need, in one call for js/saved-configs.js.
+function upgradeSavedCode(code) { return upgradeDailyDisplay(upgradeWithdrawalHandling(code)); }
+
 // #1 Faber 10-month: QQQ vs 200-SMA checked ONLY on the last trading day of each month.
 CODE[1] = `{
   name: "Faber 10-mo / 200-day (monthly) → TQQQ/cash",
@@ -153,13 +174,18 @@ ${SELL_SH_TO_COVER}
       prevMonth = month;
       const px = lev[i];
 ${WEEKLY_MONTH_END_SNIPPET}
+      // The rule is monthly: it fires on the calendar month's last trading day
+      // (and the run's last day), whatever cadence the log is kept at. Until
+      // 2026-10 it keyed off the logging flag and so traded weekly whenever the
+      // chart window was under ten years.
+      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
       if (monthEnd) {
         const sma = centerLine(sig, W, i, useMed), bull = sma > 0 && sig[i] > sma;
         if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
         else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -190,7 +216,7 @@ ${SELL_SH_TO_COVER}
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -221,7 +247,7 @@ ${SELL_SH_TO_COVER}
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -255,7 +281,7 @@ ${SELL_SH_TO_COVER}
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -287,7 +313,7 @@ ${SELL_SH_TO_COVER}
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -320,7 +346,7 @@ ${SELL_SH_TO_COVER}
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -351,7 +377,7 @@ ${SELL_SH_TO_COVER}
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -382,7 +408,7 @@ ${SELL_SH_TO_COVER}
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -422,7 +448,7 @@ ${SELL_TQQQ_QQQ_TO_COVER}
         else if (state === "qqq" && pxQ > 0) { shQ += cash / pxQ; cash = 0; }
       }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action.indexOf("buy") === 0 || action.indexOf("derisk") === 0 || monthEnd)
+      if (contributed !== 0 || action.indexOf("buy") === 0 || action.indexOf("derisk") === 0 || logDay)
         log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action });
     }
     return { log };
@@ -462,7 +488,7 @@ ${SELL_SH_TO_COVER}
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -499,7 +525,7 @@ ${SELL_SH_TO_COVER}
       else if ((!bull || stopped) && invested) { cash = sh * px; sh = 0; invested = false; action = stopped ? "stop" : "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || action === "stop" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || action === "stop" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -535,7 +561,7 @@ ${SELL_SH_TO_COVER}
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -567,7 +593,7 @@ ${SELL_SH_TO_COVER}
       else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -602,7 +628,7 @@ ${SELL_SH_TO_COVER}
         sh = (total * targetW) / px; cash = total - sh * px; w = targetW; action = "rebalance";
       }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "rebalance" || monthEnd)
+      if (contributed !== 0 || action === "rebalance" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action, weight: w });
     }
     return { log };
@@ -642,7 +668,7 @@ ${SELL_SH_TO_COVER}
       else if (invested && (!up || rsi > p.sell)) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -683,7 +709,7 @@ ${SELL_SH_TO_COVER}
       else if (!wantIn && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
     }
     return { log };
@@ -727,7 +753,7 @@ ${SELL_TQQQ_QQQ_TO_COVER}
         else if (want === "qqq" && pxQ > 0) { shQ += cash / pxQ; cash = 0; }
       }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "delever" || action === "gtfo" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "delever" || action === "gtfo" || logDay)
         log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action });
     }
     return { log };
@@ -765,7 +791,7 @@ ${SELL_LEV_PARK_TO_COVER}
         else if (state === "park" && pxP > 0) { shPark += cash / pxP; cash = 0; }
       }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "derisk" || monthEnd)
+      if (contributed !== 0 || action === "buy" || action === "derisk" || logDay)
         log.push({ date: data.dates[i], value: shLev * pxL + shPark * pxP + cash, price: pxL, contributed: contributed, action: action });
     }
     return { log };
@@ -866,7 +892,7 @@ ${SELL_HELD_TO_COVER}
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
-      if (contributed !== 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
@@ -1019,7 +1045,7 @@ ${SELL_HELD_TO_COVER}
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
-      if (contributed !== 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: px, shares: shares, holdingsValue: stockVal,
@@ -1245,7 +1271,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
       feesPaid += fee;
-      if (contributed !== 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
@@ -1576,7 +1602,7 @@ ${SELL_HELD_TO_COVER}
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
-      if (contributed !== 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
@@ -1933,7 +1959,7 @@ ${SELL_HELD_TO_COVER}
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
       if (i === p.endIdx) action = "end";
-      if (contributed !== 0 || monthEnd || action !== "hold") {
+      if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
@@ -2019,10 +2045,279 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
+
+// #45 — #44 with two changes and nothing else: the exit is a plain sell line
+// (default: the center itself, no gates) and a buy-back line sits 28% under
+// the center. After a sell, a close at or below the buy-back line marks a
+// crash; the first close back above it buys without waiting for the sell
+// line. Until the price has closed above the sell line again, the buy-back
+// line is also the sell line, so a close back under it sells again and the
+// next close above it buys again: two sell lines, one for the way down from
+// above and one around the crash level. SQQQ at +55%, the credit veto, costs
+// and one-trade-per-day are #44's. With exitPct -28, slopeGate 20, belowGate
+// 10 and bbPct Off it reproduces #44 row for row (checked across 22,984 rows
+// when it was written; tests/library-withdrawals.cjs does not cover that).
+CODE[45] = `{
+  name: "SQQQ stretch, sell line + crash buy-back",
+  params: [
+    { section: "Fund & signal" },
+    { id: "asset", label: "Fund traded", default: "tqqq", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" },
+      { value: "sso", label: "SSO" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "stat", label: "Center line", default: "median", options: [
+      { value: "median", label: "Median" }, { value: "sma", label: "Moving average" },
+      { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
+    { id: "window", label: "Window (days)", default: 250, options: [
+      5,7,10,14,20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { section: "Overextended — sell the melt-up" },
+    { id: "overPct", label: "Above line (%)", default: 55, options: [
+      2,4,5,6,8,10,12,15,18,20,22,25,28,30,32,35,38,40,42.5,45,47.5,50,52.5,55,57.5,60,62.5,65,67.5,70,72.5,75,80,85,90,95,100,110,120,125,130,140,150,160,175,200,225,250,300] },
+    { id: "park", label: "Then hold", default: "sqqq", options: [
+      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
+      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
+    { section: "Sell line — leave when it breaks down" },
+    { id: "exitPct", label: "Below line (%)", default: -3, options: [
+      10,8,6,5,4,3,2,1,0,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12,-13,-14,-15,-16,-17,-18,-19,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
+    { id: "crashAsset", label: "Then hold", default: "cash", options: [
+      { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
+      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
+      { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
+    { id: "confirmDays", label: "Buy back after closes above line", default: 5, options: [1, 2, 3, 4, 5, 6] },
+    { section: "Buy-back line — after a crash, re-enter here instead of waiting for the sell line; it sells again below it" },
+    { id: "bbPct", label: "Below line (%)", default: -34, options: [
+      { value: 999, label: "Off" }, -10,-12,-14,-15,-16,-18,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
+    { section: "Execution & costs" },
+    { id: "splitDays", label: "One trade per day", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "cashRate", label: "Cash interest (%/yr)", default: 4, options: [
+      0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
+    { id: "tradeCost", label: "Trading cost (%)", default: 0.02, options: [
+      0,0.01,0.02,0.03,0.04,0.05,0.06,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,1] }
+  ],
+  columns: [
+    { key: "assetPrice", label: "Fund", tip: "Closing price of the traded fund." },
+    { key: "medianPrice", label: "Center", tip: "The main center line in price dollars — median or moving average of the last N closes, or the RSI-implied center (price x 50 / RSI) when the signal is RSI." },
+    { key: "abovePct", label: "vs line", tip: "How far the main signal sits above (+) or below (−) its center, in percent." },
+    { key: "zone", label: "Band", tip: "Which band the close landed in — overextended, normal, or sold (below the sell line)." },
+    { key: "closesAbove", label: "Closes above", tip: "While sold out: how many closes in a row the price has made above the line it will buy back at — the buy-back line once a crash is marked, the sell line otherwise. Buying waits for the count in the setting; selling never waits." },
+    { key: "fee", label: "Fee", tip: "Trading cost paid on this row's trade." }
+  ],
+  run(data, p) {
+    const log = [];
+    const px = data[p.asset] || data.tqqq;
+    const W = Math.max(2, p.window || 250);
+    const over = (p.overPct || 0) / 100;
+    const exitB = (p.exitPct || 0) / 100;
+    const cost = (p.tradeCost || 0) / 100;
+    const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
+    const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
+    const crashAsset = p.crashAsset || "cash";
+
+    const useMed = p.stat !== "sma";
+    const mainRsi = p.stat === "rsi";
+
+    const mkRoll = (Wn) => {
+      const win = []; let sum = 0;
+      const lb = (v) => { let lo = 0, hi = win.length; while (lo < hi) { const m = (lo + hi) >> 1; if (win[m] < v) lo = m + 1; else hi = m; } return lo; };
+      const warmFrom = Math.max(0, p.startIdx - Wn + 1);
+      return {
+        warmFrom, Wn,
+        ins(v) { win.splice(lb(v), 0, v); sum += v; },
+        rem(v) { const k = lb(v); if (k < win.length && win[k] === v) { win.splice(k, 1); sum -= v; } },
+        center(m) { const n = win.length; return n === 0 ? 0 : (m ? (n % 2 ? win[(n - 1) >> 1] : (win[n / 2 - 1] + win[n / 2]) / 2) : sum / n); }
+      };
+    };
+    const mkRsi = (Wn) => {
+      let ag = 0, al = 0, cnt = 0;
+      const upd = (i) => {
+        if (!(px[i] > 0 && px[i - 1] > 0)) return;
+        const d = px[i] - px[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
+        if (cnt < Wn) { ag += g; al += l; cnt++; if (cnt === Wn) { ag /= Wn; al /= Wn; } }
+        else { ag = (ag * (Wn - 1) + g) / Wn; al = (al * (Wn - 1) + l) / Wn; }
+      };
+      for (let k = Math.max(1, p.startIdx - 4 * Wn); k < p.startIdx; k++) upd(k);
+      return { step: upd, val() { return cnt < Wn ? 0 : (al === 0 ? 100 : 100 - 100 / (1 + ag / al)); } };
+    };
+    const rollM = mainRsi ? null : mkRoll(W);
+    const rsiM = mainRsi ? mkRsi(W) : null;
+    if (rollM) for (let k = rollM.warmFrom; k < p.startIdx; k++) if (px[k] > 0) rollM.ins(px[k]);
+
+    const bbPct = p.bbPct == null ? 999 : +p.bbPct;
+    const bbB = bbPct === 999 ? 0 : bbPct / 100;
+    // Buying back waits for this many closes in a row above the line; selling
+    // acts on the first close. 1 = the first close buys. The asymmetry is the
+    // whipsaw defence: in a crash the big up days are the traps, and a sale
+    // reversed a day later costs the gap between the two closes.
+    const confirmDays = Math.max(1, Math.round(+p.confirmDays) || 1);
+    // sellArmed: the normal sell line is live. A buy-back switches it off until the price has closed
+    // back above that line; until then the buy-back line is the sell line, so a close back under it
+    // sells again. bbArmed: while sold out, the price has closed at or below the buy-back line.
+    let sellArmed = true, bbArmed = false;
+    let aboveExit = 0, aboveBB = 0;   // closes in a row above the sell line / the buy-back line
+
+    let cash = p.initial, shares = 0, held = "cash";
+    let state = "normal", invested = p.initial, feeTotal = 0;
+    let med = 0, above = 0, zone = "normal";
+    let sigM = 0;
+    let stints = [], inCrash = false, stintLen = 0;
+    let peakPx = 0, peakDate = "", ddNow = 0, maxDdSeen = 0;
+
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      if (px[i] > 0 && rollM) rollM.ins(px[i]);
+      if (rollM) { const drop = i - W; if (drop >= rollM.warmFrom && px[drop] > 0) rollM.rem(px[drop]); }
+      if (rsiM && i > 0) rsiM.step(i);
+      med = mainRsi ? 50 : rollM.center(useMed);
+      sigM = mainRsi ? rsiM.val() : px[i];
+      above = med > 0 && sigM > 0 ? sigM / med - 1 : 0;
+      if (px[i] > 0) {
+        if (px[i] > peakPx) { peakPx = px[i]; peakDate = data.dates[i]; }
+        ddNow = peakPx > 0 ? px[i] / peakPx - 1 : 0;
+        if (-ddNow > maxDdSeen) maxDdSeen = -ddNow;
+      }
+      const month = data.dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "", fee = 0;
+      if (held === "cash") cash *= 1 + dayRate;
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+${SELL_HELD_TO_COVER}
+      }
+
+      if (med > 0 && sigM > 0 && px[i] > 0) {
+        const pOver = med * (1 + over), pExit = med * (1 + exitB), pBuyBack = med * (1 + bbB);
+        aboveExit = sigM > pExit ? aboveExit + 1 : 0;
+        aboveBB = sigM > pBuyBack ? aboveBB + 1 : 0;
+        if (state === "normal" || state === "over") {
+          if (!sellArmed && sigM >= pExit) sellArmed = true;   // back above the sell line: it is live again
+          if (sigM > pOver) state = "over";
+          else if (sellArmed && sigM < pExit) state = "crashCash";
+          else if (!sellArmed && sigM < pBuyBack) state = "crashCash";   // the second sell line: back under the buy-back line after a buy-back
+          else state = "normal";
+        } else if (bbArmed && aboveBB >= confirmDays) { state = "normal"; sellArmed = false; }   // crash buy-back: in early, the normal sell on hold
+        else if (aboveExit >= confirmDays) { state = "normal"; sellArmed = true; }
+        bbArmed = state === "crashCash" && bbPct !== 999 && (bbArmed || sigM <= pBuyBack);
+        zone = state === "over" ? "overextended" : state === "normal" ? "normal" : "sold";
+        let want = state === "normal" ? p.asset
+          : state === "over" ? p.park
+          : crashAsset;
+        if (p.splitDays && want !== held && held !== "cash" && want !== "cash") want = "cash"; // leg 1 today, buy re-checks next bar
+        if (want !== held) {
+          const oldPx = priceOf(held, i);
+          if (held !== "cash" && oldPx > 0) {
+            const gross = shares * oldPx, f = gross * cost;
+            cash += gross - f; fee += f; shares = 0;
+          }
+          const newPx = priceOf(want, i);
+          if (want === "cash" || newPx > 0) {
+            if (want !== "cash") { const f = cash * cost; shares = (cash - f) / newPx; fee += f; cash = 0; }
+            action = held === "cash" ? "buy" : want === "cash" ? "sell" : "switch";
+            note = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs line — " + zone;
+            held = want;
+          }
+        } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
+          const f = cash * cost;
+          shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
+          if (action === "contribution") note = "contribution deployed";
+        }
+      }
+      const wasCrash = inCrash;
+      inCrash = state === "crashCash";
+      if (inCrash) stintLen++;
+      if (wasCrash && !inCrash) { stints.push(stintLen); stintLen = 0; }
+      feeTotal += fee;
+      const medPlot = mainRsi ? (sigM > 0 ? px[i] * 50 / sigM : 0) : med;
+      const hp = priceOf(held, i);
+      const stockVal = shares * hp;
+${WEEKLY_MONTH_END_SNIPPET}
+      if (i === p.startIdx) action = "start";
+      if (i === p.endIdx) action = "end";
+      if (contributed !== 0 || logDay || action !== "hold") {
+        log.push({
+          date: data.dates[i], value: stockVal + cash, action: action, note: note,
+          held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: stockVal,
+          cash: cash, contributed: contributed, invested: invested, fee: fee,
+          assetPrice: px[i] || 0, medianPrice: medPlot, abovePct: above * 100,
+          zone: zone,
+          ...(state === "crashCash" ? { closesAbove: Math.min(bbArmed ? aboveBB : aboveExit, confirmDays) } : {}),
+          overLine: medPlot * (1 + over), exitLine: medPlot * (1 + exitB),
+          ...(bbPct === 999 ? {} : { buyBackLine: medPlot * (1 + bbB) })
+        });
+      }
+    }
+
+    const A = p.asset.toUpperCase(), K = p.park === "cash" ? "cash" : p.park.toUpperCase();
+    const lbl = id => id === "cash" ? "cash" : id.toUpperCase();
+    const CN = mainRsi ? "RSI(" + W + ")" : (useMed ? "median" : "avg");
+    const pctStr = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(2) + "%";
+    const zoneTone = zone === "normal" ? "good" : "bad";
+    const holdTxt = held === "cash" ? "cash" : held.toUpperCase();
+    const chartLines = [
+      { key: "assetPrice", label: A + " price" },
+      mainRsi ? { key: "medianPrice", label: "RSI(" + W + ") line" } : { key: "medianPrice", label: W + "-day " + CN },
+      { key: "exitLine", label: "Sell line (" + (p.exitPct || 0) + "%)" },
+      { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)" }
+    ];
+    if (bbPct !== 999) chartLines.push({ key: "buyBackLine", label: "Buy-back (" + bbPct + "%)" });
+    if (inCrash && stintLen > 0) stints.push(stintLen);
+    return {
+      log: log,
+      lines: chartLines,
+      signals: {
+        cards: [
+          { label: mainRsi ? "RSI(" + W + ") vs 50" : A + " vs " + W + "-day " + CN,
+            value: (above >= 0 ? "▲ " : "▼ ") + pctStr,
+            tone: zone === "normal" ? "good" : "bad",
+            icon: above >= 0 ? "trendUp" : "trendDown",
+            sub: (mainRsi ? sigM.toFixed(1) + " vs 50" : (px[p.endIdx] || 0).toFixed(2) + " vs " + med.toFixed(2) + " " + CN),
+            tip: "The stretch reading the overextension rule uses. Above +" + (p.overPct || 0) + "% parks in " + K + "; below " + (p.exitPct || 0) + "% sells to " + lbl(crashAsset) + "." },
+          { label: "Current band",
+            value: zone,
+            tone: zoneTone,
+            icon: "sliders",
+            sub: "holding " + holdTxt,
+            tip: "Which band the last close landed in — overextended (park), normal (hold), sold (out)." },
+          { label: "Sell line",
+            value: (p.exitPct || 0) + "%",
+            icon: "shield",
+            sub: (sellArmed ? "armed" : "on hold until a close above it") + " · then hold " + lbl(crashAsset)
+              + (state === "crashCash" && !bbArmed ? " · " + Math.min(aboveExit, confirmDays) + " of " + confirmDays + " closes above" : confirmDays > 1 ? " · buys back after " + confirmDays + " closes above" : ""),
+            tip: "A close this far below the center sells " + A + " to " + lbl(crashAsset) + ". Bought back after " + confirmDays + (confirmDays > 1 ? " closes in a row" : " close") + " above this line, or earlier at the buy-back line after a crash; after such an early buy-back this line is on hold and the buy-back line sells instead, until the price has closed above this line again." },
+          { label: "Buy-back line",
+            value: bbPct === 999 ? "off" : bbPct + "%",
+            icon: "flag",
+            tone: bbArmed ? "good" : "",
+            sub: bbPct === 999 ? "re-entry only above the sell line"
+              : bbArmed ? "ARMED — " + (confirmDays > 1 ? Math.min(aboveBB, confirmDays) + " of " + confirmDays + " closes above it; then buys " : "the first close above it buys ") + A
+              : state === "crashCash" ? "waiting for a close at or below it"
+              : sellArmed ? "idle while in the market" : "live — a close under it sells again",
+            tip: "After a sell, a close at or below this line marks a crash; " + confirmDays + (confirmDays > 1 ? " closes in a row" : " close") + " back above it buys " + A + " without waiting for the sell line. Until the price has closed above the sell line again, this line sells too: a close back under it puts you out, and the same count of closes above it buys again." },
+          { label: A + " drawdown",
+            value: (ddNow * 100).toFixed(1) + "%",
+            tone: ddNow > -0.15 ? "good" : "bad",
+            icon: "trendDown",
+            sub: "from " + peakPx.toFixed(2) + " high (" + peakDate + "); worst " + (-maxDdSeen * 100).toFixed(0) + "%",
+            tip: "The traded fund's fall from its running high. The price bands act on stretch-vs-line — this shows what they are protecting against." }
+        ],
+        decision: {
+          action: state === "normal" ? "Buy " + A : state === "over" ? "Hold " + K : lbl(crashAsset) === "cash" ? "Stay in cash" : "Hold " + lbl(crashAsset),
+          note: "signal is " + pctStr + " vs the " + CN + " — " + zone + " band",
+          tone: zoneTone,
+          reasons: [
+            { name: "Band", val: A + " " + pctStr + " vs " + CN, tag: zone + " · " + holdTxt,
+              lean: zone === "normal" ? "buy" : holdTxt === "cash" ? "cash" : "out" }
+          ]
+        }
+      }
+    };
+  }
+}`;
+
 // Browser global + Node export.
 if (typeof window !== 'undefined') window.STRATEGY_CODE = CODE;
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = CODE;
   // Reachable from tests without becoming a strategy key.
   Object.defineProperty(module.exports, 'upgradeWithdrawalHandling', { value: upgradeWithdrawalHandling });
+  Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
+  Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
 }

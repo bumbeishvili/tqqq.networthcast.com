@@ -3066,6 +3066,36 @@
   #mini-chart-tip .mct-dot {
     width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
   }
+  /* Trade-event bands on the signal chart (one per trade, or per cluster of
+     trades a few days apart), with a tick per trade coloured by action. */
+  .custom-lines-chart .mini-ev { fill: rgba(134, 118, 255, 0.10); }
+  .custom-lines-chart .mini-ev.is-hover { fill: rgba(134, 118, 255, 0.22); }
+  .custom-lines-chart .mini-ev-cap { fill: rgba(134, 118, 255, 0.22); cursor: pointer; }
+  .custom-lines-chart .mini-ev-cap.is-hover { fill: rgba(134, 118, 255, 0.5); }
+  .custom-lines-chart .mini-ev-mark { pointer-events: none; }
+  body.mini-panning .custom-lines-chart { cursor: grabbing; }
+  .custom-lines-chart .mini-zoom-reset { cursor: pointer; }
+  .custom-lines-chart .mini-zoom-reset rect { fill: rgba(134, 118, 255, 0.16); stroke: rgba(134, 118, 255, 0.55); stroke-width: 0.3; }
+  .custom-lines-chart .mini-zoom-reset:hover rect { fill: rgba(134, 118, 255, 0.34); }
+  .custom-lines-chart .mini-zoom-reset text { fill: #383874; }
+  body.mini-panning, body.mini-panning * { user-select: none; }
+  #mini-chart-tip .mct-ev-head {
+    font-size: 10px; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: .04em; margin: 2px 0;
+  }
+  #mini-chart-tip .mct-ev {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    line-height: 1.6; padding: 2px 0 3px;
+    border-bottom: 1px dashed rgba(134, 118, 255, 0.3);
+    margin-bottom: 3px;
+  }
+  #mini-chart-tip .mct-ev-when {
+    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    color: var(--text-muted); margin-left: auto; padding-left: 12px;
+  }
+  #mini-chart-tip .mct-ev-note {
+    flex-basis: 100%; font-size: 10.5px; color: var(--text-muted); padding-left: 14px;
+  }
   /* Drag-range readout: colored % change + exact from → to values. */
   #mini-chart-tip .mct-pos { color: var(--green, #00b929); }
   #mini-chart-tip .mct-neg { color: var(--red-text, #dc2626); }
