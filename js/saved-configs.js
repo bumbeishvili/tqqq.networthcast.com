@@ -208,7 +208,9 @@ function _miniAssetKey(held) {
 // under minSpanMs or past the data, and a drag moves the window; a double-click
 // or the Reset button restores the full range. The zoom is kept per strategy,
 // so a re-render (resize, fresh log) preserves it.
-const MINI_ZOOM = { minSpanMs: 30 * 86400000, wheelK: 0.002 };
+const MINI_ZOOM = { minSpanMs: 30 * 86400000, wheelK: 0.002, rightAnchorPx: 200 };
+const MINI_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const _miniShortDate = t => { const d = new Date(t); return `${d.getUTCDate()} ${MINI_MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
 const MINI_MOD_KEY = /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
 const _miniModHeld = e => e.metaKey || e.ctrlKey;
 window._miniZoom = window._miniZoom || null;   // { cfgId, t0, t1 }, or null for the full range
@@ -220,7 +222,7 @@ function _miniFmtPrice(v) { return v >= 1000 ? fmt(v) : '$' + (v < 10 ? v.toFixe
 // month starts down to two months, week starts below that; at most `max`.
 function _miniTimeTicks(t0, t1, max) {
   const DAY = 86400000, days = (t1 - t0) / DAY, d0 = new Date(t0), d1 = new Date(t1), out = [];
-  const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const MON = MINI_MON;
   if (days > 3 * 365) {
     const y0 = d0.getUTCFullYear(), y1 = d1.getUTCFullYear(), step = Math.max(1, Math.ceil((y1 - y0) / max));
     for (let y = y0 + 1; y <= y1; y += step) out.push({ t: Date.UTC(y, 0, 1), label: String(y) });
@@ -229,7 +231,7 @@ function _miniTimeTicks(t0, t1, max) {
     for (let y = d0.getUTCFullYear(), m = d0.getUTCMonth() + 1; ; m += step) {
       const t = Date.UTC(y, m, 1);
       if (t >= t1) break;
-      if (t > t0) out.push({ t, label: MON[new Date(t).getUTCMonth()] + ' ' + String(new Date(t).getUTCFullYear()).slice(2) });
+      if (t > t0) out.push({ t, label: MON[new Date(t).getUTCMonth()] + ' ' + new Date(t).getUTCFullYear() });
     }
   } else {
     const step = Math.max(1, Math.ceil(days / 7 / max));
@@ -266,6 +268,21 @@ function _miniMarkSvg(shape, x, y, r, attrs) {
   if (shape === 'hexagon') return `<polygon points="${ring(6)}" ${attrs}/>`;
   if (shape === 'diamond') return `<polygon points="${ring(4)}" ${attrs}/>`;
   return `<rect x="${(x - r).toFixed(2)}" y="${(y - r).toFixed(2)}" width="${(2 * r).toFixed(2)}" height="${(2 * r).toFixed(2)}" ${attrs}/>`;
+}
+// The same share for the tooltip's dot: a clip to the wedge, drawn past the dot
+// so its ring (a box-shadow) is kept on that side only.
+function _miniWedgeClip(a, b) {
+  const pts = ['50% 50%'], steps = Math.max(2, Math.ceil((b - a) * 24));
+  for (let i = 0; i <= steps; i++) {
+    const ang = -Math.PI / 2 + (a + (b - a) * i / steps) * 2 * Math.PI;
+    pts.push(`${(50 + 110 * Math.cos(ang)).toFixed(1)}% ${(50 + 110 * Math.sin(ang)).toFixed(1)}%`);
+  }
+  return `polygon(${pts.join(', ')})`;
+}
+// A pie wedge from fraction a to fraction b of a circle, clockwise from 12 o'clock.
+function _miniWedgePath(x, y, r, a, b) {
+  const pt = f => { const ang = -Math.PI / 2 + f * 2 * Math.PI; return (x + r * Math.cos(ang)).toFixed(2) + ',' + (y + r * Math.sin(ang)).toFixed(2); };
+  return `M${x.toFixed(2)},${y.toFixed(2)} L${pt(a)} A${r.toFixed(2)},${r.toFixed(2)} 0 ${b - a > 0.5 ? 1 : 0} 1 ${pt(b)} Z`;
 }
 function buildCustomLinesChartHtml(cfg, lines, log, cw) {
   const all = [];
@@ -308,22 +325,29 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw) {
   const t0 = z ? Math.max(T0, Math.min(z.t0, T1 - minSpan)) : T0;
   const t1 = z ? Math.min(T1, Math.max(z.t1, t0 + minSpan)) : T1;
   const zoomed = t0 > T0 || t1 < T1;
+  const atEnd = t1 >= T1;   // the latest date is on screen
   // Points on screen: those inside the window plus one neighbour either side,
   // so each line reaches the plot's edges (the clip path trims the overhang).
   // The y-scale and the end labels use the points inside the window.
+  // A line that stops before the window's end (a level that exists only while
+  // a condition holds) is `partial`: it is labelled where it ends, beside the
+  // line, instead of in the gutter. A line with no point on screen gets no label.
+  const endTol = Math.max(8 * 86400000, (t1 - t0) * 0.01);
   const series = all.map(s => {
     let from = 0; while (from + 1 < s.pts.length && s.pts[from + 1].t <= t0) from++;
     let to = s.pts.length - 1; while (to > 0 && s.pts[to - 1].t >= t1) to--;
     const pts = s.pts.slice(from, to + 1), inWindow = pts.filter(p => p.t >= t0 && p.t <= t1);
-    return { label: s.label, color: s.color, pts, scalePts: inWindow.length ? inWindow : pts, endPt: inWindow.length ? inWindow[inWindow.length - 1] : pts[pts.length - 1] };
+    const endPt = inWindow.length ? inWindow[inWindow.length - 1] : pts[pts.length - 1];
+    return { label: s.label, color: s.color, pts, scalePts: inWindow.length ? inWindow : pts, endPt, shown: inWindow.length > 0, partial: endPt.t < t1 - endTol };
   }).filter(s => s.pts.length > 1);
   if (!series.length) return '';
   // Right gutter fits "$value  series name" on one line (both descaled, JetBrains
   // Mono advance ≈ 0.6em), capped so a narrow panel keeps a usable plot area —
   // when capped, long names clip at the right edge instead of covering lines.
   const _valTxt = v => v >= 1000 ? fmt(v) : '$' + v.toFixed(2);
-  const valColW = Math.max(...series.map(s => _valTxt(s.endPt.v).length)) * (9 / k) * 0.6;
-  const nameColW = Math.max(...series.map(s => s.label.length)) * (7 / k) * 0.6;
+  const gutterSeries = series.filter(s => s.shown && !s.partial);
+  const valColW = gutterSeries.length ? Math.max(...gutterSeries.map(s => _valTxt(s.endPt.v).length)) * (9 / k) * 0.6 : 0;
+  const nameColW = gutterSeries.length ? Math.max(...gutterSeries.map(s => s.label.length)) * (7 / k) * 0.6 : 0;
   const padR = Math.min(4 / k + valColW + 4 / k + nameColW + 2 / k, 0.45 * W);
   let lo = Infinity, hi = -Infinity;
   for (const s of series) for (const p of s.scalePts) { if (p.v < lo) lo = p.v; if (p.v > hi) hi = p.v; }
@@ -356,7 +380,19 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw) {
     for (let j = ev.i - 1; j >= 0 && !from; j--) { const h = log[j] && log[j].held; if (h && String(h) !== to) from = String(h); }
     const kind = customActionKind(ev.row.action);
     const assetKey = _miniAssetKey(kind === 'sell' ? from : to);
-    const item = { x, t, date: String(ev.row.date), kind, label: ev.st.label, color: ev.st.color, shape: ev.st.shape, from, to, held: to,
+    // A buy that moved only part of the money (a slice, or the rest after one)
+    // carries that share as a wedge: from what was already held to what is
+    // held after it, as fractions of the account.
+    let part = null;
+    if (kind === 'buy') {
+      const r = ev.row, prev = log[ev.i - 1], val = +r.value, hv = +r.holdingsValue;
+      if (val > 0 && Number.isFinite(hv)) {
+        const f1 = Math.max(0, Math.min(1, hv / val));
+        const f0 = prev && String(prev.held || '') === to && +prev.shares > 0 && +r.price > 0 ? Math.max(0, Math.min(f1, +prev.shares * +r.price / val)) : 0;
+        if (f1 - f0 > 0.02 && f1 - f0 < 0.95) part = [f0, f1];
+      }
+    }
+    const item = { x, t, date: String(ev.row.date), kind, label: ev.st.label, color: ev.st.color, shape: ev.st.shape, from, to, held: to, part,
       ring: assetKey ? MINI_ASSET_RING[assetKey] : 'rgba(255,255,255,0.95)', dashed: !!(assetKey && MINI_ASSET_DASHED[assetKey]), note: String(ev.row.note || '') };
     const last = eventGroups[eventGroups.length - 1];
     if (last && x - last.x1 < MINI_EVENT.mergeX && x - last.x0 <= MINI_EVENT.maxSpanX) { last.items.push(item); last.x1 = x; }
@@ -377,13 +413,17 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw) {
       <text x="${padL + 1}" y="${(+y - 2).toFixed(1)}" font-family="JetBrains Mono" font-size="${(8 / k).toFixed(2)}" fill="rgba(122,122,166,0.75)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${fmtP(lv)}</text>`;
   }
   // Date labels just under the plot. Centers are clamped inside the viewBox so
-  // the first and last never render half-cut at the edges.
-  const halfLbl = 12 / k;
+  // the first and last never render half-cut at the edges, and a label that
+  // would touch the one before it is dropped (JetBrains Mono advance ≈ 0.6em).
   const yLabel = (plotBottom + MINI_PX.labelGap / k).toFixed(1);
-  let xAxis = '';
+  const axisFs = 8 / k, axisCharW = 0.6 * axisFs, axisGap = 6 / k;
+  let xAxis = '', lastRight = -Infinity;
   for (const tk of _miniTimeTicks(t0, t1, 6)) {
-    const lx = Math.max(halfLbl, Math.min(W - halfLbl, xAt(tk.t)));
-    xAxis += `<text x="${lx.toFixed(1)}" y="${yLabel}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(8 / k).toFixed(2)}" fill="rgba(122,122,166,0.75)">${tk.label}</text>`;
+    const half = tk.label.length * axisCharW / 2;
+    const lx = Math.max(half, Math.min(W - half, xAt(tk.t)));
+    if (lx - half < lastRight + axisGap) continue;
+    lastRight = lx + half;
+    xAxis += `<text x="${lx.toFixed(1)}" y="${yLabel}" text-anchor="middle" font-family="JetBrains Mono" font-size="${axisFs.toFixed(2)}" fill="rgba(122,122,166,0.75)">${tk.label}</text>`;
   }
   // The strip's right end, inside the gutter so it never covers a trade cap:
   // how to zoom while at full range; the factor, the pan hint and a Reset
@@ -399,10 +439,31 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw) {
   } else {
     const factor = ((T1 - T0) / (t1 - t0)).toFixed(1);
     const btnW = 50 / k, btnH = 10 / k, btnX = W - 2 / k - btnW, btnY = 1 / k;
-    const long = `×${factor} · ${MINI_MOD_KEY} + drag to pan`;
-    const hint = hintW(long) <= padR - btnW - 8 / k ? long : `×${factor}`;
-    zoomUi = `<text x="${(btnX - 4 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.9)">${hint}</text>
-      <g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MINI_MOD_KEY} + scroll zooms, ${MINI_MOD_KEY} + drag pans.</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
+    const resetBtn = `<g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MINI_MOD_KEY} + scroll zooms, ${MINI_MOD_KEY} + drag pans.</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
+    if (atEnd) {
+      const long = `×${factor} · ${MINI_MOD_KEY} + drag to pan`;
+      const hint = hintW(long) <= padR - btnW - 8 / k ? long : `×${factor}`;
+      zoomUi = `<text x="${(btnX - 4 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.9)">${hint}</text>${resetBtn}`;
+    } else {
+      // Panned away from the end: a Latest chip in place of the hint says so,
+      // and a click brings the window back to the latest date at the same zoom.
+      const chipW = 38 / k, chipX = btnX - 4 / k - chipW;
+      const short = `×${factor}`;
+      const hint = hintW(short) <= padR - btnW - chipW - 12 / k ? `<text x="${(chipX - 4 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.9)">${short}</text>` : '';
+      zoomUi = `${hint}<g class="mini-latest" role="button"><title>The latest date is off screen to the right. Click to jump to it at this zoom.</title><rect x="${chipX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${chipW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(chipX + chipW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Latest →</text></g>${resetBtn}`;
+    }
+  }
+  // The end of the data, when it is on screen: a dotted line at the latest
+  // date with its date above it, and a dot closing each line. Drawn outside
+  // the clip so the dots at the plot's edge render whole. Absent while panned
+  // away from the end, when the strip's Latest chip says so instead.
+  let latestMark = '';
+  if (atEnd) {
+    const xEnd = (W - padR).toFixed(1);
+    const dots = series.filter(s => Math.abs(s.endPt.t - T1) < 86400000).map(s =>
+      `<circle cx="${xEnd}" cy="${yAt(s.endPt.v).toFixed(1)}" r="${(1.4 / k).toFixed(2)}" fill="${s.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(0.7 / k).toFixed(2)}"/>`).join('');
+    latestMark = `<line class="mini-latest-line" x1="${xEnd}" y1="${padT.toFixed(2)}" x2="${xEnd}" y2="${plotBottom.toFixed(2)}" stroke="rgba(122,122,166,0.55)" stroke-width="${(0.6 / k).toFixed(2)}" stroke-dasharray="${(1.6 / k).toFixed(2)} ${(1.6 / k).toFixed(2)}"/>
+      <text class="mini-latest-label" x="${(W - padR - 2 / k).toFixed(1)}" y="${(padT + 7.5 / k).toFixed(2)}" text-anchor="end" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="rgba(122,122,166,0.95)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">latest · ${_miniShortDate(T1)}</text>${dots}`;
   }
 
   // Polylines + right-edge end labels (pushed apart when endpoints collide).
@@ -412,7 +473,16 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw) {
     let d = '';
     for (const p of s.drawPts) d += (!d || p.gap ? 'M' : 'L') + xAt(p.t).toFixed(1) + ',' + yAt(p.v).toFixed(1);
     paths += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="0.45"/>`;
-    ends.push({ y: yAt(s.endPt.v), v: s.endPt.v, color: s.color, name: s.label });
+    if (s.shown && !s.partial) ends.push({ y: yAt(s.endPt.v), v: s.endPt.v, color: s.color, name: s.label });
+  }
+  // Partial lines: name and last value beside the line's end, to its right when
+  // that fits inside the plot, else to its left.
+  let lineTags = '';
+  for (const s of series.filter(s => s.shown && s.partial)) {
+    const x = xAt(s.endPt.t), txt = `${s.label} ${_valTxt(s.endPt.v)}`;
+    const y = Math.max(padT + 6 / k, Math.min(plotBottom - 1 / k, yAt(s.endPt.v) + 2.5 / k));
+    const right = x + 3 / k + txt.length * 0.6 * (7 / k) <= W - padR;
+    lineTags += `<text class="mini-line-tag" x="${(right ? x + 3 / k : x - 3 / k).toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${s.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(txt)}</text>`;
   }
   // One line per series in the gutter: value column, then the name beside it,
   // both on the same baseline so neither ever covers the plot.
@@ -442,12 +512,20 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw) {
     return pt ? { x: it.x, y: yAt(pt.v), r: markR, item: it } : null;
   }).filter(Boolean);
   window._miniChartHover.marks = marks;
-  const eventMarks = marks.map(m =>
-    _miniMarkSvg(m.item.shape, m.x, m.y, markR, `fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="${(ringW + 1.8 / k).toFixed(2)}"`)
-    + _miniMarkSvg(m.item.shape, m.x, m.y, markR, `class="mini-ev-mark" fill="${m.item.color}" stroke="${m.item.ring}" stroke-width="${ringW.toFixed(2)}"`
-        + (m.item.dashed ? ` stroke-dasharray="${(1.5 / k).toFixed(2)} ${(1.2 / k).toFixed(2)}"` : ''))).join('');
+  const eventMarks = marks.map(m => {
+    const haloAttrs = `fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="${(ringW + 1.8 / k).toFixed(2)}"`;
+    const dash = m.item.dashed ? ` stroke-dasharray="${(1.5 / k).toFixed(2)} ${(1.2 / k).toFixed(2)}"` : '';
+    if (m.item.part && m.item.shape === 'circle') {
+      // A partial buy: only the bought share of the circle, outline and halo included.
+      const d = _miniWedgePath(m.x, m.y, markR, m.item.part[0], m.item.part[1]);
+      return `<path d="${d}" ${haloAttrs} stroke-linejoin="round"/>`
+        + `<path class="mini-ev-mark" d="${d}" fill="${m.item.color}" stroke="${m.item.ring}" stroke-width="${ringW.toFixed(2)}" stroke-linejoin="round"${dash}/>`;
+    }
+    return _miniMarkSvg(m.item.shape, m.x, m.y, markR, haloAttrs)
+      + _miniMarkSvg(m.item.shape, m.x, m.y, markR, `class="mini-ev-mark" fill="${m.item.color}" stroke="${m.item.ring}" stroke-width="${ringW.toFixed(2)}"` + dash);
+  }).join('');
 
-  return `<svg class="custom-lines-chart" viewBox="0 0 ${W} ${H}"><defs><clipPath id="${clipId}"><rect x="${padL}" y="${padT.toFixed(2)}" width="${plotW.toFixed(1)}" height="${plotH.toFixed(2)}"/></clipPath></defs>${grid}<g clip-path="url(#${clipId})">${eventBands}${paths}${eventMarks}</g>${eventCaps}${endLabels}${xAxis}${zoomUi}</svg>`;
+  return `<svg class="custom-lines-chart" viewBox="0 0 ${W} ${H}"><defs><clipPath id="${clipId}"><rect x="${padL}" y="${padT.toFixed(2)}" width="${plotW.toFixed(1)}" height="${plotH.toFixed(2)}"/></clipPath></defs>${grid}<g clip-path="url(#${clipId})">${eventBands}${paths}${eventMarks}</g>${latestMark}${lineTags}${eventCaps}${endLabels}${xAxis}${zoomUi}</svg>`;
 }
 
 // --- the detail run behind the zoom ---------------------------------------
@@ -629,14 +707,17 @@ function _miniMoveText(it) {
 function _miniEventRows(group) {
   const listed = group.items.slice(0, MINI_EVENT.maxListed), unlisted = group.items.length - listed.length;
   return (group.items.length > 1 ? `<div class="mct-ev-head">${group.items.length} trades in this band</div>` : '')
-    + listed.map(it => `<div class="mct-ev"><span class="mct-dot" style="background:${it.color};box-shadow:0 0 0 2px ${it.ring}"></span>`
+    + listed.map(it => `<div class="mct-ev"><span class="mct-dot" style="background:${it.color};box-shadow:0 0 0 2px ${it.ring}${it.part ? `;clip-path:${_miniWedgeClip(it.part[0], it.part[1])}` : ''}"></span>`
         + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${fmtLogDate(it.date)}</span>`
         + (it.note ? `<div class="mct-ev-note">${_escHtml(it.note)}</div>` : '') + `</div>`).join('')
     + (unlisted > 0 ? `<div class="mct-ev-head">and ${unlisted} more — zoom in to split this band</div>` : '');
 }
 // Wheel over the chart with the modifier held zooms the time axis around the
 // cursor; the panel must not scroll meanwhile, hence passive: false. Without
-// the key the event passes through and the panel scrolls as usual.
+// the key the event passes through and the panel scrolls as usual. Within
+// MINI_ZOOM.rightAnchorPx screen pixels of the plot's right edge the pivot is
+// the visible right edge itself, so zooming near the latest price keeps that
+// price in place instead of drifting with the cursor.
 document.addEventListener('wheel', (e) => {
   const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
   const data = window._miniChartHover;
@@ -646,7 +727,12 @@ document.addEventListener('wheel', (e) => {
   const scale = Math.pow(2, -e.deltaY * (e.deltaMode === 1 ? 0.05 : e.deltaMode ? 1 : MINI_ZOOM.wheelK));
   const next = Math.max(Math.min(MINI_ZOOM.minSpanMs, full), Math.min(full, span / scale));
   if (next === span) return;
-  const x = _miniCursorX(svg, e, data), pivot = _miniTimeAtX(data, x);
+  const x = _miniCursorX(svg, e, data);
+  const pxPerUnit = svg.getBoundingClientRect().width / data.W, plotW = data.W - data.padL - data.padR;
+  // On a narrow panel the zone is capped at half the plot, so the left half still zooms at the cursor.
+  const zone = Math.min(MINI_ZOOM.rightAnchorPx, plotW * pxPerUnit / 2);
+  const nearRight = (data.W - data.padR - x) * pxPerUnit <= zone;
+  const pivot = nearRight ? data.t1 : _miniTimeAtX(data, x);
   const frac = (pivot - data.t0) / span;
   let t0 = pivot - frac * next, t1 = t0 + next;
   if (t0 < data.T0) { t0 = data.T0; t1 = t0 + next; }
@@ -655,6 +741,15 @@ document.addEventListener('wheel', (e) => {
   _miniChartClearHover();
   _miniChartRerender();
 }, { passive: false });
+// The Latest chip: keep the span, end the window at the latest date.
+function _miniJumpToLatest() {
+  const d = window._miniChartHover;
+  if (!d || !window._miniZoom) return;
+  const span = d.t1 - d.t0;
+  window._miniZoom = { cfgId: d.cfgId, t0: Math.max(d.T0, d.T1 - span), t1: d.T1 };
+  _miniChartClearHover();
+  _miniChartRerender();
+}
 function _miniZoomReset() {
   if (!window._miniZoom) return;
   window._miniZoom = null;
@@ -666,6 +761,7 @@ document.addEventListener('dblclick', (e) => {
 });
 document.addEventListener('click', (e) => {
   if (e.target && e.target.closest && e.target.closest('.mini-zoom-reset')) _miniZoomReset();
+  if (e.target && e.target.closest && e.target.closest('.mini-latest')) _miniJumpToLatest();
 });
 // Mouse down on the chart starts one of two drags. With the modifier held it
 // pans the zoomed window: the chart follows the cursor, pixel for pixel, until
@@ -726,7 +822,7 @@ document.addEventListener('mousemove', (e) => {
   // band's trades and nothing else; off a band it shows nothing. The value
   // hover below never mentions trades, so the two readouts stay apart.
   if (!drag && _miniCursorY(svg, e, data) < data.padT) {
-    const hit = e.target.closest('.mini-zoom-reset') ? null : _miniEventAt(data, _miniCursorX(svg, e, data));
+    const hit = e.target.closest('.mini-zoom-reset, .mini-latest') ? null : _miniEventAt(data, _miniCursorX(svg, e, data));
     _miniHighlightEvent(svg, hit ? hit.index : -1);
     g.innerHTML = '';
     window._miniHoverActive = true;
@@ -1105,6 +1201,8 @@ Shape:  { id, label, options: [...], default: <one of the options> }
 - For an on/off toggle use options: [true, false].
 - A long list scans badly — group it: insert { section: "Label" } entries (no id) between params
   and they render as sub-headers ("Holdings", "Signal lines", "Execution & costs").
+- An optional "tip" string on a param (or a section entry) renders an ⓘ hover note next to its
+  label: one or two plain sentences saying what the setting does. No filler.
 
 *** THE TEST EVERY PARAM MUST PASS ***
 Point at the words in my description that this knob comes from. If you cannot, DO NOT ADD IT.
@@ -2768,12 +2866,19 @@ function refreshedLibraryCopy(cfg) {
   if (edited) return null;
   const code = STRATEGY_CODE[n];
   const entry = (typeof STRATEGY_LIBRARY !== 'undefined') ? STRATEGY_LIBRARY.find(e => e.n === n) : null;
-  return { n, code, desc: entry ? entry.rules : cfg.desc, changed: code !== cfg.code || cfg.libraryN == null };
+  // The description refreshes on its own too, unless it was edited in the
+  // builder (its fingerprint no longer matches the stamp). Copies made before
+  // the stamp existed count as unedited, as they did for the code.
+  const descEdited = cfg.libraryDescFingerprint && cfg.libraryDescFingerprint !== codeFingerprint(cfg.desc || '');
+  const desc = entry && !descEdited ? entry.rules : cfg.desc;
+  return { n, code, desc, changed: code !== cfg.code || cfg.libraryN == null || desc !== cfg.desc };
 }
 function applyLibraryRefresh(cfg, up) {
-  if (up.code !== cfg.code) { cfg.codeBefore = cfg.code; cfg.code = up.code; cfg.desc = up.desc; }
+  if (up.code !== cfg.code) { cfg.codeBefore = cfg.code; cfg.code = up.code; }
+  cfg.desc = up.desc;
   cfg.libraryN = up.n;
   cfg.libraryFingerprint = codeFingerprint(up.code);
+  cfg.libraryDescFingerprint = codeFingerprint(cfg.desc || '');
 }
 function upgradeSavedCustomCode() {
   let changed = false;
@@ -3183,11 +3288,13 @@ function buildCustomControlsHtml(cfg, schema) {
     if (!sp) return '';
     // { section: "Label" } entries (no id) group the params under sub-headers
     // so a long settings list reads in blocks instead of one flat scan.
-    if (sp.id == null) return sp.section ? `<div class="custom-param-group">${_escHtml(sp.section)}</div>` : '';
+    // An optional `tip` on the entry becomes the shared ⓘ hover tooltip next to the label.
+    const tip = sp.tip != null && String(sp.tip).trim() ? ` <span class="info-icon" tabindex="0" data-tip="${_escHtml(String(sp.tip))}">ⓘ</span>` : '';
+    if (sp.id == null) return sp.section ? `<div class="custom-param-group">${_escHtml(sp.section)}${tip}</div>` : '';
     const label = _escHtml(sp.label || sp.id);
     const curLabel = _escHtml(customOptionLabel(sp, customParamValue(cfg, sp)));
     return `<div class="custom-param-row">
-      <label>${label}</label>
+      <label>${label}${tip}</label>
       <button type="button" class="pdrop-trigger inline-select cp-trigger" data-cp-cfg="${_escHtml(cfg.id)}" data-cp-id="${_escHtml(sp.id)}">
         <span class="pdrop-trigger-label">${curLabel}</span><span class="pdrop-caret">▾</span>
       </button>

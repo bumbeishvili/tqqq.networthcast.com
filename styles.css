@@ -3078,6 +3078,10 @@
   .custom-lines-chart .mini-zoom-reset rect { fill: rgba(134, 118, 255, 0.16); stroke: rgba(134, 118, 255, 0.55); stroke-width: 0.3; }
   .custom-lines-chart .mini-zoom-reset:hover rect { fill: rgba(134, 118, 255, 0.34); }
   .custom-lines-chart .mini-zoom-reset text { fill: #383874; }
+  .custom-lines-chart .mini-latest { cursor: pointer; }
+  .custom-lines-chart .mini-latest rect { fill: rgba(134, 118, 255, 0.16); stroke: rgba(134, 118, 255, 0.55); stroke-width: 0.3; }
+  .custom-lines-chart .mini-latest:hover rect { fill: rgba(134, 118, 255, 0.34); }
+  .custom-lines-chart .mini-latest text { fill: #383874; }
   body.mini-panning, body.mini-panning * { user-select: none; }
   #mini-chart-tip .mct-ev-head {
     font-size: 10px; color: var(--text-muted);
