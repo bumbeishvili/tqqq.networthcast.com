@@ -189,14 +189,14 @@ function _miniWedgePath(x, y, r, a, b) {
 // negative values; the default is log, where a constant-% gap between lines
 // draws as a constant distance. opts.compact: the desktop widget's layout:
 // no zoom hints (the Reset and Latest buttons sit in the corner under the
-// end labels), each end label stacked, a row per word of its name and its
-// value under them, and a strip above the plot only when the log has trades
+// end labels), each end label's name running down a row per word beside its
+// value, and a strip above the plot only when the log has trades
 // to show there. opts.home: { t0, t1 }, the view the chart rests in (the
 // widget's portfolio period on a history reaching further back): shown until
 // the viewer zooms or pans, and where Reset and a double-click return.
 // Without it the chart rests at the full range. A line
 // may set its own color, and in the compact layout a badge: { text, color },
-// drawn small after its value while the latest date is on screen.
+// on the row above its name while the latest date is on screen.
 function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const linear = !!(opts && opts.scale === 'linear');
   const compact = !!(opts && opts.compact);
@@ -267,20 +267,18 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     return { label: s.label, color: s.color, pts, scalePts: inWindow.length ? inWindow : pts, endPt, shown: inWindow.length > 0, partial: endPt.t < t1 - endTol, badge: atEnd ? s.badge : null };
   }).filter(s => s.pts.length > 1);
   if (!series.length) return '';
-  // Right gutter fits "$value  series name" on one line (both descaled, JetBrains
-  // Mono advance ≈ 0.6em), or in the compact layout the longest of the name's
-  // rows and the "$value badge" row. It is capped so a narrow panel keeps a usable
-  // plot area — when capped, long names clip at the right edge instead of covering lines.
+  // Right gutter: the value column, then the name column beside it (both
+  // descaled, JetBrains Mono advance ≈ 0.6em). A name is one row, or in the
+  // compact layout a row per word with any badge on the row above them. It is
+  // capped so a narrow panel keeps a usable plot area — when capped, long
+  // names clip at the right edge instead of covering lines.
   const _valTxt = v => (v < 0 ? '-' : '') + (Math.abs(v) >= 1000 ? fmt(Math.abs(v)) : '$' + Math.abs(v).toFixed(2));
   const gutterSeries = series.filter(s => s.shown && !s.partial);
-  const nameW = s => (compact ? Math.max(..._miniNameRows(s.label).map(row => row.length)) : s.label.length) * (7 / k) * 0.62;
-  const valW = s => _valTxt(s.endPt.v).length * (9 / k) * 0.6;
-  const badgeW = s => (s.badge ? 3 / k + s.badge.text.length * (7 / k) * 0.62 : 0);
-  const valColW = Math.max(0, ...gutterSeries.map(valW));
-  const gutterW = compact
-    ? Math.max(0, ...gutterSeries.map(s => Math.max(nameW(s), valW(s) + badgeW(s))))
-    : valColW + 4 / k + Math.max(0, ...gutterSeries.map(nameW));
-  const padR = Math.min(4 / k + gutterW + 5 / k, 0.45 * W);
+  const nameRowsOf = (name, badge, color) => (compact && badge ? [{ text: badge.text, color: badge.color }] : [])
+    .concat((compact ? _miniNameRows(name) : [name]).map(text => ({ text, color })));
+  const valColW = Math.max(0, ...gutterSeries.map(s => _valTxt(s.endPt.v).length)) * (9 / k) * 0.6;
+  const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.label, s.badge, s.color)).map(row => row.text.length)) * (7 / k) * 0.62;
+  const padR = Math.min(4 / k + valColW + 4 / k + nameColW + 5 / k, 0.45 * W);
   let lo = Infinity, hi = -Infinity;
   for (const s of series) for (const p of s.scalePts) { if (p.v < lo) lo = p.v; if (p.v > hi) hi = p.v; }
   if (!(hi > 0)) return '';
@@ -422,30 +420,30 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const right = x + 3 / k + txt.length * 0.6 * (7 / k) <= W - padR;
     lineTags += `<text class="mini-line-tag" x="${(right ? x + 3 / k : x - 3 / k).toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${s.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(txt)}</text>`;
   }
-  // One label per series in the gutter, never over the plot. The usual one is
-  // a single row: the value column, then the name beside it on the same
-  // baseline. The compact one is stacked, a row per word of the name and the
-  // value under them with any badge right after it; the value row sits at the
-  // line's end, and the labels keep their blocks apart between the svg's top
-  // and the plot's bottom.
+  // One label per series in the gutter, never over the plot: the value at
+  // the line's end, and its name beside it on the same baseline. In the
+  // compact layout the name runs down a row per word with any badge on the
+  // row above it, the rows centred on the value; labels push apart by their
+  // own heights and stay inside the plot's height.
+  const rowLh = 8.5 / k;
+  for (const e of ends) e.rows = nameRowsOf(e.name, e.badge, e.color);
   ends.sort((a, b) => a.y - b.y);
-  let endLabels = '';
+  const reach = e => (e.rows.length - 1) / 2 * rowLh + 5 / k;   // a compact label's half height
+  const room = (a, b) => (compact ? reach(a) + reach(b) + 1 / k : 10 / k);
+  if (compact && ends.length) ends[0].y = Math.max(ends[0].y, reach(ends[0]));
+  for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < room(ends[i - 1], ends[i])) ends[i].y = ends[i - 1].y + room(ends[i - 1], ends[i]);
   if (compact) {
-    const nameLh = 8.5 / k, below = 4 / k, gapY = 3.5 / k, labelX = (W - padR + 4 / k).toFixed(1);
-    for (const e of ends) { e.rows = _miniNameRows(e.name); e.above = 12.5 / k + (e.rows.length - 1) * nameLh; }
-    for (let i = 0; i < ends.length; i++) ends[i].y = Math.max(ends[i].y, i ? ends[i - 1].y + below + gapY + ends[i].above : ends[i].above);
-    for (let i = ends.length - 1; i >= 0; i--) ends[i].y = Math.min(ends[i].y, i < ends.length - 1 ? ends[i + 1].y - below - gapY - ends[i + 1].above : plotBottom - below);
-    for (const e of ends) {
-      const badge = e.badge ? `<tspan dx="${(3 / k).toFixed(2)}" font-size="${(7 / k).toFixed(2)}" fill="${e.badge.color}">${_escHtml(e.badge.text)}</tspan>` : '';
-      endLabels += e.rows.map((row, j) => `<text x="${labelX}" y="${(e.y - 7 / k - (e.rows.length - 1 - j) * nameLh).toFixed(1)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(row)}</text>`).join('')
-        + `<text x="${labelX}" y="${(e.y + 3 / k).toFixed(1)}" font-family="JetBrains Mono" font-size="${(9 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2.5 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_valTxt(e.v)}${badge}</text>`;
+    for (let i = ends.length - 1; i >= 0; i--) {
+      const max = i === ends.length - 1 ? plotBottom - reach(ends[i]) : ends[i + 1].y - room(ends[i], ends[i + 1]);
+      if (ends[i].y > max) ends[i].y = max;
     }
-  } else {
-    for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < 10 / k) ends[i].y = ends[i - 1].y + 10 / k;
-    for (const e of ends) {
-      endLabels += `<text x="${(W - padR + 4 / k + valColW).toFixed(1)}" y="${(e.y + 3 / k).toFixed(1)}" text-anchor="end" font-family="JetBrains Mono" font-size="${(9 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2.5 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_valTxt(e.v)}</text>
-        <text x="${(W - padR + 8 / k + valColW).toFixed(1)}" y="${(e.y + 3 / k).toFixed(1)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(e.name)}</text>`;
-    }
+  }
+  let endLabels = '';
+  for (const e of ends) {
+    const base = e.y + 3 / k;
+    const firstRow = compact ? e.y + 2.5 / k - (e.rows.length - 1) / 2 * rowLh : base;
+    endLabels += `<text x="${(W - padR + 4 / k + valColW).toFixed(1)}" y="${base.toFixed(1)}" text-anchor="end" font-family="JetBrains Mono" font-size="${(9 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2.5 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_valTxt(e.v)}</text>`
+      + e.rows.map((row, j) => `<text x="${(W - padR + 8 / k + valColW).toFixed(1)}" y="${(firstRow + j * rowLh).toFixed(1)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${row.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(row.text)}</text>`).join('');
   }
 
   // Bands across the plot, caps in the strip, and once the window is under
@@ -637,9 +635,13 @@ document.addEventListener('wheel', (e) => {
   const nearRight = (data.W - data.padR - x) * pxPerUnit <= zone;
   const pivot = nearRight ? data.t1 : _miniTimeAtX(data, x);
   const frac = (pivot - data.t0) / span;
-  let t0 = pivot - frac * next, t1 = t0 + next;
+  // Both ends from the pivot, so a pivot on an edge keeps that edge exactly
+  // (t0 + next can round a fraction of a millisecond off it, enough to read
+  // the latest date as off screen).
+  let t0 = pivot - frac * next, t1 = pivot + (1 - frac) * next;
   if (t0 < data.T0) { t0 = data.T0; t1 = t0 + next; }
   if (t1 > data.T1) { t1 = data.T1; t0 = t1 - next; }
+  if (next >= full) { t0 = data.T0; t1 = data.T1; }
   // At the full range the zoom clears, unless the chart rests on a narrower
   // home view: then the full range is kept as a zoom of its own.
   if (next >= full && !data.home) delete window._miniZooms[data.cfgId];
@@ -713,10 +715,12 @@ document.addEventListener('mousemove', (e) => {
   if (pan) {
     const data = window._miniCharts[pan.cfgId];
     if (!data) return;
+    // The window moves by its right end, so a pan that reaches the latest date
+    // lands on it exactly (t0 + span can round a hair short of it).
     const span = pan.t1 - pan.t0;
-    const t0 = Math.max(data.T0, Math.min(pan.t0 - (e.clientX - pan.clientX) / pan.pxPerMs, data.T1 - span));
-    if (t0 === data.t0) return;
-    window._miniZooms[data.cfgId] = { t0, t1: t0 + span };
+    const t1 = Math.min(data.T1, Math.max(data.T0 + span, pan.t1 - (e.clientX - pan.clientX) / pan.pxPerMs));
+    if (t1 === data.t1) return;
+    window._miniZooms[data.cfgId] = { t0: t1 - span, t1 };
     _miniChartRerender(data.cfgId);
     return;
   }

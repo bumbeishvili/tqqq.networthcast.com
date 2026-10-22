@@ -42,8 +42,8 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
 - The top chart plots your sheet's portfolio value, what you had put in by
   each date, and the profit between the two, on a linear scale. The axis
   reaches below zero when the profit does.
-- The percent after the portfolio's value is its change over the latest
-  session. Your sheet holds no positions, so the figure is the strategy's
+- The percent beside the portfolio's value, above its name, is its change
+  over the latest session. Your sheet holds no positions, so the figure is the strategy's
   move over that session. It assumes your account holds what the strategy
   holds.
 - The signal chart covers the whole price history in the site's data, back

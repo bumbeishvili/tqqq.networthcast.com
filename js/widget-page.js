@@ -35,6 +35,13 @@
   // The signal chart's line names drop a trailing percent setting:
   // "Sell line (-3%)" reads "Sell line" in the widget.
   const PERCENT_SETTING = /\s*\([^)]*%\)\s*$/;
+  // Shorter names for the narrow label column, which stacks a name's words:
+  // "Overextended" reads "Over" over "extend" (the user's wording).
+  const DISPLAY_NAMES = { Overextended: 'Over extend' };
+  const displayName = label => {
+    const name = String(label).replace(PERCENT_SETTING, '');
+    return DISPLAY_NAMES[name] || name;
+  };
   // The top chart wears the main chart's "My portfolio" colour.
   const PORTFOLIO = { id: 'widget-portfolio', color: TX_ACTUAL_COLOR };
   const $ = id => document.getElementById(id);
@@ -273,7 +280,7 @@
       if ([mine, history].some(run => !Array.isArray(run.log) || run.log.length < 2)) throw new Error('The strategy returned no rows.');
       log = mine.log;
       signalLog = history.log;
-      lines = Array.isArray(history.lines) ? history.lines.map(ln => ({ ...ln, label: String(ln.label).replace(PERCENT_SETTING, '') })) : [];
+      lines = Array.isArray(history.lines) ? history.lines.map(ln => ({ ...ln, label: displayName(ln.label) })) : [];
       portfolio = portfolioSeries(money, txRows || []);
       redraw();
       showError('');
