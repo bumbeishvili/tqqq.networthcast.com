@@ -16,8 +16,12 @@ function parseDataFile(text) {
 // string (the old `?v=baked`) just pinned every browser to a stale copy.
 // `cache: 'no-cache'` revalidates on each load: a few bytes for a 304 when the
 // file is unchanged, fresh bytes the moment the cron publishes new data.
+// Where the data files live: beside the page, unless the page sets
+// window.TQQQ_DATA_BASE first (the desktop widget's local copy of widget.html
+// reads the live site's files).
+const DATA_BASE = (typeof window !== 'undefined' && window.TQQQ_DATA_BASE) || '';
 async function loadSeries(file) {
-  const resp = await fetch('data/' + file, { cache: 'no-cache' });
+  const resp = await fetch(DATA_BASE + 'data/' + file, { cache: 'no-cache' });
   if (!resp.ok) throw new Error('Failed to load ' + file + ' (HTTP ' + resp.status + ')');
   return parseDataFile(await resp.text());
 }

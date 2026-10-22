@@ -72,14 +72,19 @@
   /* ?embed=widget (the desktop widget page, widget.html): the chart alone,
      filling its frame. The filters and the period slider stay wired but
      hidden, so the chart shows every loaded day as it does by default. */
-  .embed body{display:block;min-height:0;background:transparent}
+  .embed body{display:block;min-height:0;background:transparent;overflow:hidden}
   .embed .wrap{max-width:none;padding:0}
   .embed .back-link{display:none}
   /* Laid out off screen rather than display:none, so the hidden histograms
      still measure their real size when they draw. */
   .embed .toolbar{position:absolute;left:-10000px;top:0;width:900px;visibility:hidden}
+  .embed .scale-toggle{display:none}
+  /* The widget's other two charts label at 8-9px; the embedded chart matches. */
+  .embed .axis text,.embed .now-label,.embed .annotation text{font-size:9px}
+  .embed .line-label,.embed .today-label{font-size:9.5px}
   .embed .panel{background:transparent;border:0;box-shadow:none;padding:0}
   .embed #chart{min-height:0}
+  .embed *{font-weight:400 !important}   /* the desktop widget sets no bold anywhere */
   /* Same pill as the main chart's log toggle: dim when off, purple when on. */
   .scale-toggle{position:absolute;left:0;bottom:4px;padding:3px 7px;font:600 10px var(--sans);text-transform:uppercase;letter-spacing:.5px;
     color:var(--muted);background:rgba(219,223,241,.45);border:1px solid var(--border);border-radius:6px;cursor:pointer;user-select:none;opacity:.6;
@@ -172,13 +177,24 @@
 <script>
 const EMBED = new URLSearchParams(location.search).get('embed') === 'widget';
 if (EMBED) document.documentElement.classList.add('embed');
-const DATA_URL = '../data/intraday/tqqq-5m.tsv';
+// Embedded, the widget's settings stand in for the saved ones (similar=1|0,
+// from=YYYY-MM-DD with the end at the latest day, log=1|0, linear unless set)
+// and nothing is saved back, so the widget never changes how this page opens
+// on its own.
+const EMBED_QUERY = new URLSearchParams(location.search);
+const EMBED_SIMILAR = EMBED && EMBED_QUERY.has('similar') ? EMBED_QUERY.get('similar') === '1' : null;
+const EMBED_FROM = EMBED ? EMBED_QUERY.get('from') : null;
+const EMBED_LOG = EMBED ? EMBED_QUERY.get('log') === '1' : null;
+// The desktop widget's local copy of this page reads the live site's files
+// (?data=<site root>); everywhere else the data sits one folder up.
+const DATA_ROOT = EMBED && EMBED_QUERY.get('data') ? EMBED_QUERY.get('data') : '../';
+const DATA_URL = DATA_ROOT + 'data/intraday/tqqq-5m.tsv';
 // Today's session at 1-minute resolution from Yahoo (update_intraday_today.py).
 // The 5-minute history comes from Alpaca, whose free plan holds back the
 // latest 15 minutes; Yahoo serves the current minute, so today is drawn from
 // this file and the history from the other. Absent until the first run of
 // the day's pipeline, and stale (the last session) outside market days.
-const DATA_URL_TODAY = '../data/intraday/tqqq-today-1m.tsv';
+const DATA_URL_TODAY = DATA_ROOT + 'data/intraday/tqqq-today-1m.tsv';
 const TODAY_BAR_MINUTES = 1;
 const SESSION_OPEN_MIN = 9 * 60 + 30;
 const SESSION_CLOSE_MIN = 16 * 60;
@@ -850,6 +866,10 @@ class IntradayOverlayChart {
           .attr('class', 'hover-end');
         endLabel.html(`<tspan x="${chartWidth + 6}" dy="-0.35em">${d3.timeFormat('%b %-d, %Y')(nearest.date)}</tspan>` +
           `<tspan x="${chartWidth + 6}" dy="1.2em" class="dim">${fmtPct(last.pct)}</tspan>`);
+        // Wider than a narrow gutter (the widget's), the label ends at the
+        // svg's right edge instead, over the plot's last few pixels.
+        const endX = Math.min(chartWidth + 6, chartWidth + this.getState().marginRight - 2 - endLabel.node().getBBox().width);
+        endLabel.attr('x', endX).selectAll('tspan').attr('x', endX);
       })
       .on('mouseleave', () => {
         rule.style('display', 'none');
@@ -930,9 +950,11 @@ const fmtIsoDay = d3.timeFormat('%Y-%m-%d');
 // localStorage can be missing or throw (private mode, blocked storage);
 // the slider then just starts at the edges.
 function readSavedPeriod() {
+  if (EMBED && EMBED_FROM) return { start: EMBED_FROM, end: 'edge' };
   try { return JSON.parse(localStorage.getItem(PERIOD_STORAGE_KEY)) || {}; } catch { return {}; }
 }
 function writeSavedPeriod(period) {
+  if (EMBED) return;
   try { localStorage.setItem(PERIOD_STORAGE_KEY, JSON.stringify(period)); } catch { /* storage unavailable */ }
 }
 
@@ -981,12 +1003,15 @@ function setupPeriodSlider(allDays, onChange) {
 const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
 const LOG_SCALE_STORAGE_KEY = 'tqqq-intraday-log-scale';
 function readSavedSwitch(key, fallback = false) {
+  if (key === SIMILAR_STORAGE_KEY && EMBED_SIMILAR !== null) return EMBED_SIMILAR;
+  if (key === LOG_SCALE_STORAGE_KEY && EMBED_LOG !== null) return EMBED_LOG;
   try {
     const saved = localStorage.getItem(key);
     return saved === null ? fallback : saved === '1';
   } catch { return fallback; }
 }
 function writeSavedSwitch(key, on) {
+  if (EMBED) return;
   try { localStorage.setItem(key, on ? '1' : '0'); } catch { /* storage unavailable */ }
 }
 
@@ -1103,8 +1128,12 @@ function setupSimilarFilter(onChange) {
 const chart = new IntradayOverlayChart().container('#chart')
   .minuteOffset(localOffsetFromMarket()).zoneLabel(shortZoneName(LOCAL_TZ));
 // Embedded, the chart is as tall as its frame (the width already follows the
-// container through setDynamicContainer).
+// container through setDynamicContainer), with no row under the axis for the
+// hidden scale button, a label gutter on the right just wide enough for the
+// mean / median names at the embed's 9.5px type, and its plot top level with
+// the signal chart's beside it in the widget.
 if (EMBED) {
+  chart.marginTop(12).marginBottom(20).marginRight(44).marginLeft(44);
   chart.svgHeight(window.innerHeight);
   window.addEventListener('resize', () => { chart.svgHeight(window.innerHeight); if (chart.data()) chart.render(); });
 }

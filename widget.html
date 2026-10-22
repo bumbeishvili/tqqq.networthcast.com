@@ -7,60 +7,64 @@
 <title>TQQQ widget</title>
 <!-- The desktop widget page (js/widget-page.js). Keep the ?v= counter in step
      with index.html: both load the same assets. -->
-<link rel="stylesheet" href="styles.css?v=393">
+<link rel="stylesheet" href="styles.css?v=408">
 <style>
-  html, body { background: transparent; }
+  /* Sized to fit by the widget's frame: never a scrollbar, which a Mac set to
+     always show them draws as a white bar beside the card. */
+  html, body { background: transparent; overflow: hidden; }
+  /* Every text at the regular weight, the charts' labels and tooltips
+     included: the user wants no bold anywhere in the widget. */
+  body.widget-page * { font-weight: 400 !important; }
   body.widget-page { margin: 0; padding: 6px; min-height: 0; }
+  /* Three charts and nothing else, each on its own white tile: your portfolio
+     across the top, TQQQ intraday and the strategy's signal chart side by side
+     below it. The card under the tiles is tinted, so the gaps between them
+     read at a glance. */
   .wp-card {
-    background: var(--surface); color: var(--text);
-    border: 1px solid var(--border); border-radius: 14px;
-    padding: 14px 16px 10px;
-    box-shadow: 0 10px 30px rgba(56, 56, 116, 0.16);
+    --wp-gap: 8px;
+    background: var(--o-mist);
+    border: 1px solid var(--border); border-radius: var(--r-xl);
+    padding: var(--wp-gap);
+    box-shadow: 0 1px 2px rgba(56, 56, 116, 0.06), 0 12px 32px rgba(56, 56, 116, 0.14);
   }
-  .wp-head { margin-bottom: 6px; }
-  .wp-title { font-weight: 600; font-size: 13px; }
-  .wp-stamp { font-size: 10.5px; color: var(--text-muted); margin-top: 1px; }
-  .wp-note { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-  /* Intraday beside the signal chart; one column below 700px. */
-  .wp-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 12px; }
-  @media (max-width: 700px) { .wp-grid { grid-template-columns: minmax(0, 1fr); } }
-  .wp-intraday { display: block; width: 100%; height: 300px; border: 0; margin-top: 6px; background: transparent; }
-  /* The panel's line chips, wrapping several to a row in the narrower column. */
-  #wp-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
-  #wp-chips .legend-chip { flex: 1 1 170px; padding: 3px 8px; }
-  .wp-error { margin-top: 8px; font-size: 12px; color: var(--red-text); }
+  /* Corners concentric with the card's. */
+  .wp-tile {
+    background: var(--surface);
+    border: 1px solid var(--border); border-radius: calc(var(--r-xl) - var(--wp-gap));
+    padding: 8px 10px 6px;
+    box-shadow: var(--shadow-sm);
+  }
+  /* The two bottom tiles stretch to one height, so their edges line up. */
+  .wp-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--wp-gap); margin-top: var(--wp-gap); }
+  .wp-intraday { display: block; width: 100%; border: 0; background: transparent; }
+  .wp-card .custom-lines-chart { margin-top: 0; overflow: visible; }
+  .wp-note { padding: 18px 2px; font-size: 12px; color: var(--text-muted); }
+  .wp-error { margin-top: 6px; font-size: 12px; color: var(--red-text); }
 </style>
 </head>
 <body class="widget-page">
 <main class="wp-card" id="wp-card">
-  <div class="wp-head">
-    <div class="wp-title" id="wp-title">TQQQ</div>
-    <div class="wp-stamp" id="wp-stamp"></div>
-  </div>
-  <div class="strategy-panel-section-label">My portfolio</div>
-  <div id="wp-portfolio"><div class="wp-note">Loading…</div></div>
-  <div class="wp-grid">
-    <section>
-      <div class="strategy-panel-section-label">TQQQ intraday</div>
-      <iframe class="wp-intraday" id="wp-intraday" src="experiments/tqqq-intraday.html?embed=widget" title="TQQQ intraday"></iframe>
-    </section>
-    <section>
-      <div class="strategy-panel-section-label">Signal chart</div>
-      <div class="legend-chip-group" id="wp-chips"></div>
-      <div id="wp-signal"></div>
-    </section>
+  <section class="wp-tile"><div id="wp-portfolio"></div></section>
+  <div class="wp-bottom">
+    <section class="wp-tile"><iframe class="wp-intraday" id="wp-intraday" title="TQQQ intraday"></iframe></section>
+    <section class="wp-tile"><div id="wp-signal"></div></section>
   </div>
   <div class="wp-error" id="wp-error" hidden></div>
 </main>
-<script src="js/data.js?v=393"></script>
-<script src="js/utils.js?v=393"></script>
-<script src="js/simulate.js?v=393"></script>
-<script src="js/chart.js?v=393"></script>
-<script src="js/transactions.js?v=393"></script>
-<script src="js/signal-chart.js?v=393"></script>
-<script src="js/saved-configs.js?v=393"></script>
-<script src="js/strategy-library-code.js?v=393"></script>
-<script src="js/strategy-library.js?v=393"></script>
-<script src="js/widget-page.js?v=393"></script>
+<script>
+  // A local copy of this page (the desktop widget's) reads the live site's
+  // data files: ?data=<site root>.
+  window.TQQQ_DATA_BASE = new URLSearchParams(location.search).get('data') || '';
+</script>
+<script src="js/data.js?v=408"></script>
+<script src="js/utils.js?v=408"></script>
+<script src="js/simulate.js?v=408"></script>
+<script src="js/chart.js?v=408"></script>
+<script src="js/transactions.js?v=408"></script>
+<script src="js/signal-chart.js?v=408"></script>
+<script src="js/saved-configs.js?v=408"></script>
+<script src="js/strategy-library-code.js?v=408"></script>
+<script src="js/strategy-library.js?v=408"></script>
+<script src="js/widget-page.js?v=408"></script>
 </body>
 </html>

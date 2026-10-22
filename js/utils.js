@@ -182,6 +182,15 @@ function computeDayChange(todayVal, ydayVal) {
   if (typeof ydayVal !== 'number' || !isFinite(ydayVal) || ydayVal <= 0) return null;
   return { pct: (todayVal - ydayVal) / ydayVal * 100, abs: todayVal - ydayVal };
 }
+// The day-change badge's figures: the percent alone, "+1.2%" (the desktop
+// widget, after its portfolio value), or with the dollars, "+1.2% · +$1.23K"
+// (js/chart.js's end labels, in parentheses).
+function fmtDayChangePct(delta) {
+  return `${delta.pct >= 0 ? '+' : ''}${delta.pct.toFixed(1)}%`;
+}
+function fmtDayChange(delta) {
+  return `${fmtDayChangePct(delta)} · ${delta.pct >= 0 ? '+' : ''}${fmtFull(delta.abs)}`;
+}
 
 // Max drawdown of a REAL account's value readings, adjusted for external
 // flows (deposits/withdrawals) — a naive peak-to-trough on raw balances

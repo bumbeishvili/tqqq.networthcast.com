@@ -22,6 +22,16 @@ chmod +x "$DEST/run.sh"
 # the space in "Application Support".
 sed "s|'__RUN_SH__'|'\"$DEST/run.sh\"'|" "$REPO/widget/tqqq.widget/index.jsx" > "$DEST/index.jsx"
 [ -f "$DEST/config.json" ] || cp "$REPO/widget/config.example.json" "$DEST/config.json"
+# A copy of the site's widget page from this checkout, served by Übersicht
+# beside the widget, so a change shows on the desktop with the next install
+# instead of waiting for a deploy. It reads the live site's data files. It sits
+# under lib/: Übersicht loads every other .js file in its folder as a widget.
+SITE="$DEST/lib/site"
+if [ -d "$DEST/site" ] && [ ! -d "$SITE" ]; then mkdir -p "$DEST/lib" && mv "$DEST/site" "$SITE"; fi   # an install from before lib/
+mkdir -p "$SITE/js" "$SITE/experiments"
+cp "$REPO/widget.html" "$REPO/styles.css" "$SITE/"
+cp "$REPO"/js/*.js "$SITE/js/"
+cp "$REPO/experiments/tqqq-intraday.html" "$SITE/experiments/"
 
 echo "Installed: $DEST"
 echo "Your share link goes in: $DEST/config.json"

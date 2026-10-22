@@ -1,5 +1,7 @@
 {
+  "sheetUrl": "",
+  "sheetColumns": { "date": "date", "amount": "transaction", "value": "Total" },
   "shareLink": "",
-  "pageUrl": "https://tqqq.networthcast.com/widget.html",
+  "intraday": { "similarDaysOnly": true, "from": "2025-11-05", "log": false },
   "width": 900
 }

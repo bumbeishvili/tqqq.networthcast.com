@@ -2558,10 +2558,7 @@ function render() {
     if (cy && !cy.error) return computeDayChange(todayVal, cy.value);
     return null;
   };
-  const deltaLabelText = (delta) => {
-    const sign = delta.pct >= 0 ? '+' : '';
-    return `(${sign}${delta.pct.toFixed(1)}% · ${sign}${fmtFull(delta.abs)})`;
-  };
+  const deltaLabelText = (delta) => `(${fmtDayChange(delta)})`;
   const endLabelPlugin = {
     id: 'endLabels',
     // Size the reserved right margin to whatever the widest current label
