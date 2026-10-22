@@ -11,8 +11,8 @@ export const refreshFrequency = 60 * 1000;
 const DEFAULTS = { pageUrl: 'https://tqqq.networthcast.com/widget.html', width: 900 };
 
 export const className = `
-  top: 30px;
-  right: 20px;
+  bottom: 20px;
+  left: 20px;
   .message { width: 320px; padding: 12px 14px; border-radius: 12px; background: rgba(255, 255, 255, 0.92); color: #383874; font: 12px -apple-system, sans-serif; }
 `;
 
