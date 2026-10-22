@@ -69,6 +69,17 @@
   .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
   #chart{position:relative;min-height:520px}
+  /* ?embed=widget (the desktop widget page, widget.html): the chart alone,
+     filling its frame. The filters and the period slider stay wired but
+     hidden, so the chart shows every loaded day as it does by default. */
+  .embed body{display:block;min-height:0;background:transparent}
+  .embed .wrap{max-width:none;padding:0}
+  .embed .back-link{display:none}
+  /* Laid out off screen rather than display:none, so the hidden histograms
+     still measure their real size when they draw. */
+  .embed .toolbar{position:absolute;left:-10000px;top:0;width:900px;visibility:hidden}
+  .embed .panel{background:transparent;border:0;box-shadow:none;padding:0}
+  .embed #chart{min-height:0}
   /* Same pill as the main chart's log toggle: dim when off, purple when on. */
   .scale-toggle{position:absolute;left:0;bottom:4px;padding:3px 7px;font:600 10px var(--sans);text-transform:uppercase;letter-spacing:.5px;
     color:var(--muted);background:rgba(219,223,241,.45);border:1px solid var(--border);border-radius:6px;cursor:pointer;user-select:none;opacity:.6;
@@ -159,6 +170,8 @@
 </div>
 
 <script>
+const EMBED = new URLSearchParams(location.search).get('embed') === 'widget';
+if (EMBED) document.documentElement.classList.add('embed');
 const DATA_URL = '../data/intraday/tqqq-5m.tsv';
 // Today's session at 1-minute resolution from Yahoo (update_intraday_today.py).
 // The 5-minute history comes from Alpaca, whose free plan holds back the
@@ -170,6 +183,10 @@ const TODAY_BAR_MINUTES = 1;
 const SESSION_OPEN_MIN = 9 * 60 + 30;
 const SESSION_CLOSE_MIN = 16 * 60;
 const BAR_MINUTES = 5;
+// Closest two axis labels may sit, in px; only a short or narrow chart (the
+// desktop widget's frame) ever drops labels for it.
+const MIN_TICK_GAP_PX = 13;
+const MIN_HOUR_GAP_PX = 40;
 // Day lines are faint so 750 of them read as a fan; with few days shown the
 // same opacity vanishes, so it scales up: 5% for hundreds of days, 35% for
 // a dozen. The count is the days that pass the period and histogram filters,
@@ -559,9 +576,15 @@ class IntradayOverlayChart {
     const y = yScaleType === 'symlog'
       ? d3.scaleSymlog().constant(symlogLinearPct).domain([-limit, limit]).range([chartHeight, 0])
       : d3.scaleLinear().domain([Math.min(0, lo), Math.max(0, hi)]).nice(8).range([chartHeight, 0]);
-    const yTicks = yScaleType === 'symlog'
+    const ladder = yScaleType === 'symlog'
       ? [0].concat(NICE_PCT_LADDER.filter(t => t >= symlogLinearPct && t <= limit).flatMap(t => [t, -t]))
       : y.ticks(8);
+    // On a short chart (the desktop widget's frame) neighbouring labels would
+    // overlap; walking out from 0, a tick too close to one already kept is dropped.
+    const yTicks = [];
+    for (const t of [...ladder].sort((a, b) => Math.abs(a) - Math.abs(b))) {
+      if (yTicks.every(k => Math.abs(y(k) - y(t)) >= MIN_TICK_GAP_PX)) yTicks.push(t);
+    }
     const line = d3.line().x(p => x(p.minute)).y(p => y(p.pct));
     this.setState({ x, y, yTicks, line });
   }
@@ -569,8 +592,11 @@ class IntradayOverlayChart {
   drawAxes() {
     const { chart, x, y, yTicks, chartWidth, chartHeight, minuteOffset } = this.getState();
     const isWholeHour = m => ((m + minuteOffset) % 60 + 60) % 60 === 0;
-    const hourTicks = [SESSION_OPEN_MIN, SESSION_CLOSE_MIN]
-      .concat(d3.range(SESSION_OPEN_MIN + 1, SESSION_CLOSE_MIN).filter(isWholeHour));
+    const hourTicks = [SESSION_OPEN_MIN];
+    for (const m of d3.range(SESSION_OPEN_MIN + 1, SESSION_CLOSE_MIN).filter(isWholeHour).concat(SESSION_CLOSE_MIN)) {
+      if (x(m) - x(hourTicks[hourTicks.length - 1]) >= MIN_HOUR_GAP_PX) hourTicks.push(m);
+      else if (m === SESSION_CLOSE_MIN) hourTicks[hourTicks.length - 1] = m;   // the close outranks the hour before it
+    }
     const fmtTick = m => fmtClock(m + minuteOffset);
 
     chart._add('g.grid')
@@ -1076,6 +1102,12 @@ function setupSimilarFilter(onChange) {
 // were, with edge-pinned thumbs following the new data.
 const chart = new IntradayOverlayChart().container('#chart')
   .minuteOffset(localOffsetFromMarket()).zoneLabel(shortZoneName(LOCAL_TZ));
+// Embedded, the chart is as tall as its frame (the width already follows the
+// container through setDynamicContainer).
+if (EMBED) {
+  chart.svgHeight(window.innerHeight);
+  window.addEventListener('resize', () => { chart.svgHeight(window.innerHeight); if (chart.data()) chart.render(); });
+}
 
 // Log / linear toggle for the y-axis. Log (symmetric, linear inside ±0.1%)
 // is the default; the choice is remembered.
