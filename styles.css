@@ -3103,6 +3103,11 @@
   /* Drag-range readout: colored % change + exact from → to values. */
   #mini-chart-tip .mct-pos { color: var(--green, #00b929); }
   #mini-chart-tip .mct-neg { color: var(--red-text, #dc2626); }
+  /* The strategy run over a dragged range, under the lines' changes. */
+  #mini-chart-tip .mct-sim { margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(134, 118, 255, 0.3); }
+  #mini-chart-tip .mct-sim-row { display: flex; gap: 6px; line-height: 1.6; }
+  #mini-chart-tip .mct-sim-row b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: auto; padding-left: 12px; }
+  #mini-chart-tip .mct-sim-wait { font-size: 10.5px; color: var(--text-muted); }
   #mini-chart-tip .mct-range {
     font-family: 'JetBrains Mono', monospace;
     font-size: 10px;

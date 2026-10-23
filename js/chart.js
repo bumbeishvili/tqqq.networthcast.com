@@ -2215,7 +2215,9 @@ function render() {
   // needed fixing for custom strategies to see the same entry date the main
   // chart already does.
   const cfgCtx = {
-    initial, monthly, annualRaise, simEntryIdx, exitIdx, labels, years, totalContributed,
+    // rate: the Invested Compounded baseline, for re-deriving a transaction
+    // history at another entry date (the panel chart's range runs).
+    initial, monthly, annualRaise, rate, simEntryIdx, exitIdx, labels, years, totalContributed,
     ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
     contribSchedule,
     // The chart's shared x-axis grain (js/chart.js's chartDisplayPeriod) — a

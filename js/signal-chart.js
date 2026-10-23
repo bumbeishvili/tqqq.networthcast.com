@@ -56,10 +56,10 @@ const MINI_TEXT_REF_W = 400;
 // before the next trade starts a new one (on a long view, trades weeks apart
 // would otherwise chain into one band covering months), how far outside a
 // band the hover still counts as on it, how many trades a hover lists, and
-// the widest window (eight months) that still shows a mark at each trade's
+// the widest window (two years) that still shows a mark at each trade's
 // crossing — on a longer view the bands say enough and the marks would only
 // speckle the lines.
-const MINI_EVENT = { halfW: 1.2, mergeX: 4, maxSpanX: 10, hoverPad: 1.5, maxListed: 8, marksWithinMs: 8 * 30.4375 * 86400000 };
+const MINI_EVENT = { halfW: 1.2, mergeX: 4, maxSpanX: 10, hoverPad: 1.5, maxListed: 8, marksWithinMs: 2 * 365.25 * 86400000 };
 // Marks at the trade crossings: the main chart's symbol and colour per action
 // (CUSTOM_EVENT_STYLE: buy circle, sell hexagon, switch diamond) inside a
 // light ring per asset — the asset sold on a sell, the one bought otherwise —
@@ -506,6 +506,8 @@ function _miniChartClearHover() {
   const tip = document.getElementById('mini-chart-tip');
   if (tip) tip.setAttribute('hidden', '');
   window._miniHoverActive = false;
+  window._miniPinned = null;
+  window._miniRangeShown = null;
 }
 // Nearest point to time t (pts are in date order — binary search).
 function _miniNearestPt(pts, t) {
@@ -578,6 +580,66 @@ function _miniHoverGroup(svg) {
     svg.appendChild(g);
   }
   return g;
+}
+// --- the strategy over a dragged range ---------------------------------------
+// While a range is dragged or pinned, the tooltip also shows the strategy run
+// from the range's first day to its last, from the host's run(cfgId, from, to)
+// (js/saved-configs.js's strategy panel; the widget registers none). One run
+// at a time: while one is out the newest range waits and the ones dragged
+// past in between are skipped, so a fast drag never queues a backlog. Results
+// live for one drag, so a change of settings between drags is never answered
+// from an older run.
+let _miniRangeSimHost = null;
+function setMiniRangeSim(run) { _miniRangeSimHost = run; }
+let _miniRangeSims = new Map(), _miniRangeSimBusy = false, _miniRangeSimWanted = null;
+function _miniRangeSimKey(cfgId, from, to) { return `${cfgId}|${from}|${to}`; }
+// The run for a range: its result, null when it failed, undefined while running.
+function _miniRangeSimFor(cfgId, from, to) {
+  const key = _miniRangeSimKey(cfgId, from, to);
+  if (!_miniRangeSims.has(key)) { _miniRangeSimWanted = { key, cfgId, from, to }; _miniRangeSimPump(); }
+  return _miniRangeSims.get(key);
+}
+function _miniRangeSimPump() {
+  if (_miniRangeSimBusy || !_miniRangeSimWanted) return;
+  const job = _miniRangeSimWanted, cache = _miniRangeSims;
+  _miniRangeSimWanted = null;
+  if (cache.has(job.key)) { _miniRangeSimPump(); return; }
+  _miniRangeSimBusy = true;
+  // Through a promise, so a host that throws fails this run instead of
+  // leaving the queue busy for good.
+  Promise.resolve().then(() => _miniRangeSimHost(job.cfgId, job.from, job.to))
+    .then(result => cache.set(job.key, result), () => cache.set(job.key, null))
+    .finally(() => {
+      _miniRangeSimBusy = false;
+      if (cache === _miniRangeSims) _miniRangeSimShow(job.key);
+      _miniRangeSimPump();
+    });
+}
+// A finished run fills its row block in the tooltip, if that range is still shown.
+function _miniRangeSimShow(key) {
+  const shown = window._miniRangeShown, tip = document.getElementById('mini-chart-tip');
+  const slot = tip && shown && shown.key === key ? tip.querySelector('.mct-sim') : null;
+  if (!slot) return;
+  slot.outerHTML = _miniRangeSimHtml(_miniRangeSims.get(key));
+  _miniPlaceTip(tip, shown.at);
+}
+// The run's rows, in the main chart's terms: what the portfolio grew to, what
+// went in, the profit, then the strategy's CAGR and deepest drawdown.
+function _miniRangeSimHtml(sim) {
+  const head = '<div class="mct-ev-head">Strategy over this range</div>';
+  if (sim === undefined) return `<div class="mct-sim">${head}<div class="mct-sim-wait">Running…</div></div>`;
+  if (!sim) return `<div class="mct-sim">${head}<div class="mct-sim-wait">The strategy did not run for this range.</div></div>`;
+  const signed = (v, txt) => `<b class="${v >= 0 ? 'mct-pos' : 'mct-neg'}">${v >= 0 ? '+' : '−'}${txt}</b>`;
+  const row = (k, v) => `<div class="mct-sim-row"><span>${k}</span>${v}</div>`;
+  const rows = [row('Portfolio', `<b>${fmtFull(sim.value)}</b>`)];
+  if (sim.invested != null) {
+    const profit = sim.value - sim.invested;
+    rows.push(row('Invested', `<b>${fmtFull(sim.invested)}</b>`));
+    rows.push(row('Profit', signed(profit, fmtFull(Math.abs(profit)) + (sim.invested > 0 ? ` · ${Math.abs(profit / sim.invested * 100).toFixed(1)}%` : ''))));
+  }
+  rows.push(row('CAGR', signed(sim.cagr, `${Math.abs(sim.cagr).toFixed(1)}%`)));
+  rows.push(row('Max drawdown', `<b class="mct-neg">${sim.maxDD > 0 ? '−' : ''}${sim.maxDD.toFixed(1)}%</b>`));
+  return `<div class="mct-sim">${head}${rows.join('')}</div>`;
 }
 function _miniPlaceTip(tip, e) {
   tip.removeAttribute('hidden');
@@ -684,6 +746,10 @@ document.addEventListener('click', (e) => {
 // with the exact from → to values. Auto-clears on release. The range drag
 // starts on the plot only: the strip above it belongs to the trade bands.
 document.addEventListener('mousedown', (e) => {
+  // Any press dismisses a pinned range, as on the main chart; a press on a
+  // chart then starts its own drag. Range runs are kept for one drag only.
+  if (window._miniPinned) _miniChartClearHover();
+  _miniRangeSims = new Map();
   const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
   const data = _miniDataOf(svg);
   if (!svg || !data || !data.series.length) return;
@@ -700,16 +766,28 @@ document.addEventListener('mousedown', (e) => {
   window._miniDragCfg = data.cfgId;   // the range belongs to this chart
   e.preventDefault(); // no text selection while dragging
 });
-document.addEventListener('mouseup', () => {
+document.addEventListener('mouseup', (e) => {
   if (window._miniPan) {
     window._miniPan = null;
     document.body.classList.remove('mini-panning');
   }
   if (!window._miniDragAnchor) return;
+  // Shift at release keeps the range and its readout, the main chart's pin,
+  // until Escape or the next press.
+  const shown = window._miniRangeShown;
+  const pin = e.shiftKey && shown && shown.cfgId === window._miniDragCfg;
   window._miniDragAnchor = null;
   window._miniDragCfg = null;
+  if (pin) { window._miniPinned = shown.cfgId; return; }
   _miniChartClearHover();
 });
+// Escape dismisses a pinned range before the page's own Escape handlers see it
+// (one closes the strategy panel this chart sits in); the next Escape does that.
+window.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !window._miniPinned) return;
+  _miniChartClearHover();
+  e.stopPropagation();
+}, true);
 document.addEventListener('mousemove', (e) => {
   const pan = window._miniPan;
   if (pan) {
@@ -724,6 +802,8 @@ document.addEventListener('mousemove', (e) => {
     _miniChartRerender(data.cfgId);
     return;
   }
+  // A pinned range holds the tooltip until it is dismissed: no hover meanwhile.
+  if (window._miniPinned) return;
   const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
   if (!svg) { if (window._miniHoverActive && !window._miniDragAnchor) _miniChartClearHover(); return; }
   const data = _miniDataOf(svg);
@@ -734,6 +814,7 @@ document.addEventListener('mousemove', (e) => {
   const g = _miniHoverGroup(svg);
   const tip = _miniChartTipEl();
   const drag = window._miniDragAnchor && window._miniDragCfg === data.cfgId ? window._miniDragAnchor : null;
+  window._miniRangeShown = null;   // set again below while the readout is a range
 
   // The strip above the plot is the trade layer: over a band it lists that
   // band's trades and nothing else; off a band it shows nothing. The value
@@ -785,13 +866,16 @@ document.addEventListener('mousemove', (e) => {
               <text x="${xM.toFixed(1)}" y="${m.y.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${fs.toFixed(2)}" font-weight="600"><tspan fill="rgba(56,56,116,0.85)">${_escHtml(m.label)} </tspan><tspan fill="${col}" font-weight="700">${pctTxt}</tspan></text>`;
           }).join('');
         })();
+    const simKey = _miniRangeSimHost ? _miniRangeSimKey(data.cfgId, lo.d, hi.d) : null;
     tip.innerHTML = `<div class="mct-date">${fmtLogDate(lo.d)} – ${fmtLogDate(hi.d)}</div>`
       + spans.map(s => {
           const pct = s.p0.v > 0 ? (s.p1.v / s.p0.v - 1) * 100 : 0;
           const cls = pct >= 0 ? 'mct-pos' : 'mct-neg';
           return `<div class="mct-row"><span class="mct-dot" style="background:${s.color}"></span>${_escHtml(s.label)}<b class="${cls}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</b><span class="mct-range">${_miniFmtExact(s.p0.v)} → ${_miniFmtExact(s.p1.v)}</span></div>`;
-        }).join('');
+        }).join('')
+      + (simKey ? _miniRangeSimHtml(_miniRangeSimFor(data.cfgId, lo.d, hi.d)) : '');
     _miniPlaceTip(tip, e);
+    window._miniRangeShown = { cfgId: data.cfgId, key: simKey, at: { clientX: e.clientX, clientY: e.clientY } };
     window._miniHoverActive = true;
     return;
   }

@@ -21,6 +21,9 @@ const DEFAULTS = {
   // this file (Übersicht serves it), reading the live site's data files.
   pageUrl: 'tqqq.widget/lib/site/widget.html',
   dataUrl: 'https://tqqq.networthcast.com/',
+  // Fill the whole screen; false gives a `width`-wide widget in the corner
+  // set by className, as tall as the page.
+  fillScreen: true,
   width: 900,
   // The intraday chart: similar days only, any open and close, from this day
   // to the latest, on a linear scale.
@@ -73,8 +76,12 @@ export const render = ({ output, error, height, attempt }) => {
   }
   const intraday = { ...DEFAULTS.intraday, ...(config.intraday || {}) };
   const view = new URLSearchParams({ similar: intraday.similarDaysOnly ? '1' : '0', log: intraday.log ? '1' : '0' });
+  if (config.fillScreen) view.set('fill', '1');
   if (intraday.from) view.set('from', intraday.from);
   hash = hash ? hash + '&' + view.toString() : '#' + view.toString();
   const src = config.pageUrl + search + hash;
-  return <iframe src={src} title="TQQQ" style={{ display: 'block', width: config.width + 'px', height: height + 'px', border: 0, background: 'transparent' }} />;
+  const size = config.fillScreen
+    ? { position: 'fixed', left: 0, top: 0, width: '100vw', height: '100vh' }
+    : { width: config.width + 'px', height: height + 'px' };
+  return <iframe src={src} title="TQQQ" style={{ display: 'block', border: 0, background: 'transparent', ...size }} />;
 };

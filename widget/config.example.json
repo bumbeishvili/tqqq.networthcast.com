@@ -3,5 +3,6 @@
   "sheetColumns": { "date": "date", "amount": "transaction", "value": "Total" },
   "shareLink": "",
   "intraday": { "similarDaysOnly": true, "from": "2025-11-05", "log": false },
+  "fillScreen": true,
   "width": 900
 }

@@ -51,6 +51,11 @@
   // A share link's payloads: the fragment first, then the query, as js/init.js reads them.
   const fragment = new URLSearchParams(location.hash.replace(/^#/, ''));
   const query = new URLSearchParams(location.search);
+  // Filling the screen (the widget's fillScreen, fill=1): the card takes the
+  // whole frame, its two rows split the height in the fixed layout's
+  // proportions, and each chart is as tall as its tile.
+  const FILL = fragment.get('fill') === '1';
+  const chartPx = (host, fixedPx) => (FILL ? host.clientHeight : fixedPx);
   const param = k => (fragment.has(k) ? fragment.get(k) : query.get(k));
   async function payload(packedKey, plainKey) {
     const packed = param(packedKey), plain = param(plainKey);
@@ -183,14 +188,30 @@
     const width = host.clientWidth;
     return width && chartLines.length ? buildCustomLinesChartHtml(chartCfg, chartLines, rows, width, { aspect: heightPx / width, textWidth: $('wp-signal').clientWidth || width, compact: true, ...view }) : '';
   }
+  // The intraday page draws at its own type size and is scaled up like the
+  // signal chart's text (the square root of the chart's width over
+  // MINI_TEXT_REF_W, js/signal-chart.js), so on a wide screen the two read at
+  // one size. Its frame is drawn at the box's size over that scale and
+  // transformed up to fill the box.
+  function intradayScale() {
+    return Math.sqrt(Math.max(1, $('wp-signal').clientWidth / MINI_TEXT_REF_W));
+  }
+  function sizeIntraday(visualPx) {
+    const s = intradayScale(), box = $('wp-intraday-box'), frame = $('wp-intraday');
+    box.style.height = Math.round(visualPx) + 'px';
+    frame.style.width = (box.clientWidth / s) + 'px';
+    frame.style.height = (visualPx / s) + 'px';
+    frame.style.transform = `scale(${s})`;
+  }
   // The intraday frame ends where the signal chart's plot ends plus the room
-  // the intraday page keeps under its own plot, so the two plots end level.
+  // the intraday page keeps under its own plot (scaled with it), so the two
+  // plots end level.
   function alignIntraday() {
     const svg = $('wp-signal').querySelector('.custom-lines-chart');
     const d = svg && window._miniCharts[svg.getAttribute('data-mini-id')];
     if (!d) return;
     const scale = svg.getBoundingClientRect().height / d.H;
-    $('wp-intraday').style.height = Math.round((d.H - d.padB) * scale + INTRADAY_AXIS_PX) + 'px';
+    sizeIntraday((d.H - d.padB) * scale + INTRADAY_AXIS_PX * intradayScale());
   }
   // Swap in just the svg, as the strategy panel does, so the page never jumps.
   function place(host, html) {
@@ -203,13 +224,13 @@
   // The charts' host hook (js/signal-chart.js): redraw one chart by id, or both.
   function redraw(id) {
     if (!id || id === PORTFOLIO.id) {
-      place($('wp-portfolio'), portfolio.lines.length ? chartHtml(PORTFOLIO, portfolio.lines, portfolio.rows, $('wp-portfolio'), PORTFOLIO_PX, { scale: 'linear' })
+      place($('wp-portfolio'), portfolio.lines.length ? chartHtml(PORTFOLIO, portfolio.lines, portfolio.rows, $('wp-portfolio'), chartPx($('wp-portfolio'), PORTFOLIO_PX), { scale: 'linear' })
         : '<div class="wp-note">Add your sheet to the widget’s config.json to see your portfolio here.</div>');
     }
     // The signal chart draws once its run is in; a resize can come first.
     if (cfg && signalLog.length && (!id || id === cfg.id)) {
       const home = { t0: Date.parse(log[0].date), t1: Date.parse(signalLog[signalLog.length - 1].date) };
-      place($('wp-signal'), chartHtml(cfg, lines, signalLog, $('wp-signal'), BOTTOM_PX, { home }));
+      place($('wp-signal'), chartHtml(cfg, lines, signalLog, $('wp-signal'), chartPx($('wp-signal'), BOTTOM_PX), { home }));
       alignIntraday();
     }
   }
@@ -239,17 +260,27 @@
   function relayPointerMoves(win, frameEl) {
     const View = frameEl.ownerDocument.defaultView;
     win.addEventListener('mousemove', e => {
+      // A scaled frame (the intraday one) maps its pixels to the page's by its scale.
       const box = frameEl.getBoundingClientRect();
+      const sx = frameEl.offsetWidth ? box.width / frameEl.offsetWidth : 1, sy = frameEl.offsetHeight ? box.height / frameEl.offsetHeight : 1;
       frameEl.dispatchEvent(new View.MouseEvent('mousemove', {
         bubbles: true, view: View,
-        clientX: box.left + frameEl.clientLeft + e.clientX, clientY: box.top + frameEl.clientTop + e.clientY,
+        clientX: box.left + (frameEl.clientLeft + e.clientX) * sx, clientY: box.top + (frameEl.clientTop + e.clientY) * sy,
         screenX: e.screenX, screenY: e.screenY, buttons: e.buttons,
         altKey: e.altKey, ctrlKey: e.ctrlKey, metaKey: e.metaKey, shiftKey: e.shiftKey,
       }));
     });
   }
 
+  if (FILL) {
+    document.documentElement.classList.add('wp-fill');
+    $('wp-top').style.flexGrow = PORTFOLIO_PX;
+    $('wp-bottom').style.flexGrow = BOTTOM_PX;
+  }
   setMiniChartHost(redraw);
+  // The panel's range runs need the main chart's money settings, which this
+  // page has none of: a dragged range here shows the lines' changes only.
+  setMiniRangeSim(null);
   if (_miniChartResizeObs) { _miniChartResizeObs.observe($('wp-portfolio')); _miniChartResizeObs.observe($('wp-signal')); }
   window.addEventListener('resize', reportSize);
   if (window.frameElement) relayPointerMoves(window, window.frameElement);
@@ -258,7 +289,7 @@
   const intraday = new URLSearchParams({ embed: 'widget' });
   for (const key of ['similar', 'from', 'log']) if (fragment.get(key)) intraday.set(key, fragment.get(key));
   if (query.get('data')) intraday.set('data', query.get('data'));
-  $('wp-intraday').style.height = BOTTOM_PX + 'px';
+  sizeIntraday(chartPx($('wp-signal'), BOTTOM_PX));
   $('wp-intraday').addEventListener('load', reportSize);
   $('wp-intraday').addEventListener('load', () => relayPointerMoves($('wp-intraday').contentWindow, $('wp-intraday')));
   $('wp-intraday').src = 'experiments/tqqq-intraday.html?' + intraday.toString();

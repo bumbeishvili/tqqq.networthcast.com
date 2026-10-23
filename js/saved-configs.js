@@ -174,12 +174,66 @@ function customDetailLog(cfg) {
   });
   return null;
 }
-// The rows the signal chart draws: the detail log once it is in, the display
-// log until then (and for good when the detail run failed or came back empty).
-function customSignalChartLog(cfg, displayLog) {
-  const detail = customDetailLog(cfg);
-  return detail && detail.length ? detail : displayLog;
+// The years before the main chart's range, for the panel's signal chart: the
+// same code and settings over the whole history in the data, logged daily,
+// on a plain $10,000 with no contributions (the chart draws the strategy's
+// lines and trades, which follow prices; it never shows this run's money).
+// Cached per signature; its arrival redraws the open panel.
+const CUSTOM_HISTORY_MONEY = 10000;
+window._customHistoryLogs = window._customHistoryLogs || {};   // cfgId → { sig, log | null while running }
+function customHistoryLog(cfg) {
+  const ctx = { initial: CUSTOM_HISTORY_MONEY, monthly: 0, annualRaise: 0, entryDateOverride: daily[0].date, exitDateOverride: daily[daily.length - 1].date, contribSchedule: null };
+  const sig = customSig(cfg, ctx);
+  const have = window._customHistoryLogs[cfg.id];
+  if (have && have.sig === sig) return have.log;
+  window._customHistoryLogs[cfg.id] = { sig, log: null };
+  postCustomJob(cfg, cfg.params || {}, Object.assign({}, computeCustomGlobals(cfg, ctx), { dailyDisplay: true }), (msg, err) => {
+    const slot = window._customHistoryLogs[cfg.id];
+    if (!slot || slot.sig !== sig) return;   // superseded by a newer signature
+    slot.log = (!err && msg && Array.isArray(msg.log)) ? msg.log : [];
+    if (window._openCustomCfgId === cfg.id) _miniChartRerender();
+  });
+  return null;
 }
+// What the signal chart draws: the main run (its detail log once it is in, the
+// display log until then and for good when the detail run failed), after the
+// history run's rows from before the main run's first day, so the chart
+// reaches back to the data's start. It rests on the main run's range (home)
+// and zooms out over the rest.
+function customSignalChartView(cfg, displayLog) {
+  const detail = customDetailLog(cfg);
+  const main = detail && detail.length ? detail : displayLog;
+  if (!main.length) return { log: main, home: null };
+  const home = { t0: Date.parse(main[0].date), t1: Date.parse(main[main.length - 1].date) };
+  const history = customHistoryLog(cfg);
+  const before = history ? history.filter(r => r.date < main[0].date) : [];
+  return { log: before.concat(main), home };
+}
+
+// The strategy over a range dragged on the panel's signal chart (its tooltip,
+// js/signal-chart.js's setMiniRangeSim): the same code and settings, entered
+// on the range's first day and left on its last, on the main chart's money —
+// its starting amount, monthly contribution and yearly raise, or a
+// transaction history re-derived for that entry the way the main chart does.
+// Resolves to the tooltip's figures (nominal dollars), or null when the run
+// fails. Invested is the log's own `invested`; a strategy that does not log
+// it gets no invested or profit rows.
+function runCustomRangeSim(cfgId, from, to) {
+  const cfg = savedConfigs.find(c => c.id === cfgId), base = window._customCtx;
+  if (!cfg || !base) return Promise.resolve(null);
+  let ctx = { ...base, entryDateOverride: from, exitDateOverride: to };
+  const eff = window._txSchedule ? txEffectiveForEntry(window._txSchedule, from, base.rate) : null;
+  if (eff) ctx = { ...ctx, initial: eff.initial, contribSchedule: eff.schedule };
+  return new Promise(resolve => postCustomJob(cfg, cfg.params || {}, computeCustomGlobals(cfg, ctx), (msg, err) => {
+    if (err || !msg || msg.error || !Array.isArray(msg.log) || !msg.log.length) { resolve(null); return; }
+    const last = msg.log[msg.log.length - 1];
+    const invested = typeof last.invested === 'number' && Number.isFinite(last.invested) ? last.invested : null;
+    const years = (Date.parse(to) - Date.parse(from)) / (365.25 * 86400000);
+    const stats = customSeriesResult(msg.log, { ...ctx, labels: [from, to], years, totalContributed: invested }, null);
+    resolve({ value: stats.end, invested, cagr: stats.cagr, maxDD: stats.maxDD });
+  }));
+}
+setMiniRangeSim(runCustomRangeSim);
 
 // The strategy panel as the signal chart's host (js/signal-chart.js): redraw
 // just the chart svg of the open custom panel (nothing else in the panel) from
@@ -194,7 +248,8 @@ function redrawPanelSignalChart() {
   const cfg = savedConfigs.find(c => c.id === id);
   const auxLines = (window._customLines || {})[id] || [];
   if (!cfg || !auxLines.length) return;
-  const html = buildCustomLinesChartHtml(cfg, auxLines, customSignalChartLog(cfg, (window._customLogs || {})[id] || []), body.clientWidth);
+  const view = customSignalChartView(cfg, (window._customLogs || {})[id] || []);
+  const html = buildCustomLinesChartHtml(cfg, auxLines, view.log, body.clientWidth, { home: view.home });
   if (!html) return;
   const tpl = document.createElement('div');
   tpl.innerHTML = html;
@@ -2997,10 +3052,10 @@ function renderCustomPanelBody(cfgId) {
   // code) drawn on their own scale in the panel, with per-line eye chips.
   const auxLines = (window._customLines || {})[cfgId] || null;
   if (auxLines && auxLines.length) {
-    const auxLog = customSignalChartLog(cfg, (window._customLogs || {})[cfgId] || []);
+    const auxView = customSignalChartView(cfg, (window._customLogs || {})[cfgId] || []);
     html += `<div class="strategy-panel-section-label" style="margin-top:14px">Signal chart</div>
       <div class="legend-chip-group">${buildCustomLineChipsHtml(cfg, auxLines)}</div>
-      ${buildCustomLinesChartHtml(cfg, auxLines, auxLog, body.clientWidth)}`;
+      ${buildCustomLinesChartHtml(cfg, auxLines, auxView.log, body.clientWidth, { home: auxView.home })}`;
   }
 
   // Live signal dashboard (whatever the strategy reported in `signals`), then

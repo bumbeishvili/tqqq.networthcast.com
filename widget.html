@@ -7,7 +7,7 @@
 <title>TQQQ widget</title>
 <!-- The desktop widget page (js/widget-page.js). Keep the ?v= counter in step
      with index.html: both load the same assets. -->
-<link rel="stylesheet" href="styles.css?v=412">
+<link rel="stylesheet" href="styles.css?v=417">
 <style>
   /* Sized to fit by the widget's frame: never a scrollbar, which a Mac set to
      always show them draws as a white bar beside the card. */
@@ -36,7 +36,20 @@
   }
   /* The two bottom tiles stretch to one height, so their edges line up. */
   .wp-bottom { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--wp-gap); margin-top: var(--wp-gap); }
-  .wp-intraday { display: block; width: 100%; border: 0; background: transparent; }
+  /* The intraday frame sits in a box of its on-screen size and is drawn at
+     that size over its scale, transformed up (js/widget-page.js). */
+  .wp-intraday-box { position: relative; width: 100%; }
+  .wp-intraday { position: absolute; left: 0; top: 0; display: block; border: 0; background: transparent; transform-origin: 0 0; }
+  /* Filling the screen (the widget's fillScreen): the card takes the whole
+     frame, its two rows split the height (their flex-grow, set from
+     js/widget-page.js) and each chart fills its tile. */
+  html.wp-fill, html.wp-fill body { height: 100%; }
+  html.wp-fill body.widget-page { box-sizing: border-box; }
+  html.wp-fill .wp-card { box-sizing: border-box; height: 100%; display: flex; flex-direction: column; }
+  html.wp-fill #wp-top, html.wp-fill #wp-bottom { flex-basis: 0; min-height: 0; }
+  html.wp-fill #wp-bottom { grid-template-rows: minmax(0, 1fr); }
+  html.wp-fill .wp-tile { display: flex; flex-direction: column; min-height: 0; }
+  html.wp-fill #wp-portfolio, html.wp-fill #wp-signal { flex: 1 1 0; min-height: 0; }
   .wp-card .custom-lines-chart { margin-top: 0; overflow: visible; }
   .wp-note { padding: 18px 2px; font-size: 12px; color: var(--text-muted); }
   .wp-error { margin-top: 6px; font-size: 12px; color: var(--red-text); }
@@ -44,9 +57,9 @@
 </head>
 <body class="widget-page">
 <main class="wp-card" id="wp-card">
-  <section class="wp-tile"><div id="wp-portfolio"></div></section>
-  <div class="wp-bottom">
-    <section class="wp-tile"><iframe class="wp-intraday" id="wp-intraday" title="TQQQ intraday"></iframe></section>
+  <section class="wp-tile" id="wp-top"><div id="wp-portfolio"></div></section>
+  <div class="wp-bottom" id="wp-bottom">
+    <section class="wp-tile"><div class="wp-intraday-box" id="wp-intraday-box"><iframe class="wp-intraday" id="wp-intraday" title="TQQQ intraday"></iframe></div></section>
     <section class="wp-tile"><div id="wp-signal"></div></section>
   </div>
   <div class="wp-error" id="wp-error" hidden></div>
@@ -56,15 +69,15 @@
   // data files: ?data=<site root>.
   window.TQQQ_DATA_BASE = new URLSearchParams(location.search).get('data') || '';
 </script>
-<script src="js/data.js?v=412"></script>
-<script src="js/utils.js?v=412"></script>
-<script src="js/simulate.js?v=412"></script>
-<script src="js/chart.js?v=412"></script>
-<script src="js/transactions.js?v=412"></script>
-<script src="js/signal-chart.js?v=412"></script>
-<script src="js/saved-configs.js?v=412"></script>
-<script src="js/strategy-library-code.js?v=412"></script>
-<script src="js/strategy-library.js?v=412"></script>
-<script src="js/widget-page.js?v=412"></script>
+<script src="js/data.js?v=417"></script>
+<script src="js/utils.js?v=417"></script>
+<script src="js/simulate.js?v=417"></script>
+<script src="js/chart.js?v=417"></script>
+<script src="js/transactions.js?v=417"></script>
+<script src="js/signal-chart.js?v=417"></script>
+<script src="js/saved-configs.js?v=417"></script>
+<script src="js/strategy-library-code.js?v=417"></script>
+<script src="js/strategy-library.js?v=417"></script>
+<script src="js/widget-page.js?v=417"></script>
 </body>
 </html>

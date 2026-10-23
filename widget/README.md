@@ -35,7 +35,8 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
 | `intraday` | The intraday chart's settings: `similarDaysOnly`; `from`, the period's first day as `YYYY-MM-DD` (the period ends at the latest day); `log`, a log scale instead of the default linear one. |
 | `pageUrl` | The page the widget shows. Default: the copy the installer puts in the widget's `lib/site` folder. Set `https://tqqq.networthcast.com/widget.html` to show the deployed page instead; on the desktop that page answers hover only (see Troubleshooting). |
 | `dataUrl` | Where the page reads the market data files. Default: `https://tqqq.networthcast.com/`. |
-| `width` | Widget width in pixels. |
+| `fillScreen` | Fill the whole screen (the default). `false` gives a widget `width` pixels wide in the corner set in `index.jsx`. |
+| `width` | Widget width in pixels when `fillScreen` is `false`. |
 
 ## Using it
 
@@ -67,8 +68,11 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
   `styles.css`, `experiments/tqqq-intraday.html`) or
   `widget/tqqq.widget/index.jsx`. It copies them into the widget, and
   Übersicht reloads it. Nothing needs to be pushed first.
-- The widget's position is the `bottom` and `left` values in that file's
-  `className`. Change them there, then run the installer.
+- With `fillScreen` off, the widget's position is the `bottom` and `left`
+  values in that file's `className`. Change them there, then run the
+  installer.
+- Which screens show the widget is Übersicht's own setting: in its menu-bar
+  menu, the widget's entry picks all screens, the main one, or chosen ones.
 
 ## Troubleshooting
 
