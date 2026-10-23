@@ -229,7 +229,9 @@ function runCustomRangeSim(cfgId, from, to) {
     const last = msg.log[msg.log.length - 1];
     const invested = typeof last.invested === 'number' && Number.isFinite(last.invested) ? last.invested : null;
     const years = (Date.parse(to) - Date.parse(from)) / (365.25 * 86400000);
-    const stats = customSeriesResult(msg.log, { ...ctx, labels: [from, to], years, totalContributed: invested }, null);
+    // A strategy with its own money is measured on its own deposits in the range.
+    const runCtx = msg.money === 'own' ? ownMoneyCtx(ctx, msg.log, from) : ctx;
+    const stats = customSeriesResult(msg.log, { ...runCtx, labels: [from, to], years, totalContributed: invested }, null);
     resolve({ value: stats.end, invested, cagr: stats.cagr, maxDD: stats.maxDD });
   }));
 }
@@ -531,6 +533,7 @@ const CUSTOM_PROMPT = `You are writing ONE backtest strategy for a charting app.
   params:  [ ... ],   // the sidebar dropdowns — see PARAMS
   columns: [ ... ],   // labels + tooltips for your log's columns — see COLUMNS
   lines:   [ ... ],   // toggleable chart lines for your computed levels — see LINES
+  // money: "own",    // only when the rule decides its own deposits — see OWN MONEY
   run(data, p) {
     // build the portfolio value over time — see RETURN — and report where the
     // rules stand on the final day — see SIGNALS
@@ -740,6 +743,19 @@ trade fires, without working it out from the rule text. Declare them as lines:
 - A rule on a percent that is no price (a volatility, a share of the account) draws in percent: give
   every line unit: "%" and log the percent itself (40 for 40%). One chart has one unit, so do not
   mix percent lines with price lines.
+
+=== OWN MONEY: a rule that decides how much goes in (only when the rule says so) ===
+Most strategies trade the money the app hands them (p.initial, p.contributions). Some rules decide the
+deposits themselves: "buy 1 share every week, 2 when the price is under its 50-day average". For those,
+put money: "own" at the top level of your object, next to params, and then:
+- Ignore p.initial and p.contributions. Start with cash = 0.
+- On each deposit add the amount to cash, make the trade your rule calls for, and log that row with
+  contributed = the amount (negative takes money out) and invested = the running total. Every deposit
+  gets its own row, the first one included.
+- Everything else is as above: value is cash plus what you hold, and the action words, rows and lines
+  are the same.
+While such a strategy is shown, the app runs every line on the chart on your deposits and measures your
+CAGR on them; the user's own Initial Investment and Monthly Contribution are off meanwhile.
 
 === SIGNALS: the live dashboard (do this — it is what users check first) ===
 Return a "signals" object alongside your log describing WHERE EVERY RULE STANDS ON THE FINAL DAY of
@@ -998,7 +1014,7 @@ function customWorkerMain() {
   }
   function asMod(m) {
     if (typeof m === 'function') return { name: null, run: m, params: undefined };
-    if (m && typeof m.run === 'function') return { name: m.name || null, run: m.run, params: m.params, columns: m.columns, lines: m.lines };
+    if (m && typeof m.run === 'function') return { name: m.name || null, run: m.run, params: m.params, columns: m.columns, lines: m.lines, money: m.money };
     return null;
   }
   // Column metadata ({ key, label, tip }) the strategy declares for its log —
@@ -1134,6 +1150,8 @@ function customWorkerMain() {
               columns: readColumns(res && res.columns) || readColumns(mod.columns),
               signals: readSignals(res && res.signals),
               lines: readLines(res && res.lines) || readLines(mod.lines),
+              // "own": the strategy brings its own money (see ownMoneyCtx).
+              money: mod.money === 'own' ? 'own' : null,
               totalContributed: (res && typeof res.totalContributed === 'number') ? res.totalContributed : null };
     } catch (err) {
       out = { reqId: msg.reqId, error: (err && err.message) ? err.message : String(err) };
@@ -1188,8 +1206,47 @@ function customSig(cfg, ctx) {
   // staleness risk as the fields above if left out (a window crossing the
   // 10y threshold without any of the other fields changing would keep
   // serving a cached result computed at the old log density).
-  return [cfg.code || '', JSON.stringify(cfg.params || {}), ctx.initial, ctx.monthly, ctx.annualRaise,
-    ctx.simEntryIdx, ctx.exitIdx, ctx.entryDateOverride || '', ctx.exitDateOverride || '', schedKey, ctx.displayGrain || ''].join('|');
+  // A strategy that brings its own money ignores the chart's (ownMoneyCtx), so
+  // the chart switching to its deposits must not re-run it.
+  const ownMoney = ((window._customResults || {})[cfg.id] || {}).money === 'own';
+  const money = ownMoney ? [] : [ctx.initial, ctx.monthly, ctx.annualRaise];
+  return [cfg.code || '', JSON.stringify(cfg.params || {}), ...money,
+    ctx.simEntryIdx, ctx.exitIdx, ctx.entryDateOverride || '', ctx.exitDateOverride || '', ownMoney ? '' : schedKey, ctx.displayGrain || ''].join('|');
+}
+// --- strategies that bring their own money --------------------------------
+// A custom strategy whose code declares money: "own" decides its own deposits
+// (CUSTOM_PROMPT's OWN MONEY section): it ignores p.initial and
+// p.contributions and logs every deposit as `contributed` on its row. It is
+// measured on those deposits, and while one is shown the chart runs every
+// line on them, the way it runs them on a transaction history (js/chart.js's
+// render), with the money controls off (js/transactions.js's
+// renderOwnMoneyState).
+function ownMoneyDeposits(log) {
+  return (log || []).filter(r => r && r.date != null && Number.isFinite(+r.contributed) && +r.contributed !== 0)
+    .map(r => ({ date: String(r.date), amount: +r.contributed }));
+}
+// The money a run is measured on when it brings its own: its deposits as a
+// transaction history entered on `entryDate` (js/transactions.js's
+// _txStateFromRows, txEffectiveForEntry). No deposits is an empty schedule,
+// so nothing falls back to the monthly slider.
+function ownMoneyCtx(ctx, log, entryDate) {
+  const deposits = ownMoneyDeposits(log);
+  const eff = deposits.length
+    ? txEffectiveForEntry(_txStateFromRows(deposits, 'strategy'), entryDate, ctx.rate)
+    : { initial: 0, schedule: { byDate: new Map(), byMonth: new Map(), list: [], priceDateByMonth: new Map() } };
+  return { ...ctx, initial: eff.initial, monthly: 0, annualRaise: 0, contribSchedule: eff.schedule,
+    totalContributed: deposits.reduce((sum, d) => sum + d.amount, 0) };
+}
+// The shown custom strategy that brings its own money, with its latest run's
+// log: the first such in the saved list when several are shown. null when none
+// is, or before its first run reports back.
+function ownMoneyStrategy() {
+  for (const c of savedConfigs) {
+    if (c.type !== 'custom' || c.hidden) continue;
+    const res = (window._customResults || {})[c.id];
+    if (res && !res.error && res.money === 'own') return { cfg: c, log: res.log || [] };
+  }
+  return null;
 }
 function computeCustomGlobals(cfg, ctx) {
   let entryDate = null, exitDate = null, startIdx = 0, endIdx = 0;
@@ -1376,7 +1433,7 @@ function onCustomWorkerMessage(e) {
   window._customResults[pend.cfgId] = {
     sig: pend.sig, log: msg.log || [], schema: msg.schema || [],
     columns: msg.columns || null, signals: msg.signals || null, lines: msg.lines || null,
-    name: msg.name || null, error: msg.error || null,
+    name: msg.name || null, error: msg.error || null, money: msg.money || null,
     totalContributed: (typeof msg.totalContributed === 'number') ? msg.totalContributed : null,
   };
   window._customSchemas[pend.cfgId] = msg.schema || [];
@@ -1497,12 +1554,13 @@ function computeCustomSeries(cfg, ctx) {
     // Today's line is settled — safe to also fetch yesterday's for the
     // day-over-day change badge (endLabelPlugin), sequenced behind it.
     scheduleCustomYesterdayRun(cfg, ctx);
-    return customSeriesResult(cached.log, ctx, cached.error, cached.totalContributed);
+    return customSeriesResult(cached.log, cached.money === 'own' ? ownMoneyCtx(ctx, cached.log, ctx.entryDateForSim) : ctx, cached.error, cached.totalContributed);
   }
   scheduleCustomRun(cfg, sig, computeCustomGlobals(cfg, ctx));
   window._customErrors[cfg.id] = null; // computing…
   window._customLogs[cfg.id] = (cached && cached.log) || [];
-  return customSeriesResult(cached ? cached.log : [], ctx, null, cached ? cached.totalContributed : null, true);
+  const staleCtx = cached && cached.money === 'own' ? ownMoneyCtx(ctx, cached.log, ctx.entryDateForSim) : ctx;
+  return customSeriesResult(cached ? cached.log : [], staleCtx, null, cached ? cached.totalContributed : null, true);
 }
 
 // Run the right engine for a config and return its label-aligned series + stats.
@@ -1839,6 +1897,9 @@ function appendConfigDatasets(chart, ctx) {
 const TX_ACTUAL_COLOR = '#0d9488'; // mirrored by styles.css's .tx-actual-dot
 function appendActualPortfolioDataset(chart, ctx) {
   window._actualMetrics = null;
+  // The real account cannot run on a strategy's own deposits, so it steps
+  // aside while one funds the chart (js/chart.js's render).
+  if (window._ownMoneyCfgId) return;
   const s = window._txSchedule;
   // The ENTRY-AWARE view (js/chart.js stashes window._txEffective each
   // render): a mid-history entry re-anchors the line at the cutoff lump and

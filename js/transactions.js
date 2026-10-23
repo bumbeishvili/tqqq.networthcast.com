@@ -820,6 +820,24 @@ function applyTxEntryDate() {
   }
 }
 
+// While a shown custom strategy brings its own money (js/saved-configs.js's
+// ownMoneyStrategy), every line runs on its deposits: the sliders and the
+// transaction controls are off and dimmed, and a note says whose money it is
+// and how much went in. Called by render() each pass with the strategy, or
+// null to put the controls back.
+function renderOwnMoneyState(own) {
+  const block = document.getElementById('contrib-controls');
+  const note = document.getElementById('contrib-own-note');
+  if (!block || !note) return;
+  block.classList.toggle('is-own-money', !!own);
+  note.hidden = !own;
+  if (own) {
+    const deposits = ownMoneyDeposits(own.log);
+    const total = deposits.reduce((sum, d) => sum + d.amount, 0);
+    note.textContent = `${own.cfg.name} brings its own money: ${fmtFull(Math.round(total))} over ${deposits.length} deposit${deposits.length === 1 ? '' : 's'}. Every line runs on it.`;
+  }
+  for (const el of block.querySelectorAll('input, select, button')) el.disabled = !!own;
+}
 // Swaps the sidebar between the default sliders and the active-transactions
 // summary. Called on confirm/clear and once at startup (restoring from
 // localStorage/share link).

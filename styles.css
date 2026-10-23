@@ -2955,6 +2955,19 @@
   }
   .tx-clear-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.06); }
   #tx-mode-toggle-btn { margin-bottom: 10px; }
+  /* A custom strategy bringing its own money turns the money controls off
+     (js/transactions.js's renderOwnMoneyState): they dim, the note stays. */
+  .contrib-own-note {
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text);
+    margin-bottom: 12px;
+  }
+  #contrib-controls.is-own-money > :not(.contrib-own-note) { opacity: .4; }
+  /* In the docked header the switched-off controls make way for the note,
+     which says why they are off. */
+  body.panel-docked .header #contrib-controls.is-own-money > :not(.contrib-own-note) { display: none; }
+  body.panel-docked .header .contrib-own-note { margin: 0; max-width: 520px; }
   .tx-delete-btn:hover { border-color: var(--red-text); color: var(--red-text); background: rgba(var(--red-rgb), 0.08); }
 
   /* Parsed-rows preview inside the transaction-upload modal. */

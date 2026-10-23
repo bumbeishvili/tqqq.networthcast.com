@@ -2228,7 +2228,16 @@ function render() {
   // never changes. Stashed on window so appendActualPortfolioDataset (the
   // "My portfolio" line) reads the SAME view this render simulated with.
   window._txEffective = null;
-  if (window._txSchedule && typeof txEffectiveForEntry === 'function') {
+  // A shown custom strategy that brings its own money funds every line with
+  // its deposits, ahead of a transaction history (ownMoneyStrategy). The
+  // sliders' values stay as they are, unused, until it is hidden.
+  const sliderInitial = initial;
+  const ownMoney = typeof ownMoneyStrategy === 'function' ? ownMoneyStrategy() : null;
+  if (ownMoney) {
+    const m = ownMoneyCtx({ rate }, ownMoney.log, entryDateForSim);
+    initial = m.initial;
+    contribSchedule = m.contribSchedule;
+  } else if (window._txSchedule && typeof txEffectiveForEntry === 'function') {
     const eff = txEffectiveForEntry(window._txSchedule, entryDateForSim, rate);
     if (eff) {
       initial = eff.initial;
@@ -2236,6 +2245,8 @@ function render() {
       window._txEffective = eff;
     }
   }
+  window._ownMoneyCfgId = ownMoney ? ownMoney.cfg.id : null;
+  if (typeof renderOwnMoneyState === 'function') renderOwnMoneyState(ownMoney);
   // Day-over-day change badge (endLabelPlugin) only makes sense when the chart
   // is actually showing the most recent data — a historical exit date has no
   // "since yesterday" to speak of. prevTradingDayDate stays null (and the
@@ -2253,7 +2264,7 @@ function render() {
   if (entryPickBtn) entryPickBtn.classList.toggle('is-active', !!entryOverride);
   if (exitPickBtn)  exitPickBtn.classList.toggle('is-active', !!exitOverride);
 
-  document.getElementById('disp-initial').textContent = fmtFull(initial);
+  document.getElementById('disp-initial').textContent = fmtFull(ownMoney ? sliderInitial : initial);
   document.getElementById('disp-monthly').textContent = fmtFull(monthly);
   // Annual increase is now a dropdown that shows its own value — no separate display.
   const _dispRaise = document.getElementById('disp-raise');
