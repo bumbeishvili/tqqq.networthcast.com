@@ -269,6 +269,14 @@ function chartIndexForPixel(c, px) {
   const i = Math.round(v);
   return Math.max(0, Math.min(labs.length - 1, Number.isFinite(i) ? i : 0));
 }
+// Trade markers on the main chart follow the signal chart's rule
+// (js/signal-chart.js's MINI_EVENT.marksWithinMs): only on a period under two
+// years. On a longer one they stack into columns over the line; the open
+// panel's signal chart shows the trades as bands there.
+function chartShowsTradeMarks(c) {
+  const labels = c.data.labels;
+  return labels.length > 1 && Date.parse(labels[labels.length - 1]) - Date.parse(labels[0]) < MINI_EVENT.marksWithinMs;
+}
 // Markers cluster wherever trades bunch up (both legs of a switch on one day,
 // or several trades within a few days at nearly the same portfolio value), so
 // they'd stack. Keep x exact and fan the clashing ones vertically: search
@@ -3212,6 +3220,7 @@ function render() {
         }
       }
 
+      if (!chartShowsTradeMarks(c)) { cx.restore(); return; }
       const hoveredKey = _smaHoverKey;
       // Markers cluster wherever trades bunch up — a switch's two legs on one day,
       // or several trades within a few days at nearly the same portfolio value —
@@ -3310,6 +3319,7 @@ function render() {
         cx.stroke();
       }
 
+      if (!chartShowsTradeMarks(c)) { cx.restore(); return; }
       const hoveredKey = _smaHoverKey;
       const placed = [];
       let hovered = null; // the highlighted marker draws last, on top of its cluster
