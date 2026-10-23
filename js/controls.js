@@ -338,18 +338,25 @@ document.addEventListener('mouseover', positionInfoTip);
 document.addEventListener('focusin',   positionInfoTip);
 
 
-// Draggable resize handle on the strategy panel — like a code-editor split.
-// Width persists in its own localStorage key (separate from LS_KEY so it
-// survives version resets — it's a harmless UI preference). Clamped so the
-// panel can't get uselessly narrow or eat the whole viewport.
+// Draggable divider between the docked strategy panel and the chart — like a
+// code-editor split (js/chart.js's syncPanelDock docks the panel; the
+// docked column reads --panel-w). Width persists in its own localStorage key
+// (separate from LS_KEY so it survives version resets — it's a harmless UI
+// preference). Clamped so the panel can't get uselessly narrow or squeeze the
+// chart beside it below a readable width.
 const PANEL_WIDTH_KEY = '9sig-panel-width';
 const PANEL_MIN_W = 280;
-const panelMaxW = () => Math.round(window.innerWidth * 0.98);
-function applyPanelWidth(w) {
-  const content = document.querySelector('.strategy-panel-content');
-  if (!content) return;
-  const clamped = Math.max(PANEL_MIN_W, Math.min(panelMaxW(), w));
-  content.style.width = clamped + 'px';
+const PANEL_CHART_MIN_W = 400;
+// The width last dragged to. A narrower window clamps what is shown without
+// forgetting it, so widening the window again brings it back.
+let _panelWidthPref = 360;
+function applyPanelWidth(w = _panelWidthPref) {
+  const layout = document.querySelector('.layout');
+  if (!layout) return w;
+  const max = layout.clientWidth - parseFloat(getComputedStyle(layout).columnGap) - PANEL_CHART_MIN_W;
+  const clamped = Math.round(Math.max(PANEL_MIN_W, Math.min(max, w)));
+  layout.style.setProperty('--panel-w', clamped + 'px');
+  return clamped;
 }
 (function initPanelResizer() {
   const resizer = document.getElementById('strategy-panel-resizer');
@@ -358,37 +365,40 @@ function applyPanelWidth(w) {
   // Restore a saved width on load.
   try {
     const saved = parseFloat(localStorage.getItem(PANEL_WIDTH_KEY));
-    if (Number.isFinite(saved)) applyPanelWidth(saved);
+    if (Number.isFinite(saved)) _panelWidthPref = saved;
   } catch (e) {}
+  applyPanelWidth();
 
   let startX = 0, startW = 0, dragging = false;
   const onMove = (e) => {
     if (!dragging) return;
-    const w = startW + (e.clientX - startX);
-    applyPanelWidth(w);
+    _panelWidthPref = applyPanelWidth(startW + (e.clientX - startX));
+    // The legend above the chart can re-wrap at the new width, which moves
+    // the chart's bottom edge.
+    fitChartHeight();
     e.preventDefault();
   };
   const onUp = () => {
     if (!dragging) return;
     dragging = false;
     content.classList.remove('is-resizing');
+    document.body.classList.remove('panel-resizing');
     document.removeEventListener('mousemove', onMove);
     document.removeEventListener('mouseup', onUp);
-    try { localStorage.setItem(PANEL_WIDTH_KEY, String(parseInt(content.style.width, 10) || 360)); } catch (e) {}
+    try { localStorage.setItem(PANEL_WIDTH_KEY, String(_panelWidthPref)); } catch (e) {}
   };
   resizer.addEventListener('mousedown', (e) => {
     dragging = true;
     startX = e.clientX;
     startW = content.getBoundingClientRect().width;
     content.classList.add('is-resizing');
+    document.body.classList.add('panel-resizing');
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
     e.preventDefault();
   });
   // Keep within bounds if the window shrinks.
-  window.addEventListener('resize', () => {
-    if (content.style.width) applyPanelWidth(parseInt(content.style.width, 10) || 360);
-  });
+  window.addEventListener('resize', () => applyPanelWidth());
 })();
 
 // In-chart "log" pill is the sole source-of-truth for the logarithmic
@@ -502,11 +512,12 @@ if (inflPill) inflPill.addEventListener('click', () => {
   }
   // chart.js calls this right after it rewrites #disp-entry / #disp-exit —
   // new text changes the groups' widths, so they need re-centering; also
-  // re-run on resize (px positions).
+  // re-run whenever the track's width changes (px positions): a window
+  // resize, the strategy panel docking beside the chart, or its divider.
   window.refreshPeriodThumbLabels = function () {
     positionThumbLabels(valToPercent(+entryInput.value), valToPercent(+exitInput.value));
   };
-  window.addEventListener('resize', window.refreshPeriodThumbLabels);
+  new ResizeObserver(window.refreshPeriodThumbLabels).observe(container);
 
   // `side` identifies which thumb actually moved this time ('entry' or
   // 'exit') — only THAT side's exact-day override (js/date-picker.js) gets
@@ -826,7 +837,8 @@ async function shareConfig() {
   if (activeCfgs.length) {
     const lean = activeCfgs.map(c => {
       const o = { type: c.type, name: c.name, params: c.params || {}, color: c.color };
-      if (c.type === 'custom') { o.code = c.code || ''; o.desc = c.desc || ''; }
+      // A library copy's stamp rides along so its edits survive the trip.
+      if (c.type === 'custom') { o.code = c.code || ''; o.desc = c.desc || ''; Object.assign(o, libraryStampOf(c)); }
       return o;
     });
     // `scz` is the deflated payload (see packSharePayload) — a custom

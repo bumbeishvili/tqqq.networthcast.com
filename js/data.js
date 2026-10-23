@@ -306,12 +306,13 @@ function rollingSMA(values, window) {
   return out;
 }
 
-// Wilder-smoothed RSI. Returns array of RSI values per daily index, null
-// until enough history accumulates. Default window 10 trading days — matches
-// the "TFTLT" Reddit strategy's overheat threshold convention.
-function rollingRSI(values, window) {
-  const out = new Array(values.length).fill(null);
-  if (values.length < window + 1) return out;
+// Wilder-smoothed average gain and loss per daily index, null until enough
+// history accumulates: what rollingRSI reads its RSI from, and where the
+// signal chart's RSI level lines start (js/strategy-library-code.js's
+// rsiLevel takes yesterday's pair).
+function wilderAverages(values, window) {
+  const ag = new Array(values.length).fill(null), al = new Array(values.length).fill(null);
+  if (values.length < window + 1) return { ag, al };
   let gainSum = 0, lossSum = 0;
   for (let i = 1; i <= window; i++) {
     const d = values[i] - values[i-1];
@@ -319,7 +320,7 @@ function rollingRSI(values, window) {
   }
   let avgGain = gainSum / window;
   let avgLoss = lossSum / window;
-  out[window] = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
+  ag[window] = avgGain; al[window] = avgLoss;
   for (let i = window + 1; i < values.length; i++) {
     const d = values[i] - values[i-1];
     const g = d > 0 ? d : 0;
@@ -327,9 +328,16 @@ function rollingRSI(values, window) {
     // Wilder's smoothing: prior average × (window-1) + new value, all over window.
     avgGain = (avgGain * (window - 1) + g) / window;
     avgLoss = (avgLoss * (window - 1) + l) / window;
-    out[i] = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
+    ag[i] = avgGain; al[i] = avgLoss;
   }
-  return out;
+  return { ag, al };
+}
+// Wilder-smoothed RSI. Returns array of RSI values per daily index, null
+// until enough history accumulates. Default window 10 trading days — matches
+// the "TFTLT" Reddit strategy's overheat threshold convention.
+function rollingRSI(values, window) {
+  const { ag, al } = wilderAverages(values, window);
+  return ag.map((g, i) => g == null ? null : al[i] === 0 ? 100 : 100 - (100 / (1 + g / al[i])));
 }
 
 // Build a pair of LAZY, memoizing lookup objects (daily + monthly) for one

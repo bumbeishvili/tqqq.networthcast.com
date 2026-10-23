@@ -1282,6 +1282,13 @@ function renderStrategyPanelBody(idx) {
     `;
   }
   html += renderStatsGrid(idx);
+  // The signal chart, as custom strategies have one (nativeSignalChart).
+  const signal = nativeSignalChart(idx);
+  if (signal) {
+    html += `<div class="strategy-panel-section-label" style="margin-top:14px">Signal chart</div>`
+      + `<div class="legend-chip-group">${buildCustomLineChipsHtml(signal.cfg, signal.lines)}</div>`
+      + buildCustomLinesChartHtml(signal.cfg, signal.lines, signal.log, body.clientWidth, { home: signal.home });
+  }
   // 9sig-specific content: log first, then the "explained" rules block
   // (rules are reference material; the live log is what the user usually
   // wants to scan after tweaking the controls).
@@ -1332,6 +1339,214 @@ function renderStrategyPanelBody(idx) {
   if (typeof window.refreshPreviewTriggers === 'function') window.refreshPreviewTriggers();
   // Restore the pre-rebuild scroll position.
   body.scrollTop = _scrollTop;
+  // Width changes (docking, the divider) redraw the signal chart so its text
+  // stays the right size (js/signal-chart.js's _miniChartResizeObs).
+  if (_miniChartResizeObs && !body._miniObserved) {
+    _miniChartResizeObs.observe(body);
+    body._miniObserved = true;
+  }
+}
+
+// ── Signal charts for the built-in SMA and 9sig panels ─────────────────────
+// The signal chart custom strategies have (js/signal-chart.js), for the two
+// built-in engines, so every strategy in the library shows one, the presets
+// included (SMA 200, 9sig, the overfit rows). The panel's strategy is the one
+// its controls hold: the base line's, or the saved strategy being edited,
+// whose run _logData carries then.
+//   SMA: the signal ticker's daily close, its N-day average and the buffer
+//   lines around it, from the daily arrays the engine itself reads
+//   (dailyRows, smaAtDailyByKey), over the whole history. Each RSI rule is
+//   drawn as the close that would put RSI at its threshold (rsiLevel, as the
+//   library's RSI strategies draw theirs), and the bubble brake as its
+//   ticker's average plus the trigger, with that ticker's own close when it
+//   is not the signal ticker. Then the run's trades, and those of a run on
+//   $10,000 over the years before it, so zooming out shows them too. The
+//   chart rests on the main run's range.
+//   9sig: the fund holding against the signal line, daily. The holding is the
+//   shares each rebalance left times that day's close (the main chart's
+//   drawdown revalues it the same way); the line runs from each rebalance's
+//   target to the next one's. Its trades are the rebalances that bought or
+//   sold.
+// Rows follow the custom log's shape: one per day with the line values and
+// what is held, and a trade row in the chart's vocabulary (buy, sell) with
+// the portfolio value and a note wherever the engine traded.
+const NATIVE_HISTORY_MONEY = 10000;
+// The SMA panel's strategy settings, as render() hands them to the engine.
+function smaPanelOpts() {
+  return {
+    smaAsset: ((document.getElementById('select-sma-asset') || {}).value || 'qqq').toLowerCase(),
+    smaWindow: +((document.getElementById('select-sma-window') || {}).value) || 200,
+    underlyingCol: ulColFromVal((document.getElementById('select-sma-underlying') || {}).value),
+    ...readSmaBaseOpts(),
+  };
+}
+// The panel's ticker as the trade text shows it; cash stays lowercase.
+const _heldName = h => (!h || h === 'cash') ? 'cash' : String(h).toUpperCase();
+// The SMA run over the years before the main run, on $10,000 and no
+// contributions (the chart shows its trades, which follow prices, never its
+// money): its trades before the main run's first day. One run per settings
+// and start, kept until either changes.
+let _smaHistory = { key: null, trades: [] };
+function smaHistoryTrades(o, start) {
+  const key = JSON.stringify(o) + '|' + start;
+  if (_smaHistory.key === key) return _smaHistory.trades;
+  const first = dailyRows[0][0];
+  const r = first < start
+    ? simulateSMA(NATIVE_HISTORY_MONEY, 0, 0, 0, quarterlyData.length - 1, 0, { ...o, entryDateOverride: first, exitDateOverride: start })
+    : null;
+  _smaHistory = { key, trades: r && r.smaLog ? r.smaLog.filter(t => t.date < start) : [] };
+  return _smaHistory.trades;
+}
+// The close each day that would put RSI(w) of a price series at x: from the
+// day before's close and Wilder averages (data.js's wilderAverages, the
+// smoothing the engine's RSI uses). null until the RSI exists. Kept per
+// series, window and threshold, since the whole history is drawn.
+const _rsiLevelCache = new Map();
+function rsiLevelSeries(col, w, x) {
+  const key = col + '|' + w + '|' + x;
+  if (_rsiLevelCache.has(key)) return _rsiLevelCache.get(key);
+  const closes = dailyRows.map(r => r[col]);
+  const { ag, al } = wilderAverages(closes, w);
+  const out = closes.map((_, i) => i > 0 && ag[i - 1] != null ? rsiLevel(closes[i - 1], ag[i - 1], al[i - 1], w, x) : null);
+  _rsiLevelCache.set(key, out);
+  return out;
+}
+// An SMA trade in the chart's vocabulary, with what the lines say about it.
+// The engine logs no reasons, so a note is written only where the day's
+// closes show one: a buy closing over the buy line, a sell under the sell
+// line or with RSI at its overheat level, the bubble brake and its release.
+// Selling to cash is the sell leg of a move; buying the out ticker is its buy
+// leg.
+function smaChartTrade(t, o, price, c, overheat) {
+  const A = o.smaAsset.toUpperCase(), W = o.smaWindow;
+  const kind = t.action === 'ENTER' || t.action === 'BG-CLEAR' ? 'buy'
+    : t.action === 'EXIT' || t.action === 'BG-GTFO' ? (t.held === 'cash' ? 'sell' : 'buy') : null;
+  if (!kind) return null;
+  let note = '';
+  if (t.action === 'BG-GTFO') note = `Bubble brake: ${o.bgAsset.toUpperCase()} ${o.bgGtfoPct}% or more over its ${o.bgWindow || W}-day average`;
+  else if (t.action === 'BG-CLEAR') note = 'Bubble brake off';
+  else if (t.action === 'EXIT' && t.held !== 'cash') note = `Parked in ${_heldName(t.held)} while out`;
+  else if (c != null && kind === 'buy' && price > c * (1 + o.entryBufferPct / 100)) note = `${A} closed over its ${W}-day average${o.entryBufferPct > 0 ? ` +${o.entryBufferPct}%` : ''}`;
+  else if (c != null && kind === 'sell' && price < c * (1 - o.exitBufferPct / 100)) note = `${A} closed under its ${W}-day average${o.exitBufferPct > 0 ? ` -${o.exitBufferPct}%` : ''}`;
+  else if (overheat != null && kind === 'sell' && price >= overheat) note = `RSI(${o.rsiOhWindow}) of ${A} at or over ${o.rsiOverheatThreshold}`;
+  return { action: kind, held: _heldName(t.held), value: t.total, note };
+}
+function smaSignalChart() {
+  const smaLog = _logData && _logData.smaLog;
+  if (!smaLog || smaLog.length < 2 || !dailyRows || !smaAtDailyByKey) return null;
+  const o = smaPanelOpts();
+  const center = smaAtDailyByKey[o.smaAsset + '_' + o.smaWindow];
+  if (!center) return null;
+  const col = SMA_ASSET_COL[o.smaAsset] || SMA_ASSET_COL.qqq;
+  const bgCol = SMA_ASSET_COL[o.bgAsset] || SMA_ASSET_COL.qqq;
+  const bgCenter = o.bgGtfoPct > 0 ? smaAtDailyByKey[o.bgAsset + '_' + (o.bgWindow || o.smaWindow)] : null;
+  const overheat = o.rsiOverheatThreshold > 0 ? rsiLevelSeries(col, o.rsiOhWindow, o.rsiOverheatThreshold) : null;
+  const cool = o.rsiCoolThreshold > 0 ? rsiLevelSeries(col, o.rsiCoolWindow, o.rsiCoolThreshold) : null;
+  const lines = [{ key: 'assetPrice', label: `${o.smaAsset.toUpperCase()} price` }, { key: 'center', label: `${o.smaWindow}-day average` }];
+  if (o.entryBufferPct > 0) lines.push({ key: 'buyLine', label: `Buy line (+${o.entryBufferPct}%)` });
+  if (o.exitBufferPct > 0) lines.push({ key: 'sellLine', label: `Sell line (-${o.exitBufferPct}%)` });
+  if (overheat) lines.push({ key: 'overheatLine', label: `RSI(${o.rsiOhWindow}) ${o.rsiOverheatThreshold}` });
+  if (cool) lines.push({ key: 'coolLine', label: `RSI(${o.rsiCoolWindow}) ${o.rsiCoolThreshold}` });
+  if (bgCenter && bgCol !== col) lines.push({ key: 'bubblePrice', label: `${o.bgAsset.toUpperCase()} price` });
+  if (bgCenter) lines.push({ key: 'bubbleLine', label: `${o.bgAsset.toUpperCase()} bubble line (+${o.bgGtfoPct}%)` });
+  const start = smaLog[0].date, end = smaLog[smaLog.length - 1].date;
+  const trades = smaHistoryTrades(o, start).concat(smaLog);
+  const rows = [];
+  let k = 0, held = 'cash';
+  for (let i = 0; i < dailyRows.length && dailyRows[i][0] <= end; i++) {
+    const date = dailyRows[i][0], price = dailyRows[i][col], c = center[i];
+    const day = {
+      date, assetPrice: price, center: c,
+      buyLine: c != null && o.entryBufferPct > 0 ? c * (1 + o.entryBufferPct / 100) : null,
+      sellLine: c != null && o.exitBufferPct > 0 ? c * (1 - o.exitBufferPct / 100) : null,
+      overheatLine: overheat ? overheat[i] : null,
+      coolLine: cool ? cool[i] : null,
+      bubblePrice: bgCenter && bgCol !== col ? dailyRows[i][bgCol] : null,
+      bubbleLine: bgCenter && bgCenter[i] != null ? bgCenter[i] * (1 + o.bgGtfoPct / 100) : null,
+    };
+    let traded = false;
+    for (; k < trades.length && trades[k].date <= date; k++) {
+      const t = trades[k];
+      held = _heldName(t.held);
+      const trade = t.date === date ? smaChartTrade(t, o, price, c, overheat && overheat[i]) : null;
+      if (trade) { rows.push({ ...day, ...trade }); traded = true; }
+    }
+    if (!traded) rows.push({ ...day, held });
+  }
+  return { lines, rows, home: { t0: Date.parse(start), t1: Date.parse(end) } };
+}
+function nineSigSignalChart() {
+  const log = _logData && _logData.log;
+  if (!log || log.length < 2 || !daily || !dailyDateToIdx) return null;
+  const key = COL_TO_DAILY_KEY[ulColFromVal((document.getElementById('select-9sig-underlying') || {}).value)] || 'tqqq';
+  const UL = key.toUpperCase();
+  // Keys apart from a saved 9sig's own sub-series (CONFIG_SUB_DEFS: holding,
+  // target, cash), which share cfg.subShown with these lines' chips.
+  const lines = [{ key: 'sigHolding', label: `${UL} holding` }, { key: 'sigLine', label: 'Signal line' }];
+  const i0 = dailyDateToIdx.get(log[0].date), i1 = dailyDateToIdx.get(log[log.length - 1].date);
+  if (i0 == null || i1 == null) return null;
+  const rows = [];
+  let k = 0;
+  for (let i = i0; i <= i1; i++) {
+    const date = daily[i].date;
+    while (k + 1 < log.length && log[k + 1].date <= date) k++;
+    const r = log[k], next = log[k + 1];
+    const holding = (r.price > 0 ? r.tqqqVal / r.price : 0) * daily[i][key];
+    const signal = next && r.target > 0 && next.target > 0
+      ? r.target * Math.pow(next.target / r.target, (Date.parse(date) - Date.parse(r.date)) / (Date.parse(next.date) - Date.parse(r.date)))
+      : r.target;
+    const day = { date, sigHolding: holding, sigLine: signal, held: UL };
+    // The rebalance's own words: "BUY $12.3K", "SELL $8.1K (30d expired)",
+    // "RESET $40K (spike)". A sell's row holds cash, so the trade reads
+    // "Sell TQQQ".
+    const amount = date === r.date ? (String(r.action).match(/\$[^\s)]+/) || [''])[0] : '';
+    const verb = date === r.date ? String(r.action).split(' ')[0] : '';
+    if (verb === 'BUY') rows.push({ ...day, action: 'buy', value: r.total, note: `Bought ${amount} of ${UL}: the holding was under the signal line${/\(part\)/.test(r.action) ? '; cash ran short' : ''}` });
+    else if (verb === 'SELL') rows.push({ ...day, action: 'sell', held: 'cash', value: r.total, note: `Sold ${amount} of ${UL}: the holding was over the signal line${/expired/.test(r.action) ? '; the crash rule\'s skipped sells ran out' : ''}` });
+    else if (verb === 'RESET') rows.push({ ...day, action: 'sell', held: 'cash', value: r.total, note: `Spike reset: ${UL} doubled in a quarter, sold ${amount} back to 60%` });
+    else rows.push(day);
+  }
+  return { lines, rows, home: null };
+}
+// Which signal lines a base line's chart shows; a saved strategy keeps its
+// own in cfg.subShown, as a custom strategy does.
+const _baseSignalShown = {};
+// The cfg a built-in panel's chart and its line chips read: the saved
+// strategy being edited, or the base line's stand-in, keyed 'base-sma' /
+// 'base-9sig' (the chips' click handler in js/saved-configs.js finds either).
+function nativeSignalCfg(idx) {
+  const saved = window._editingConfigId && typeof getSavedConfigs === 'function' ? getSavedConfigs().find(c => c.id === window._editingConfigId) : null;
+  if (saved) { saved.subShown = saved.subShown || {}; return saved; }
+  const id = 'base-' + PANEL_KEY_BY_IDX[idx];
+  const ds = chart && chart.data.datasets[idx];
+  return { id, color: ds && typeof ds.borderColor === 'string' ? ds.borderColor : null, subShown: _baseSignalShown[id] = _baseSignalShown[id] || {} };
+}
+// The open built-in panel's signal chart: its cfg, lines, rows and home view;
+// null for a panel without one.
+function nativeSignalChart(idx) {
+  const built = idx === 8 ? smaSignalChart() : idx === 0 ? nineSigSignalChart() : null;
+  if (!built) return null;
+  return { cfg: nativeSignalCfg(idx), lines: built.lines, log: built.rows, home: built.home };
+}
+// The strategy over a range dragged on a built-in panel's signal chart (its
+// tooltip, js/signal-chart.js's setMiniRangeSim): the panel's settings through
+// the engine path a saved strategy's line takes (computeConfigSeries), entered
+// on the range's first day and left on its last, on the main chart's money,
+// re-derived for that entry when a transaction history is active, as
+// runCustomRangeSim does. The figures are the line's own: a range over the
+// whole main period reads what the panel's stats do.
+function runNativeRangeSim(from, to) {
+  const ctx = window._chartMoneyCtx, type = PANEL_KEY_BY_IDX[_currentPanelIdx];
+  if (!ctx || (type !== 'sma' && type !== '9sig')) return null;
+  const eff = window._txSchedule ? txEffectiveForEntry(window._txSchedule, from, ctx.rate) : null;
+  const s = computeConfigSeries({ id: 'panel-range-run', type, params: captureParams(type) }, {
+    ...ctx, ...(eff ? { initial: eff.initial, contribSchedule: eff.schedule } : {}),
+    labels: [from, to], years: (Date.parse(to) - Date.parse(from)) / (365.25 * 86400000),
+    entryDateOverride: from, exitDateOverride: to, entryDateForSim: from,
+    simEntryIdx: Math.max(0, quarterIdxForDate(from) - 1), exitIdx: quarterIdxForDate(to),
+    displayGrain: 'quarterly', isLatestDaySelected: false,
+  });
+  return { value: s.end, invested: s.contributed, cagr: s.cagr, maxDD: s.maxDD };
 }
 
 // Strategy detail side panel — opens when a legend chip's more-button is
@@ -1422,6 +1637,7 @@ function openStrategyPanel(idx) {
   renderStrategyPanelBody(idx);
   panel.classList.add('is-open');
   panel.setAttribute('aria-hidden', 'false');
+  syncPanelDock();
   applyPanelEmphasis();
 }
 // Open the custom-strategy editor panel (code + generated controls + log).
@@ -1437,6 +1653,7 @@ function openCustomPanel(cfgId) {
   if (typeof renderCustomPanelBody === 'function') renderCustomPanelBody(cfgId);
   panel.classList.add('is-open');
   panel.setAttribute('aria-hidden', 'false');
+  syncPanelDock();
   applyPanelEmphasis();
 }
 function closeStrategyPanel() {
@@ -1454,9 +1671,52 @@ function closeStrategyPanel() {
   _currentPanelIdx = null;
   panel.classList.remove('is-open');
   panel.setAttribute('aria-hidden', 'true');
+  syncPanelDock();
   if (openKey && typeof render === 'function') render();
   applyPanelEmphasis(); // restore all lines to full width/opacity
 }
+// Wider than 900px the open panel docks: it moves into .layout as the first
+// column, beside the chart, instead of floating over the page, so its signal
+// chart and the main chart can be read and used together (styles.css,
+// body.panel-docked). The controls card it replaces hides, and the card's
+// contribution controls move into the header's free space so the money stays
+// adjustable. At 900px and less the panel stays an overlay: a split would
+// leave neither side readable. Each moved element leaves a comment node in
+// its usual spot, and undocking puts it back there.
+const PANEL_DOCK_MQ = window.matchMedia('(min-width: 901px)');
+const _panelDockSpots = new Map();
+function _dockMove(el, parent, before) {
+  const spot = document.createComment(`#${el.id} sits here while the strategy panel is not docked`);
+  el.replaceWith(spot);
+  _panelDockSpots.set(el, spot);
+  parent.insertBefore(el, before);
+}
+function _dockReturn(el) {
+  _panelDockSpots.get(el).replaceWith(el);
+  _panelDockSpots.delete(el);
+}
+function syncPanelDock() {
+  const panel = document.getElementById('strategy-panel');
+  if (!panel) return;
+  const dock = panel.classList.contains('is-open') && PANEL_DOCK_MQ.matches;
+  if (dock === document.body.classList.contains('panel-docked')) return;
+  const layout = document.querySelector('.layout');
+  const header = document.querySelector('.header');
+  const contrib = document.getElementById('contrib-controls');
+  if (dock) {
+    _dockMove(panel, layout, layout.firstChild);
+    _dockMove(contrib, header, header.querySelector('.header-actions'));
+  } else {
+    _dockReturn(panel);
+    _dockReturn(contrib);
+  }
+  document.body.classList.toggle('panel-docked', dock);
+  // The docked width is clamped against the layout; the header's height
+  // changed with the controls moving in or out.
+  if (typeof applyPanelWidth === 'function') applyPanelWidth();
+  fitChartHeight();
+}
+PANEL_DOCK_MQ.addEventListener('change', syncPanelDock);
 // Gated close: when a BASE panel has edits that differ from canonical defaults,
 // closing would silently reset them — so warn first. Editing a saved strategy
 // auto-syncs live, so no warning is needed there.
@@ -1493,8 +1753,13 @@ function openPanelByKey(key) {
 // toggle — main legend always; the side panel's nested chips when open.
 function refreshAllLegends() {
   renderChartLegend();
-  if (_currentPanelIdx !== null) renderStrategyPanelBody(_currentPanelIdx);
-  if (window._openCustomCfgId && typeof renderCustomPanelBody === 'function') renderCustomPanelBody(window._openCustomCfgId);
+  // While a zoom or pan gesture re-runs the period every frame, the open panel
+  // waits: rebuilding it each frame (its log, its signal chart) would make the
+  // gesture crawl. The gesture's end renders it once (endZoomGesture).
+  if (!_zoomGesture) {
+    if (_currentPanelIdx !== null) renderStrategyPanelBody(_currentPanelIdx);
+    if (window._openCustomCfgId && typeof renderCustomPanelBody === 'function') renderCustomPanelBody(window._openCustomCfgId);
+  }
   if (typeof renderSavedConfigPills === 'function') renderSavedConfigPills();
 }
 
@@ -1537,6 +1802,132 @@ function chartDisplayPeriod(livePeriod, spanYears) {
   // strategy (monthly / weekly) is actually visible.
   const floor = (spanYears != null && spanYears < 10) ? 'weekly' : 'quarterly';
   return _finerPeriod(p || livePeriod || floor, floor);
+}
+
+// Zoom and pan on the main chart move Entry and Exit, with the signal chart's
+// gestures (js/signal-chart.js): ⌘/Ctrl + scroll narrows or widens the period
+// around the date under the cursor (near the right edge that edge stays put),
+// out as far as the visible strategies' history goes; ⌘/Ctrl + drag slides
+// it; a double-click or Reset zoom brings back the Entry and Exit from before
+// the zoom; Latest → slides the period to end on the latest day. Each step
+// re-runs the strategies for the new period, as moving the slider does, so
+// every line restarts at the initial investment on the new Entry and the
+// legend's figures cover the new period. A plain drag still measures a range.
+const CHART_ZOOM = { minSpanMs: 90 * 86400000, wheelK: 0.002, rightAnchorPx: 200, uiGapPx: 30, settleMs: 250 };
+// The window (ms) the zoom last set, kept exact so trackpad-sized wheel steps
+// add up between the trading days it snaps to, and `range`, the 'entry|exit'
+// it became. render() drops it, with _zoomHome, once Entry or Exit changes
+// some other way.
+let _zoomWindow = null;
+// The Entry/Exit inputs from before the zoom began; Reset puts them back.
+let _zoomHome = null;
+const ZOOM_INPUT_IDS = ['slider-entry', 'slider-exit', 'entry-exact-date', 'exit-exact-date'];
+// Set while a ⌘/Ctrl + drag slides the period: where it started.
+let _chartPan = null;
+// True while a wheel or drag gesture changes the period every frame: the open
+// strategy panel waits until the gesture ends (refreshAllLegends).
+let _zoomGesture = false, _zoomSettleTimer = null, _zoomRenderRaf = null;
+// The widest period: the earliest Entry the slider allows for the visible
+// strategies (effectiveEntryMinQIdx; the sim enters at the end of the quarter
+// before it) to the latest day.
+function zoomBounds() {
+  const floorIdx = typeof effectiveEntryMinQIdx === 'function' ? effectiveEntryMinQIdx() : 0;
+  return { T0: Date.parse(quarterlyData[Math.max(0, floorIdx - 1)][0]), T1: Date.parse(daily[daily.length - 1].date) };
+}
+// The window a gesture starts from: the zoom's own, or the period on the chart.
+function currentZoomWindow() {
+  return _zoomWindow || { t0: Date.parse(chart._periodDates[0]), t1: Date.parse(chart._periodDates[1]) };
+}
+// The first trading day on or after time t.
+function _firstDayFrom(t) {
+  let lo = 0, hi = daily.length - 1;
+  while (lo < hi) { const m = (lo + hi) >> 1; if (Date.parse(daily[m].date) < t) lo = m + 1; else hi = m; }
+  return lo;
+}
+// Set Entry and Exit to the window t0..t1 (ms) the way the date picker sets an
+// exact day: snapped to trading days, the slider thumbs moved to their
+// quarters. An Exit on the latest day clears its exact date instead, so the
+// period keeps ending on the latest day as new data arrives. Rendered on the
+// next frame, so a burst of wheel or drag events costs one run.
+function setPeriodFromZoom(t0, t1) {
+  if (!_zoomHome) _zoomHome = Object.fromEntries(ZOOM_INPUT_IDS.map(id => [id, document.getElementById(id).value]));
+  const last = daily.length - 1;
+  const entry = daily[_firstDayFrom(t0)].date;
+  let x = _firstDayFrom(t1);
+  if (Date.parse(daily[x].date) > t1) x--;
+  const exit = daily[x].date;
+  _zoomWindow = { t0, t1, range: entry + '|' + exit };
+  document.getElementById('entry-exact-date').value = entry;
+  document.getElementById('slider-entry').value = quarterIdxForDate(entry);
+  document.getElementById('exit-exact-date').value = x === last ? '' : exit;
+  document.getElementById('slider-exit').value = x === last ? quarterlyData.length - 1 : quarterIdxForDate(exit);
+  if (!_zoomRenderRaf) _zoomRenderRaf = requestAnimationFrame(() => { _zoomRenderRaf = null; render(); });
+}
+// A wheel gesture ends once the wheel has been still for settleMs, a drag on
+// mouseup. Then the period is saved and the open panel catches up.
+function zoomGestureStep() {
+  _zoomGesture = true;
+  clearTimeout(_zoomSettleTimer);
+  _zoomSettleTimer = setTimeout(endZoomGesture, CHART_ZOOM.settleMs);
+}
+function endZoomGesture() {
+  clearTimeout(_zoomSettleTimer);
+  if (_zoomRenderRaf) { cancelAnimationFrame(_zoomRenderRaf); _zoomRenderRaf = null; }
+  _zoomGesture = false;
+  saveSliders();
+  render();
+}
+// Reset zoom and a double-click: the Entry and Exit from before the zoom.
+function resetChartZoom() {
+  if (!_zoomHome) return;
+  for (const id of ZOOM_INPUT_IDS) document.getElementById(id).value = _zoomHome[id];
+  _zoomHome = null;
+  _zoomWindow = null;
+  endZoomGesture();
+}
+// Latest →: the same length of period, ending on the latest day.
+function zoomToLatest() {
+  const { T1 } = zoomBounds(), cur = currentZoomWindow();
+  setPeriodFromZoom(T1 - (cur.t1 - cur.t0), T1);
+  endZoomGesture();
+}
+// The controls in the chart's bottom-right corner (index.html #chart-zoom-ui):
+// a hint, and Latest → and Reset zoom after a zoom. The hint's wordings,
+// longest first, go on to fitChartZoomUi, which shows the first that fits.
+function renderChartZoomUi() {
+  const hint = document.getElementById('chart-zoom-hint');
+  const latest = document.getElementById('chart-zoom-latest');
+  const reset = document.getElementById('chart-zoom-reset');
+  if (!hint || !latest || !reset) return;
+  reset.hidden = !_zoomHome;
+  latest.hidden = !_zoomHome || chart._periodDates[1] === daily[daily.length - 1].date;
+  hint._wordings = [_zoomHome ? `${MOD_KEY} + drag to pan` : `${MOD_KEY} + scroll to zoom`];
+}
+// The width the visible zoom buttons take, which the end-label margin keeps
+// for them (endLabelPlugin); 0 when none shows.
+function chartZoomButtonsWidth() {
+  const ui = document.getElementById('chart-zoom-ui');
+  if (!_zoomHome || !ui) return 0;
+  const shown = [...ui.querySelectorAll('.chart-zoom-btn')].filter(b => !b.hidden);
+  return shown.reduce((w, b) => w + b.offsetWidth, 0) + Math.max(0, shown.length - 1) * parseFloat(getComputedStyle(ui).columnGap);
+}
+// The controls get the room right of the last x-axis label; the hint takes
+// the longest wording that fits there, or is dropped (the buttons' tooltips
+// carry the instructions). Measured only when the wordings or the room
+// changed, not on every hover redraw.
+function fitChartZoomUi(c) {
+  const ui = document.getElementById('chart-zoom-ui'), hint = document.getElementById('chart-zoom-hint');
+  if (!ui || !hint || !hint._wordings || !c.chartArea) return;
+  const room = Math.round(c.width - c.chartArea.right - CHART_ZOOM.uiGapPx);
+  const key = [hint._wordings.join('/'), room, document.getElementById('chart-zoom-latest').hidden, document.getElementById('chart-zoom-reset').hidden].join('|');
+  if (ui._fitKey === key) return;
+  ui._fitKey = key;
+  hint.hidden = false;
+  for (const wording of hint._wordings) {
+    hint.textContent = wording;
+    if (ui.offsetWidth <= room) return;
+  }
+  hint.hidden = true;
 }
 // The chart's minimum plottable value is 1. Values below 1 (e.g. a strategy fully
 // out of cash → Cash = 0) are raised to 1 so they always render: on a log axis 0
@@ -1889,6 +2280,9 @@ function render() {
   //     coarser line is step-resampled onto it (identity when the grains match).
   const mainPeriod   = window._editingConfigId ? 'quarterly' : _livePeriod;
   const displayGrain = chartDisplayPeriod(_livePeriod, _yearsSpan(entryDateForSim, exitDateForSim));
+  // A zoom's session (Reset, the exact window) ends once Entry or Exit is
+  // changed some other way (setPeriodFromZoom).
+  if (_zoomWindow && _zoomWindow.range !== entryDateForSim + '|' + exitDateForSim) { _zoomWindow = null; _zoomHome = null; }
 
   // Rebalance point: % of the way through each period where the check happens
   // (0 = start, 100 = end). Maps to a trading-day offset and shifts the schedule
@@ -2232,6 +2626,8 @@ function render() {
     // to build its own "yesterday" qData.
     isLatestDaySelected, prevTradingDayDate, entryDateForSim,
   };
+  // The money the built-in panels' range runs use (runNativeRangeSim).
+  window._chartMoneyCtx = cfgCtx;
   if (chart) {
     // externalTooltip (defined once, at chart creation below) is a stable
     // callback Chart.js keeps calling on every render — it can't close over
@@ -2242,6 +2638,8 @@ function render() {
     // _displayGrain above — endLabelPlugin reads these fresh each draw.
     chart._isLatestDaySelected = isLatestDaySelected;
     chart._prevTradingDayDate = prevTradingDayDate;
+    // The period on screen, where a zoom gesture starts from (currentZoomWindow).
+    chart._periodDates = [entryDateForSim, exitDateForSim];
     // Strip saved-config datasets up front so the envelope length math below
     // (which assumes datasets end at the envelope block) stays correct.
     if (typeof removeConfigDatasets === 'function') removeConfigDatasets(chart);
@@ -2282,6 +2680,7 @@ function render() {
     chart.options.scales.y.min = logScale ? undefined : 0;
     clampChartMin(chart);
     applyPanelEmphasis(false); // keep the open panel's line emphasized across re-renders
+    renderChartZoomUi();
     chart.update('none');
   } else {
   const ctx = document.getElementById('mainChart').getContext('2d');
@@ -2382,6 +2781,8 @@ function render() {
     // overlay + legend-chip readout would visually collide with the normal
     // hover tooltip otherwise.
     if (rangeSelectDragging || hasRangeSelection()) { el.style.display = 'none'; return; }
+    // Nor while a ⌘/Ctrl + drag pans the chart.
+    if (_chartPan) { el.style.display = 'none'; return; }
     if (tooltip.opacity === 0) {
       if (isTouchChart && chartTooltipPinned) return; // stay open until dismissed
       el.style.display = 'none';
@@ -2611,9 +3012,11 @@ function render() {
       // "INVESTED COMPOUNDED" (the longest built-in name) at the smaller 8px
       // font without silently clipping it against the canvas edge the same
       // way an under-sized fixed margin did before this whole plugin existed.
-      c.options.layout.padding.right = compact
+      // After a zoom the margin also keeps room under the labels for its buttons.
+      const zoomW = _zoomHome ? Math.ceil(chartZoomButtonsWidth()) + CHART_ZOOM.uiGapPx : 0;
+      c.options.layout.padding.right = Math.max(zoomW, compact
         ? Math.max(40, Math.min(130, Math.round(maxW) + 12))
-        : Math.max(100, Math.min(260, Math.round(maxW) + 16));
+        : Math.max(100, Math.min(260, Math.round(maxW) + 16)));
     },
     afterDraw(c) {
       const { ctx: cx, chartArea: area } = c;
@@ -2628,6 +3031,7 @@ function render() {
           inflBtn._lx = bx; inflBtn._ly = by;
         }
       }
+      fitChartZoomUi(c);
       // Compact mode below — see the matching comment in beforeLayout.
       const compact = window.innerWidth <= 600;
       const lastIdx = c.data.labels.length - 1;
@@ -3341,9 +3745,14 @@ function render() {
             // height ate into the LOG toggle's fixed bottom-left position
             // (they sit only a few px apart — see .chart-log-toggle CSS).
             maxTicksLimit: window.innerWidth <= 600 ? 6 : 10,
+            // Year and month; a window under about a year (a zoom, or a short
+            // Entry → Exit) gets whole dates, since its weekly ticks would
+            // repeat months.
             callback: function(val) {
               const d = this.getLabelForValue(val);
-              return d ? d.substring(0, 7) : '';
+              if (!d) return '';
+              const days = (Date.parse(this.getLabelForValue(this.max)) - Date.parse(this.getLabelForValue(this.min))) / 86400000;
+              return days < 400 ? d : d.substring(0, 7);
             }
           },
           grid: { color: "rgba(197,193,236,0.3)" }, border: { color: "#c5c1ec" }
@@ -3393,6 +3802,7 @@ function render() {
   chart._displayGrain = displayGrain;
   chart._isLatestDaySelected = isLatestDaySelected;
   chart._prevTradingDayDate = prevTradingDayDate;
+  chart._periodDates = [entryDateForSim, exitDateForSim];
   // First successful chart creation — the loading overlay (index.html) has
   // done its job. This branch only runs once per page load (subsequent
   // render() calls take the `if (chart)` update path above), so no separate
@@ -3403,6 +3813,7 @@ function render() {
   if (typeof applyNineSigFamily === 'function') applyNineSigFamily(chart);
   applyInflationToChart(chart); // deflate all lines to real $ when the toggle is on
   clampChartMin(chart);
+  renderChartZoomUi();
   chart.update('none');
   // SMA action-marker hover (chart is created exactly once, so attach here).
   chart.canvas.addEventListener('mousemove', handleSmaMarkerHover);
@@ -3423,7 +3834,8 @@ function render() {
   // pointer leaves the canvas mid-gesture, and definitely finish on mouseup
   // wherever that lands.
   chart.canvas.addEventListener('mousedown', (e) => {
-    if (isTouchChart || !chart.chartArea) return;
+    // With ⌘/Ctrl held the drag pans a zoom instead (the handlers below).
+    if (isTouchChart || !chart.chartArea || modKeyHeld(e)) return;
     const rect = chart.canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left, my = e.clientY - rect.top;
     const area = chart.chartArea;
@@ -3497,9 +3909,67 @@ function render() {
   // it must not simultaneously dismiss it.
   document.addEventListener('click', (e) => {
     if (!hasRangeSelection()) return;
-    if (e.target && e.target.closest && (e.target.closest('#mainChart') || e.target.closest('#share-btn') || e.target.closest('#analytics-share'))) return;
+    if (e.target && e.target.closest && (e.target.closest('#mainChart') || e.target.closest('#chart-zoom-ui') || e.target.closest('#share-btn') || e.target.closest('#analytics-share'))) return;
     clearRangeSelection();
   });
+
+  // Zoom and pan move Entry and Exit (setPeriodFromZoom). ⌘/Ctrl + wheel over
+  // the chart scales the period by 2^(-deltaY × wheelK) around the date under
+  // the cursor, never under minSpanMs or past zoomBounds; within
+  // rightAnchorPx of the plot's right edge the pivot is that edge, so zooming
+  // near the latest value keeps Exit in place. passive: false so the page
+  // neither scrolls nor zooms itself. A pinned range is dismissed: its dates
+  // belong to the period being left.
+  chart.canvas.addEventListener('wheel', (e) => {
+    if (!modKeyHeld(e) || !chart.chartArea) return;
+    e.preventDefault();
+    const { T0, T1 } = zoomBounds(), full = T1 - T0;
+    const cur = currentZoomWindow(), span = cur.t1 - cur.t0;
+    const scale = Math.pow(2, -e.deltaY * (e.deltaMode === 1 ? 0.05 : e.deltaMode ? 1 : CHART_ZOOM.wheelK));
+    const next = Math.max(Math.min(CHART_ZOOM.minSpanMs, full), Math.min(full, span / scale));
+    if (next === span) return;
+    clearRangeSelection();
+    const area = chart.chartArea, x = e.clientX - chart.canvas.getBoundingClientRect().left;
+    const nearRight = area.right - x <= Math.min(CHART_ZOOM.rightAnchorPx, (area.right - area.left) / 2);
+    // Where the cursor sits along the period; near the right edge, the edge.
+    const frac = nearRight ? 1 : Math.max(0, Math.min(1, (x - area.left) / (area.right - area.left)));
+    const pivot = cur.t0 + frac * span;
+    let n0 = pivot - frac * next, n1 = pivot + (1 - frac) * next;
+    if (n0 < T0) { n0 = T0; n1 = T0 + next; }
+    if (n1 > T1) { n1 = T1; n0 = T1 - next; }
+    zoomGestureStep();
+    setPeriodFromZoom(n0, n1);
+  }, { passive: false });
+  // ⌘/Ctrl + drag slides the period, following the cursor pixel for pixel and
+  // stopping at either end of zoomBounds (the whole history has nowhere to go).
+  chart.canvas.addEventListener('mousedown', (e) => {
+    if (!modKeyHeld(e) || !chart.chartArea) return;
+    const { T0, T1 } = zoomBounds(), cur = currentZoomWindow(), area = chart.chartArea;
+    if (cur.t1 - cur.t0 >= T1 - T0) return;
+    e.preventDefault();
+    clearRangeSelection();
+    _chartPan = { clientX: e.clientX, t0: cur.t0, t1: cur.t1, msPerPx: (cur.t1 - cur.t0) / (area.right - area.left) };
+    _zoomGesture = true;
+    document.body.classList.add('chart-panning');
+    document.getElementById('custom-tooltip').style.display = 'none';
+  });
+  document.addEventListener('mousemove', (e) => {
+    if (!_chartPan) return;
+    const { T0, T1 } = zoomBounds();
+    const shift = Math.max(T0 - _chartPan.t0, Math.min(T1 - _chartPan.t1, (_chartPan.clientX - e.clientX) * _chartPan.msPerPx));
+    setPeriodFromZoom(_chartPan.t0 + shift, _chartPan.t1 + shift);
+  });
+  document.addEventListener('mouseup', () => {
+    if (!_chartPan) return;
+    _chartPan = null;
+    document.body.classList.remove('chart-panning');
+    endZoomGesture();
+  });
+  chart.canvas.addEventListener('dblclick', resetChartZoom);
+  const zoomReset = document.getElementById('chart-zoom-reset');
+  zoomReset.title = `Back to the Entry and Exit from before the zoom. ${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.`;
+  zoomReset.addEventListener('click', resetChartZoom);
+  document.getElementById('chart-zoom-latest').addEventListener('click', zoomToLatest);
 
   // Reverse link: hovering a transaction-log row highlights that trade's action
   // point on the chart. Rows carry data-mkey = their smaLog index, which is the

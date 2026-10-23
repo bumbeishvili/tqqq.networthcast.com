@@ -233,23 +233,33 @@ function runCustomRangeSim(cfgId, from, to) {
     resolve({ value: stats.end, invested, cagr: stats.cagr, maxDD: stats.maxDD });
   }));
 }
-setMiniRangeSim(runCustomRangeSim);
+// Custom strategies run in the worker; the built-in SMA and 9sig panels'
+// charts run their own engines (js/chart.js's runNativeRangeSim).
+setMiniRangeSim((cfgId, from, to) => (savedConfigs.some(c => c.id === cfgId && c.type === 'custom')
+  ? runCustomRangeSim(cfgId, from, to) : runNativeRangeSim(from, to)));
 
 // The strategy panel as the signal chart's host (js/signal-chart.js): redraw
-// just the chart svg of the open custom panel (nothing else in the panel) from
-// the current width, log and zoom.
+// just the chart svg of the open panel (nothing else in the panel) from the
+// current width, log and zoom — a custom strategy's, or a built-in SMA or
+// 9sig panel's (js/chart.js's nativeSignalChart).
 function redrawPanelSignalChart() {
-  const id = window._openCustomCfgId;
-  if (!id) return;
   const body = document.getElementById('strategy-panel-body');
   if (!body || !body.clientWidth) return;
   const svg = body.querySelector('.custom-lines-chart');
   if (!svg) return;
-  const cfg = savedConfigs.find(c => c.id === id);
-  const auxLines = (window._customLines || {})[id] || [];
-  if (!cfg || !auxLines.length) return;
-  const view = customSignalChartView(cfg, (window._customLogs || {})[id] || []);
-  const html = buildCustomLinesChartHtml(cfg, auxLines, view.log, body.clientWidth, { home: view.home });
+  const id = window._openCustomCfgId;
+  let html = '';
+  if (id) {
+    const cfg = savedConfigs.find(c => c.id === id);
+    const auxLines = (window._customLines || {})[id] || [];
+    if (!cfg || !auxLines.length) return;
+    const view = customSignalChartView(cfg, (window._customLogs || {})[id] || []);
+    html = buildCustomLinesChartHtml(cfg, auxLines, view.log, body.clientWidth, { home: view.home });
+  } else {
+    const signal = nativeSignalChart(_currentPanelIdx);
+    if (!signal) return;
+    html = buildCustomLinesChartHtml(signal.cfg, signal.lines, signal.log, body.clientWidth, { home: signal.home });
+  }
   if (!html) return;
   const tpl = document.createElement('div');
   tpl.innerHTML = html;
@@ -727,6 +737,9 @@ trade fires, without working it out from the rule text. Declare them as lines:
   Max 6; declare only levels a rule actually uses, in raw units, no rescaling.
 - The price being compared (the fund your rule reads, which may differ from the fund you trade) is
   the FIRST line, so the user can watch it cross your levels: { key: "assetPrice", label: "TQQQ price" }.
+- A rule on a percent that is no price (a volatility, a share of the account) draws in percent: give
+  every line unit: "%" and log the percent itself (40 for 40%). One chart has one unit, so do not
+  mix percent lines with price lines.
 
 === SIGNALS: the live dashboard (do this — it is what users check first) ===
 Return a "signals" object alongside your log describing WHERE EVERY RULE STANDS ON THE FINAL DAY of
@@ -1020,7 +1033,9 @@ function customWorkerMain() {
       if (!l) continue;
       if (typeof l === 'string') { out.push({ key: l, label: l }); continue; }
       if (l.key == null) continue;
-      out.push({ key: String(l.key), label: l.label != null ? String(l.label) : String(l.key) });
+      var line = { key: String(l.key), label: l.label != null ? String(l.label) : String(l.key) };
+      if (l.unit === '%') line.unit = '%';   // a percent line (see LINES in the prompt)
+      out.push(line);
     }
     return out.length ? out : null;
   }
@@ -1543,6 +1558,7 @@ function computeConfigSeries(cfg, ctx) {
   const p = cfg.params || {};
   let points = null;
   let subPoints = null; // 9sig Holding/Target/Cash breakdown (for its sub-series)
+  let contributed = null; // what the run put in: its initial plus contributions
   // #3 Daily-drawdown control points (date/shares/cash) + the daily price field
   // to revalue against. Filled per strategy below; null → fall back to the
   // rebalance-grain series drawdown (e.g. Invested Compounded, custom).
@@ -1604,6 +1620,7 @@ function computeConfigSeries(cfg, ctx) {
     opts.sampleWeekly = displayGrain === 'weekly' && opts.rebalancePeriod !== 'weekly';
     const cashRate = (+pget(p, 'select-9sig-cashrate', 4) || 0) / 100;
     const r = simulate(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, opts);
+    contributed = r.totalContributed;
     // Driven by the same sampleQuarterly/sampleWeekly flags set above, not by
     // whether samplePoints happens to be non-empty — see the 'bh'/'invested'
     // branches below for why a duck-typed check is the wrong call here.
@@ -1662,6 +1679,7 @@ function computeConfigSeries(cfg, ctx) {
     };
     const cashRate = (+pget(p, 'select-sma-cashrate', 4) || 0) / 100;
     const r = simulateSMA(initial, monthly, cashRate, simEntryIdx, exitIdx, annualRaise, opts);
+    contributed = r.totalContributed;
     points = (r.smaPoints || []).map(pt => ({ date: pt.date, value: pt.value }));
     // Full multi-asset holdings per step → honest daily-revalued max drawdown.
     ddMulti = r.ddControls || null;
@@ -1679,6 +1697,7 @@ function computeConfigSeries(cfg, ctx) {
       sampleWeekly: displayGrain === 'weekly',
     };
     const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, bhOpts);
+    contributed = r.totalContributed;
     const key = pget(p, 'select-bh-underlying', 'tqqq');
     const rawArr = key === 'sqqq' ? (r.sqqqPoints || [])
               : key === 'qqq' ? r.qqqPoints
@@ -1718,6 +1737,7 @@ function computeConfigSeries(cfg, ctx) {
       sampleWeekly: displayGrain === 'weekly',
     };
     const r = simulate(initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, investedOpts);
+    contributed = r.totalContributed;
     const seriesRows = (displayGrain === 'quarterly' || displayGrain === 'weekly') ? r.samplePoints : (r.log || []);
     points = seriesRows.map(l => ({ date: l.date, value: l.investedCompounded }));
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'invested', log: r.log };
@@ -1740,7 +1760,7 @@ function computeConfigSeries(cfg, ctx) {
     : (ddControls && ddControls.length && dailyRows && typeof computeDailyMaxDrawdown === 'function')
     ? computeDailyMaxDrawdown(ddControls, dailyRows, ddKey)
     : ((typeof computeMaxDrawdown === 'function') ? computeMaxDrawdown(data, labels) : { pct: 0, peakDate: null, troughDate: null });
-  return { data, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate };
+  return { data, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed };
 }
 
 function fadeColor(hex, a) {
@@ -2178,25 +2198,28 @@ function initCodeEditor(ta) {
 // A saved strategy and a share link both carry a custom strategy's code as it
 // was on the day they were made. These two bring that code up to date:
 // a copy of a library strategy takes the library's current code for that entry
-// (refreshLibraryCopies), and any custom code gets the library's current
+// (refreshLibraryCopies) and, if the entry was renamed, its current name
+// (refreshedLibraryName), and any custom code gets the library's current
 // withdrawal handling and daily-detail logging (js/strategy-library-code.js's
 // upgradeSavedCode). upgradeSavedCustomCode handles what is already in
 // savedConfigs, withCurrentCustomCode a share link's entries.
 //
 // They go together. Share-link entries are matched against saved strategies by
-// their code text (importSharedConfigs' duplicate check, resolveSharedConfigId),
-// so upgrading one side alone would import a user's own older link as a
-// duplicate of the strategy they already have. Both are called from js/init.js,
-// which loads after the library code; this file loads before it.
+// their code text (importSharedConfigs' duplicate check, which compares names
+// too, and resolveSharedConfigId), so upgrading one side alone would import a
+// user's own older link as a duplicate of the strategy they already have. Both
+// are called from js/init.js, which loads after the library code; this file
+// loads before it.
 //
 // A library copy is recognised by its entry number, stamped when it was added
 // (addStrategyFromLibrary), or for copies made before the stamp existed by the
 // name line of its code (libraryEntryOf). A copy whose code no longer matches
 // the fingerprint taken when it was made was edited by the user and is left
 // alone. The code a refresh replaces is kept on the config as codeBefore.
+const libraryEntryNumber = cfg => (cfg.libraryN != null ? +cfg.libraryN : libraryEntryOf(cfg.code));
 function refreshedLibraryCopy(cfg) {
   if (typeof STRATEGY_CODE === 'undefined' || !cfg || cfg.type !== 'custom' || !cfg.code) return null;
-  const n = cfg.libraryN != null ? +cfg.libraryN : libraryEntryOf(cfg.code);
+  const n = libraryEntryNumber(cfg);
   if (n == null || !STRATEGY_CODE[n]) return null;
   const edited = cfg.libraryN != null && cfg.libraryFingerprint && cfg.libraryFingerprint !== codeFingerprint(cfg.code);
   if (edited) return null;
@@ -2208,6 +2231,30 @@ function refreshedLibraryCopy(cfg) {
   const descEdited = cfg.libraryDescFingerprint && cfg.libraryDescFingerprint !== codeFingerprint(cfg.desc || '');
   const desc = entry && !descEdited ? entry.rules : cfg.desc;
   return { n, code, desc, changed: code !== cfg.code || cfg.libraryN == null || desc !== cfg.desc };
+}
+// The name a copy should wear after its library entry was renamed, or null to
+// keep its own: a copy still named after one of the entry's formerNames
+// (js/strategy-library.js) takes the current name, with any " (2)" suffix
+// uniqueName gave a second copy kept. Separate from refreshedLibraryCopy
+// because it also applies to copies whose code the user edited: the name
+// still came from the library.
+function refreshedLibraryName(cfg) {
+  if (typeof STRATEGY_LIBRARY === 'undefined' || !cfg || cfg.type !== 'custom' || !cfg.code) return null;
+  const n = libraryEntryNumber(cfg);
+  const entry = STRATEGY_LIBRARY.find(e => e.n === n);
+  const [, base, suffix] = /^(.*?)( \(\d+\))?$/.exec(cfg.name || '');
+  return entry && entry.formerNames && entry.formerNames.includes(base) ? entry.name + (suffix || '') : null;
+}
+// The stamp a library copy carries (addStrategyFromLibrary, applyLibraryRefresh):
+// the entry it came from, and fingerprints of its code and description as they
+// were then. Share links carry it (shareConfig in js/controls.js) and imports
+// keep it (importSharedConfigs), so the receiving page can tell an edited copy,
+// kept as sent, from an unedited one, brought up to the current library code.
+// Without it every shared copy counted as unedited and arrived with the
+// library's code, the sender's edits gone. {} for a config without a stamp.
+const LIBRARY_STAMP_KEYS = ['libraryN', 'libraryFingerprint', 'libraryDescFingerprint'];
+function libraryStampOf(cfg) {
+  return Object.fromEntries(LIBRARY_STAMP_KEYS.filter(key => cfg[key] != null).map(key => [key, cfg[key]]));
 }
 function applyLibraryRefresh(cfg, up) {
   if (up.code !== cfg.code) { cfg.codeBefore = cfg.code; cfg.code = up.code; }
@@ -2221,6 +2268,8 @@ function upgradeSavedCustomCode() {
   for (const c of savedConfigs) {
     const up = refreshedLibraryCopy(c);
     if (up && up.changed) { applyLibraryRefresh(c, up); if (!c._transient) changed = true; }
+    const name = refreshedLibraryName(c);
+    if (name) { c.name = name; if (!c._transient) changed = true; }
   }
   const outdated = savedConfigs
     .filter(c => c.type === 'custom' && c.code)
@@ -2235,6 +2284,8 @@ function withCurrentCustomCode(entries) {
     const copy = { ...c };
     const up = refreshedLibraryCopy(copy);
     if (up && up.changed) applyLibraryRefresh(copy, up);
+    const name = refreshedLibraryName(copy);
+    if (name) copy.name = name;
     copy.code = upgradeSavedCode(copy.code);
     return copy;
   });
@@ -2262,7 +2313,7 @@ function importSharedConfigs(arr) {
       // The recipient clicks "Save" on the banner to keep them locally.
       _transient: true,
     };
-    if (c.type === 'custom') { cfg.code = c.code || ''; cfg.desc = c.desc || ''; } // safe to run: sandboxed
+    if (c.type === 'custom') { cfg.code = c.code || ''; cfg.desc = c.desc || ''; Object.assign(cfg, libraryStampOf(c)); } // safe to run: sandboxed
     savedConfigs.push(cfg);
     existing.add(sig(c));
   }
@@ -3157,7 +3208,10 @@ document.addEventListener('click', (e) => {
   // Cash line (persisted on the config, so it never flips to the canonical base).
   const subChip = tgt.closest('.cfg-sub-chip');
   if (subChip) {
-    const cfg = savedConfigs.find(c => c.id === subChip.getAttribute('data-config-id'));
+    // A base line's signal chart chips name its stand-in (js/chart.js's
+    // nativeSignalCfg), kept in memory rather than with the saved strategies.
+    const chipId = subChip.getAttribute('data-config-id');
+    const cfg = savedConfigs.find(c => c.id === chipId) || (/^base-/.test(chipId) && _currentPanelIdx != null ? nativeSignalCfg(_currentPanelIdx) : null);
     const key = subChip.getAttribute('data-config-sub');
     if (cfg && key) {
       cfg.subShown = cfg.subShown || {};

@@ -83,8 +83,6 @@ function _miniAssetKey(held) {
 const MINI_ZOOM = { minSpanMs: 30 * 86400000, wheelK: 0.002, rightAnchorPx: 200 };
 const MINI_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const _miniShortDate = t => { const d = new Date(t); return `${d.getUTCDate()} ${MINI_MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
-const MINI_MOD_KEY = /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
-const _miniModHeld = e => e.metaKey || e.ctrlKey;
 window._miniZooms = window._miniZooms || {};   // cfg id → { t0, t1 }; absent = the full range
 // fmt() rounds sub-$1000 values to whole dollars, which turns the low end of
 // a log axis (TQQQ opened at $0.42) into a "$0" label — keep decimals on
@@ -93,6 +91,17 @@ window._miniZooms = window._miniZooms || {};   // cfg id → { t0, t1 }; absent 
 // broken after its hyphen ("Buy-back" reads "Buy-" over "back").
 function _miniNameRows(name) {
   return name.split(' ').flatMap(word => word.replace(/-/g, '-\n').split('\n')).filter(Boolean);
+}
+// A value as its chart reads it: dollars, or percent on a chart whose lines
+// all declare unit: "%" (a volatility, a share of the account).
+function _miniFmtValue(unit, v) {
+  return unit === '%' ? (Math.abs(v) < 10 ? v.toFixed(1) : String(Math.round(v))) + '%' : _miniFmtPrice(v);
+}
+// How far a line moved over a dragged range: percent for prices, percentage
+// points on a chart in percent (a share going 40% to 60% is +20 pts, not +50%).
+function _miniRangeMove(unit, v0, v1) {
+  const d = unit === '%' ? v1 - v0 : (v0 > 0 ? (v1 / v0 - 1) * 100 : 0);
+  return { up: d >= 0, text: (d >= 0 ? '+' : '') + d.toFixed(1) + (unit === '%' ? ' pts' : '%') };
 }
 function _miniFmtPrice(v) {
   const a = Math.abs(v);
@@ -219,10 +228,11 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
         broken = false;
       } else broken = true;
     }
-    if (pts.length > 1) all.push({ label: ln.label, color: ln.color || customLineColor(cfg, i), pts, badge: ln.badge || null });
+    if (pts.length > 1) all.push({ label: ln.label, color: ln.color || customLineColor(cfg, i), pts, badge: ln.badge || null, unit: ln.unit === '%' ? '%' : null });
   });
   window._miniChartHover = null;
   if (!all.length) return '';
+  const unit = all.every(s => s.unit === '%') ? '%' : '$';   // the axis reads percent only when every line is one
 
   const { W, padL } = MINI_CHART;
   const H = opts && opts.aspect ? Math.max(60, Math.round(W * opts.aspect)) : MINI_CHART.H;
@@ -272,7 +282,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // compact layout a row per word with any badge on the row above them. It is
   // capped so a narrow panel keeps a usable plot area — when capped, long
   // names clip at the right edge instead of covering lines.
-  const _valTxt = v => (v < 0 ? '-' : '') + (Math.abs(v) >= 1000 ? fmt(Math.abs(v)) : '$' + Math.abs(v).toFixed(2));
+  const _valTxt = v => unit === '%' ? _miniFmtValue(unit, v) : (v < 0 ? '-' : '') + (Math.abs(v) >= 1000 ? fmt(Math.abs(v)) : '$' + Math.abs(v).toFixed(2));
   const gutterSeries = series.filter(s => s.shown && !s.partial);
   const nameRowsOf = (name, badge, color) => (compact && badge ? [{ text: badge.text, color: badge.color }] : [])
     .concat((compact ? _miniNameRows(name) : [name]).map(text => ({ text, color })));
@@ -293,7 +303,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   for (const s of series) s.drawPts = _miniDecimate(s.pts, budget);
   const xAt = t => padL + (t - t0) / (t1 - t0) * plotW;
   const yAt = v => padT + (yHi - tf(v)) / (yHi - yLo) * plotH;
-  const fmtP = _miniFmtPrice;
+  const fmtP = v => _miniFmtValue(unit, v);
   // Trade events: a band at each trade's date across the plot, a cap in the
   // strip above it where the hover answers for them, and a mark at the trade's
   // crossing on the first drawn line, coloured by action (the main chart's
@@ -324,7 +334,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // Everything the hover and zoom handlers need to resolve a cursor position
   // back to dates, values and bands, under the chart's id (its svg carries
   // it); window._miniChartHover is the most recently built one.
-  const chartData = { series, t0, t1, T0, T1, yLo, yHi, linear, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home };
+  const chartData = { series, t0, t1, T0, T1, yLo, yHi, linear, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home, unit };
   window._miniCharts[cfg.id] = chartData;
   window._miniChartHover = chartData;
 
@@ -372,13 +382,13 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const hintW = txt => txt.length * 0.6 * (7 / k);   // JetBrains Mono advance
   let zoomUi = '';
   if (!offRest) {
-    const hint = `${MINI_MOD_KEY} + scroll to zoom`;
+    const hint = `${MOD_KEY} + scroll to zoom`;
     if (!compact && hintW(hint) <= padR - 4 / k) zoomUi = `<text x="${(W - 2 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.6)">${hint}</text>`;
   } else {
     const factor = ((T1 - T0) / (t1 - t0)).toFixed(1);
-    const resetBtn = `<g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MINI_MOD_KEY} + scroll zooms, ${MINI_MOD_KEY} + drag pans.</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
+    const resetBtn = `<g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
     if (atEnd) {
-      const long = `×${factor} · ${MINI_MOD_KEY} + drag to pan`;
+      const long = `×${factor} · ${MOD_KEY} + drag to pan`;
       const hint = hintW(long) <= padR - btnW - 8 / k ? long : `×${factor}`;
       zoomUi = (compact ? '' : `<text x="${(btnX - 4 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.9)">${hint}</text>`) + resetBtn;
     } else {
@@ -403,14 +413,16 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   }
 
   // Polylines + right-edge end labels (pushed apart when endpoints collide).
-  let paths = '';
+  // The first line, the price the levels are compared with, is drawn last so
+  // a level that hugs it (an RSI threshold resolved to a price) cannot hide it.
   const ends = [];
-  for (const s of series) {
+  const pathOf = s => {
     let d = '';
     for (const p of s.drawPts) d += (!d || p.gap ? 'M' : 'L') + xAt(p.t).toFixed(1) + ',' + yAt(p.v).toFixed(1);
-    paths += `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="0.45"/>`;
-    if (s.shown && !s.partial) ends.push({ y: yAt(s.endPt.v), v: s.endPt.v, color: s.color, name: s.label, badge: s.badge });
-  }
+    return `<path d="${d}" fill="none" stroke="${s.color}" stroke-width="0.45"/>`;
+  };
+  const paths = series.slice(1).map(pathOf).join('') + pathOf(series[0]);
+  for (const s of series) if (s.shown && !s.partial) ends.push({ y: yAt(s.endPt.v), v: s.endPt.v, color: s.color, name: s.label, badge: s.badge });
   // Partial lines: name and last value beside the line's end, to its right when
   // that fits inside the plot, else to its left.
   let lineTags = '';
@@ -684,7 +696,7 @@ function _miniEventRows(group) {
 document.addEventListener('wheel', (e) => {
   const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
   const data = _miniDataOf(svg);
-  if (!svg || !data || !data.series.length || !_miniModHeld(e)) return;
+  if (!svg || !data || !data.series.length || !modKeyHeld(e)) return;
   e.preventDefault();
   const span = data.t1 - data.t0, full = data.T1 - data.T0;
   const scale = Math.pow(2, -e.deltaY * (e.deltaMode === 1 ? 0.05 : e.deltaMode ? 1 : MINI_ZOOM.wheelK));
@@ -753,7 +765,7 @@ document.addEventListener('mousedown', (e) => {
   const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
   const data = _miniDataOf(svg);
   if (!svg || !data || !data.series.length) return;
-  if (_miniModHeld(e)) {
+  if (modKeyHeld(e)) {
     const pxPerUnit = svg.getBoundingClientRect().width / data.W;
     window._miniPan = { cfgId: data.cfgId, clientX: e.clientX, t0: data.t0, t1: data.t1, pxPerMs: pxPerUnit * (data.W - data.padL - data.padR) / (data.t1 - data.t0) };
     document.body.classList.add('mini-panning');
@@ -853,13 +865,13 @@ document.addEventListener('mousemove', (e) => {
       + (() => {
           const k = data.k, fs = 7 / k, ch = fs * 0.6, lh = 10 / k, padX = 3 / k;
           const mids = spans.map(s => {
-            const pct = s.p0.v > 0 ? (s.p1.v / s.p0.v - 1) * 100 : 0;
-            return { y: (yAt(s.p0.v) + yAt(s.p1.v)) / 2 - lh / 2, pct, label: s.label };
+            const move = _miniRangeMove(data.unit, s.p0.v, s.p1.v);
+            return { y: (yAt(s.p0.v) + yAt(s.p1.v)) / 2 - lh / 2, move, label: s.label };
           }).sort((a, b) => a.y - b.y);
           for (let i = 1; i < mids.length; i++) if (mids[i].y - mids[i - 1].y < lh) mids[i].y = mids[i - 1].y + lh;
           return mids.map(m => {
-            const pctTxt = (m.pct >= 0 ? '+' : '') + m.pct.toFixed(1) + '%';
-            const col = m.pct >= 0 ? '#00b929' : '#dc2626';
+            const pctTxt = m.move.text;
+            const col = m.move.up ? '#00b929' : '#dc2626';
             const tw = (m.label.length + 1 + pctTxt.length) * ch;
             const xM = Math.max(data.padL + tw / 2 + padX, Math.min(data.W - data.padR - tw / 2 - padX, (xA + xB) / 2));
             return `<rect x="${(xM - tw / 2 - padX).toFixed(1)}" y="${(m.y - lh * 0.72).toFixed(1)}" width="${(tw + 2 * padX).toFixed(1)}" height="${lh.toFixed(2)}" rx="${(3 / k).toFixed(2)}" fill="#fff" stroke="${col}" stroke-width="${(0.8 / k).toFixed(2)}"/>
@@ -869,9 +881,9 @@ document.addEventListener('mousemove', (e) => {
     const simKey = _miniRangeSimHost ? _miniRangeSimKey(data.cfgId, lo.d, hi.d) : null;
     tip.innerHTML = `<div class="mct-date">${fmtLogDate(lo.d)} – ${fmtLogDate(hi.d)}</div>`
       + spans.map(s => {
-          const pct = s.p0.v > 0 ? (s.p1.v / s.p0.v - 1) * 100 : 0;
-          const cls = pct >= 0 ? 'mct-pos' : 'mct-neg';
-          return `<div class="mct-row"><span class="mct-dot" style="background:${s.color}"></span>${_escHtml(s.label)}<b class="${cls}">${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%</b><span class="mct-range">${_miniFmtExact(s.p0.v)} → ${_miniFmtExact(s.p1.v)}</span></div>`;
+          const move = _miniRangeMove(data.unit, s.p0.v, s.p1.v);
+          const cls = move.up ? 'mct-pos' : 'mct-neg';
+          return `<div class="mct-row"><span class="mct-dot" style="background:${s.color}"></span>${_escHtml(s.label)}<b class="${cls}">${move.text}</b><span class="mct-range">${data.unit === '%' ? _miniFmtValue('%', s.p0.v) : _miniFmtExact(s.p0.v)} → ${data.unit === '%' ? _miniFmtValue('%', s.p1.v) : _miniFmtExact(s.p1.v)}</span></div>`;
         }).join('')
       + (simKey ? _miniRangeSimHtml(_miniRangeSimFor(data.cfgId, lo.d, hi.d)) : '');
     _miniPlaceTip(tip, e);
@@ -896,7 +908,7 @@ document.addEventListener('mousemove', (e) => {
   g.innerHTML = `<line x1="${cx.toFixed(1)}" y1="${data.padT}" x2="${cx.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
     + hits.map(h => `<circle cx="${cx.toFixed(1)}" cy="${yAt(h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join('');
   tip.innerHTML = `<div class="mct-date">${fmtLogDate(anchor.d)}</div>`
-    + hits.map(h => `<div class="mct-row"><span class="mct-dot" style="background:${h.color}"></span>${_escHtml(h.label)}<b>${_miniFmtPrice(h.pt.v)}</b></div>`).join('');
+    + hits.map(h => `<div class="mct-row"><span class="mct-dot" style="background:${h.color}"></span>${_escHtml(h.label)}<b>${_miniFmtValue(data.unit, h.pt.v)}</b></div>`).join('');
   _miniPlaceTip(tip, e);
   window._miniHoverActive = true;
 });

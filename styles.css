@@ -177,11 +177,13 @@
      ceiling at all — 97vw, always. The sidebar's fixed 288px doesn't need to
      grow, so all of that scales straight into the chart's `1fr` column. */
   .layout {
+    /* Also read by the docked strategy panel's divider, which fills this gap. */
+    --layout-gap: 20px;
     width: 97vw;
     margin: 0 auto;
     display: grid;
     grid-template-columns: 288px 1fr;
-    gap: 20px;
+    gap: var(--layout-gap);
   }
 
   /* Layout collapses to single-column AND the share button + legend chips
@@ -332,11 +334,12 @@
 
   /* Compact parameter rows: label on the left, value on the right at the
      same vertical level, slider underneath spanning both columns. Scoped
-     to the left Parameters panel only — the what-if-controls block and
+     to the contribution controls only (in the left panel, or in the header
+     while the strategy panel is docked) — the what-if-controls block and
      other panel-injected control-groups need their stacked default layout
      because their middle children (e.g. "Show alternate runs" toggle)
      would otherwise get shoved out of place by the grid. */
-  .layout > .panel:first-child .control-group:has(> label):has(> .value-display) {
+  #contrib-controls .control-group:has(> label):has(> .value-display) {
     display: grid;
     grid-template-columns: 1fr auto;
     align-items: baseline;
@@ -344,13 +347,13 @@
     row-gap: 12px;
     margin-bottom: 22px;
   }
-  .layout > .panel:first-child .control-group:has(> label):has(> .value-display) > label { margin-bottom: 0; }
-  .layout > .panel:first-child .control-group:has(> label):has(> .value-display) > .value-display {
+  #contrib-controls .control-group:has(> label):has(> .value-display) > label { margin-bottom: 0; }
+  #contrib-controls .control-group:has(> label):has(> .value-display) > .value-display {
     margin-bottom: 0;
     text-align: right;
     font-size: 14px;
   }
-  .layout > .panel:first-child .control-group:has(> label):has(> .value-display) > input[type="range"] {
+  #contrib-controls .control-group:has(> label):has(> .value-display) > input[type="range"] {
     grid-column: 1 / -1;
   }
 
@@ -2951,6 +2954,7 @@
     transition: border-color 0.15s, color 0.15s, background 0.15s;
   }
   .tx-clear-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.06); }
+  #tx-mode-toggle-btn { margin-bottom: 10px; }
   .tx-delete-btn:hover { border-color: var(--red-text); color: var(--red-text); background: rgba(var(--red-rgb), 0.08); }
 
   /* Parsed-rows preview inside the transaction-upload modal. */
@@ -3433,6 +3437,125 @@
     .strategy-panel-content { width: 100vw; max-width: 100vw; }
     .strategy-panel-resizer { display: none; }
   }
+  /* Docked strategy panel (wider than 900px; js/chart.js's syncPanelDock).
+     The open panel becomes the layout's first column instead of an overlay,
+     so the chart beside it stays whole and both can be used at once. The
+     controls card it replaces hides, and the card's contribution controls
+     move into the header. The panel's content is absolutely positioned in
+     its column, so the column adds no height of its own: it is exactly as
+     tall as the chart column (fitChartHeight sizes that one to the window)
+     and the panel body scrolls inside it. --panel-w is the width dragged on
+     the divider (js/controls.js's applyPanelWidth). */
+  body.panel-docked .layout { grid-template-columns: var(--panel-w, 360px) minmax(0, 1fr); }
+  body.panel-docked .layout > .panel { display: none; }
+  body.panel-docked .strategy-panel {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    visibility: visible;
+    pointer-events: auto;
+  }
+  body.panel-docked .strategy-panel-backdrop { display: none; }
+  body.panel-docked .strategy-panel .strategy-panel-content {
+    position: absolute;
+    inset: 0;
+    width: auto;
+    max-width: none;
+    height: auto;
+    transform: none;
+    transition: none;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    box-shadow: none;
+  }
+  /* The resizer is the divider between the panel and the chart: it fills the
+     column gap just past the panel's 1px border, shows a grip at rest, and
+     the accent line down the gap's middle takes over while hovered or
+     dragged. */
+  body.panel-docked .strategy-panel-resizer {
+    right: calc(-1px - var(--layout-gap));
+    width: var(--layout-gap);
+  }
+  body.panel-docked .strategy-panel-resizer::after { right: calc(var(--layout-gap) / 2 - 1px); }
+  body.panel-docked .strategy-panel-resizer::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: calc(var(--layout-gap) / 2 - 2px);
+    width: 4px;
+    height: 36px;
+    margin-top: -18px;
+    border-radius: 2px;
+    background: var(--border);
+    transition: opacity 0.15s;
+  }
+  body.panel-docked .strategy-panel-resizer:hover::before,
+  body.panel-docked .strategy-panel-content.is-resizing .strategy-panel-resizer::before { opacity: 0; }
+  /* While the divider is dragged, a transparent sheet over the page keeps
+     the resize cursor and stops the charts under the pointer from showing
+     their hover readouts. The drag itself listens on the document. */
+  body.panel-resizing { user-select: none; }
+  body.panel-resizing::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    cursor: ew-resize;
+  }
+  /* The contribution controls in the header while docked: one row in the
+     free space between the subtitle and the actions. */
+  body.panel-docked .header #contrib-controls {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    margin-left: auto;
+    margin-right: 16px;
+    align-self: center;
+  }
+  body.panel-docked .header #tx-mode-toggle-btn {
+    width: auto;
+    margin: 0;
+    padding: 6px 10px;
+    white-space: nowrap;
+  }
+  body.panel-docked .header #contrib-default-controls:not([hidden]) {
+    display: flex;
+    gap: 24px;
+  }
+  body.panel-docked .header #contrib-default-controls .control-group {
+    width: 220px;
+    margin: 0;
+    row-gap: 6px;
+  }
+  /* Monthly Contribution keeps to two rows like Initial Investment: its
+     label, yearly increase and value share the first, the slider the second. */
+  body.panel-docked .header #contrib-default-controls .control-group:has(> .mc-head) {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "label raise value" "range range range";
+    align-items: baseline;
+    column-gap: 8px;
+    width: 300px;
+  }
+  body.panel-docked .header .mc-head { display: contents; }
+  body.panel-docked .header .mc-head > label { grid-area: label; }
+  body.panel-docked .header .mc-head > div { grid-area: value; }
+  body.panel-docked .header .control-group .mc-raise { grid-area: raise; margin: 0; }
+  body.panel-docked .header #slider-monthly { grid-area: range; }
+  body.panel-docked .header #contrib-tx-active:not([hidden]) {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 0;
+  }
+  body.panel-docked .header .tx-summary {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 14px;
+    row-gap: 2px;
+    margin: 0;
+  }
+  body.panel-docked .header .tx-summary-row + .tx-summary-row { margin-top: 0; }
   .strategy-panel-header {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);
@@ -3991,6 +4114,45 @@
     background: var(--state-on-bg);
     border-color: var(--state-on-border);
   }
+
+  /* Zoom controls in the chart's bottom-right corner, right of the last x-axis
+     label (js/chart.js's renderChartZoomUi, fitChartZoomUi): a hint, and
+     Latest → and Reset zoom after a zoom. The buttons wear the LOG pill's
+     look. Touch screens get no wheel, so no controls either. */
+  .chart-zoom-ui {
+    position: absolute;
+    right: 0;
+    bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+  }
+  .chart-zoom-hint {
+    font: 500 10px 'Open Sans', sans-serif;
+    color: var(--text-muted);
+    opacity: .75;
+  }
+  .chart-zoom-btn {
+    padding: 3px 7px;
+    font: 600 10px 'Open Sans', sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--state-off-text);
+    background: var(--state-off-bg);
+    border: 1px solid var(--state-off-border);
+    border-radius: 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s, background 0.15s, border-color 0.15s;
+  }
+  .chart-zoom-btn:hover {
+    color: var(--text);
+    background: var(--state-hover-bg);
+    border-color: var(--state-hover-border);
+  }
+  @media (hover: none) { .chart-zoom-ui { display: none; } }
+  body.chart-panning, body.chart-panning * { cursor: grabbing; user-select: none; }
 
   /* "deinflated $" toggle — JS parks it at the plot's top-left corner (endLabels
      plugin); these are just the pre-first-draw fallback coordinates. */

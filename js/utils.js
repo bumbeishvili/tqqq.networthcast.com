@@ -25,6 +25,12 @@ function qLabel(dateStr) {
 // of one period → "first day of the next".
 const _LOG_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+// The key that turns a wheel into a zoom and a drag into a pan on the charts
+// (js/signal-chart.js, js/chart.js): ⌘ on a Mac, Ctrl elsewhere. A trackpad
+// pinch arrives as a Ctrl + wheel, so it zooms too.
+const MOD_KEY = /Mac|iPhone|iPad/.test(navigator.platform || '') ? '⌘' : 'Ctrl';
+const modKeyHeld = e => e.metaKey || e.ctrlKey;
+
 // "YYYY-MM-DD" → "Sep 2012". Kept for callers that want month/year resolution.
 function fmtMonthYear(dateStr) {
   if (!dateStr || dateStr.length < 7) return '';

@@ -601,6 +601,11 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   // chart's endpoint. Append an "end of range" row (unless the last event is
   // already at the final step) so the table's last Total matches the chart.
   const lastRow = stepRows[mEnd];
+  // The exit day's value closes the chart series too when the exit is not a
+  // quarter end (an exact exit date, a zoomed period): without it the line
+  // ended on the quarter before, while the log's END row and the drawdown use
+  // the exit day.
+  if (lastRow && smaPoints[smaPoints.length - 1].date !== lastRow[0]) smaPoints.push({ date: lastRow[0], value: totalAt(lastRow), state });
   if (lastRow && (!smaLog.length || smaLog[smaLog.length - 1].date !== lastRow[0])) {
     smaLog.push({
       date: lastRow[0], state, held: dominantHeld(lastRow), action: 'END', fee: 0,

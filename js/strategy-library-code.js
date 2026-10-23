@@ -51,6 +51,21 @@ function centerLine(arr, Wn, at, useMed) {
 // own source text (kept in sync automatically — it IS the function above).
 const CENTER_LINE_SNIPPET = `    const useMed = p.stat === "median";
     ${centerLine.toString().replace(/\n/g, '\n    ')}`;
+
+// The close that would put Wilder's RSI at x today, from yesterday's close and
+// the average gain and loss over n days, smoothed as the RSI strategies below
+// smooth them. RSI rises with the close, so a close above this level is
+// exactly RSI above x: those strategies draw their RSI thresholds on the
+// signal chart at these prices. null for x of 0 or 100, which no close
+// reaches. Shared like centerLine: each strategy embeds the SOURCE via
+// RSI_LEVEL_SNIPPET.
+function rsiLevel(prev, ag, al, n, x) {
+  if (!(x > 0 && x < 100) || !(prev > 0)) return null;
+  const rs = x / (100 - x), m = n - 1;
+  const rise = m * (rs * al - ag);
+  return rise >= 0 ? prev + rise : prev - m * (ag / rs - al);
+}
+const RSI_LEVEL_SNIPPET = `    ${rsiLevel.toString().replace(/\n/g, '\n    ')}`;
 // The stat param entry, in both default flavors.
 const STAT_PARAM_SNIPPET = `{ id: "stat", label: "Center line", options: [{ value: "sma", label: "Moving average" }, { value: "median", label: "Median" }], default: "sma" }`;
 const STAT_PARAM_MEDIAN_SNIPPET = `{ id: "stat", label: "Center line", options: [{ value: "median", label: "Median" }, { value: "sma", label: "Moving average" }], default: "median" }`;
@@ -179,14 +194,17 @@ CODE[1] = `{
   name: "Faber 10-mo / 200-day (monthly) → TQQQ/cash",
   params: [{ id: "window", label: "Window (days)", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "QQQ's average or median close over the window (the Center line setting). Checked only on the month end." }],
   run(data, p) {
     const log = [], W = p.window, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -202,14 +220,15 @@ ${WEEKLY_MONTH_END_SNIPPET}
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
       if (monthEnd) {
         const sma = centerLine(sig, W, i, useMed), bull = sma > 0 && sig[i] > sma;
-        if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-        else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+        if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: month end, QQQ closed above its " + lineName; }
+        else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold TQQQ: month end, QQQ closed under its " + lineName; }
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: centerLine(sig, W, i, useMed) });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName }] };
   }
 }`;
 
@@ -218,14 +237,17 @@ CODE[2] = `{
   name: "Gayed LRS 3× — SPY 200SMA → SPXL/cash",
   params: [{ id: "window", label: "Window (days)", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
   run(data, p) {
     const log = [], W = p.window, sig = data.spy, lev = data.spxl;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -233,14 +255,15 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought " + "SPXL" + ": " + "SPY" + " closed above its " + lineName; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold " + "SPXL" + ": " + "SPY" + " closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "SPXL" : "CASH", note: note, assetPrice: sig[i], center: sma });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "SPY" + " price" }, { key: "center", label: lineName }] };
   }
 }`;
 
@@ -249,14 +272,17 @@ CODE[3] = `{
   name: "Gayed LRS 2× — SPY 200SMA → SSO/cash",
   params: [{ id: "window", label: "Window (days)", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
   run(data, p) {
     const log = [], W = p.window, sig = data.spy, lev = data.sso;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -264,14 +290,15 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought " + "SSO" + ": " + "SPY" + " closed above its " + lineName; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold " + "SSO" + ": " + "SPY" + " closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "SSO" : "CASH", note: note, assetPrice: sig[i], center: sma });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "SPY" + " price" }, { key: "center", label: lineName }] };
   }
 }`;
 
@@ -281,14 +308,20 @@ CODE[8] = `{
   params: [{ id: "band", label: "Band (% around line)", options: [0, 1, 2, 3], default: 1 },
            { id: "window", label: "Window", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "buyLine", label: "Buy line", tip: "Where SPY must close to buy: the center plus the band." },
+             { key: "sellLine", label: "Sell line", tip: "Where SPY must close to sell: the center minus the band." }],
   run(data, p) {
     const log = [], W = p.window, sig = data.spy, lev = data.tqqq, up = 1 + p.band / 100, dn = 1 - p.band / 100;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
+    const bandTxt = p.band > 0 ? p.band + "% " : "";
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -297,15 +330,17 @@ ${SELL_SH_TO_COVER}
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], s = sig[i];
       if (sma > 0 && s > 0) {
-        if (!invested && s >= sma * up && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-        else if (invested && s <= sma * dn) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+        if (!invested && s >= sma * up && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: SPY closed " + bandTxt + "above its " + lineName; }
+        else if (invested && s <= sma * dn) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold TQQQ: SPY closed " + bandTxt + "under its " + lineName; }
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: s, center: sma, ...(p.band > 0 ? { buyLine: sma * up, sellLine: sma * dn } : {}) });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "SPY price" }, { key: "center", label: lineName },
+      ...(p.band > 0 ? [{ key: "buyLine", label: "Buy line (+" + p.band + "%)" }, { key: "sellLine", label: "Sell line (-" + p.band + "%)" }] : [])] };
   }
 }`;
 
@@ -315,14 +350,17 @@ CODE[9] = `{
   params: [{ id: "signal", label: "Signal", options: ["spy", "qqq"], default: "spy" },
            { id: "window", label: "Window", options: [100, 150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
   run(data, p) {
     const log = [], W = p.window, sig = data[p.signal], lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average"), sigName = p.signal.toUpperCase();
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -330,14 +368,15 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought " + "TQQQ" + ": " + sigName + " closed above its " + lineName; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold " + "TQQQ" + ": " + sigName + " closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: sigName + " price" }, { key: "center", label: lineName }] };
   }
 }`;
 
@@ -348,14 +387,17 @@ CODE[10] = `{
            { id: "lev", label: "Leveraged ETF", options: ["tqqq", "qld", "sso", "spxl"], default: "tqqq" },
            { id: "window", label: "Window (days)", options: [100, 150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
   run(data, p) {
     const log = [], W = p.window, sig = data[p.signal], lev = data[p.lev];
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average"), sigName = p.signal.toUpperCase(), levName = p.lev.toUpperCase();
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -363,14 +405,15 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought " + levName + ": " + sigName + " closed above its " + lineName; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold " + levName + ": " + sigName + " closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? levName : "CASH", note: note, assetPrice: sig[i], center: sma });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: sigName + " price" }, { key: "center", label: lineName }] };
   }
 }`;
 
@@ -379,14 +422,17 @@ CODE[11] = `{
   name: "SPY 200SMA → UPRO (SPXL) / cash",
   params: [{ id: "window", label: "Window", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
   run(data, p) {
     const log = [], W = p.window, sig = data.spy, lev = data.spxl;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -394,14 +440,15 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought " + "SPXL" + ": " + "SPY" + " closed above its " + lineName; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold " + "SPXL" + ": " + "SPY" + " closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "SPXL" : "CASH", note: note, assetPrice: sig[i], center: sma });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "SPY" + " price" }, { key: "center", label: lineName }] };
   }
 }`;
 
@@ -410,14 +457,16 @@ CODE[12] = `{
   name: "SSO own 200SMA → SSO/cash (2×)",
   params: [{ id: "window", label: "Window", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "center", label: "Center", tip: "SSO's average or median close over the window (the Center line setting). The rule holds SSO while SSO closes above it." }],
   run(data, p) {
     const log = [], W = p.window, lev = data.sso;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -425,14 +474,15 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const sma = centerLine(lev, W, i, useMed), px = lev[i], bull = sma > 0 && px > sma;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought SSO: SSO closed above its " + lineName; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold SSO: SSO closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "SSO" : "CASH", note: note, center: sma });
     }
-    return { log };
+    return { log, lines: [{ key: "price", label: "SSO price" }, { key: "center", label: lineName }] };
   }
 }`;
 
@@ -443,14 +493,20 @@ CODE[13] = `{
            { id: "exit", label: "Exit band (% below)", options: [0, 2, 3, 4, 5], default: 3 },
            { id: "window", label: "Window", options: [100, 150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "tqqqLine", label: "TQQQ line", tip: "Where SPY must close to switch to TQQQ: the center plus the enter band." },
+             { key: "qqqLine", label: "QQQ line", tip: "Where SPY must close to switch to QQQ: the center minus the exit band." }],
   run(data, p) {
     const log = [], W = p.window, sig = data.spy, up = 1 + p.entry / 100, dn = 1 - p.exit / 100;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, shT = 0, shQ = 0, state = "qqq", prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
+    const upTxt = p.entry > 0 ? p.entry + "% " : "", dnTxt = p.exit > 0 ? p.exit + "% " : "";
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -463,16 +519,22 @@ ${SELL_TQQQ_QQQ_TO_COVER}
       if (state !== cur && pxT > 0 && pxQ > 0) {
         cash += shT * pxT + shQ * pxQ; shT = 0; shQ = 0;
         if (state === "tqqq") shT = cash / pxT; else shQ = cash / pxQ;
-        cash = 0; action = state === "tqqq" ? "buy TQQQ" : "derisk QQQ";
+        cash = 0; action = cur === "none" ? "buy" : "switch";
+        const why = state === "tqqq" ? "SPY closed " + upTxt + "above its " + lineName
+          : px <= sma * dn ? "SPY closed " + dnTxt + "under its " + lineName : "SPY not " + upTxt + "above its " + lineName;
+        note = (action === "buy" ? "Bought " : "Switched to ") + state.toUpperCase() + ": " + why;
       } else if (cash > 0) {
         if (state === "tqqq" && pxT > 0) { shT += cash / pxT; cash = 0; }
         else if (state === "qqq" && pxQ > 0) { shQ += cash / pxQ; cash = 0; }
       }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action.indexOf("buy") === 0 || action.indexOf("derisk") === 0 || logDay)
-        log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action });
+      if (contributed !== 0 || action === "buy" || action === "switch" || logDay)
+        log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action,
+          held: shT > 0 ? "TQQQ" : shQ > 0 ? "QQQ" : "CASH", note: note, assetPrice: px, center: sma,
+          ...(p.entry > 0 ? { tqqqLine: sma * up } : {}), ...(p.exit > 0 ? { qqqLine: sma * dn } : {}) });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "SPY price" }, { key: "center", label: lineName },
+      ...(p.entry > 0 ? [{ key: "tqqqLine", label: "TQQQ line (+" + p.entry + "%)" }] : []), ...(p.exit > 0 ? [{ key: "qqqLine", label: "QQQ line (-" + p.exit + "%)" }] : [])] };
   }
 }`;
 
@@ -482,9 +544,13 @@ CODE[15] = `{
   params: [{ id: "rsiMax", label: "Max RSI(14) to hold", options: [60, 70, 80, 100], default: 80 },
            { id: "window", label: "Window", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "rsiCapLine", label: "RSI cap", tip: "The QQQ close that would put RSI(14) at the cap today. Above it the strategy is out." }],
   run(data, p) {
     const log = [], W = p.window, RW = 14, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
+${RSI_LEVEL_SNIPPET}
     const seed = Math.max(1, p.startIdx - 60);
     let ag = 0, al = 0;
     for (let i = seed; i < seed + RW && i <= p.startIdx; i++) { const d = sig[i] - sig[i - 1]; if (d > 0) ag += d; else al -= d; }
@@ -492,27 +558,31 @@ ${CENTER_LINE_SNIPPET}
     for (let i = seed + RW; i < p.startIdx; i++) { const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0; ag = (ag * (RW - 1) + g) / RW; al = (al * (RW - 1) + l) / RW; }
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
 ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
+      const capLine = rsiLevel(sig[i - 1], ag, al, RW, p.rsiMax);   // where QQQ would close for RSI(14) to sit at the cap
       const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
       ag = (ag * (RW - 1) + g) / RW; al = (al * (RW - 1) + l) / RW;
       const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma && rsi < p.rsiMax;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: QQQ above its " + lineName + ", RSI(14) under " + p.rsiMax; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = sig[i] > sma ? "Sold TQQQ: RSI(14) reached " + p.rsiMax : "Sold TQQQ: QQQ closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, rsiCapLine: capLine });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName },
+      ...(p.rsiMax < 100 ? [{ key: "rsiCapLine", label: "RSI(14) " + p.rsiMax }] : [])] };
   }
 }`;
 
@@ -520,6 +590,9 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[17] = `{
   name: "MACD(12/26) → TQQQ/cash (+trailing stop)",
   params: [{ id: "trail", label: "Trailing stop (% from peak)", options: [0, 20, 30, 40], default: 30 }],
+  columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
+             { key: "triggerLine", label: "MACD trigger", tip: "The QQQ close that would put MACD exactly on its signal line or zero, whichever is higher. Above it the buy rule holds." },
+             { key: "stopLine", label: "Trailing stop", tip: "While holding: TQQQ's high since the buy, less the stop setting. A TQQQ close under it sells." }],
   run(data, p) {
     const log = [], sig = data.qqq, lev = data.tqqq;
     const seed = Math.max(0, p.startIdx - 60);
@@ -530,7 +603,7 @@ CODE[17] = `{
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4)), trail = p.trail / 100;
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -538,18 +611,24 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const s = sig[i], px = lev[i];
+      // The QQQ close that would put MACD exactly on its signal line or zero,
+      // whichever is higher, today: MACD rises with the close, so above it the buy rule holds.
+      const triggerLine = (Math.max(signal, 0) - (1 - k12) * e12 + (1 - k26) * e26) / (k12 - k26);
       if (s > 0) { e12 += k12 * (s - e12); e26 += k26 * (s - e26); macd = e12 - e26; signal += k9 * (macd - signal); }
       const bull = macd > signal && macd > 0;
       if (invested && px > peak) peak = px;
       const stopped = invested && trail > 0 && px > 0 && px < peak * (1 - trail);
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; peak = px; action = "buy"; }
-      else if ((!bull || stopped) && invested) { cash = sh * px; sh = 0; invested = false; action = stopped ? "stop" : "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; peak = px; action = "buy"; note = "Bought TQQQ: MACD rose above its signal line and zero"; }
+      else if ((!bull || stopped) && invested) { cash = sh * px; sh = 0; invested = false; action = "sell";
+        note = stopped ? "Sold TQQQ: trailing stop, " + p.trail + "% under its high since the buy" : "Sold TQQQ: MACD fell under " + (macd > 0 ? "its signal line" : "zero"); }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || action === "stop" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: s, triggerLine: triggerLine, stopLine: invested && trail > 0 ? peak * (1 - trail) : null });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "triggerLine", label: "MACD trigger" },
+      { key: "price", label: "TQQQ price" }, ...(p.trail > 0 ? [{ key: "stopLine", label: "Trailing stop (-" + p.trail + "%)" }] : [])] };
   }
 }`;
 
@@ -558,15 +637,18 @@ CODE[18] = `{
   name: "40-week SMA (weekly) → TQQQ/cash",
   params: [{ id: "window", label: "Window (days)", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "QQQ's average or median close over the window (the Center line setting). Checked only on the week end." }],
   run(data, p) {
     const log = [], W = p.window, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     const dow = (ds) => new Date(Date.UTC(+ds.slice(0, 4), +ds.slice(5, 7) - 1, +ds.slice(8, 10))).getUTCDay();
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -577,15 +659,16 @@ ${SELL_SH_TO_COVER}
       const weekEnd = i === p.endIdx || dow(data.dates[i + 1]) <= dow(data.dates[i]);
       if (weekEnd) {
         const sma = centerLine(sig, W, i, useMed), bull = sma > 0 && sig[i] > sma;
-        if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-        else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+        if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: week end, QQQ closed above its " + lineName; }
+        else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold TQQQ: week end, QQQ closed under its " + lineName; }
       }
       if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: centerLine(sig, W, i, useMed) });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName }] };
   }
 }`;
 
@@ -595,14 +678,18 @@ CODE[19] = `{
   params: [{ id: "fast", label: "Fast window", options: [20, 50, 100], default: 50 },
            { id: "slow", label: "Slow window", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "fastLine", label: "Fast line", tip: "QQQ's average or median close over the fast window." },
+             { key: "slowLine", label: "Slow line", tip: "QQQ's average or median close over the slow window. The rule holds TQQQ while the fast line is above it." },
+             { key: "assetPrice", label: "QQQ", tip: "QQQ's close." }],
   run(data, p) {
     const log = [], F = p.fast, S = p.slow, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const stat = useMed ? "median" : "average";
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -610,14 +697,15 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const maF = centerLine(sig, F, i, useMed), maS = centerLine(sig, S, i, useMed), px = lev[i], bull = maS > 0 && maF > maS;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: the " + F + "-day " + stat + " crossed above the " + S + "-day"; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold TQQQ: the " + F + "-day " + stat + " crossed under the " + S + "-day"; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, fastLine: maF, slowLine: maS, assetPrice: sig[i] });
     }
-    return { log };
+    return { log, lines: [{ key: "fastLine", label: F + "-day " + stat }, { key: "slowLine", label: S + "-day " + stat }, { key: "assetPrice", label: "QQQ price" }] };
   }
 }`;
 
@@ -626,13 +714,23 @@ CODE[20] = `{
   name: "Vol-target TQQQ (scale to target vol)",
   params: [{ id: "target", label: "Target vol (%/yr)", options: [15, 20, 25, 30], default: 25 },
            { id: "lookback", label: "Vol lookback (days)", options: [20, 40, 60], default: 20 }],
+  columns: [{ key: "share", label: "TQQQ share", tip: "Share of the account in TQQQ at the close." },
+             { key: "vol", label: "Volatility", tip: "TQQQ's annualised volatility over the lookback. Each month the share is reset to the target divided by it, at most 100%." },
+             { key: "target", label: "Target", tip: "The target volatility setting." }],
   run(data, p) {
     const log = [], lev = data.tqqq, L = p.lookback, tgt = p.target / 100;
+    // Annualised volatility of TQQQ's daily returns over the lookback ending on day j.
+    const volAt = j => {
+      let m = 0, c = 0; const r = [];
+      for (let k = Math.max(1, j - L + 1); k <= j; k++) { if (lev[k] > 0 && lev[k - 1] > 0) { const ret = lev[k] / lev[k - 1] - 1; r.push(ret); m += ret; c++; } }
+      m = c ? m / c : 0; let v = 0; for (const x of r) v += (x - m) * (x - m);
+      return c ? Math.sqrt(v / c) * Math.sqrt(252) : 0;
+    };
     let cash = p.initial, sh = 0, prevMonth = null, w = 0;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -641,18 +739,22 @@ ${SELL_SH_TO_COVER}
       const px = lev[i], newMonth = prevMonth === null || month !== prevMonth;
       prevMonth = month;
       if (newMonth && px > 0) {
-        let m = 0, c = 0; const r = [];
-        for (let k = Math.max(1, i - L + 1); k <= i; k++) { if (lev[k] > 0 && lev[k - 1] > 0) { const ret = lev[k] / lev[k - 1] - 1; r.push(ret); m += ret; c++; } }
-        m = c ? m / c : 0; let v = 0; for (const x of r) v += (x - m) * (x - m); v = c ? Math.sqrt(v / c) * Math.sqrt(252) : 0;
+        const v = volAt(i);
         const targetW = v > 0 ? Math.max(0, Math.min(1, tgt / v)) : 0;
         const total = sh * px + cash;
         sh = (total * targetW) / px; cash = total - sh * px; w = targetW; action = "rebalance";
+        note = "Rebalanced to " + Math.round(targetW * 100) + "% TQQQ: volatility " + Math.round(v * 100) + "% against the " + p.target + "% target";
       }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "rebalance" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action, weight: w });
+      if (contributed !== 0 || action === "rebalance" || logDay) {
+        const total = sh * px + cash;
+        log.push({ date: data.dates[i], value: total, price: px, contributed: contributed, action: action, weight: w,
+          held: sh > 0 ? (cash > total * 0.001 ? "TQQQ + CASH" : "TQQQ") : "CASH", note: note,
+          share: total > 0 ? sh * px / total * 100 : 0, vol: volAt(i) * 100, target: p.target });
+      }
     }
-    return { log };
+    return { log, lines: [{ key: "share", label: "TQQQ share", unit: "%" }, { key: "vol", label: L + "-day volatility", unit: "%" },
+      { key: "target", label: "Target (" + p.target + "%)", unit: "%" }] };
   }
 }`;
 
@@ -662,9 +764,14 @@ CODE[22] = `{
   params: [{ id: "buy", label: "Buy RSI(2) below", options: [5, 10, 15], default: 10 },
            { id: "sell", label: "Sell RSI(2) above", options: [60, 70, 80], default: 70 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "rsiBuyLine", label: "RSI buy", tip: "The QQQ close that would put RSI(2) at the buy level today. A close under it, with QQQ above its center, buys." },
+             { key: "rsiSellLine", label: "RSI sell", tip: "The QQQ close that would put RSI(2) at the sell level today. A close above it sells." }],
   run(data, p) {
     const log = [], W = 200, RW = 2, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
+${RSI_LEVEL_SNIPPET}
     const seed = Math.max(1, p.startIdx - 30);
     let ag = 0, al = 0;
     for (let i = seed; i < seed + RW && i <= p.startIdx; i++) { const d = sig[i] - sig[i - 1]; if (d > 0) ag += d; else al -= d; }
@@ -672,27 +779,31 @@ ${CENTER_LINE_SNIPPET}
     for (let i = seed + RW; i < p.startIdx; i++) { const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0; ag = (ag * (RW - 1) + g) / RW; al = (al * (RW - 1) + l) / RW; }
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
 ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
+      const rsiBuyLine = rsiLevel(sig[i - 1], ag, al, RW, p.buy), rsiSellLine = rsiLevel(sig[i - 1], ag, al, RW, p.sell);
       const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
       ag = (ag * (RW - 1) + g) / RW; al = (al * (RW - 1) + l) / RW;
       const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
       const sma = centerLine(sig, W, i, useMed), px = lev[i], up = sma > 0 && sig[i] > sma;
-      if (up && !invested && rsi < p.buy && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (invested && (!up || rsi > p.sell)) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (up && !invested && rsi < p.buy && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: RSI(2) under " + p.buy + ", QQQ above its " + lineName; }
+      else if (invested && (!up || rsi > p.sell)) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = up ? "Sold TQQQ: RSI(2) over " + p.sell : "Sold TQQQ: QQQ closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, rsiBuyLine: rsiBuyLine, rsiSellLine: rsiSellLine });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName },
+      { key: "rsiBuyLine", label: "RSI(2) " + p.buy }, { key: "rsiSellLine", label: "RSI(2) " + p.sell }] };
   }
 }`;
 
@@ -702,9 +813,14 @@ CODE[23] = `{
   params: [{ id: "oh", label: "Overheat exit RSI(10) ≥", options: [60, 70, 80, 100], default: 80 },
            { id: "cool", label: "Cool-gate re-entry RSI(10) <", options: [40, 50, 60, 100], default: 60 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "overheatLine", label: "Overheat line", tip: "The QQQ close that would put RSI(10) at the overheat level today. A close above it sells." },
+             { key: "coolLine", label: "Cool line", tip: "The QQQ close that would put RSI(10) at the cool level today. While out, a close under it, with QQQ above its center, buys back." }],
   run(data, p) {
     const log = [], W = 200, RW = 10, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
+${RSI_LEVEL_SNIPPET}
     const seed = Math.max(1, p.startIdx - 40);
     let ag = 0, al = 0;
     for (let i = seed; i < seed + RW && i <= p.startIdx; i++) { const d = sig[i] - sig[i - 1]; if (d > 0) ag += d; else al -= d; }
@@ -712,28 +828,32 @@ ${CENTER_LINE_SNIPPET}
     for (let i = seed + RW; i < p.startIdx; i++) { const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0; ag = (ag * (RW - 1) + g) / RW; al = (al * (RW - 1) + l) / RW; }
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
 ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
+      const overheatLine = rsiLevel(sig[i - 1], ag, al, RW, p.oh), coolLine = rsiLevel(sig[i - 1], ag, al, RW, p.cool);
       const d = sig[i] - sig[i - 1], g = d > 0 ? d : 0, l = d < 0 ? -d : 0;
       ag = (ag * (RW - 1) + g) / RW; al = (al * (RW - 1) + l) / RW;
       const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
       const sma = centerLine(sig, W, i, useMed), px = lev[i], up = sma > 0 && sig[i] > sma;
       const wantIn = up && rsi < p.oh && (invested || rsi < p.cool);
-      if (wantIn && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; }
-      else if (!wantIn && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; }
+      if (wantIn && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: " + (p.cool < 100 ? "RSI(10) under " + p.cool + ", " : "") + "QQQ above its " + lineName; }
+      else if (!wantIn && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = up ? "Sold TQQQ: RSI(10) reached " + p.oh : "Sold TQQQ: QQQ closed under its " + lineName; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action });
+        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, overheatLine: overheatLine, coolLine: coolLine });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName },
+      ...(p.oh < 100 ? [{ key: "overheatLine", label: "RSI(10) " + p.oh }] : []), ...(p.cool < 100 ? [{ key: "coolLine", label: "RSI(10) " + p.cool }] : [])] };
   }
 }`;
 
@@ -744,14 +864,20 @@ CODE[24] = `{
            { id: "gtfo", label: "Sell→cash at (% above line)", options: [0, 35, 40, 45, 50], default: 40 },
            { id: "window", label: "Window", options: [150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "delevLine", label: "Delever line", tip: "Where QQQ must close to switch from TQQQ to QQQ: the center plus the delever setting." },
+             { key: "cashLine", label: "Cash line", tip: "Where QQQ must close to sell everything: the center plus the cash setting." }],
   run(data, p) {
     const log = [], W = p.window, sig = data.qqq;
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, shT = 0, shQ = 0, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average");
+    const delevName = "the delever line (+" + p.delev + "%)", cashName = "the cash line (+" + p.gtfo + "%)";
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -768,16 +894,23 @@ ${SELL_TQQQ_QQQ_TO_COVER}
       if (want !== cur && pxT > 0 && pxQ > 0) {
         cash += shT * pxT + shQ * pxQ; shT = 0; shQ = 0;
         if (want === "tqqq") { shT = cash / pxT; cash = 0; } else if (want === "qqq") { shQ = cash / pxQ; cash = 0; }
-        action = want === "tqqq" ? "buy" : (want === "qqq" ? "delever" : "gtfo");
+        action = want === "cash" ? "sell" : cur === "cash" ? "buy" : "switch";
+        const why = want === "cash" ? (q < sma ? "QQQ closed under its " + lineName : "QQQ closed above " + cashName)
+          : want === "qqq" ? (cur === "tqqq" ? "QQQ closed above " + delevName : "QQQ closed back under " + cashName)
+          : cur === "qqq" ? "QQQ closed back under " + delevName : "QQQ closed above its " + lineName;
+        note = (action === "sell" ? "Sold " + cur.toUpperCase() : action === "buy" ? "Bought " + want.toUpperCase() : "Switched to " + want.toUpperCase()) + ": " + why;
       } else if (cash > 0) {
         if (want === "tqqq" && pxT > 0) { shT += cash / pxT; cash = 0; }
         else if (want === "qqq" && pxQ > 0) { shQ += cash / pxQ; cash = 0; }
       }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "delever" || action === "gtfo" || logDay)
-        log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action });
+      if (contributed !== 0 || action === "buy" || action === "switch" || action === "sell" || logDay)
+        log.push({ date: data.dates[i], value: shT * pxT + shQ * pxQ + cash, price: pxT, contributed: contributed, action: action,
+          held: shT > 0 ? "TQQQ" : shQ > 0 ? "QQQ" : "CASH", note: note, assetPrice: q, center: sma,
+          ...(p.delev > 0 ? { delevLine: sma * (1 + p.delev / 100) } : {}), ...(p.gtfo > 0 ? { cashLine: sma * (1 + p.gtfo / 100) } : {}) });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName },
+      ...(p.delev > 0 ? [{ key: "delevLine", label: "Delever line (+" + p.delev + "%)" }] : []), ...(p.gtfo > 0 ? [{ key: "cashLine", label: "Cash line (+" + p.gtfo + "%)" }] : [])] };
   }
 }`;
 
@@ -788,14 +921,17 @@ CODE[25] = `{
            { id: "lev", label: "Leveraged ETF", options: ["tqqq", "qld", "sso", "spxl"], default: "tqqq" },
            { id: "window", label: "Window", options: [100, 150, 200, 250], default: 200 },
            ${STAT_PARAM_SNIPPET}],
+  columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
+             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting). Above it the strategy holds the leveraged fund, under it the signal fund." }],
   run(data, p) {
     const log = [], W = p.window, sig = data[p.signal], lev = data[p.lev];
 ${CENTER_LINE_SNIPPET}
     let cash = p.initial, shLev = 0, shPark = 0, state = "park", prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
+    const lineName = W + "-day " + (useMed ? "median" : "average"), sigName = p.signal.toUpperCase(), levName = p.lev.toUpperCase();
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold";
+      let contributed = 0, action = "hold", note = "";
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -804,18 +940,21 @@ ${SELL_LEV_PARK_TO_COVER}
       prevMonth = month;
       const sma = centerLine(sig, W, i, useMed), pxL = lev[i], pxP = sig[i], want = (sma > 0 && sig[i] > sma) ? "lev" : "park";
       if (want !== state && pxL > 0 && pxP > 0) {
+        const fromCash = shLev === 0 && shPark === 0;
         cash += shLev * pxL + shPark * pxP; shLev = 0; shPark = 0;
         if (want === "lev") shLev = cash / pxL; else shPark = cash / pxP;
-        cash = 0; state = want; action = want === "lev" ? "buy" : "derisk";
+        cash = 0; state = want; action = fromCash ? "buy" : "switch";
+        note = (fromCash ? "Bought " : "Switched to ") + (want === "lev" ? levName : sigName) + ": " + sigName + " closed " + (want === "lev" ? "above" : "under") + " its " + lineName;
       } else if (cash > 0) {
         if (state === "lev" && pxL > 0) { shLev += cash / pxL; cash = 0; }
         else if (state === "park" && pxP > 0) { shPark += cash / pxP; cash = 0; }
       }
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "derisk" || logDay)
-        log.push({ date: data.dates[i], value: shLev * pxL + shPark * pxP + cash, price: pxL, contributed: contributed, action: action });
+      if (contributed !== 0 || action === "buy" || action === "switch" || logDay)
+        log.push({ date: data.dates[i], value: shLev * pxL + shPark * pxP + cash, price: pxL, contributed: contributed, action: action,
+          held: shLev > 0 ? levName : shPark > 0 ? sigName : "CASH", note: note, assetPrice: pxP, center: sma });
     }
-    return { log };
+    return { log, lines: [{ key: "assetPrice", label: sigName + " price" }, { key: "center", label: lineName }] };
   }
 }`;
 
