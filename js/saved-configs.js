@@ -3366,9 +3366,12 @@ document.addEventListener('click', (e) => {
     if (!cfg || !c) return;
     cfg.code = c.value;
     persistSavedConfigs();
-    const id = cfg.id;
+    const id = cfg.id, isNew = _builderIsNew;
     closeCustomBuilder(false);
     if (typeof render === 'function') render();                      // schedules the sandboxed run
+    // A new strategy's panel opens at the default quarter of the page, however
+    // wide an earlier panel was dragged (js/controls.js's resetPanelWidth).
+    if (isNew && typeof resetPanelWidth === 'function') resetPanelWidth();
     if (typeof openCustomPanel === 'function') openCustomPanel(id);  // sidebar shows the line/log (or an error) when it returns
     return;
   }

@@ -347,16 +347,27 @@ document.addEventListener('focusin',   positionInfoTip);
 const PANEL_WIDTH_KEY = '9sig-panel-width';
 const PANEL_MIN_W = 280;
 const PANEL_CHART_MIN_W = 400;
-// The width last dragged to. A narrower window clamps what is shown without
-// forgetting it, so widening the window again brings it back.
-let _panelWidthPref = 360;
+// Until the divider is dragged, and again for each new custom strategy
+// (resetPanelWidth), the panel takes this share of the layout.
+const PANEL_DEFAULT_SHARE = 0.25;
+// The width last dragged to, or null for the default share. A narrower window
+// clamps what is shown without forgetting it, so widening the window again
+// brings it back.
+let _panelWidthPref = null;
 function applyPanelWidth(w = _panelWidthPref) {
   const layout = document.querySelector('.layout');
   if (!layout) return w;
   const max = layout.clientWidth - parseFloat(getComputedStyle(layout).columnGap) - PANEL_CHART_MIN_W;
-  const clamped = Math.round(Math.max(PANEL_MIN_W, Math.min(max, w)));
+  const want = w != null ? w : layout.clientWidth * PANEL_DEFAULT_SHARE;
+  const clamped = Math.round(Math.max(PANEL_MIN_W, Math.min(max, want)));
   layout.style.setProperty('--panel-w', clamped + 'px');
   return clamped;
+}
+// Back to the default share, forgetting the width last dragged to.
+function resetPanelWidth() {
+  _panelWidthPref = null;
+  try { localStorage.removeItem(PANEL_WIDTH_KEY); } catch (e) {}
+  applyPanelWidth();
 }
 (function initPanelResizer() {
   const resizer = document.getElementById('strategy-panel-resizer');
