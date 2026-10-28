@@ -25,16 +25,47 @@ const LS_TX_KEY = 'tqqq_transactions_v1';
 // The real account's chart lines (js/saved-configs.js's
 // appendActualPortfolioDatasets), each with the state flag its sidebar eye
 // toggles. `name` is the sidebar's, `label` the chart's. Portfolio and Profit
-// need the file's value column; Invested only the transactions.
+// need the file's value column; Invested only the transactions. `dayChange`
+// lines get the end label's day-change badge, from the strategy the account
+// follows (txFollowKey).
 const TX_LINES = [
-  { key: 'actual',   flag: 'showActual',   name: 'Portfolio', label: 'My portfolio', needsReadings: true },
-  { key: 'invested', flag: 'showInvested', name: 'Invested',  label: 'Invested',     needsReadings: false },
-  { key: 'profit',   flag: 'showProfit',   name: 'Profit',    label: 'Profit',       needsReadings: true },
+  { key: 'actual',   flag: 'showActual',   name: 'Portfolio', label: 'My portfolio', needsReadings: true,  dayChange: true },
+  { key: 'invested', flag: 'showInvested', name: 'Invested',  label: 'Invested',     needsReadings: false, dayChange: false },
+  { key: 'profit',   flag: 'showProfit',   name: 'Profit',    label: 'Profit',       needsReadings: true,  dayChange: true },
 ];
-// Every line's shown flag, read off a stored record or an earlier state; a
-// flag it lacks (a record from before that line existed) means shown.
-function txLineFlags(src) {
-  return Object.fromEntries(TX_LINES.map(l => [l.flag, !src || src[l.flag] !== false]));
+const TX_FOLLOW_DEFAULT = 'bh-tqqq';
+// The account's view settings, read off a stored record or an earlier state:
+// every line's shown flag (one it lacks, from a record older than that line,
+// means shown) and the strategy its day change follows.
+function txViewPrefs(src) {
+  return {
+    ...Object.fromEntries(TX_LINES.map(l => [l.flag, !src || src[l.flag] !== false])),
+    follow: (src && src.follow) || TX_FOLLOW_DEFAULT,
+  };
+}
+// What the account's day change can follow (the sidebar's "Day change like"
+// dropdown). The sheet records values but no holdings, so the day's move is
+// borrowed from a strategy: a Buy & Hold of any ticker, the 9sig or SMA panel
+// on the chart, a saved strategy (an edited library copy, the user's own
+// code), or any runnable library strategy. Keys are the analytics picker's
+// ('bh-tqqq', '9sig', 'sma', 'cfg:<id>') plus 'lib:<n>'. Invested Compounded
+// has no day move, so it is not offered.
+function txFollowGroups() {
+  // "B&H TQQQ", as the analytics picker names them: the ticker must survive
+  // the narrow sidebar's truncation.
+  const bh = [...document.getElementById('select-bh-underlying').options].map(o => ['bh-' + o.value, 'B&H ' + o.textContent.trim()]);
+  return [
+    { label: 'Buy & Hold', items: bh },
+    { label: 'On the chart', items: [['9sig', nineSigName()], ['sma', 'SMA']] },
+    { label: 'Saved', items: savedConfigs.filter(c => c.type !== 'invested').map(c => ['cfg:' + c.id, c.name]) },
+    { label: 'Library', items: STRATEGY_LIBRARY.filter(strategyRunnable).map(s => ['lib:' + s.n, s.name]) },
+  ].filter(g => g.items.length);
+}
+// The strategy the account's day change follows: the stored choice, or Buy &
+// Hold TQQQ when that choice is gone (a deleted saved strategy).
+function txFollowKey(state) {
+  const key = state && state.follow;
+  return txFollowGroups().some(g => g.items.some(([k]) => k === key)) ? key : TX_FOLLOW_DEFAULT;
 }
 
 function persistTransactions() {
@@ -50,7 +81,7 @@ function persistTransactions() {
         dateCol: window._txScheduleStash.dateCol,
         amountCol: window._txScheduleStash.amountCol,
         actualCol: window._txScheduleStash.actualCol,
-        ...txLineFlags(window._txScheduleStash),
+        ...txViewPrefs(window._txScheduleStash),
         active: !!window._txSchedule,
       }));
     } else {
@@ -301,9 +332,10 @@ function _txSnapToTradingDay(dateStr) {
   }
   return ans;
 }
-// `shown` is whatever carries the lines' eye flags forward (a stored record
-// or the state being replaced); without one every line starts shown.
-function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol, shown) {
+// `prefs` is whatever carries the view settings forward (txViewPrefs: a stored
+// record or the state being replaced); without one every line starts shown and
+// the day change follows Buy & Hold TQQQ.
+function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol, prefs) {
   if (!rows || !rows.length) return null;
   const [first, ...rest] = rows;
   const byDate = new Map(), byMonth = new Map(), list = [], priceDateByMonth = new Map();
@@ -355,7 +387,7 @@ function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol,
     dateCol: (dateCol != null ? dateCol : null),
     amountCol: (amountCol != null ? amountCol : null),
     actualCol: (actualCol != null ? actualCol : null),
-    ...txLineFlags(shown),
+    ...txViewPrefs(prefs),
   };
 }
 
@@ -693,9 +725,11 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('[data-tx-cancel]')) { closeTxModal(); return; }
   if (e.target.closest('[data-tx-confirm]')) {
     if (!_txParsedPreview || !_txParsedPreview.rows.length) return;
+    // An edit keeps the replaced history's view settings (shown lines, the
+    // day-change strategy).
     const state = _txStateFromRows(_txParsedPreview.rows, _txParsedPreviewSource,
       _txParsedPreviewSource === 'sheet' ? _txParsedPreviewUrl : null,
-      _txParsedPreview.dateCol, _txParsedPreview.amountCol, _txParsedPreview.actualCol);
+      _txParsedPreview.dateCol, _txParsedPreview.amountCol, _txParsedPreview.actualCol, window._txScheduleStash);
     window._txSchedule = state;
     window._txScheduleStash = state;
     persistTransactions();
@@ -795,6 +829,16 @@ document.addEventListener('input', (e) => {
 });
 
 document.addEventListener('change', (e) => {
+  // The strategy the account's day change follows (renderTxSummary). Set on
+  // both the live state and the stash, like the eye toggles.
+  if (e.target.id === 'select-tx-follow') {
+    if (window._txSchedule) window._txSchedule.follow = e.target.value;
+    if (window._txScheduleStash) window._txScheduleStash.follow = e.target.value;
+    persistTransactions();
+    if (typeof saveSliders === 'function') saveSliders();
+    if (typeof render === 'function') render();
+    return;
+  }
   if (e.target.id === 'tx-file-input') {
     const file = e.target.files && e.target.files[0];
     if (!file) return;
@@ -874,6 +918,7 @@ function toggleContribMode() {
   const entryPickBtn = document.getElementById('entry-date-pick');
   if (entryPickBtn) entryPickBtn.disabled = false;
 }
+let _txFollowOptionsHtml = null; // the day-change dropdown's current options (renderTxSummary)
 function renderTxSummary() {
   const el = document.getElementById('tx-summary-text');
   if (!el || !window._txSchedule) return;
@@ -893,6 +938,18 @@ function renderTxSummary() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${eyeSvg}</svg><span>${l.name}</span>
     </button>`;
   }).join('');
+  // The day-change dropdown, for the lines that carry a badge (Portfolio and
+  // Profit, which need the value column).
+  const followRow = document.getElementById('tx-follow-row');
+  followRow.hidden = !hasReadings;
+  if (hasReadings) {
+    const sel = document.getElementById('select-tx-follow');
+    const html = txFollowGroups().map(g => `<optgroup label="${_txEscHtml(g.label)}">${g.items.map(([k, n]) => `<option value="${_txEscHtml(k)}">${_txEscHtml(n)}</option>`).join('')}</optgroup>`).join('');
+    // Rebuilt only when the list changed: every render() lands here, and
+    // replacing the options under an open dropdown closes it.
+    if (html !== _txFollowOptionsHtml) { sel.innerHTML = html; _txFollowOptionsHtml = html; }
+    sel.value = txFollowKey(s);
+  }
   const editBtn = document.getElementById('tx-edit-btn');
   if (editBtn) {
     const label = s.source === 'sheet' ? 'Change the linked sheet' : 'Edit transactions';

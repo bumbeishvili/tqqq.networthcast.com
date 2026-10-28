@@ -2941,6 +2941,13 @@
   .tx-line-toggle.is-off { opacity: var(--state-hidden-opacity); }
   .tx-line-toggle.is-off:hover { opacity: 0.75; }
   .tx-line-toggle.is-off span { text-decoration: line-through; text-decoration-color: rgba(122, 122, 166, 0.6); }
+  /* "Day change like [strategy]": the select takes the rest of the row and
+     truncates a long strategy name rather than widening the sidebar. */
+  .tx-follow:not([hidden]) {
+    display: flex; align-items: center; gap: 4px;
+    margin-top: 8px; font-size: 12px; color: var(--text-muted); white-space: nowrap;
+  }
+  .tx-follow select { flex: 1 1 auto; min-width: 0; text-overflow: ellipsis; }
   .tx-clear-btn {
     width: 100%;
     padding: 9px 10px;
@@ -3560,6 +3567,8 @@
     gap: 12px;
     margin: 0;
   }
+  body.panel-docked .header .tx-follow { margin-top: 0; }
+  body.panel-docked .header .tx-follow select { flex: 0 1 200px; }
   .strategy-panel-header {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);

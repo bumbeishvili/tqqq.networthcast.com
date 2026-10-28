@@ -705,6 +705,17 @@ function buildStrategyCards(list) {
   }).join('');
 }
 
+// The strategy a runnable library entry runs as: a preset becomes a NATIVE
+// 9sig/SMA config (real engine, real sidebar knobs, shareable); everything
+// else a custom config carrying its code. The fields a saved copy
+// (addStrategyFromLibrary) and the account's day-change run
+// (js/saved-configs.js's txFollowMove) share.
+function libraryEntryConfig(entry) {
+  return entry.preset
+    ? { type: entry.preset.type, name: entry.name, params: Object.assign({}, entry.preset.params) }
+    : { type: 'custom', name: entry.name, params: {}, code: strategyHasCode(entry.n) };
+}
+
 // Add a library strategy to the chart as a real custom strategy (type:'custom',
 // carrying the verified code). Reuses the existing custom-strategy engine — the
 // line computes in the worker exactly like a user-pasted custom strategy.
@@ -714,20 +725,15 @@ function addStrategyFromLibrary(n) {
   const code = strategyHasCode(n);
   if (!entry || (!code && !entry.preset)) return;
   if (typeof savedConfigs === 'undefined' || typeof persistSavedConfigs !== 'function') return;
-  const name = (typeof uniqueName === 'function') ? uniqueName(entry.name) : entry.name;
-  // A preset becomes a NATIVE 9sig/SMA config (real engine, real sidebar knobs,
-  // shareable); everything else becomes a custom config carrying its code.
   const cfg = {
+    ...libraryEntryConfig(entry),
     id: 'cfg_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    type: entry.preset ? entry.preset.type : 'custom',
-    name: name,
+    name: (typeof uniqueName === 'function') ? uniqueName(entry.name) : entry.name,
     desc: entry.rules,
-    params: entry.preset ? Object.assign({}, entry.preset.params) : {},
     color: (typeof nextConfigColor === 'function') ? nextConfigColor() : '#e879f9',
     hidden: false,
   };
   if (!entry.preset) {
-    cfg.code = code;
     // Where the copy came from and what its code looked like then, so a later
     // load can refresh it to the current library code unless it was edited
     // (refreshLibraryCopies in js/saved-configs.js).

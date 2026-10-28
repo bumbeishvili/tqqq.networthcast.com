@@ -1912,6 +1912,10 @@ function cumulativeFlowsAt(flows, dates) {
   });
 }
 function appendActualPortfolioDatasets(chart, ctx) {
+  // The sidebar's day-change dropdown lists the saved strategies, which any
+  // render may have added or removed.
+  if (typeof renderTxSummary === 'function') renderTxSummary();
+  window._txDay = null;
   // The real account cannot run on a strategy's own deposits, so it steps
   // aside while one funds the chart (js/chart.js's render).
   if (window._ownMoneyCfgId) return;
@@ -1940,6 +1944,18 @@ function appendActualPortfolioDatasets(chart, ctx) {
     const investedAtReading = cumulativeFlowsAt(flows, pts.map(p => p.date));
     const profitPts = pts.map((p, i) => ({ date: p.date, value: p.value - investedAtReading[i] }));
     series.profit = nullBefore(resampleByDate(profitPts, labels), pts[0].date);
+    // The day-change badges' inputs (js/chart.js's txLineDayChange), when the
+    // latest reading is on the chart's last day and that day is the latest
+    // session: an older reading is not today's value, so it gets no badge.
+    const today = labels[labels.length - 1];
+    if (ctx.isLatestDaySelected && pts[pts.length - 1].date === today) {
+      window._txDay = {
+        portfolio: pts[pts.length - 1].value,
+        invested: investedAtReading[investedAtReading.length - 1],
+        flowToday: flows.filter(f => f.date === today).reduce((sum, f) => sum + f.amount, 0),
+        move: txFollowMove(txFollowKey(s), ctx),
+      };
+    }
   }
   const styles = {
     actual:   { borderColor: TX_ACTUAL_COLOR, borderWidth: 2.5, tension: 0.3 }, // the user's REAL line — visually primary
@@ -1958,9 +1974,30 @@ function appendActualPortfolioDatasets(chart, ctx) {
       pointHitRadius: 10,
       _configLine: true,
       _actualLine: true,
+      _txDay: line.dayChange ? line.key : null,
     });
     chart.setDatasetVisibility(chart.data.datasets.length - 1, true);
   }
+}
+// The day's move of the strategy the account follows (js/transactions.js's
+// txFollowKey), as js/chart.js's txFollowPct reads it at draw time: a Buy &
+// Hold's is its ticker's close-to-close move; a line on the chart (the 9sig or
+// SMA panel, a saved strategy) is read off its own badge; a library strategy
+// runs here as a temporary strategy, which fills the same day-change caches a
+// saved one does, and keeps its latest value in the chart's units.
+function txFollowMove(key, ctx) {
+  if (key.startsWith('bh-')) {
+    const ticker = key.slice(3);
+    const yday = repriceAtPrevTradingDay({ [ticker]: 1 }, 0), today = daily[daily.length - 1][ticker];
+    return { pct: yday > 0 && today > 0 ? (today / yday - 1) * 100 : null };
+  }
+  if (key in STRATEGY_KEY_TO_DATASET_IDX) return { idx: STRATEGY_KEY_TO_DATASET_IDX[key] };
+  if (key.startsWith('cfg:')) return { cfgId: key.slice(4) };
+  const n = +key.slice(4);
+  const cfg = { ...libraryEntryConfig(STRATEGY_LIBRARY.find(s => s.n === n)), id: 'tx-follow-lib-' + n };
+  const labels = ctx.labels;
+  const defl = inflationOn() ? inflFactor(labels[labels.length - 1], labels[0]) : 1;
+  return { cfgId: cfg.id, today: computeConfigSeries(cfg, ctx).end * defl };
 }
 
 // --- naming -------------------------------------------------------------

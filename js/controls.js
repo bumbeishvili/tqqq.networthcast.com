@@ -912,6 +912,14 @@ async function shareConfig() {
       }
     }
   }
+  // The strategy the shared history's day change follows (js/transactions.js's
+  // txFollowKey), unless it's the default; a saved one by its position in
+  // activeCfgs, like the analytics keys above.
+  if (window._txSchedule && window._txSchedule.rows && window._txSchedule.rows.length) {
+    const follow = txFollowKey(window._txSchedule);
+    const sharedFollow = follow !== TX_FOLLOW_DEFAULT ? shareAnalyticsKey(follow) : null;
+    if (sharedFollow) params.set('tf', sharedFollow);
+  }
   if (typeof analyticsYearMin !== 'undefined' && analyticsYearMin != null) {
     params.set('anp', String(analyticsYearMin));
   }

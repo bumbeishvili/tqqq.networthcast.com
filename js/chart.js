@@ -2975,6 +2975,7 @@ function render() {
   // yesterday-fetch and this draw self-corrects instead of showing a stale
   // pairing.
   const dayChangeFor = (i, ds, todayVal) => {
+    if (ds && ds._txDay) return txLineDayChange(ds._txDay, todayVal);
     if (window._ydayValueByIdx && (i in window._ydayValueByIdx)) {
       return computeDayChange(todayVal, window._ydayValueByIdx[i]);
     }
@@ -2990,6 +2991,34 @@ function render() {
     const cy = window._customYesterdayResults && window._customYesterdayResults[cfgId];
     if (cy && !cy.error) return computeDayChange(todayVal, cy.value);
     return null;
+  };
+  // The real account's sheet records values but no holdings, so its day move
+  // is borrowed from the strategy it follows (window._txDay.move, see
+  // js/saved-configs.js's txFollowMove): that strategy's own badge percent,
+  // or a Buy & Hold's fixed one.
+  const txFollowPct = () => {
+    const move = window._txDay.move;
+    if ('pct' in move) return move.pct;
+    const last = chart.data.labels.length - 1;
+    const i = 'idx' in move ? move.idx : chart.data.datasets.findIndex(d => d._configId === move.cfgId && !d._configSub);
+    const delta = i >= 0
+      ? dayChangeFor(i, chart.data.datasets[i], chart.data.datasets[i].data[last])
+      : dayChangeFor(-1, { _configId: move.cfgId }, move.today); // a library strategy: no line, its run's value
+    return delta ? delta.pct : null;
+  };
+  // Portfolio's and Profit's day change: the followed move applied to the
+  // latest reading less today's deposit gives yesterday's portfolio, and
+  // yesterday's profit is that less what was in by yesterday. Scaled into the
+  // chart's units (real $ when the inflation toggle is on) through todayVal.
+  const txLineDayChange = (line, todayVal) => {
+    const day = window._txDay;
+    const pct = day && txFollowPct();
+    if (pct == null) return null;
+    const ydayPortfolio = (day.portfolio - day.flowToday) / (1 + pct / 100);
+    const [today, yday] = line === 'actual'
+      ? [day.portfolio, ydayPortfolio]
+      : [day.portfolio - day.invested, ydayPortfolio - (day.invested - day.flowToday)];
+    return computeDayChange(todayVal, todayVal * yday / today);
   };
   const deltaLabelText = (delta) => `(${fmtDayChange(delta)})`;
   const endLabelPlugin = {

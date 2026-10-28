@@ -287,6 +287,11 @@
       // A shared link always opens with its transactions active — that's the
       // whole point of sharing it.
       const state = _txStateFromRows(txRows, 'upload');
+      // The day-change strategy the sender picked (`tf`); a saved one is a
+      // position in the shared list, resolved like the analytics keys. One
+      // that doesn't resolve falls back to the default (txFollowKey).
+      const tf = params.get('tf');
+      if (tf) state.follow = tf.startsWith('cfg:') ? resolveAnalyticsCfgKey(tf) : tf;
       window._txSchedule = state;
       window._txScheduleStash = state;
     } else if (typeof loadTransactionsFromStorage === 'function') {
