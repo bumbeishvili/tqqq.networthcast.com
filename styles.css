@@ -2932,6 +2932,8 @@
   .tx-summary-row + .tx-summary-row { margin-top: 4px; }
   .tx-actual-row { font-size: 12px; }
   .tx-actual-name { font-weight: 600; }
+  /* Lines up under the "My portfolio" name: eye (13px + 2px padding each side) + gap + dot + gap. */
+  .tx-actual-money { padding-left: 37px; }
   .tx-actual-stat { color: var(--text-muted); margin-left: 4px; }
   .tx-actual-dot { width: 10px; height: 10px; border-radius: 50%; background: #0d9488; display: inline-block; flex: 0 0 auto; }
   .tx-actual-eye {

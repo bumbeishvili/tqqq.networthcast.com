@@ -1924,10 +1924,15 @@ function appendActualPortfolioDataset(chart, ctx) {
   const dd = (typeof computeFlowAdjustedDrawdown === 'function')
     ? computeFlowAdjustedDrawdown(pts, flows)
     : { pct: 0, peakDate: null, troughDate: null };
+  // What had gone in by the latest reading, on the same entry-aware flows, so
+  // profit is the latest value minus the money behind it.
+  const lastDate = pts[pts.length - 1].date;
+  const invested = flows.filter(f => f.date <= lastDate).reduce((sum, f) => sum + f.amount, 0);
   window._actualMetrics = {
     cagr: cfgMoneyWeightedCAGR(ctx, finalV),
     maxDD: dd.pct * 100, ddPeak: dd.peakDate, ddTrough: dd.troughDate,
     start: pts[0].value, end: finalV,
+    invested, profit: finalV - invested,
   };
   chart.data.datasets.push({
     label: 'My portfolio',

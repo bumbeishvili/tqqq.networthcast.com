@@ -887,6 +887,12 @@ function renderTxSummary() {
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${eyeSvg}</svg>
       </button>
       <span class="tx-actual-dot"></span><span class="tx-actual-name">My portfolio</span>${stats}</span>`);
+    // Its money at the latest reading: what went in by then and the profit on it.
+    if (on && m && Number.isFinite(m.invested)) {
+      rows.push(`<span class="tx-summary-row tx-actual-row tx-actual-money">
+        <span>Invested <b>${fmtFull(Math.round(m.invested))}</b></span>
+        <span class="tx-actual-stat">Profit <b class="${m.profit >= 0 ? 'tx-actual-pos' : 'tx-actual-neg'}">${m.profit >= 0 ? '+' : '−'}${fmtFull(Math.round(Math.abs(m.profit)))}</b></span></span>`);
+    }
   }
   el.innerHTML = rows.join('');
   const editBtn = document.getElementById('tx-edit-btn');
