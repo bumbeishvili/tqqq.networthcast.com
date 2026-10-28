@@ -23,15 +23,13 @@
   // Lines the signal chart leaves out, by the strategy's line key: the
   // buy-back strategy's center line, its 250-day median at the defaults.
   const HIDDEN_SIGNAL_LINES = ['medianPrice'];
-  // The top chart's three lines in three hue families: teal (the main chart's
-  // My portfolio), the site's orange text colour for Invested and the
-  // palette's purple for Profit (js/signal-chart.js's CUSTOM_MINI_COLORS; its
-  // turn in the palette would be red, which reads as a loss). By
-  // colorSeparation every pair is at least 20 apart as seen and 13 in the
-  // worst colour-blind view; the indigo Invested had before sat 18 and 9 from
-  // the purple, and looked alike.
-  const INVESTED_TOKEN = '--orange-text';
-  const PROFIT_COLOR = '#a21caf';
+  // The top chart's three lines wear the main chart's colours for the same
+  // lines (js/saved-configs.js's TX_ACTUAL_COLOR / TX_INVESTED_COLOR /
+  // TX_PROFIT_COLOR): teal, slate and the palette's purple (js/signal-chart.js's
+  // CUSTOM_MINI_COLORS; its turn in the palette would be red, which reads as a
+  // loss). By colorSeparation every pair is at least 25 apart as seen and 16
+  // in the worst colour-blind view; the indigo Invested had before sat 18 and
+  // 9 from the purple, and looked alike.
   // The signal chart's line names drop a trailing percent setting:
   // "Sell line (-3%)" reads "Sell line" in the widget.
   const PERCENT_SETTING = /\s*\([^)]*%\)\s*$/;
@@ -156,8 +154,8 @@
     const chart = (valueKey, valueLabel, rows) => ({
       lines: [
         { key: valueKey, label: valueLabel, badge: sessionBadge(rows[rows.length - 1][valueKey]) },
-        { key: 'invested', label: 'Invested', color: tokenColor(INVESTED_TOKEN) },
-        { key: 'profit', label: 'Profit', color: PROFIT_COLOR },
+        { key: 'invested', label: 'Invested', color: TX_INVESTED_COLOR },
+        { key: 'profit', label: 'Profit', color: TX_PROFIT_COLOR },
       ],
       rows,
     });

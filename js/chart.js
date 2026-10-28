@@ -1941,16 +1941,27 @@ function fitChartZoomUi(c) {
 // out of cash → Cash = 0) are raised to 1 so they always render: on a log axis 0
 // can't be plotted (log of 0 is undefined) and the line would vanish; 1 keeps it
 // continuous at the very bottom ("simulate zero"). Real gaps (null) are left alone.
+// A line that can go below zero (the real account's Profit, flagged `_signed`)
+// keeps its values on the linear axis, which then starts at its lowest value
+// instead of 0 (an unset minimum rounds down to a whole tick step: -$50K for a
+// -$6K dip); the log axis has no place for them, so there they become gaps
+// rather than a false $1.
 const CHART_MIN = 1;
 function clampChartMin(chart) {
   if (!chart || !chart.data) return;
+  const log = chart.options.scales.y.type === 'logarithmic';
+  let lowest = 0;
   for (const ds of chart.data.datasets) {
     const d = ds.data;
     if (!d) continue;
     for (let i = 0; i < d.length; i++) {
-      if (typeof d[i] === 'number' && d[i] < CHART_MIN) d[i] = CHART_MIN;
+      if (typeof d[i] !== 'number' || d[i] >= CHART_MIN) continue;
+      if (!ds._signed) d[i] = CHART_MIN;
+      else if (log) d[i] = null;
+      else lowest = Math.min(lowest, d[i]);
     }
   }
+  if (!log) chart.options.scales.y.min = lowest;
 }
 // Single delegated click handler — the legend HTML gets replaced on every
 // render, so attaching here once on document avoids leaks/duplicate
@@ -2225,7 +2236,7 @@ function render() {
   // mid-history → the portfolio's actual value at the cutoff (or the
   // Invested-Compounded balance when no actual column) becomes the initial
   // lump and only later transactions remain as flows. The underlying data
-  // never changes. Stashed on window so appendActualPortfolioDataset (the
+  // never changes. Stashed on window so appendActualPortfolioDatasets (the
   // "My portfolio" line) reads the SAME view this render simulated with.
   window._txEffective = null;
   // A shown custom strategy that brings its own money funds every line with

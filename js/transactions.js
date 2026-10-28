@@ -22,6 +22,20 @@ window._txSchedule = null;
 // together on confirm; only _txSchedule gets nulled by the sliders toggle.
 window._txScheduleStash = null;
 const LS_TX_KEY = 'tqqq_transactions_v1';
+// The real account's chart lines (js/saved-configs.js's
+// appendActualPortfolioDatasets), each with the state flag its sidebar eye
+// toggles. `name` is the sidebar's, `label` the chart's. Portfolio and Profit
+// need the file's value column; Invested only the transactions.
+const TX_LINES = [
+  { key: 'actual',   flag: 'showActual',   name: 'Portfolio', label: 'My portfolio', needsReadings: true },
+  { key: 'invested', flag: 'showInvested', name: 'Invested',  label: 'Invested',     needsReadings: false },
+  { key: 'profit',   flag: 'showProfit',   name: 'Profit',    label: 'Profit',       needsReadings: true },
+];
+// Every line's shown flag, read off a stored record or an earlier state; a
+// flag it lacks (a record from before that line existed) means shown.
+function txLineFlags(src) {
+  return Object.fromEntries(TX_LINES.map(l => [l.flag, !src || src[l.flag] !== false]));
+}
 
 function persistTransactions() {
   try {
@@ -36,7 +50,7 @@ function persistTransactions() {
         dateCol: window._txScheduleStash.dateCol,
         amountCol: window._txScheduleStash.amountCol,
         actualCol: window._txScheduleStash.actualCol,
-        showActual: window._txScheduleStash.showActual !== false,
+        ...txLineFlags(window._txScheduleStash),
         active: !!window._txSchedule,
       }));
     } else {
@@ -55,7 +69,7 @@ function loadTransactionsFromStorage() {
     const parsed = JSON.parse(raw);
     if (!parsed || !Array.isArray(parsed.rows) || !parsed.rows.length) return null;
     return {
-      state: _txStateFromRows(parsed.rows, parsed.source || 'upload', parsed.sheetUrl || null, parsed.dateCol, parsed.amountCol, parsed.actualCol, parsed.showActual),
+      state: _txStateFromRows(parsed.rows, parsed.source || 'upload', parsed.sheetUrl || null, parsed.dateCol, parsed.amountCol, parsed.actualCol, parsed),
       active: parsed.active !== false,
     };
   } catch (e) { return null; }
@@ -287,7 +301,9 @@ function _txSnapToTradingDay(dateStr) {
   }
   return ans;
 }
-function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol, showActual) {
+// `shown` is whatever carries the lines' eye flags forward (a stored record
+// or the state being replaced); without one every line starts shown.
+function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol, shown) {
   if (!rows || !rows.length) return null;
   const [first, ...rest] = rows;
   const byDate = new Map(), byMonth = new Map(), list = [], priceDateByMonth = new Map();
@@ -339,7 +355,7 @@ function _txStateFromRows(rows, source, sheetUrl, dateCol, amountCol, actualCol,
     dateCol: (dateCol != null ? dateCol : null),
     amountCol: (amountCol != null ? amountCol : null),
     actualCol: (actualCol != null ? actualCol : null),
-    showActual: showActual !== false,
+    ...txLineFlags(shown),
   };
 }
 
@@ -631,17 +647,19 @@ function _txHandlePastedText(text) {
 
 document.addEventListener('click', (e) => {
   if (e.target.closest('#tx-upload-btn')) { openTxModal(); return; }
-  // Eye toggle for the "My portfolio" line (renderTxSummary). Both the live
-  // state and the stash carry the flag so it survives the sliders toggle and
-  // persists via persistTransactions' whitelist.
-  if (e.target.closest('#tx-actual-toggle')) {
+  // Eye toggles for the real account's lines (renderTxSummary). Both the live
+  // state and the stash carry the flags so they survive the sliders toggle and
+  // persist via persistTransactions' whitelist.
+  const lineToggle = e.target.closest('[data-tx-line]');
+  if (lineToggle) {
+    const { flag } = TX_LINES.find(l => l.key === lineToggle.dataset.txLine);
     // Compute the flipped value ONCE — _txSchedule and _txScheduleStash are
     // usually the SAME object, so flipping each in a loop toggles it twice
     // (a no-op, which is exactly how v1 of this handler failed).
     const cur = window._txSchedule || window._txScheduleStash;
-    const next = cur ? cur.showActual === false : true;
-    if (window._txSchedule) window._txSchedule.showActual = next;
-    if (window._txScheduleStash) window._txScheduleStash.showActual = next;
+    const next = cur ? cur[flag] === false : true;
+    if (window._txSchedule) window._txSchedule[flag] = next;
+    if (window._txScheduleStash) window._txScheduleStash[flag] = next;
     persistTransactions();
     if (typeof render === 'function') render();
     renderTxSummary();
@@ -860,41 +878,21 @@ function renderTxSummary() {
   const el = document.getElementById('tx-summary-text');
   if (!el || !window._txSchedule) return;
   const s = window._txSchedule;
-  const n = s.rows.length;
-  // Deliberately terse: no "since <date>" (the Entry display under the chart
-  // already shows it) and no heading (the block's content is self-explaining).
-  const rows = [
-    `<span class="tx-summary-row"><b>${n}</b>&nbsp;transactions · <b>${fmtFull(Math.round(s.total))}</b>&nbsp;invested</span>`,
-  ];
-  if (s.source === 'sheet') rows.push(`<span class="tx-summary-row tx-sheet-tag">synced from Google Sheet</span>`);
-  // The "My portfolio" line (the file's actual-value column, drawn on the
-  // chart by js/saved-configs.js's appendConfigDatasets): color dot, its
-  // money-weighted CAGR + flow-adjusted DD (window._actualMetrics), and an
-  // eye toggle — same stroked SVG eye as the legend chips / saved-config
-  // pills, never an emoji glyph (renders as a jarring photorealistic eye).
-  if (s.actualPoints && s.actualPoints.length) {
-    const m = window._actualMetrics;
-    const on = s.showActual !== false;
+  // One eye toggle per line the history can draw, name only: the chart's end
+  // labels carry the values. Same stroked SVG eye as the legend chips /
+  // saved-config pills, never an emoji glyph (renders as a jarring
+  // photorealistic eye).
+  const hasReadings = !!(s.actualPoints && s.actualPoints.length);
+  el.innerHTML = TX_LINES.filter(l => hasReadings || !l.needsReadings).map(l => {
+    const on = s[l.flag] !== false;
+    const tip = `${on ? 'Hide' : 'Show'} the ${l.label} line`;
     const eyeSvg = on
       ? '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>'
       : '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>';
-    const stats = (on && m && Number.isFinite(m.cagr))
-      ? `<span class="tx-actual-stat"><b class="${m.cagr >= 0 ? 'tx-actual-pos' : 'tx-actual-neg'}">${m.cagr >= 0 ? '+' : ''}${m.cagr.toFixed(1)}%</b></span>` +
-        (Number.isFinite(m.maxDD) && m.maxDD > 0 ? `<span class="tx-actual-stat">DD <b class="tx-actual-neg">-${m.maxDD.toFixed(1)}%</b></span>` : '')
-      : '';
-    rows.push(`<span class="tx-summary-row tx-actual-row">
-      <button type="button" id="tx-actual-toggle" class="tx-actual-eye" title="${on ? 'Hide' : 'Show'} the My portfolio line" aria-label="${on ? 'Hide' : 'Show'} the My portfolio line">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${eyeSvg}</svg>
-      </button>
-      <span class="tx-actual-dot"></span><span class="tx-actual-name">My portfolio</span>${stats}</span>`);
-    // Its money at the latest reading: what went in by then and the profit on it.
-    if (on && m && Number.isFinite(m.invested)) {
-      rows.push(`<span class="tx-summary-row tx-actual-row tx-actual-money">
-        <span>Invested <b>${fmtFull(Math.round(m.invested))}</b></span>
-        <span class="tx-actual-stat">Profit <b class="${m.profit >= 0 ? 'tx-actual-pos' : 'tx-actual-neg'}">${m.profit >= 0 ? '+' : '−'}${fmtFull(Math.round(Math.abs(m.profit)))}</b></span></span>`);
-    }
-  }
-  el.innerHTML = rows.join('');
+    return `<button type="button" class="tx-line-toggle${on ? '' : ' is-off'}" data-tx-line="${l.key}" title="${tip}" aria-label="${tip}" aria-pressed="${on}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">${eyeSvg}</svg><span>${l.name}</span>
+    </button>`;
+  }).join('');
   const editBtn = document.getElementById('tx-edit-btn');
   if (editBtn) {
     const label = s.source === 'sheet' ? 'Change the linked sheet' : 'Edit transactions';
@@ -951,7 +949,7 @@ async function refreshTxFromSheet() {
     // going back to whichever wrong column auto-detect landed on before.
     const parsed = _txParseWithCols(text, cur.dateCol, cur.amountCol, cur.actualCol);
     if (!parsed.rows.length) throw new Error('empty sheet');
-    const fresh = _txStateFromRows(parsed.rows, 'sheet', cur.sheetUrl, parsed.dateCol, parsed.amountCol, parsed.actualCol, cur.showActual);
+    const fresh = _txStateFromRows(parsed.rows, 'sheet', cur.sheetUrl, parsed.dateCol, parsed.amountCol, parsed.actualCol, cur);
     window._txScheduleStash = fresh;
     persistTransactions();
     if (wasActive) {

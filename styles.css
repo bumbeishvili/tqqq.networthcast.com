@@ -2916,34 +2916,31 @@
   }
   .new-custom-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.06); }
 
-  /* Active-state summary shown in place of the Initial/Monthly sliders once a
-     real transaction history is loaded (js/transactions.js). */
-  .tx-summary {
-    font-size: 13px;
-    line-height: 1.5;
-    color: var(--text);
-    margin-bottom: 10px;
+  /* Active-state row shown in place of the Initial/Monthly sliders once a
+     real transaction history is loaded (js/transactions.js): one eye toggle
+     per account line, then the edit / first-date / delete buttons. All six
+     need ~280px: one line in the docked header, while the 238px sidebar
+     column wraps the buttons under the toggles. */
+  .tx-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px 10px;
   }
-  .tx-summary b { font-family: 'JetBrains Mono', monospace; }
-  .tx-sheet-tag { color: var(--text-muted); font-size: 12px; }
-  /* Terse row-per-line tx summary; the "My portfolio" row's dot color
-     mirrors TX_ACTUAL_COLOR (js/saved-configs.js). */
-  .tx-summary-row { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-  .tx-summary-row + .tx-summary-row { margin-top: 4px; }
-  .tx-actual-row { font-size: 12px; }
-  .tx-actual-name { font-weight: 600; }
-  /* Lines up under the "My portfolio" name: eye (13px + 2px padding each side) + gap + dot + gap. */
-  .tx-actual-money { padding-left: 37px; }
-  .tx-actual-stat { color: var(--text-muted); margin-left: 4px; }
-  .tx-actual-dot { width: 10px; height: 10px; border-radius: 50%; background: #0d9488; display: inline-block; flex: 0 0 auto; }
-  .tx-actual-eye {
-    background: none; border: none; cursor: pointer; padding: 0 2px;
-    color: var(--text-muted); display: inline-flex; align-items: center; flex: 0 0 auto;
+  .tx-summary { display: flex; align-items: center; gap: 10px; }
+  .tx-actions { display: flex; gap: 6px; }
+  .tx-line-toggle {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: none; border: none; padding: 0; cursor: pointer;
+    font: 600 12px 'Open Sans', sans-serif; color: var(--text); white-space: nowrap;
   }
-  .tx-actual-eye svg { width: 13px; height: 13px; }
-  .tx-actual-eye:hover { color: var(--accent-text); }
-  .tx-actual-pos { color: var(--green-text); }
-  .tx-actual-neg { color: var(--red-text); }
+  .tx-line-toggle svg { width: 13px; height: 13px; color: var(--text-muted); flex: 0 0 auto; }
+  .tx-line-toggle:hover svg { color: var(--accent-text); }
+  /* Hidden = the same "off" reading as a hidden legend chip. */
+  .tx-line-toggle.is-off { opacity: var(--state-hidden-opacity); }
+  .tx-line-toggle.is-off:hover { opacity: 0.75; }
+  .tx-line-toggle.is-off span { text-decoration: line-through; text-decoration-color: rgba(122, 122, 166, 0.6); }
   .tx-clear-btn {
     width: 100%;
     padding: 9px 10px;
@@ -3563,14 +3560,6 @@
     gap: 12px;
     margin: 0;
   }
-  body.panel-docked .header .tx-summary {
-    display: flex;
-    flex-wrap: wrap;
-    column-gap: 14px;
-    row-gap: 2px;
-    margin: 0;
-  }
-  body.panel-docked .header .tx-summary-row + .tx-summary-row { margin-top: 0; }
   .strategy-panel-header {
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);

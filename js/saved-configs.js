@@ -1884,74 +1884,83 @@ function appendConfigDatasets(chart, ctx) {
     // render as a mini chart inside the strategy's own panel instead — see
     // buildCustomLinesChartHtml.
   }
-  appendActualPortfolioDataset(chart, ctx);
+  appendActualPortfolioDatasets(chart, ctx);
 }
 
-// The "My portfolio" line — the ACTUAL account value readings carried in the
-// user's transaction file (the optional third column, js/transactions.js's
-// state.actualPoints). What IS, drawn next to what was contributed (Invested
-// Compounded) and what could have been (every strategy). Flagged _configLine
-// so removeConfigDatasets strips it each render and the index-keyed
-// hidden-list persistence skips it, exactly like saved-config lines; the
-// endLabelPlugin / tooltip / range-select all pick it up generically.
-const TX_ACTUAL_COLOR = '#0d9488'; // mirrored by styles.css's .tx-actual-dot
-function appendActualPortfolioDataset(chart, ctx) {
-  window._actualMetrics = null;
+// The real account's lines from the user's transaction file (js/transactions.js's
+// TX_LINES): "My portfolio", the ACTUAL account value readings (the optional
+// third column, state.actualPoints); Invested, the money put in by each day;
+// and Profit, the difference. What IS, drawn next to what could have been
+// (every strategy). Flagged _configLine so removeConfigDatasets strips them
+// each render and the index-keyed hidden-list persistence skips them, exactly
+// like saved-config lines; the endLabelPlugin / tooltip / range-select all pick
+// them up generically. Colours, shared with the desktop widget's top chart
+// (js/widget-page.js): teal, a neutral slate for the money in, and the signal
+// palette's purple for Profit (red would read as a loss). By colorSeparation
+// the slate sits at least 20 apart as seen and 11 in the worst colour-blind
+// view from every line this chart draws; the widget's earlier orange sat 4
+// from 9sig's Cash and 3 (colour-blind) from Buy & Hold TQQQ.
+const TX_ACTUAL_COLOR = '#0d9488';
+const TX_INVESTED_COLOR = '#334155';
+const TX_PROFIT_COLOR = '#a21caf';
+// The running total of `flows` at each of `dates`, both in date order.
+function cumulativeFlowsAt(flows, dates) {
+  let next = 0, sum = 0;
+  return dates.map(d => {
+    while (next < flows.length && flows[next].date <= d) sum += flows[next++].amount;
+    return sum;
+  });
+}
+function appendActualPortfolioDatasets(chart, ctx) {
   // The real account cannot run on a strategy's own deposits, so it steps
   // aside while one funds the chart (js/chart.js's render).
   if (window._ownMoneyCfgId) return;
   const s = window._txSchedule;
   // The ENTRY-AWARE view (js/chart.js stashes window._txEffective each
-  // render): a mid-history entry re-anchors the line at the cutoff lump and
+  // render): a mid-history entry re-anchors the lines at the cutoff lump and
   // drops earlier readings/flows. Falls back to the raw state when absent.
   const eff = window._txEffective || s;
-  if (!s || !eff || !eff.actualPoints || !eff.actualPoints.length || s.showActual === false) return;
-  const pts = eff.actualPoints;
-  // Forward-fill via resampleByDate, but null out labels BEFORE the first
-  // real reading — back-filling would draw a flat line through history the
-  // account didn't exist in. After the last reading the forward-fill stands:
-  // the latest known value carries to the right edge, so the end label and
-  // the "what is, today" comparison exist.
-  const series = resampleByDate(pts, ctx.labels);
-  const firstDate = pts[0].date;
-  for (let i = 0; i < ctx.labels.length && ctx.labels[i] < firstDate; i++) series[i] = null;
-  const finalV = pts[pts.length - 1].value;
-  // FLOW-ADJUSTED drawdown (js/utils.js computeFlowAdjustedDrawdown) — a
-  // naive peak-to-trough on raw balances counted a big withdrawal as a
-  // "drawdown" (the initial version showed -70% where the real market DD was
-  // far less). Flows = the (entry-aware) initial lump + every later flow.
+  if (!s || !eff) return;
+  const labels = ctx.labels;
+  // Null before the account existed — back-filling would draw a flat line
+  // through history it wasn't in. After the last reading the forward-fill
+  // stands: the latest known value carries to the right edge, so the end
+  // labels and the "what is, today" comparison exist.
+  const nullBefore = (values, from) => values.map((v, i) => (labels[i] < from ? null : v));
+  // Money in: the (entry-aware) initial lump at the entry, then every later flow.
   const flows = [{ date: eff.entryDate || s.entryDate, amount: eff.initial }, ...eff.schedule.list];
-  const dd = (typeof computeFlowAdjustedDrawdown === 'function')
-    ? computeFlowAdjustedDrawdown(pts, flows)
-    : { pct: 0, peakDate: null, troughDate: null };
-  // What had gone in by the latest reading, on the same entry-aware flows, so
-  // profit is the latest value minus the money behind it.
-  const lastDate = pts[pts.length - 1].date;
-  const invested = flows.filter(f => f.date <= lastDate).reduce((sum, f) => sum + f.amount, 0);
-  window._actualMetrics = {
-    cagr: cfgMoneyWeightedCAGR(ctx, finalV),
-    maxDD: dd.pct * 100, ddPeak: dd.peakDate, ddTrough: dd.troughDate,
-    start: pts[0].value, end: finalV,
-    invested, profit: finalV - invested,
+  const firstMoney = flows.find(f => f.amount !== 0);
+  const series = { invested: firstMoney ? nullBefore(cumulativeFlowsAt(flows, labels), firstMoney.date) : null };
+  const pts = eff.actualPoints || [];
+  if (pts.length) {
+    series.actual = nullBefore(resampleByDate(pts, labels), pts[0].date);
+    // Profit at each reading is its value minus the money in by that day,
+    // carried forward like the value, so a deposit after the latest reading
+    // doesn't show as a loss.
+    const investedAtReading = cumulativeFlowsAt(flows, pts.map(p => p.date));
+    const profitPts = pts.map((p, i) => ({ date: p.date, value: p.value - investedAtReading[i] }));
+    series.profit = nullBefore(resampleByDate(profitPts, labels), pts[0].date);
+  }
+  const styles = {
+    actual:   { borderColor: TX_ACTUAL_COLOR, borderWidth: 2.5, tension: 0.3 }, // the user's REAL line — visually primary
+    invested: { borderColor: TX_INVESTED_COLOR, borderWidth: 2, tension: 0 }, // a step per deposit
+    profit:   { borderColor: TX_PROFIT_COLOR, borderWidth: 2, tension: 0.3, _signed: true }, // a loss plots below zero (js/chart.js's clampChartMin)
   };
-  chart.data.datasets.push({
-    label: 'My portfolio',
-    data: series,
-    borderColor: TX_ACTUAL_COLOR,
-    backgroundColor: 'transparent',
-    fill: false,
-    tension: 0.3,
-    pointRadius: 0,
-    pointHitRadius: 10,
-    borderWidth: 2.5, // the user's REAL line — visually primary
-    _configLine: true,
-    _actualLine: true,
-  });
-  chart.setDatasetVisibility(chart.data.datasets.length - 1, true);
-  // The sidebar summary shows these metrics — but its usual triggers
-  // (toggleContribMode etc.) run BEFORE render() gets here, when
-  // _actualMetrics was still null. Refresh it now that they exist.
-  if (typeof renderTxSummary === 'function') renderTxSummary();
+  for (const line of TX_LINES) {
+    if (!series[line.key] || s[line.flag] === false) continue;
+    chart.data.datasets.push({
+      label: line.label,
+      data: series[line.key],
+      ...styles[line.key],
+      backgroundColor: 'transparent',
+      fill: false,
+      pointRadius: 0,
+      pointHitRadius: 10,
+      _configLine: true,
+      _actualLine: true,
+    });
+    chart.setDatasetVisibility(chart.data.datasets.length - 1, true);
+  }
 }
 
 // --- naming -------------------------------------------------------------
