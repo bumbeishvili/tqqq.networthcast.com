@@ -2217,6 +2217,11 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // and one-trade-per-day are #44's. With exitPct -28, slopeGate 20, belowGate
 // 10 and bbPct Off it reproduces #44 row for row (checked across 22,984 rows
 // when it was written; tests/library-withdrawals.cjs does not cover that).
+// The defaults are the best fit on Q1 2010 to Q4 2025, 2009-12-31 to
+// 2025-12-31 (2026-10-29, six searches, 286,000 runs of this code, scratchpad
+// r5/bb-fit.cjs): sell line +10% (above the center), 4 closes, buy-back -32%
+// with all the money; 100.8% a year against 91.8% for the earlier -3 / 5 /
+// -34 / half.
 CODE[45] = `{
   name: "SQQQ stretch, sell line + crash buy-back",
   params: [
@@ -2236,21 +2241,21 @@ CODE[45] = `{
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
     { section: "Sell line — leave when it breaks down" },
-    { id: "exitPct", label: "Below line (%)", tip: "Sell on the first close this far under the center line.", default: -3, options: [
+    { id: "exitPct", label: "Level vs center line (%)", tip: "Sell on the first close under this level. Negative is below the center line, positive above it.", default: 10, options: [
       10,8,6,5,4,3,2,1,0,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12,-13,-14,-15,-16,-17,-18,-19,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
     { id: "crashAsset", label: "Then hold", tip: "What to hold after selling, until the strategy buys back.", default: "cash", options: [
       { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
       { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
-    { id: "confirmDays", label: "Buy back after closes above line", tip: "Closes in a row above the line before buying back. Selling needs one.", default: 5, options: [1, 2, 3, 4, 5, 6] },
+    { id: "confirmDays", label: "Buy back after closes above line", tip: "Closes in a row above the line before buying back. Selling needs one.", default: 4, options: [1, 2, 3, 4, 5, 6] },
     { id: "dipReentry", label: "Re-enter a correction", tip: "How far the price must climb from its low toward the center line before buying back.", default: 50, options: [
       { value: 0, label: "At the sell line" }, { value: 25, label: "A quarter of the way back from its low" },
       { value: 33, label: "A third of the way back from its low" }, { value: 50, label: "Half way back from its low" },
       { value: 67, label: "Two thirds of the way back from its low" } ] },
     { section: "Buy-back line — after a crash, re-enter here instead of waiting for the sell line; it sells again below it" },
-    { id: "bbPct", label: "Below line (%)", tip: "How far under the center line counts as a crash.", default: -34, options: [
+    { id: "bbPct", label: "Below line (%)", tip: "How far under the center line counts as a crash.", default: -32, options: [
       { value: 999, label: "Off" }, -10,-12,-14,-15,-16,-18,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
-    { id: "bbSlice", label: "Buy a slice at the line right away", tip: "Bought at the first close under the line. The rest waits for the closes above it.", default: 50, options: [
+    { id: "bbSlice", label: "Buy a slice at the line right away", tip: "Bought at the first close under the line. The rest waits for the closes above it.", default: 100, options: [
       { value: 0, label: "No — wait for the closes above it" }, { value: 25, label: "A quarter of the money" },
       { value: 33, label: "A third of the money" }, { value: 50, label: "Half of the money" },
       { value: 75, label: "Three quarters of the money" }, { value: 100, label: "All of the money" } ] },
@@ -2354,7 +2359,8 @@ CODE[45] = `{
     // Trade notes say what was traded and which rule fired, naming the line with its setting.
     const nm = id => id === "cash" ? "cash" : String(id).toUpperCase();
     const closesTxt = confirmDays + (confirmDays > 1 ? " closes in a row" : " close");
-    const overTxt = "the overextended line (+" + (p.overPct || 0) + "%)", exitTxt = "the sell line (" + (p.exitPct || 0) + "%)", bbTxt = "the buy-back line (" + bbPct + "%)";
+    const exitLvl = ((p.exitPct || 0) > 0 ? "+" : "") + (p.exitPct || 0) + "%";   // the sell line can sit above the center line
+    const overTxt = "the overextended line (+" + (p.overPct || 0) + "%)", exitTxt = "the sell line (" + exitLvl + ")", bbTxt = "the buy-back line (" + bbPct + "%)";
     const shareTxt = f => f >= 0.99 ? "all the money" : f >= 0.74 ? "three quarters of the money" : f >= 0.49 ? "half the money" : f >= 0.32 ? "a third of the money" : "a quarter of the money";
     let why = "", splitFrom = "", splitIdx = -9;   // why: the rule that changed the state today; splitFrom/splitIdx: leg one of a switch
 
@@ -2488,7 +2494,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
     const chartLines = [
       { key: "assetPrice", label: A + " price" },
       mainRsi ? { key: "medianPrice", label: "RSI(" + W + ") line" } : { key: "medianPrice", label: W + "-day " + CN },
-      { key: "exitLine", label: "Sell line (" + (p.exitPct || 0) + "%)" },
+      { key: "exitLine", label: "Sell line (" + exitLvl + ")" },
       { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)" }
     ];
     if (bbPct !== 999) chartLines.push({ key: "buyBackLine", label: "Buy-back (" + bbPct + "%)" });
@@ -2504,7 +2510,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
             tone: state === "normal" ? "good" : "bad",
             icon: above >= 0 ? "trendUp" : "trendDown",
             sub: (mainRsi ? sigM.toFixed(1) + " vs 50" : (px[p.endIdx] || 0).toFixed(2) + " vs " + med.toFixed(2) + " " + CN),
-            tip: "The stretch reading the overextension rule uses. Above +" + (p.overPct || 0) + "% parks in " + K + "; below " + (p.exitPct || 0) + "% sells to " + lbl(crashAsset) + "." },
+            tip: "The stretch reading the overextension rule uses. Above +" + (p.overPct || 0) + "% parks in " + K + "; below " + exitLvl + " sells to " + lbl(crashAsset) + "." },
           { label: "Current band",
             value: zone,
             tone: zoneTone,
@@ -2512,7 +2518,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
             sub: "holding " + holdTxt,
             tip: "Where the last close landed: overextended (park), between lines (hold), sold (out)." },
           { label: "Sell line",
-            value: (p.exitPct || 0) + "%",
+            value: exitLvl,
             icon: "shield",
             sub: (sellArmed ? "armed" : "on hold until a close above it") + " · then hold " + lbl(crashAsset)
               + (state === "crashCash" && !bbArmed ? " · " + Math.min(aboveRe, confirmDays) + " of " + confirmDays + " closes above " + (dipF > 0 && lowRel * dipF < exitB ? "the re-entry line" : "it") : confirmDays > 1 ? " · buys back after " + confirmDays + " closes above" : ""),
@@ -2554,6 +2560,470 @@ ${WEEKLY_MONTH_END_SNIPPET}
     };
   }
 }`;
+
+// #47 — TQQQ vs QQQ stretch (the user's idea, 2026-10-29). The signal is how
+// far TQQQ's buy & hold over a lookback is ahead of QQQ's: (TQQQ growth ÷ QQQ
+// growth − 1) in percent, read off the last `lookback` years of prices only —
+// nothing older matters (an earlier version ranked it against every reading
+// since 1971, which made 2010+ results swing from 1% to 86% with the start
+// year of that history). Rules on that lead: a ceiling (step aside, SQQQ for
+// at most N days then cash, back at a lower lead), a floor (a break sells,
+// SQQQ while broken, back after N closes above a re-entry lead) and a deep
+// buy (TQQQ again far behind while the floor is broken); and the buy-back
+// strategy's overextended line (SQQQ while TQQQ closes more than 55% above its
+// own 250-day median; Off leaves the stretch rules alone). The rules also run
+// over the lookback window before the entry, so a start inside a stepped-aside
+// or floor-broken stretch carries that state in. Sales go through at the close
+// that shows the signal; a switch between two funds buys the other one at the
+// next close unless One trade per day is off. The defaults are the
+// best fit of a search over about four million settings scored on Q1 2010 to
+// Q4 2025, 2009-12-31 to 2025-12-31, memory before the entry included
+// (scratchpad r5/opt-q.cjs, the strategy's own option lists): 135.8% a year
+// with the line, 98.2% with it off; January to October 2026, left out of the
+// fit, +187.5%. The SQQQ limit came after: run on the reconstructed prices
+// from 1953 the rules made 4.4% a year and lost 99.999% before 2010, mostly
+// in SQQQ under the floor (3,694 days) and over the line (1,616 days) while
+// the market rose. The user wants nothing lost from 2010, where the longest
+// SQQQ run is 95 days, so the default limit is 126 days: identical from 2010
+// (135.8%), 8.6% a year from 1953 instead of 4.4%. 20 days is the best count
+// over the full history (14.9%) but costs 8 points from 2010 (scratchpad
+// r5/defence-grid.cjs). The two median defences, off by default, keep the
+// money over 1953-2009 but cost 25-35 points from 2010. A plain stop on the
+// deep buy lost on both counts; the deep buy guard (25% under the buy price,
+// cash until TQQQ closes above its median, then bought again) and the credit
+// veto (NFCI above 0.4, the NFCI strategy's level) never fire after 2009, so
+// 2010 to today is identical, and lift 1953-2026 to 17.1% a year: 1973-74
+// +28%, 2000-02 +9%, 2008 +5% instead of -89%, -99%, -88% (scratchpad
+// r5/defence2.cjs, after surveying how the other library strategies get
+// through those bears, r5/survey.cjs).
+// Number 46 is skipped on purpose: it was handed out once
+// on 2026-10-23 and withdrawn, and a saved copy stamped 46 would refresh into
+// whatever strategy reused it.
+CODE[47] = `{
+  name: "TQQQ vs QQQ stretch",
+  params: [
+    { section: "Stretch" },
+    { id: "lookbackYears", label: "Lookback (years)", tip: "How many years of buy & hold growth are compared: TQQQ's against QQQ's.", default: 2.25, options: [
+      1,1.25,1.5,1.75,2,2.25,2.5,2.75,3,3.25,3.5,3.75,4,4.5,5,5.5,6,7,8,9,10] },
+    { section: "Ceiling — step aside" },
+    { id: "topLead", label: "TQQQ ahead by at least (%)", tip: "TQQQ's growth over the lookback against QQQ's: 90 means TQQQ grew 1.9 times as much.", default: 90, options: [
+      20,30,40,50,60,70,75,80,85,90,95,100,110,120,130,140,150,160,180,200,225,250,300,{ value: 9999, label: "Off" }] },
+    { id: "topHold", label: "Held instead", tip: "What is held from the ceiling until the lead falls back.", default: "sqqq", options: [
+      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" } ] },
+    { id: "topDays", label: "SQQQ for at most (days)", tip: "After this many days SQQQ is sold to cash, which waits for the lead to fall back.", default: 10, options: [
+      { value: 0, label: "No limit" }, 3,5,10,15,21,42,63,126] },
+    { id: "backLead", label: "Back to TQQQ at lead ≤ (%)", tip: "At or above the ceiling means no band: back on the first close under the ceiling.", default: 80, options: [
+      -20,0,10,20,30,40,50,60,70,75,80,85,90,95,100,110,120,130,140,150,160,180,200,250] },
+    { section: "Floor — sell the breakdown" },
+    { id: "floorLead", label: "Sell at lead under (%)", tip: "A close with TQQQ's lead under this sells TQQQ; negative means TQQQ is behind QQQ.", default: 10, options: [
+      { value: -9999, label: "Off" }, -70,-60,-50,-40,-30,-25,-20,-15,-10,-5,0,5,10,15,20,25,30] },
+    { id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken.", default: "sqqq", options: [
+      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" } ] },
+    { id: "floorDays", label: "SQQQ for at most (days)", tip: "After this many days SQQQ is sold to cash, which waits for the re-entry.", default: 0, options: [
+      { value: 0, label: "No limit" }, 3,5,10,15,21,42,63] },
+    { id: "reentryLead", label: "Back at lead ≥ (%)", tip: "TQQQ is bought again after the closes in a row below at or above this lead.", default: 30, options: [
+      -70,-60,-50,-40,-30,-20,-10,0,5,10,15,20,25,30,35,40,45,50,60,70,80] },
+    { id: "reentryCloses", label: "Closes in a row", tip: "How many closes in a row at or above the re-entry lead buy TQQQ again.", default: 3, options: [1,2,3,5,7,10] },
+    { id: "deepLead", label: "Deep buy at lead ≤ (%)", tip: "While the floor is broken, a close this far behind or worse buys TQQQ, held until the ceiling.", default: -30, options: [
+      { value: -9999, label: "Off" }, -85,-80,-75,-70,-65,-60,-55,-50,-45,-40,-35,-30,-25,-20] },
+    { section: "Overextended price — the buy-back strategy's SQQQ line" },
+    { id: "overPct", label: "SQQQ above median (%)", tip: "SQQQ while TQQQ closes this far above its own median, back on the first close under.", default: 55, options: [
+      { value: 0, label: "Off" }, 30,40,45,50,55,60,70,80] },
+    { id: "overWindow", label: "Median window (days)", tip: "How many days of TQQQ closes the median covers.", default: 250, options: [150,200,250,300] },
+    { section: "Defence" },
+    { id: "sqqqMaxDays", label: "SQQQ at most (days in a row)", tip: "After this many days in a row in SQQQ, hold cash until the rules want something else.", default: 126, options: [
+      { value: 0, label: "No limit" }, 5, 10, 15, 20, 30, 42, 63, 100, 126, 252] },
+    { id: "sqqqNeedsDown", label: "SQQQ only under the median", tip: "The ceiling and the floor hold SQQQ only while TQQQ closes under its median, cash otherwise. The overextended line is not affected.", type: "bool", default: false, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "sellLine", label: "Cash under median (%)", tip: "Holds cash instead of TQQQ while TQQQ closes this far under its median.", default: 0, options: [
+      { value: 0, label: "Off" }, -10, -15, -20, -25, -30, -35, -40, -50] },
+    { id: "deepGuard", label: "Deep buy guard (% under its price)", tip: "A deep buy that closes this far under its buy price goes to cash, and buys back once TQQQ closes above its median.", default: 25, options: [
+      { value: 0, label: "Off" }, 15, 20, 25, 30, 40, 50] },
+    { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "Cash instead of TQQQ while the Chicago Fed's credit stress index is above this. Each weekly reading is used a week later.", default: 0.4, options: [
+      { value: 0, label: "Off" }, 0.2, 0.3, 0.4, 0.5, 0.75, 1] },
+    { section: "Execution & costs" },
+    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "cashRate", label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", default: 4, options: [
+      0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
+    { id: "tradeCost", label: "Trading cost (%)", tip: "Charged on every buy and sell, as a share of the amount traded.", default: 0.02, options: [
+      0,0.01,0.02,0.03,0.04,0.05,0.06,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,1] }
+  ],
+  columns: [
+    { key: "leadPct", label: "TQQQ ahead", tip: "How far TQQQ's buy & hold over the lookback is ahead of QQQ's: TQQQ growth ÷ QQQ growth − 1. Negative means behind." },
+    { key: "tqqqGrowthPct", label: "TQQQ growth", tip: "TQQQ's buy & hold return over the lookback." },
+    { key: "qqqGrowthPct", label: "QQQ growth", tip: "QQQ's buy & hold return over the lookback." },
+    { key: "overPct", label: "TQQQ vs median", tip: "How far TQQQ's close sits above (+) or below (−) its own median. Blank when the overextended line is off." },
+    { key: "sqqqRun", label: "SQQQ days", tip: "Days in a row the rules have wanted SQQQ. Past the limit the money sits in cash." }
+  ],
+  run(data, p) {
+    const log = [], dates = data.dates, n = dates.length, T = data.tqqq, Q = data.qqq;
+    const years = p.lookbackYears || 2.25, L = Math.round(years * 252);
+    const top = p.topLead == null ? 90 : +p.topLead, back = p.backLead == null ? 80 : +p.backLead, band = back < top;
+    const topOn = top < 9999, topHold = p.topHold || "sqqq", topDays = +p.topDays || 0;
+    const floor = p.floorLead == null ? 10 : +p.floorLead, floorOn = floor > -9999, floorHold = p.floorHold || "sqqq", floorDays = +p.floorDays || 0;
+    const reentry = p.reentryLead == null ? 30 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 1);
+    const deep = p.deepLead == null ? -30 : +p.deepLead, deepOn = floorOn && deep > -9999;
+    const over = (+p.overPct || 0) / 100, OW = +p.overWindow || 250;
+    const cost = (p.tradeCost || 0) / 100;
+    const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
+    const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
+    // The lead: TQQQ's growth over the lookback divided by QQQ's, minus 1, in
+    // percent — from the last L closes only.
+    const lead = new Float64Array(n).fill(NaN), gT = new Float64Array(n).fill(NaN), gQ = new Float64Array(n).fill(NaN);
+    for (let i = L; i < n; i++) {
+      if (T[i] > 0 && T[i - L] > 0 && Q[i] > 0 && Q[i - L] > 0) {
+        gT[i] = T[i] / T[i - L]; gQ[i] = Q[i] / Q[i - L];
+        lead[i] = (Math.exp(Math.log(T[i] / T[i - L]) - Math.log(Q[i] / Q[i - L])) - 1) * 100;
+      }
+    }
+    // TQQQ against its own median over the window, today's close included,
+    // from the start of the memory window before the entry (when the
+    // overextended line or a median defence is on).
+    const sqMax = +p.sqqqMaxDays || 0, needsDown = !!p.sqqqNeedsDown, sellLine = (+p.sellLine || 0) / 100;
+    const dGuard = (+p.deepGuard || 0) / 100, nfTh = +p.nfciVeto || 0;
+    const rel = new Float64Array(n).fill(NaN);
+    if (over > 0 || needsDown || sellLine || dGuard) {
+      const win = [];
+      const lb = (v) => { let lo = 0, hi = win.length; while (lo < hi) { const m = (lo + hi) >> 1; if (win[m] < v) lo = m + 1; else hi = m; } return lo; };
+      for (let i = Math.max(0, p.startIdx - L - OW - 1); i <= p.endIdx; i++) {
+        if (T[i] > 0) win.splice(lb(T[i]), 0, T[i]);
+        if (i - OW >= 0 && T[i - OW] > 0) { const k = lb(T[i - OW]); if (win[k] === T[i - OW]) win.splice(k, 1); }
+        if (win.length >= OW && T[i] > 0) { const c = win.length, med = c % 2 ? win[(c - 1) >> 1] : (win[c / 2 - 1] + win[c / 2]) / 2; rel[i] = T[i] / med - 1; }
+      }
+    }
+    const leadTxt = (x) => x === x ? (x >= 0 ? x.toFixed(0) + "% ahead" : (-x).toFixed(0) + "% behind") : "n/a";
+    // State on the lead: "in" (TQQQ), "top" (stepped aside at the ceiling),
+    // "brk" (floor broken), "deep" (bought back far behind).
+    let state = "in", days = 0, closes = 0, why = "", whyIdx = -1, deepPx = 0, deepPaused = false;
+    const advance = (i) => {
+      const v = lead[i];
+      if (!(v === v)) return;
+      const prev = state, now = "TQQQ is " + leadTxt(v);
+      if (state === "in") {
+        if (topOn && v >= top) { state = "top"; why = now + ", at or past the ceiling (" + top + "%)"; }
+        else if (floorOn && v < floor) { state = "brk"; closes = 0; why = now + ", under the floor (" + floor + "%)"; }
+      } else if (state === "top") {
+        if (floorOn && v < floor) { state = "brk"; closes = 0; why = now + ", under the floor (" + floor + "%)"; }
+        else if (band ? v <= back : v < top) { state = "in"; why = now + (band ? ", at or under " + back + "%" : ", under the ceiling (" + top + "%)"); }
+      } else if (state === "brk") {
+        if (deepOn && v <= deep) { state = "deep"; deepPx = T[i]; deepPaused = false; why = now + ", at or past the deep buy (" + deep + "%)"; }
+        else { closes = v >= reentry ? closes + 1 : 0; if (closes >= closesNeeded) { state = "in"; why = closesNeeded + (closesNeeded > 1 ? " closes in a row" : " close") + " at " + reentry + "% or more"; } }
+      } else {
+        if (topOn && v >= top) { state = "top"; why = now + ", at or past the ceiling (" + top + "%)"; }
+        else if (v >= reentry) { state = "in"; why = now + ", back at " + reentry + "% or more"; }
+      }
+      days = state === prev ? days + 1 : 0;
+      if (state !== prev) whyIdx = i;
+      // The deep buy guard: a deep buy closing dGuard under its buy price waits in
+      // cash until TQQQ closes above its median, then is bought again. 1973, 2000
+      // and 2008 each fell another 89-99% after a deep buy; since 2010 a deep buy
+      // fell at most 17% further, so the guard has never fired there.
+      if (state !== "deep") deepPaused = false;
+      else if (dGuard > 0) {
+        if (!deepPaused && T[i] < deepPx * (1 - dGuard)) { deepPaused = true; why = "the deep buy guard, TQQQ " + Math.round(dGuard * 100) + "% under its buy price"; whyIdx = i; }
+        else if (deepPaused && rel[i] >= 0) { deepPaused = false; deepPx = T[i]; why = "the deep buy guard released, TQQQ back above its median"; whyIdx = i; }
+      }
+    };
+    const wantNow = (i) => {
+      let w = state === "deep" && deepPaused ? "cash" : state === "in" || state === "deep" ? "tqqq"
+        : state === "top" ? (topHold === "sqqq" && topDays && days >= topDays ? "cash" : topHold)
+        : (floorHold === "sqqq" && floorDays && days >= floorDays ? "cash" : floorHold);
+      const overNow = over > 0 && rel[i] === rel[i] && rel[i] > over;
+      if (overNow) w = "sqqq";
+      // Defences: the ceiling's and floor's SQQQ only in a downtrend, cash far under the median.
+      if (w === "sqqq" && !overNow && needsDown && !(rel[i] < 0)) w = "cash";
+      if (w === "tqqq" && sellLine && rel[i] === rel[i] && rel[i] < sellLine) w = "cash";
+      // The credit veto: never above 0.4 since 2010 (0.31 in April 2020), 5.2 in 1974, 3.1 in 2008.
+      if (w === "tqqq" && nfTh && data.nfci && data.nfci[i] > nfTh) w = "cash";
+      return w;
+    };
+    // SQQQ at most sqMax days in a row, counted on the rules' choice; cash once past it.
+    // Before 2010 the floor alone held SQQQ for years while the market rose.
+    let sqRun = 0, sqAt = -1;
+    const capSq = (i, w) => {
+      if (i !== sqAt) { sqRun = w === "sqqq" ? sqRun + 1 : 0; sqAt = i; }
+      return w === "sqqq" && sqMax > 0 && sqRun > sqMax ? "cash" : w;
+    };
+    const lbl = (id) => id === "cash" ? "cash" : id.toUpperCase();
+    // Why the money is in cash when the rules' state would hold a fund. Past the
+    // SQQQ limit the note names what wanted SQQQ, not the stretch's older reason.
+    const capped = () => sqMax > 0 && sqRun > sqMax;
+    const capWhy = (i) => "SQQQ held " + sqMax + " days in a row, the most allowed; "
+      + (over > 0 && rel[i] > over ? "TQQQ " + (rel[i] * 100).toFixed(0) + "% above its " + OW + "-day median" : state === "brk" ? "the floor is broken" : "stepped aside at the ceiling");
+    // A defence that put the money in cash is the whole reason for it.
+    const defenceWhy = (i) => capped() ? capWhy(i)
+      : state === "deep" && deepPaused ? "the deep buy guard, TQQQ fell " + Math.round(dGuard * 100) + "% under its buy price; back once it closes above its median"
+      : nfTh && data.nfci && data.nfci[i] > nfTh && (state === "in" || state === "deep") ? "credit veto, NFCI " + data.nfci[i].toFixed(2) + " above " + nfTh
+      : sellLine && rel[i] < sellLine && (state === "in" || state === "deep") ? "TQQQ " + Math.abs(rel[i] * 100).toFixed(0) + "% under its median, past the cash line"
+      : needsDown && !(rel[i] < 0) && (state === "top" || state === "brk") ? "TQQQ above its median, so no SQQQ" : "";
+    const cashWhy = (i) => defenceWhy(i) ? defenceWhy(i) + "; "
+      : state === "top" && topHold === "sqqq" && topDays && days >= topDays ? "SQQQ held for its " + topDays + " days; "
+      : state === "brk" && floorHold === "sqqq" && floorDays && days >= floorDays ? "SQQQ held for its " + floorDays + " days; " : "";
+    // The signal lines as TQQQ price levels for a day's close: a close past one
+    // is the trade it names. A lead threshold x is the close that puts TQQQ x%
+    // ahead of QQQ over the lookback. Only the lines that can fire from the
+    // current state are given, so each one appears while it is live.
+    const leadLbl = (x) => x >= 0 ? x + "% ahead" : -x + "% behind";
+    const atLead = (i, x) => lead[i] === lead[i] ? T[i - L] * (Q[i] / Q[i - L]) * (1 + x / 100) : null;
+    // Each level says whether crossing it sells TQQQ or buys it (kind), so the
+    // chart can show just the nearest sell and buy level on either side.
+    const signalLevels = (i) => {
+      const med = rel[i] === rel[i] ? T[i] / (1 + rel[i]) : null, out = [], holdsT = capSq(i, wantNow(i)) === "tqqq";
+      const wantsT = (state === "in" || state === "deep") && !deepPaused;
+      const add = (label, px, dir, kind, act) => { if (px > 0) out.push({ label, px, dir, kind, act }); };
+      if (over > 0 && med) {
+        const ln = med * (1 + over), on = T[i] > ln;
+        if (on) add("Overextended (+" + Math.round(over * 100) + "%)", ln, "down", wantsT ? "buy" : "", "a close under it ends the SQQQ hold");
+        else add("Overextended (+" + Math.round(over * 100) + "%)", ln, "up", holdsT ? "sell" : "", "a close above it holds SQQQ");
+      }
+      if (topOn && (state === "in" || state === "deep")) add("Ceiling (" + leadLbl(top) + ")", atLead(i, top), "up", holdsT ? "sell" : "", "a close above it steps aside to " + lbl(topHold));
+      if (topOn && band && state === "top") add("Back at (" + leadLbl(back) + ")", atLead(i, back), "down", "buy", "a close under it buys TQQQ");
+      if (floorOn && state === "in") add("Floor (" + leadLbl(floor) + ")", atLead(i, floor), "down", holdsT ? "sell" : "", "a close under it sells to " + lbl(floorHold));
+      if (floorOn && state === "brk") add("Re-entry (" + leadLbl(reentry) + ")", atLead(i, reentry), "up", "buy", closesNeeded + (closesNeeded > 1 ? " closes" : " close") + " above it buy TQQQ");
+      if (deepOn && state === "brk") add("Deep buy (" + leadLbl(deep) + ")", atLead(i, deep), "down", "buy", "a close under it buys TQQQ");
+      if (dGuard && state === "deep" && !deepPaused) add("Deep buy guard (−" + Math.round(dGuard * 100) + "%)", deepPx * (1 - dGuard), "down", holdsT ? "sell" : "", "a close under it sells to cash");
+      if (dGuard && state === "deep" && deepPaused && med) add(OW + "-day median", med, "up", "buy", "a close above it buys the deep buy back");
+      if (sellLine && med && (state === "in" || state === "deep")) add("Cash line (" + Math.round(sellLine * 100) + "%)", med * (1 + sellLine), "down", holdsT ? "sell" : "", "a close under it sells to cash");
+      return { med, out };
+    };
+    // A day's chart row: TQQQ, its median, and the nearest level of each role.
+    const signalRow = (i) => {
+      const s = signalLevels(i), near = (kind, dir) => { const v = s.out.filter(l => l.kind === kind && l.dir === dir).map(l => l.px); return v.length ? (dir === "up" ? Math.min(...v) : Math.max(...v)) : null; };
+      return { assetPrice: T[i] > 0 ? T[i] : null, medianPrice: s.med, sellAbove: near("sell", "up"), sellBelow: near("sell", "down"), buyAbove: near("buy", "up"), buyBelow: near("buy", "down") };
+    };
+    const reason = (i, w) => over > 0 && rel[i] === rel[i] && rel[i] > over && w === "sqqq"
+      ? "TQQQ closed " + (rel[i] * 100).toFixed(0) + "% above its " + OW + "-day median"
+      : w === "cash" && defenceWhy(i) ? defenceWhy(i)
+      : (w === "cash" ? cashWhy(i) : "") + (why || "TQQQ is " + leadTxt(lead[i])) +
+        (whyIdx >= 0 && whyIdx < p.startIdx ? "; that was on " + dates[whyIdx] + ", before the entry" : "");
+    // Memory before the entry: the rules run over the lookback window before
+    // it, without trading, so the first day holds what the running strategy
+    // held. Started blank, an entry on 2020-03-23 read the crash low only as
+    // "under the floor" and bought SQQQ (the deep buy had fired on 2020-03-20),
+    // then held it while TQQQ nearly tripled.
+    for (let i = Math.max(0, p.startIdx - L); i < p.startIdx; i++) { advance(i); capSq(i, wantNow(i)); }
+    let cash = p.initial, shares = 0, held = "cash";
+    let invested = p.initial, pending = false;
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      const month = dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "", fee = 0;
+      if (i > p.startIdx) cash *= 1 + dayRate;
+      if (p.contributions && p.contributions[dates[i]]) {
+        const amt = p.contributions[dates[i]];
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+${SELL_HELD_TO_COVER}
+      }
+      advance(i);
+      const want = capSq(i, wantNow(i));
+      if (pending) {
+        // second day of a switch: buy what the rule wants now
+        if (want !== "cash" && priceOf(want, i) > 0) {
+          const f = cash * cost; shares = (cash - f) / priceOf(want, i); fee += f; cash = 0; held = want;
+          action = "buy"; note = "Bought " + lbl(want) + ": second day of the switch; " + reason(i, want);
+        }
+        pending = false;
+      } else if (want !== held) {
+        if (held !== "cash") {
+          const from = held, gross = shares * priceOf(held, i), f = gross * cost;
+          cash += gross - f; fee += f; shares = 0; held = "cash";
+          if (want === "cash") { action = "sell"; note = "Sold " + lbl(from) + ": " + reason(i, want); }
+          else if (p.splitDays !== false) { pending = true; action = "sell"; note = "Sold " + lbl(from) + ": " + reason(i, want) + "; " + lbl(want) + " is bought tomorrow"; }
+          else if (priceOf(want, i) > 0) {
+            const f2 = cash * cost; shares = (cash - f2) / priceOf(want, i); fee += f2; cash = 0; held = want;
+            action = "switch"; note = "Switched " + lbl(from) + " to " + lbl(want) + ": " + reason(i, want);
+          }
+        } else if (priceOf(want, i) > 0) {
+          const f = cash * cost; shares = (cash - f) / priceOf(want, i); fee += f; cash = 0; held = want;
+          action = "buy"; note = "Bought " + lbl(want) + ": " + reason(i, want);
+        }
+      } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
+        const f = cash * cost; shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
+      }
+      const hp = priceOf(held, i), holdingsValue = shares * hp;
+${WEEKLY_MONTH_END_SNIPPET}
+      if (i === p.startIdx) { action = "start"; if (!note) note = "Holding " + lbl(held) + ": " + reason(i, held); }
+      if (i === p.endIdx) action = "end";
+      if (contributed !== 0 || logDay || action !== "hold") {
+        log.push({
+          date: dates[i], value: holdingsValue + cash, action: action, note: note,
+          held: held.toUpperCase(), price: hp, shares: shares, holdingsValue: holdingsValue,
+          cash: cash, contributed: contributed, invested: invested, fee: fee,
+          leadPct: lead[i] === lead[i] ? lead[i] : null,
+          tqqqGrowthPct: gT[i] === gT[i] ? (gT[i] - 1) * 100 : null, qqqGrowthPct: gQ[i] === gQ[i] ? (gQ[i] - 1) * 100 : null,
+          overPct: over > 0 && rel[i] === rel[i] ? rel[i] * 100 : null,
+          sqqqRun: sqRun > 0 ? sqRun : null,
+          ...signalRow(i)
+        });
+      }
+    }
+    const e = p.endIdx, wantE = capSq(e, wantNow(e)), v = lead[e];
+    const cashNow = wantE === "cash" ? cashWhy(e).replace(/; $/, "") : "";
+    const pctTxt = (x) => x === x ? (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(0) + "%" : "n/a";
+    const zone = { in: "between the floor and the ceiling", top: "stepped aside at the ceiling", brk: "under the floor", deep: "bought back far behind" }[state];
+    // The chart: TQQQ's close and the nearest sell and buy level on either side
+    // of it, so each trade sits where the price crosses the line that fired it.
+    // Which rule a level belongs to is in the trade notes and the Nearest signal card.
+    const lines = [{ key: "assetPrice", label: "TQQQ price" }];
+    if (over > 0 || needsDown || sellLine || dGuard) lines.push({ key: "medianPrice", label: OW + "-day median" });
+    lines.push({ key: "sellAbove", label: "Sell above" }, { key: "sellBelow", label: "Sell below" }, { key: "buyAbove", label: "Buy above" }, { key: "buyBelow", label: "Buy below" });
+    const nearest = signalLevels(e).out.filter(l => l.kind).map(l => ({ ...l, dist: l.px / T[e] - 1 })).sort((a, b) => Math.abs(a.dist) - Math.abs(b.dist))[0];
+    const cards = [
+      { label: "TQQQ ahead of QQQ", value: v === v ? (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(0) + "%" : "n/a",
+        sub: years + "y: TQQQ " + pctTxt(gT[e] - 1) + " vs QQQ " + pctTxt(gQ[e] - 1),
+        icon: state === "top" ? "trendUp" : state === "brk" ? "trendDown" : "activity", tone: wantE === "tqqq" ? "good" : "bad",
+        tip: "How far TQQQ's buy & hold over the lookback is ahead of QQQ's." },
+      { label: "Holding", value: lbl(wantE), sub: cashNow || zone, icon: "shield", tone: wantE === "tqqq" ? "good" : "bad",
+        tip: "What the rules hold today and which zone of the lead they are in." },
+      { label: "Levels", value: (floorOn ? floor + "%" : "—") + " / " + (topOn ? top + "%" : "—"), sub: "floor · ceiling", icon: "flag",
+        tip: "The leads that sell TQQQ: the floor below, the ceiling above." }
+    ];
+    if (over > 0) cards.push({ label: "TQQQ vs median", value: rel[e] === rel[e] ? pctTxt(rel[e]) : "n/a", sub: "SQQQ above +" + (over * 100).toFixed(0) + "%",
+      icon: "flag", tone: rel[e] > over ? "bad" : "good", tip: "How far TQQQ's close sits above its own " + OW + "-day median." });
+    if (nearest) cards.push({ label: "Nearest signal", value: nearest.label.replace(/ \\(.*$/, "") + " " + pctTxt(nearest.dist),
+      sub: nearest.act + ", at " + nearest.px.toFixed(2), icon: nearest.dir === "up" ? "trendUp" : "trendDown",
+      tip: "The signal line closest to today's close, how far TQQQ has to move to reach it, and what a close past it does." });
+    return {
+      log: log, lines: lines,
+      signals: {
+        cards: cards,
+        decision: {
+          action: wantE === "tqqq" ? "Hold TQQQ" : wantE === "cash" ? "Stay in cash" : "Hold " + lbl(wantE),
+          note: (over > 0 && rel[e] > over ? "TQQQ is " + pctTxt(rel[e]) + " against its " + OW + "-day median; " : "") +
+            "over " + years + " years TQQQ is " + leadTxt(v) + " of QQQ today, " + zone + (cashNow ? "; " + cashNow : ""),
+          tone: wantE === "tqqq" ? "good" : "bad",
+          reasons: [{ name: "Stretch", val: leadTxt(v), tag: state + " · " + lbl(wantE), lean: wantE === "tqqq" ? "buy" : wantE === "cash" ? "cash" : "out" }]
+        }
+      }
+    };
+  }
+}`;
+
+// #48-#50 — NFCI veto, buy-back and TQQQ vs QQQ stretch, each trading
+// Turnaround Monday in its idle cash (2026-10-29, the user's request after
+// the combination study, scratchpad r5/combo-sim.cjs and combo-cagr.cjs).
+// The rule is the user's custom "Turnaround Monday" code (the r/TQQQ
+// "Turnaround Tuesday" post): buy at a Monday close under the prior close,
+// sell at the first close above the prior close. The data has closes only,
+// so the prior close stands in for the prior day's high.
+//
+// Each entry is its base strategy's own text with these additions, made at
+// load, so a change to the base reaches the combination too:
+//   - the Turnaround Monday settings before Execution & costs, and a column;
+//   - the rule run on the signal fund every day, before the main loop;
+//   - a hook on the line where the base decides what to hold: while the base
+//     wants cash, an open Turnaround Monday trade holds the fund instead, and
+//     the trade ends at the rule's exit or as soon as the base wants anything
+//     else. A trade starts at a Monday close on money in cash, or on the fund
+//     the rules are selling at that close, which is then kept (a "keep" row
+//     says so); money in another fund would need a two-day switch, so it waits;
+//   - the trade note, the log column, and on the dashboard a Turnaround
+//     Monday card and today's call while a trade is open.
+// Every insertion point must appear exactly once in the base text; a base
+// edited so that one moves fails here at load instead of running half-wired.
+function withTurnaroundMonday(base, spec) {
+  const once = (text, find, repl, what) => {
+    const at = text.indexOf(find);
+    if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withTurnaroundMonday(${spec.name}): ${what} must appear exactly once in the base`);
+    return text.slice(0, at) + repl + text.slice(at + find.length);
+  };
+  const params = `    { section: "Turnaround Monday — trade the idle cash" },
+    { id: "tmOn", label: "Trade down Mondays while in cash", tip: "While the rules above hold cash, buy at a Monday close under the prior close and sell at the first close above the prior close.", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "tmSignal", label: "Monday signal read on", tip: "The fund whose closes decide when a trade starts and ends.", default: "${spec.signal}", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "tmFund", label: "Fund bought", tip: "What a trade holds, paid for with the idle cash.", default: "tqqq", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" } ] },
+    { id: "tmNfci", label: "No trades while NFCI above", tip: "No Monday trades while the Chicago Fed's credit stress index is above this, and an open one is sold.", default: 0.4, options: [
+      { value: 0, label: "Off" }, 0.4, 0.75, 1] },
+`;
+  const setup = `    // Turnaround Monday on the signal fund, run every day on its own. A trade
+    // it opens at a Monday close while the rules want cash buys the fund; it
+    // ends at the rule's exit or as soon as the rules want anything else.
+    const tmOn = p.tmOn !== false, tmFund = data[p.tmFund] ? p.tmFund : "tqqq";
+    const tmSig = data[p.tmSignal] ? p.tmSignal : "tqqq", tmSigName = tmSig.toUpperCase();
+    const tmIn = new Uint8Array(p.endIdx + 1);   // 1 = the rule is in a trade at that close
+    for (let i = p.startIdx, inT = false; i <= p.endIdx; i++) {
+      const c = data[tmSig][i], prev = i > 0 ? data[tmSig][i - 1] : 0;
+      const wd = ((Math.floor(Date.parse(data.dates[i]) / 86400000) + 4) % 7 + 7) % 7;   // 1 = Monday (1970-01-01 was a Thursday)
+      if (c > 0 && prev > 0) { if (inT) { if (c > prev) inT = false; } else if (wd === 1 && c < prev) inT = true; }
+      tmIn[i] = inT ? 1 : 0;
+    }
+    let tmActive = false, tmSince = "", tmWhy = "", tmKept = false, tmWas = false, tmIdle = false;
+    // On a price chart of the signal fund itself: the close a Monday must finish
+    // under (Friday's, drawn Friday to Monday while the rules want cash), and
+    // while a trade is open the close it sells above (the prior close).
+    const tmChart = tmOn && tmSig === (p.asset || "tqqq");
+    const tmWd = (i) => i <= p.endIdx ? ((Math.floor(Date.parse(data.dates[i]) / 86400000) + 4) % 7 + 7) % 7 : -1;
+    const tmStress = (i) => !!(+p.tmNfci && data.nfci && data.nfci[i] > +p.tmNfci);
+    // What to hold today: the rules' choice, or the fund while a trade opened in their cash is open.
+    // A trade starts at the Monday close on money in cash, or on the fund the rules are selling
+    // that close (kept instead of sold); money in another fund would need a two-day switch.
+    const tmHold = (i, want) => {
+      tmWhy = ""; tmKept = false; tmWas = tmActive; tmIdle = tmOn && want === "cash" && !tmStress(i);
+      // Credit stress pauses it: NFCI has not been above 0.4 since 2010; in 1973-74 the
+      // Monday dip-buys in the rules' cash turned the stretch's +28% into -72%.
+      if (!tmOn || want !== "cash" || tmStress(i)) { if (tmActive && tmStress(i)) tmWhy = "Turnaround Monday paused, NFCI " + data.nfci[i].toFixed(2) + " above " + p.tmNfci; tmActive = false; return want; }
+      if (tmActive && !tmIn[i]) { tmActive = false; tmWhy = "Turnaround Monday exit, " + tmSigName + " closed above the prior close"; }
+      else if (!tmActive && (held === "cash" || held === tmFund) && tmIn[i] && !(i > p.startIdx && tmIn[i - 1])) {
+        tmActive = true; tmSince = data.dates[i]; tmKept = held === tmFund;
+        tmWhy = tmKept ? "Kept " + tmFund.toUpperCase() + ": the rules sold, but " + tmSigName + " closed a Monday under the prior close; held to the first close above it"
+          : "Turnaround Monday, " + tmSigName + " closed a Monday under the prior close";
+      }
+      return tmActive ? tmFund : "cash";
+    };
+`;
+  const dashboard = `    // Turnaround Monday on the dashboard: its card, and today's call while a trade is open.
+    const last = res.log[res.log.length - 1] || {};
+    const tmF = (data[p.tmFund] ? p.tmFund : "tqqq").toUpperCase(), tmS = (data[p.tmSignal] ? p.tmSignal : "tqqq").toUpperCase();
+    const tmOpen = p.tmOn !== false && !!last.tmTrade, tmIdle = last.held === "CASH";
+    const nfE = data.nfci ? data.nfci[p.endIdx] : NaN, tmPausedNow = !!(+p.tmNfci && nfE > +p.tmNfci);
+    // Its levels on the chart when its signal is the charted fund: folded into the
+    // base's Buy below / Sell above lines when it has them (the nearer level wins),
+    // otherwise as two lines of their own while the chart has room (6 at most).
+    if (p.tmOn !== false && tmS.toLowerCase() === (p.asset || "tqqq")) {
+      const keys = (res.lines || []).map(l => l.key);
+      if (keys.includes("buyBelow") && keys.includes("sellAbove")) {
+        for (const r of res.log) {
+          if (r.tmBuyBelow != null) r.buyBelow = r.buyBelow == null ? r.tmBuyBelow : Math.max(r.buyBelow, r.tmBuyBelow);
+          if (r.tmSellAbove != null) r.sellAbove = r.sellAbove == null ? r.tmSellAbove : Math.min(r.sellAbove, r.tmSellAbove);
+        }
+      } else if (keys.length <= 4) res.lines = (res.lines || []).concat([{ key: "tmBuyBelow", label: "Monday buy below" }, { key: "tmSellAbove", label: "Monday trade sells above" }]);
+    }
+    if (res.signals) {
+      res.signals.cards = (res.signals.cards || []).concat([{ label: "Turnaround Monday", icon: "clock", tone: tmOpen ? "good" : "",
+        value: p.tmOn === false ? "Off" : tmOpen ? "In a trade" : tmPausedNow ? "Paused" : tmIdle ? "Waiting" : "Idle",
+        sub: tmOpen ? tmF + " since " + last.tmTrade + ", sells at the first close above the prior close" : tmPausedNow ? "credit stress, NFCI " + nfE.toFixed(2) + " above " + p.tmNfci
+          : tmIdle ? "buys " + tmF + " at a Monday close under the prior close" : "the rules hold " + last.held,
+        tip: "Trades the idle cash: buys " + tmF + " when " + tmS + " closes a Monday under the prior close, sells at the first close above it." }]);
+      if (tmOpen && res.signals.decision) {
+        const d = res.signals.decision;
+        res.signals.decision = { action: "Hold " + tmF, note: "Turnaround Monday trade since " + last.tmTrade + "; the rules themselves are in cash", tone: "good",
+          reasons: (d.reasons || []).concat([{ name: "Turnaround Monday", val: "open since " + last.tmTrade, tag: "in · " + tmF, lean: "buy" }]) };
+      }
+    }
+`;
+  let t = base.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
+  t = once(t, '    { section: "Execution & costs" },', params + '    { section: "Execution & costs" },', 'the Execution & costs section');
+  t = once(t, '  columns: [\n', '  columns: [\n    { key: "tmTrade", label: "Monday trade", tip: "The day an open Turnaround Monday trade was bought. Blank when none is open." },\n', 'the columns list');
+  t = once(t, '  run(data, p) {\n', '  run(data, p) {\n    const res = (function (data, p) {\n', 'run(data, p)');
+  t = once(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', 'the main loop');
+  t = once(t, '        log.push({\n', '        log.push({\n          tmTrade: tmActive ? tmSince : null,\n'
+    + '          tmSellAbove: tmChart && (tmWas || tmActive) && i > 0 ? data[tmSig][i - 1] : null,\n'
+    + '          tmBuyBelow: tmChart && tmIdle && !tmWas ? (tmWd(i) === 1 && i > 0 ? data[tmSig][i - 1] : tmWd(i + 1) === 1 ? data[tmSig][i] : null) : null,\n', 'the log row');
+  t = once(t, '      if (i === p.endIdx) action = "end";\n', '      if (tmKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + tmWhy : tmWhy; }   // a sale the Monday trade held off\n      if (i === p.endIdx) action = "end";\n', 'the end-of-run action');
+  for (const [find, repl, what] of spec.hooks) t = once(t, find, repl, what);
+  if (!t.endsWith('\n  }\n}')) throw new Error(`withTurnaroundMonday(${spec.name}): the base must end with its run method`);
+  return t.slice(0, -'\n  }\n}'.length) + '\n    })(data, p);\n' + dashboard + '    return res;\n  }\n}';
+}
+CODE[48] = withTurnaroundMonday(CODE[44], { name: "NFCI veto + Turnaround Monday", signal: "tqqq", hooks: [
+  ['        if (vetoOn) want = "cash";\n', '        if (vetoOn) want = "cash";\n        want = tmHold(i, want);\n', 'the credit-veto line'],
+  ['note = vetoOn ? "NFCI "', 'note = tmWhy ? tmWhy : vetoOn ? "NFCI "', 'the trade note'] ] });
+CODE[49] = withTurnaroundMonday(CODE[45], { name: "Buy-back + Turnaround Monday", signal: "spy", hooks: [
+  ['          : (_frac > 0 ? p.asset : crashAsset);\n', '          : (_frac > 0 ? p.asset : crashAsset);\n        want = tmHold(i, want);\n        if (tmActive) _frac = 1;\n        if (tmWhy && !why) why = tmWhy;\n', 'the holding decision'] ] });
+CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Monday", signal: "tqqq", hooks: [
+  ['      const want = capSq(i, wantNow(i));', '      const want = tmHold(i, capSq(i, wantNow(i)));', 'the holding decision'],
+  ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
 
 // Browser global + Node export.
 if (typeof window !== 'undefined') window.STRATEGY_CODE = CODE;

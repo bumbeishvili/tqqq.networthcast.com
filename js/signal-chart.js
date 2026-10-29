@@ -207,7 +207,13 @@ function _miniWedgePath(x, y, r, a, b) {
 // may set its own color, and in the compact layout a badge: { text, color },
 // on the row above its name while the latest date is on screen.
 function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
-  const linear = !!(opts && opts.scale === 'linear');
+  // A percent chart whose lines go below zero (a lead that turns into a lag)
+  // draws on an even axis: a log axis would drop those stretches without a
+  // trace.
+  const shownLines = lines.filter(ln => customLineShown(cfg, ln.key));
+  const percentWithNegative = shownLines.length > 0 && shownLines.every(ln => ln.unit === '%') &&
+    shownLines.some(ln => log.some(r => r && typeof r[ln.key] === 'number' && isFinite(r[ln.key]) && r[ln.key] < 0));
+  const linear = !!(opts && opts.scale === 'linear') || percentWithNegative;
   const compact = !!(opts && opts.compact);
   const all = [];
   lines.forEach((ln, i) => {
