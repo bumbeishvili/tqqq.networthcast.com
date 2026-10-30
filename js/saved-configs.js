@@ -750,7 +750,9 @@ which timing fired. A rule with no line is a bug. Declare them as lines:
   its lines unit: "%" and log the percent itself (40 for 40%). An index reading that is neither (a
   stress index such as data.nfci) takes unit: "num". Do not mix units inside one group.
 - Rules on different things go in separate groups, one panel each, stacked on one date axis: give
-  each line group: "<short name>" (lines without one form the first panel). Two funds' prices are
+  each line group: "<short name>" (lines without one form the first panel). Panels stack in the
+  order their groups first appear in lines: declare first the group whose rules trade most, last
+  the one that trades least (a credit veto that rarely fires). Two funds' prices are
   different things, and so are a price, a percent and an index. A group needs a level of its own:
   a fund your rule only trades, with no level on it, gets no line. Each group's FIRST line is what its
   levels are compared with. On each trade row, firedBy: "<group name>" names the group whose rule

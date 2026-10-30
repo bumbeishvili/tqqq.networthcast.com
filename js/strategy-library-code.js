@@ -3059,7 +3059,12 @@ function withTurnaroundMonday(base, spec) {
     if (p.tmOn !== false) {
       const lines = res.lines || [], first = lines.length ? lines[0].label : "";
       for (const l of lines) if (!l.group) l.group = first;
-      lines.push({ key: "tmChange", label: tmS + " vs prior close", unit: "%", group: ${panel} }, { key: "tmPrior", label: "Prior close", unit: "%", group: ${panel} });
+      // Panels stack from the most trades to the fewest, so the Monday panel
+      // goes second: since 2010 its trades fall between the base's main panel
+      // and the rest (#50: price 186, Monday 146, lead 104, NFCI none;
+      // scratchpad r7/panel-trades.cjs).
+      const afterFirst = lines.findIndex(l => l.group !== lines[0].group);
+      lines.splice(afterFirst < 0 ? lines.length : afterFirst, 0, { key: "tmChange", label: tmS + " vs prior close", unit: "%", group: ${panel} }, { key: "tmPrior", label: "Prior close", unit: "%", group: ${panel} });
       if (+p.tmNfci && data.nfci) {
         const veto = lines.find(l => l.key === "nfciVeto"), vetoAt = (res.log.find(r => r.nfciVeto != null) || {}).nfciVeto;
         if (lines.some(l => l.key === "nfci") && veto && vetoAt === +p.tmNfci) veto.label += ", Monday pause";
