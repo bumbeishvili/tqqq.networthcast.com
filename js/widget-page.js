@@ -17,12 +17,13 @@
   const WIDGET_ENTRY = 50;                     // the strategy the widget tracks: TQQQ vs QQQ + Turnaround Monday
   const DEFAULT_COLOR = '#e879f9';             // a library copy's colour when the link gives none
   const PORTFOLIO_PX = 190;                    // height of the top chart
-  const BOTTOM_PX = 240;                       // height of the signal chart
+  const BOTTOM_PX = 240;                       // the bottom row's share of a full screen; the intraday chart's height until the signal chart draws
   const INTRADAY_AXIS_PX = 20;                 // the intraday page's room under its plot (its embed marginBottom)
   const DEFAULT_START_MONEY = 10000;           // the site's default starting amount
-  // Lines the signal chart leaves out, by the strategy's line key: the
-  // buy-back strategy's center line, its 250-day median at the defaults.
-  const HIDDEN_SIGNAL_LINES = ['medianPrice'];
+  // The signal chart is the site's strategy-panel chart, drawn with the same
+  // options (the user, 2026-10-30: "make sure it matches 1x1"): every line,
+  // the site's names and panel heights. Only the top chart uses the compact
+  // layout.
   // The top chart's three lines wear the main chart's colours for the same
   // lines (js/saved-configs.js's TX_ACTUAL_COLOR / TX_INVESTED_COLOR /
   // TX_PROFIT_COLOR): teal, slate and the palette's purple (js/signal-chart.js's
@@ -30,19 +31,6 @@
   // loss). By colorSeparation every pair is at least 25 apart as seen and 16
   // in the worst colour-blind view; the indigo Invested had before sat 18 and
   // 9 from the purple, and looked alike.
-  // The signal chart's line names drop a trailing percent setting:
-  // "Sell line (-3%)" reads "Sell line" in the widget.
-  const PERCENT_SETTING = /\s*\([^)]*%\)\s*$/;
-  // Shorter names for the narrow label column, which stacks a name's words:
-  // "Overextended" reads "Over" over "extend" (the user's wording). TQQQ vs
-  // QQQ + Turnaround Monday has eleven labels in four panels, so its long
-  // names go to one or two words each; the panel titles say what they are of.
-  const DISPLAY_NAMES = { Overextended: 'Over extend', 'TQQQ vs prior close': 'Day', "Prior day's high": 'High',
-    "Prior day's low": 'Low', 'TQQQ ahead of QQQ': 'Lead', 'Credit veto': 'Veto' };
-  const displayName = label => {
-    const name = String(label).replace(PERCENT_SETTING, '');
-    return DISPLAY_NAMES[name] || name;
-  };
   // The top chart wears the main chart's "My portfolio" colour.
   const PORTFOLIO = { id: 'widget-portfolio', color: TX_ACTUAL_COLOR };
   const $ = id => document.getElementById(id);
@@ -111,7 +99,7 @@
     const shared = customs.find(c => libraryEntryOf(c.code) === WIDGET_ENTRY);
     const base = shared ? withCurrentCustomCode([shared])[0]
       : { type: 'custom', name: null, params: {}, color: DEFAULT_COLOR, code: STRATEGY_CODE[WIDGET_ENTRY] };
-    return { ...base, id: 'widget-strategy', color: base.color || DEFAULT_COLOR, subShown: Object.fromEntries(HIDDEN_SIGNAL_LINES.map(key => [key, false])) };
+    return { ...base, id: 'widget-strategy', color: base.color || DEFAULT_COLOR };
   }
   // The site's default money: its $10,000 from the given day to today.
   function defaultMoney(entryDate) {
@@ -187,10 +175,12 @@
   // and pans across the whole history.
   let cfg = null, lines = [], log = [], signalLog = [], portfolio = { lines: [], rows: [] };
   // Every chart's text is sized as on the signal chart, the narrowest of them.
-  // `view` adds the chart's own options: a linear scale, a home view.
+  // `heightPx` fits the chart to that height; null lets it take its own height,
+  // as on the site, where each panel after the first adds to it. `view` adds
+  // the chart's own options: the compact layout, a linear scale, a home view.
   function chartHtml(chartCfg, chartLines, rows, host, heightPx, view) {
     const width = host.clientWidth;
-    return width && chartLines.length ? buildCustomLinesChartHtml(chartCfg, chartLines, rows, width, { aspect: heightPx / width, textWidth: $('wp-signal').clientWidth || width, compact: true, ...view }) : '';
+    return width && chartLines.length ? buildCustomLinesChartHtml(chartCfg, chartLines, rows, width, { ...(heightPx ? { aspect: heightPx / width } : {}), textWidth: $('wp-signal').clientWidth || width, ...view }) : '';
   }
   // The intraday page draws at its own type size and is scaled up like the
   // signal chart's text (the square root of the chart's width over
@@ -228,13 +218,15 @@
   // The charts' host hook (js/signal-chart.js): redraw one chart by id, or both.
   function redraw(id) {
     if (!id || id === PORTFOLIO.id) {
-      place($('wp-portfolio'), portfolio.lines.length ? chartHtml(PORTFOLIO, portfolio.lines, portfolio.rows, $('wp-portfolio'), chartPx($('wp-portfolio'), PORTFOLIO_PX), { scale: 'linear' })
+      place($('wp-portfolio'), portfolio.lines.length ? chartHtml(PORTFOLIO, portfolio.lines, portfolio.rows, $('wp-portfolio'), chartPx($('wp-portfolio'), PORTFOLIO_PX), { compact: true, scale: 'linear' })
         : '<div class="wp-note">Add your sheet to the widget’s config.json to see your portfolio here.</div>');
     }
-    // The signal chart draws once its run is in; a resize can come first.
+    // The signal chart draws once its run is in; a resize can come first. It
+    // fills its tile on a full screen, and otherwise stands at the site's own
+    // height for its panels, the intraday chart following (alignIntraday).
     if (cfg && signalLog.length && (!id || id === cfg.id)) {
       const home = { t0: Date.parse(log[0].date), t1: Date.parse(signalLog[signalLog.length - 1].date) };
-      place($('wp-signal'), chartHtml(cfg, lines, signalLog, $('wp-signal'), chartPx($('wp-signal'), BOTTOM_PX), { home }));
+      place($('wp-signal'), chartHtml(cfg, lines, signalLog, $('wp-signal'), FILL ? $('wp-signal').clientHeight : null, { home }));
       alignIntraday();
     }
   }
@@ -315,7 +307,7 @@
       if ([mine, history].some(run => !Array.isArray(run.log) || run.log.length < 2)) throw new Error('The strategy returned no rows.');
       log = mine.log;
       signalLog = history.log;
-      lines = Array.isArray(history.lines) ? history.lines.map(ln => ({ ...ln, label: displayName(ln.label) })) : [];
+      lines = Array.isArray(history.lines) ? history.lines : [];
       portfolio = portfolioSeries(money, txRows || []);
       redraw();
       showError('');

@@ -52,9 +52,8 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
   see earlier years, and Reset or a double-click brings you back. Its trades
   come from one run of the strategy over that whole history on the site's
   default $10,000.
-- The signal chart leaves out the strategy's 250-day median, the crash
-  guard's buy-back level, and names its lines without their percent
-  settings.
+- The signal chart is the strategy panel's chart from the site, drawn the
+  same way: the same lines, names and panel heights.
 - Hover any chart for its readout.
 - On the portfolio and signal charts, ⌘ + scroll zooms and ⌘ + drag pans. A plain drag
   measures the change over a range. While zoomed, Reset and Latest sit in the
