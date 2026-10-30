@@ -3106,7 +3106,7 @@
   .custom-lines-chart .mini-latest:hover rect { fill: rgba(134, 118, 255, 0.34); }
   .custom-lines-chart .mini-latest text { fill: #383874; }
   body.mini-panning, body.mini-panning * { user-select: none; }
-  #mini-chart-tip .mct-ev-head {
+  #mini-chart-tip .mct-ev-head, #mini-chart-tip .mct-group {
     font-size: 10px; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: .04em; margin: 2px 0;
   }

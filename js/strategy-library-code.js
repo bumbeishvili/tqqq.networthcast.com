@@ -601,6 +601,7 @@ CODE[17] = `{
     for (let i = seed + 1; i < p.startIdx; i++) { if (sig[i] > 0) { e12 += k12 * (sig[i] - e12); e26 += k26 * (sig[i] - e26); macd = e12 - e26; signal += k9 * (macd - signal); } }
     let cash = p.initial, sh = 0, invested = false, prevMonth = null, peak = 0;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4)), trail = p.trail / 100;
+    const QQQ_PANEL = "QQQ", TQQQ_PANEL = "TQQQ";   // the chart's panels: MACD on QQQ, the stop on TQQQ
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "";
@@ -625,10 +626,13 @@ ${SELL_SH_TO_COVER}
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
-          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: s, triggerLine: triggerLine, stopLine: invested && trail > 0 ? peak * (1 - trail) : null });
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: s, triggerLine: triggerLine, stopLine: invested && trail > 0 ? peak * (1 - trail) : null,
+          ...(action === "sell" && stopped ? { firedBy: TQQQ_PANEL } : {}) });
     }
-    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "triggerLine", label: "MACD trigger" },
-      { key: "price", label: "TQQQ price" }, ...(p.trail > 0 ? [{ key: "stopLine", label: "Trailing stop (-" + p.trail + "%)" }] : [])] };
+    // A panel per fund with a level: QQQ with the MACD trigger, TQQQ with its
+    // trailing stop. Without the stop TQQQ has no level of its own, so no panel.
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price", group: QQQ_PANEL }, { key: "triggerLine", label: "MACD trigger", group: QQQ_PANEL },
+      ...(p.trail > 0 ? [{ key: "price", label: "TQQQ price", group: TQQQ_PANEL }, { key: "stopLine", label: "Trailing stop (-" + p.trail + "%)", group: TQQQ_PANEL }] : [])] };
   }
 }`;
 
@@ -1222,8 +1226,9 @@ ${WEEKLY_MONTH_END_SNIPPET}
     const K = p.park === "cash" ? "cash" : p.park.toUpperCase();
     return {
       log: log,
+      // The rule reads the signal fund only: its price, center and trigger.
+      // The fund traded has no level of its own, so it gets no line.
       lines: [
-        { key: "assetPrice", label: A + " price" },
         { key: "signalPrice", label: S + " price" },
         { key: "signalSma", label: W + "-day " + (useMed ? "median" : "avg") },
         { key: "triggerLine", label: "Sell trigger (+" + (p.stretch || 0) + "%)" }
@@ -1942,7 +1947,7 @@ CODE[44] = `{
     const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
     const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
     const crashAsset = p.crashAsset || "cash";
-    const nfciTh = p.nfciTh == null ? 0.4 : +p.nfciTh;
+    const nfciTh = p.nfciTh == null ? 0.4 : +p.nfciTh, CREDIT = "Credit stress (NFCI)";   // CREDIT: its chart panel
     const nfciArr = data.nfci || null;
     // Veto-lift semantics. "cycle" (default): NFCI is a crash START signal —
     // the veto arms when NFCI crosses above the threshold and lifts when
@@ -2049,6 +2054,7 @@ CODE[44] = `{
         if (-ddNow > maxDdSeen) maxDdSeen = -ddNow;
       }
       nfNow = nfciArr ? nfciArr[i] : NaN;
+      let fired = null;   // the chart panel whose rule fired this close's trade
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "", fee = 0;
       if (held === "cash") cash *= 1 + dayRate;
@@ -2081,6 +2087,7 @@ ${SELL_HELD_TO_COVER}
           vetoOn = vetoActive;
         }
         prevAbove = nfAbove;
+        const vetoMoved = vetoOn !== wasVeto;   // the veto began or ended at this close
         if (vetoOn) { vetoDays++; if (!wasVeto) vetoWindows++; }
         wasVeto = vetoOn;
         let want = state === "normal" ? p.asset
@@ -2100,6 +2107,10 @@ ${SELL_HELD_TO_COVER}
             action = held === "cash" ? "buy" : want === "cash" ? "sell" : "switch";
             note = vetoOn ? "NFCI " + nfNow.toFixed(2) + " > " + nfciTh + " — credit veto"
               : (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs line — " + zone;
+            // The veto's own trades go in the NFCI panel, the rest in the price
+            // panel: the veto starting, or ending as NFCI calms (a crash cycle
+            // that lifts it is the price's doing).
+            fired = vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null;
             held = want;
           }
         } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
@@ -2126,6 +2137,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
           cash: cash, contributed: contributed, invested: invested, fee: fee,
           assetPrice: px[i] || 0, medianPrice: medPlot, abovePct: above * 100,
           nfci: isFinite(nfNow) ? nfNow : null,
+          nfciVeto: nfciTh !== 999 && isFinite(nfNow) ? nfciTh : null,
+          ...(fired ? { firedBy: fired } : {}),
           zone: vetoOn ? "CREDIT VETO" : zone,
           overLine: medPlot * (1 + over), exitLine: medPlot * (1 + exitB)
         });
@@ -2138,12 +2151,16 @@ ${WEEKLY_MONTH_END_SNIPPET}
     const pctStr = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(2) + "%";
     const zoneTone = vetoOn ? "bad" : zone === "normal" ? "good" : "bad";
     const holdTxt = held === "cash" ? "cash" : held.toUpperCase();
+    // Two panels: the price with the lines set from its center, and NFCI with
+    // the credit veto, the rule that reads it.
+    const PRICE = A + " price";
     const chartLines = [
-      { key: "assetPrice", label: A + " price" },
-      mainRsi ? { key: "medianPrice", label: "RSI(" + W + ") line" } : { key: "medianPrice", label: W + "-day " + CN },
-      { key: "exitLine", label: "Crash exit (" + (p.exitPct || 0) + "%)" },
-      { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)" }
+      { key: "assetPrice", label: A + " price", group: PRICE },
+      mainRsi ? { key: "medianPrice", label: "RSI(" + W + ") line", group: PRICE } : { key: "medianPrice", label: W + "-day " + CN, group: PRICE },
+      { key: "exitLine", label: "Crash exit (" + (p.exitPct || 0) + "%)", group: PRICE },
+      { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)", group: PRICE }
     ];
+    if (nfciTh !== 999) chartLines.push({ key: "nfci", label: "NFCI", unit: "num", group: CREDIT }, { key: "nfciVeto", label: "Credit veto", unit: "num", group: CREDIT });
     if (inCrash && stintLen > 0) stints.push(stintLen);
     const nfciStr = isFinite(nfNow) ? (nfNow >= 0 ? "+" : "") + nfNow.toFixed(2) : "n/a";
     const vetoDist = isFinite(nfNow) && nfciTh !== 999 ? (nfciTh - nfNow) : NaN;
@@ -2695,7 +2712,7 @@ CODE[47] = `{
     const leadTxt = (x) => x === x ? (x >= 0 ? x.toFixed(0) + "% ahead" : (-x).toFixed(0) + "% behind") : "n/a";
     // State on the lead: "in" (TQQQ), "top" (stepped aside at the ceiling),
     // "brk" (floor broken), "deep" (bought back far behind).
-    let state = "in", days = 0, closes = 0, why = "", whyIdx = -1, deepPx = 0, deepPaused = false;
+    let state = "in", days = 0, closes = 0, why = "", whyIdx = -1, deepPx = 0, deepPaused = false, releasedAt = -1;
     const advance = (i) => {
       const v = lead[i];
       if (!(v === v)) return;
@@ -2722,28 +2739,48 @@ CODE[47] = `{
       if (state !== "deep") deepPaused = false;
       else if (dGuard > 0) {
         if (!deepPaused && T[i] < deepPx * (1 - dGuard)) { deepPaused = true; why = "the deep buy guard, TQQQ " + Math.round(dGuard * 100) + "% under its buy price"; whyIdx = i; }
-        else if (deepPaused && rel[i] >= 0) { deepPaused = false; deepPx = T[i]; why = "the deep buy guard released, TQQQ back above its median"; whyIdx = i; }
+        else if (deepPaused && rel[i] >= 0) { deepPaused = false; deepPx = T[i]; why = "the deep buy guard released, TQQQ back above its median"; whyIdx = i; releasedAt = i; }
       }
     };
-    const wantNow = (i) => {
-      let w = state === "deep" && deepPaused ? "cash" : state === "in" || state === "deep" ? "tqqq"
+    // What the rules want to hold at a close, and which of the chart's panels
+    // holds the rule that settles it: the stretch rules on the lead, a line set
+    // from the median, or the credit veto.
+    const PRICE = "TQQQ price", LEAD = "TQQQ vs QQQ", CREDIT = "Credit stress (NFCI)";
+    const decide = (i) => {
+      const base = state === "deep" && deepPaused ? "cash" : state === "in" || state === "deep" ? "tqqq"
         : state === "top" ? (topHold === "sqqq" && topDays && days >= topDays ? "cash" : topHold)
         : (floorHold === "sqqq" && floorDays && days >= floorDays ? "cash" : floorHold);
       const overNow = over > 0 && rel[i] === rel[i] && rel[i] > over;
-      if (overNow) w = "sqqq";
+      const downNow = needsDown && !(rel[i] < 0), cashNow = !!sellLine && rel[i] === rel[i] && rel[i] < sellLine;
+      const vetoNow = !!nfTh && !!data.nfci && data.nfci[i] > nfTh;
+      let w = overNow ? "sqqq" : base;
       // Defences: the ceiling's and floor's SQQQ only in a downtrend, cash far under the median.
-      if (w === "sqqq" && !overNow && needsDown && !(rel[i] < 0)) w = "cash";
-      if (w === "tqqq" && sellLine && rel[i] === rel[i] && rel[i] < sellLine) w = "cash";
+      if (w === "sqqq" && !overNow && downNow) w = "cash";
+      if (w === "tqqq" && cashNow) w = "cash";
       // The credit veto: never above 0.4 since 2010 (0.31 in April 2020), 5.2 in 1974, 3.1 in 2008.
-      if (w === "tqqq" && nfTh && data.nfci && data.nfci[i] > nfTh) w = "cash";
-      return w;
+      if (w === "tqqq" && vetoNow) w = "cash";
+      return { w, base, overNow, downNow, cashNow, vetoNow };
     };
+    const wantNow = (i) => decide(i).w;
     // SQQQ at most sqMax days in a row, counted on the rules' choice; cash once past it.
     // Before 2010 the floor alone held SQQQ for years while the market rose.
     let sqRun = 0, sqAt = -1;
     const capSq = (i, w) => {
       if (i !== sqAt) { sqRun = w === "sqqq" ? sqRun + 1 : 0; sqAt = i; }
       return w === "sqqq" && sqMax > 0 && sqRun > sqMax ? "cash" : w;
+    };
+    // The panel a trade at this close is marked in: the rule whose reading
+    // changed at it, the stretch rules' state first, then the +55% line, the
+    // credit veto and the median defences. The deep buy guard's release is a
+    // close above the median; a trade none of them explains, the SQQQ limit,
+    // goes with the rule that wanted SQQQ. Once a day, in order.
+    let lastDec = null;
+    const triggerAt = (i) => {
+      const d = decide(i), y = lastDec || d;
+      lastDec = d;
+      return releasedAt === i ? PRICE : d.base !== y.base ? LEAD : d.overNow !== y.overNow ? PRICE
+        : d.vetoNow !== y.vetoNow ? CREDIT : d.downNow !== y.downNow || d.cashNow !== y.cashNow ? PRICE
+        : d.overNow ? PRICE : LEAD;
     };
     const lbl = (id) => id === "cash" ? "cash" : id.toUpperCase();
     // Why the money is in cash when the rules' state would hold a fund. Past the
@@ -2760,14 +2797,13 @@ CODE[47] = `{
     const cashWhy = (i) => defenceWhy(i) ? defenceWhy(i) + "; "
       : state === "top" && topHold === "sqqq" && topDays && days >= topDays ? "SQQQ held for its " + topDays + " days; "
       : state === "brk" && floorHold === "sqqq" && floorDays && days >= floorDays ? "SQQQ held for its " + floorDays + " days; " : "";
-    // The signal lines as TQQQ price levels for a day's close: a close past one
-    // is the trade it names. A lead threshold x is the close that puts TQQQ x%
-    // ahead of QQQ over the lookback. Only the lines that can fire from the
-    // current state are given, so each one appears while it is live.
+    // The rules' levels as TQQQ prices for a day's close: a close past one is
+    // the trade it names. A lead threshold x is the close that puts TQQQ x%
+    // ahead of QQQ over the lookback.
     const leadLbl = (x) => x >= 0 ? x + "% ahead" : -x + "% behind";
     const atLead = (i, x) => lead[i] === lead[i] ? T[i - L] * (Q[i] / Q[i - L]) * (1 + x / 100) : null;
-    // Each level says whether crossing it sells TQQQ or buys it (kind), so the
-    // chart can show just the nearest sell and buy level on either side.
+    // The levels that can fire from the current state, for the Nearest signal
+    // card. Each says whether crossing it sells TQQQ or buys it (kind).
     const signalLevels = (i) => {
       const med = rel[i] === rel[i] ? T[i] / (1 + rel[i]) : null, out = [], holdsT = capSq(i, wantNow(i)) === "tqqq";
       const wantsT = (state === "in" || state === "deep") && !deepPaused;
@@ -2787,10 +2823,29 @@ CODE[47] = `{
       if (sellLine && med && (state === "in" || state === "deep")) add("Cash line (" + Math.round(sellLine * 100) + "%)", med * (1 + sellLine), "down", holdsT ? "sell" : "", "a close under it sells to cash");
       return { med, out };
     };
-    // A day's chart row: TQQQ, its median, and the nearest level of each role.
-    const signalRow = (i) => {
-      const s = signalLevels(i), near = (kind, dir) => { const v = s.out.filter(l => l.kind === kind && l.dir === dir).map(l => l.px); return v.length ? (dir === "up" ? Math.min(...v) : Math.max(...v)) : null; };
-      return { assetPrice: T[i] > 0 ? T[i] : null, medianPrice: s.med, sellAbove: near("sell", "up"), sellBelow: near("sell", "down"), buyAbove: near("buy", "up"), buyBelow: near("buy", "down") };
+    // A day's chart row for three panels: TQQQ's price with its median and the
+    // lines set from the median; the lead with its levels, in percent; NFCI
+    // with the credit veto. Each line is on every day its data allows, so none
+    // breaks. A rule with two levels draws the one that fires from the current
+    // state: the ceiling's back-at lead while stepped aside, the floor's
+    // re-entry lead while out after a break, and while a deep buy is held its
+    // guard, as the lead at which TQQQ would close that far under the price
+    // paid. Each trade then sits where a panel's first line crosses the line
+    // that fired it.
+    const chartRow = (i) => {
+      const med = rel[i] === rel[i] ? T[i] / (1 + rel[i]) : null, led = lead[i] === lead[i];
+      const out = state === "brk" || deepPaused, nf = data.nfci ? data.nfci[i] : NaN;
+      return {
+        assetPrice: T[i] > 0 ? T[i] : null,
+        medianPrice: med,
+        overLine: over > 0 && med ? med * (1 + over) : null,
+        cashLine: sellLine && med ? med * (1 + sellLine) : null,
+        ceilingLine: topOn && led ? (state === "top" && band ? back : top) : null,
+        floorLine: floorOn && led ? (out ? reentry : floor) : null,
+        deepLine: deepOn && led ? (state === "deep" && dGuard && !deepPaused ? (deepPx * (1 - dGuard) / atLead(i, 0) - 1) * 100 : deep) : null,
+        nfci: nfTh && isFinite(nf) ? nf : null,
+        nfciVeto: nfTh && isFinite(nf) ? nfTh : null
+      };
     };
     const reason = (i, w) => over > 0 && rel[i] === rel[i] && rel[i] > over && w === "sqqq"
       ? "TQQQ closed " + (rel[i] * 100).toFixed(0) + "% above its " + OW + "-day median"
@@ -2802,9 +2857,9 @@ CODE[47] = `{
     // held. Started blank, an entry on 2020-03-23 read the crash low only as
     // "under the floor" and bought SQQQ (the deep buy had fired on 2020-03-20),
     // then held it while TQQQ nearly tripled.
-    for (let i = Math.max(0, p.startIdx - L); i < p.startIdx; i++) { advance(i); capSq(i, wantNow(i)); }
+    for (let i = Math.max(0, p.startIdx - L); i < p.startIdx; i++) { advance(i); capSq(i, wantNow(i)); triggerAt(i); }
     let cash = p.initial, shares = 0, held = "cash";
-    let invested = p.initial, pending = false;
+    let invested = p.initial, pending = false, switchBy = null;
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "", fee = 0;
@@ -2816,11 +2871,14 @@ ${SELL_HELD_TO_COVER}
       }
       advance(i);
       const want = capSq(i, wantNow(i));
+      const trigger = triggerAt(i);
+      let firedBy = null;
       if (pending) {
         // second day of a switch: buy what the rule wants now
         if (want !== "cash" && priceOf(want, i) > 0) {
           const f = cash * cost; shares = (cash - f) / priceOf(want, i); fee += f; cash = 0; held = want;
           action = "buy"; note = "Bought " + lbl(want) + ": second day of the switch; " + reason(i, want);
+          firedBy = switchBy;
         }
         pending = false;
       } else if (want !== held) {
@@ -2837,6 +2895,7 @@ ${SELL_HELD_TO_COVER}
           const f = cash * cost; shares = (cash - f) / priceOf(want, i); fee += f; cash = 0; held = want;
           action = "buy"; note = "Bought " + lbl(want) + ": " + reason(i, want);
         }
+        if (action === "sell" || action === "switch" || action === "buy") firedBy = switchBy = trigger;   // a switch's second day keeps it
       } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {
         const f = cash * cost; shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
       }
@@ -2853,7 +2912,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
           tqqqGrowthPct: gT[i] === gT[i] ? (gT[i] - 1) * 100 : null, qqqGrowthPct: gQ[i] === gQ[i] ? (gQ[i] - 1) * 100 : null,
           overPct: over > 0 && rel[i] === rel[i] ? rel[i] * 100 : null,
           sqqqRun: sqRun > 0 ? sqRun : null,
-          ...signalRow(i)
+          ...chartRow(i),
+          ...(firedBy ? { firedBy } : {})
         });
       }
     }
@@ -2861,12 +2921,16 @@ ${WEEKLY_MONTH_END_SNIPPET}
     const cashNow = wantE === "cash" ? cashWhy(e).replace(/; $/, "") : "";
     const pctTxt = (x) => x === x ? (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(0) + "%" : "n/a";
     const zone = { in: "between the floor and the ceiling", top: "stepped aside at the ceiling", brk: "under the floor", deep: "bought back far behind" }[state];
-    // The chart: TQQQ's close and the nearest sell and buy level on either side
-    // of it, so each trade sits where the price crosses the line that fired it.
-    // Which rule a level belongs to is in the trade notes and the Nearest signal card.
-    const lines = [{ key: "assetPrice", label: "TQQQ price" }];
-    if (over > 0 || needsDown || sellLine || dGuard) lines.push({ key: "medianPrice", label: OW + "-day median" });
-    lines.push({ key: "sellAbove", label: "Sell above" }, { key: "sellBelow", label: "Sell below" }, { key: "buyAbove", label: "Buy above" }, { key: "buyBelow", label: "Buy below" });
+    // The chart's panels (chartRow, the names at decide), each with the rules that read its first line.
+    const lines = [{ key: "assetPrice", label: "TQQQ price", group: PRICE }];
+    if (over > 0 || needsDown || sellLine || dGuard) lines.push({ key: "medianPrice", label: OW + "-day median", group: PRICE });
+    if (over > 0) lines.push({ key: "overLine", label: "Overextended (+" + Math.round(over * 100) + "%)", group: PRICE });
+    if (sellLine) lines.push({ key: "cashLine", label: "Cash line (" + Math.round(sellLine * 100) + "%)", group: PRICE });
+    lines.push({ key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: LEAD });
+    if (topOn) lines.push({ key: "ceilingLine", label: "Ceiling", unit: "%", group: LEAD });
+    if (floorOn) lines.push({ key: "floorLine", label: "Floor", unit: "%", group: LEAD });
+    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD });
+    if (nfTh) lines.push({ key: "nfci", label: "NFCI", unit: "num", group: CREDIT }, { key: "nfciVeto", label: "Credit veto", unit: "num", group: CREDIT });
     const nearest = signalLevels(e).out.filter(l => l.kind).map(l => ({ ...l, dist: l.px / T[e] - 1 })).sort((a, b) => Math.abs(a.dist) - Math.abs(b.dist))[0];
     const cards = [
       { label: "TQQQ ahead of QQQ", value: v === v ? (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(0) + "%" : "n/a",
@@ -2949,21 +3013,16 @@ function withTurnaroundMonday(base, spec) {
       if (c > 0 && prev > 0) { if (inT) { if (c > prev) inT = false; } else if (wd === 1 && c < prev) inT = true; }
       tmIn[i] = inT ? 1 : 0;
     }
-    let tmActive = false, tmSince = "", tmWhy = "", tmKept = false, tmWas = false, tmIdle = false;
-    // On a price chart of the signal fund itself: the close a Monday must finish
-    // under (Friday's, drawn Friday to Monday while the rules want cash), and
-    // while a trade is open the close it sells above (the prior close).
-    const tmChart = tmOn && tmSig === (p.asset || "tqqq");
-    const tmWd = (i) => i <= p.endIdx ? ((Math.floor(Date.parse(data.dates[i]) / 86400000) + 4) % 7 + 7) % 7 : -1;
+    let tmActive = false, tmSince = "", tmWhy = "", tmKept = false, tmPauseSale = false;
     const tmStress = (i) => !!(+p.tmNfci && data.nfci && data.nfci[i] > +p.tmNfci);
     // What to hold today: the rules' choice, or the fund while a trade opened in their cash is open.
     // A trade starts at the Monday close on money in cash, or on the fund the rules are selling
     // that close (kept instead of sold); money in another fund would need a two-day switch.
     const tmHold = (i, want) => {
-      tmWhy = ""; tmKept = false; tmWas = tmActive; tmIdle = tmOn && want === "cash" && !tmStress(i);
+      tmWhy = ""; tmKept = false; tmPauseSale = false;
       // Credit stress pauses it: NFCI has not been above 0.4 since 2010; in 1973-74 the
       // Monday dip-buys in the rules' cash turned the stretch's +28% into -72%.
-      if (!tmOn || want !== "cash" || tmStress(i)) { if (tmActive && tmStress(i)) tmWhy = "Turnaround Monday paused, NFCI " + data.nfci[i].toFixed(2) + " above " + p.tmNfci; tmActive = false; return want; }
+      if (!tmOn || want !== "cash" || tmStress(i)) { if (tmActive && tmStress(i)) { tmWhy = "Turnaround Monday paused, NFCI " + data.nfci[i].toFixed(2) + " above " + p.tmNfci; tmPauseSale = true; } tmActive = false; return want; }
       if (tmActive && !tmIn[i]) { tmActive = false; tmWhy = "Turnaround Monday exit, " + tmSigName + " closed above the prior close"; }
       else if (!tmActive && (held === "cash" || held === tmFund) && tmIn[i] && !(i > p.startIdx && tmIn[i - 1])) {
         tmActive = true; tmSince = data.dates[i]; tmKept = held === tmFund;
@@ -2972,24 +3031,20 @@ function withTurnaroundMonday(base, spec) {
       }
       return tmActive ? tmFund : "cash";
     };
+    // The chart panel a trade at this close is marked in: the rules' own (t);
+    // a Monday trade's is the first panel, since no line of its own fires it,
+    // and a sale on credit stress goes in the NFCI panel when there is one.
+    const tmPanel = (t) => !tmWhy ? t : tmPauseSale ? ${JSON.stringify(spec.creditPanel || null)} : null;
 `;
   const dashboard = `    // Turnaround Monday on the dashboard: its card, and today's call while a trade is open.
     const last = res.log[res.log.length - 1] || {};
     const tmF = (data[p.tmFund] ? p.tmFund : "tqqq").toUpperCase(), tmS = (data[p.tmSignal] ? p.tmSignal : "tqqq").toUpperCase();
     const tmOpen = p.tmOn !== false && !!last.tmTrade, tmIdle = last.held === "CASH";
     const nfE = data.nfci ? data.nfci[p.endIdx] : NaN, tmPausedNow = !!(+p.tmNfci && nfE > +p.tmNfci);
-    // Its levels on the chart when its signal is the charted fund: folded into the
-    // base's Buy below / Sell above lines when it has them (the nearer level wins),
-    // otherwise as two lines of their own while the chart has room (6 at most).
-    if (p.tmOn !== false && tmS.toLowerCase() === (p.asset || "tqqq")) {
-      const keys = (res.lines || []).map(l => l.key);
-      if (keys.includes("buyBelow") && keys.includes("sellAbove")) {
-        for (const r of res.log) {
-          if (r.tmBuyBelow != null) r.buyBelow = r.buyBelow == null ? r.tmBuyBelow : Math.max(r.buyBelow, r.tmBuyBelow);
-          if (r.tmSellAbove != null) r.sellAbove = r.sellAbove == null ? r.tmSellAbove : Math.min(r.sellAbove, r.tmSellAbove);
-        }
-      } else if (keys.length <= 4) res.lines = (res.lines || []).concat([{ key: "tmBuyBelow", label: "Monday buy below" }, { key: "tmSellAbove", label: "Monday trade sells above" }]);
-    }
+    // No chart line of its own: what a trade compares with is the prior close,
+    // a new price every day that matters only on Mondays and during a trade, so
+    // a line for it would be broken most of the time. Its trades are marked in
+    // the chart's first panel (tmPanel).
     if (res.signals) {
       res.signals.cards = (res.signals.cards || []).concat([{ label: "Turnaround Monday", icon: "clock", tone: tmOpen ? "good" : "",
         value: p.tmOn === false ? "Off" : tmOpen ? "In a trade" : tmPausedNow ? "Paused" : tmIdle ? "Waiting" : "Idle",
@@ -3008,21 +3063,21 @@ function withTurnaroundMonday(base, spec) {
   t = once(t, '  columns: [\n', '  columns: [\n    { key: "tmTrade", label: "Monday trade", tip: "The day an open Turnaround Monday trade was bought. Blank when none is open." },\n', 'the columns list');
   t = once(t, '  run(data, p) {\n', '  run(data, p) {\n    const res = (function (data, p) {\n', 'run(data, p)');
   t = once(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', 'the main loop');
-  t = once(t, '        log.push({\n', '        log.push({\n          tmTrade: tmActive ? tmSince : null,\n'
-    + '          tmSellAbove: tmChart && (tmWas || tmActive) && i > 0 ? data[tmSig][i - 1] : null,\n'
-    + '          tmBuyBelow: tmChart && tmIdle && !tmWas ? (tmWd(i) === 1 && i > 0 ? data[tmSig][i - 1] : tmWd(i + 1) === 1 ? data[tmSig][i] : null) : null,\n', 'the log row');
+  t = once(t, '        log.push({\n', '        log.push({\n          tmTrade: tmActive ? tmSince : null,\n', 'the log row');
   t = once(t, '      if (i === p.endIdx) action = "end";\n', '      if (tmKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + tmWhy : tmWhy; }   // a sale the Monday trade held off\n      if (i === p.endIdx) action = "end";\n', 'the end-of-run action');
   for (const [find, repl, what] of spec.hooks) t = once(t, find, repl, what);
   if (!t.endsWith('\n  }\n}')) throw new Error(`withTurnaroundMonday(${spec.name}): the base must end with its run method`);
   return t.slice(0, -'\n  }\n}'.length) + '\n    })(data, p);\n' + dashboard + '    return res;\n  }\n}';
 }
-CODE[48] = withTurnaroundMonday(CODE[44], { name: "NFCI veto + Turnaround Monday", signal: "tqqq", hooks: [
+CODE[48] = withTurnaroundMonday(CODE[44], { name: "NFCI veto + Turnaround Monday", signal: "tqqq", creditPanel: "Credit stress (NFCI)", hooks: [
   ['        if (vetoOn) want = "cash";\n', '        if (vetoOn) want = "cash";\n        want = tmHold(i, want);\n', 'the credit-veto line'],
-  ['note = vetoOn ? "NFCI "', 'note = tmWhy ? tmWhy : vetoOn ? "NFCI "', 'the trade note'] ] });
+  ['note = vetoOn ? "NFCI "', 'note = tmWhy ? tmWhy : vetoOn ? "NFCI "', 'the trade note'],
+  ['fired = vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null;', 'fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);', 'the trade panel'] ] });
 CODE[49] = withTurnaroundMonday(CODE[45], { name: "Buy-back + Turnaround Monday", signal: "spy", hooks: [
   ['          : (_frac > 0 ? p.asset : crashAsset);\n', '          : (_frac > 0 ? p.asset : crashAsset);\n        want = tmHold(i, want);\n        if (tmActive) _frac = 1;\n        if (tmWhy && !why) why = tmWhy;\n', 'the holding decision'] ] });
-CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Monday", signal: "tqqq", hooks: [
+CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Monday", signal: "tqqq", creditPanel: "Credit stress (NFCI)", hooks: [
   ['      const want = capSq(i, wantNow(i));', '      const want = tmHold(i, capSq(i, wantNow(i)));', 'the holding decision'],
+  ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
   ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
 
 // Browser global + Node export.

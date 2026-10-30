@@ -1450,13 +1450,17 @@ function smaSignalChart() {
   const bgCenter = o.bgGtfoPct > 0 ? smaAtDailyByKey[o.bgAsset + '_' + (o.bgWindow || o.smaWindow)] : null;
   const overheat = o.rsiOverheatThreshold > 0 ? rsiLevelSeries(col, o.rsiOhWindow, o.rsiOverheatThreshold) : null;
   const cool = o.rsiCoolThreshold > 0 ? rsiLevelSeries(col, o.rsiCoolWindow, o.rsiCoolThreshold) : null;
-  const lines = [{ key: 'assetPrice', label: `${o.smaAsset.toUpperCase()} price` }, { key: 'center', label: `${o.smaWindow}-day average` }];
-  if (o.entryBufferPct > 0) lines.push({ key: 'buyLine', label: `Buy line (+${o.entryBufferPct}%)` });
-  if (o.exitBufferPct > 0) lines.push({ key: 'sellLine', label: `Sell line (-${o.exitBufferPct}%)` });
-  if (overheat) lines.push({ key: 'overheatLine', label: `RSI(${o.rsiOhWindow}) ${o.rsiOverheatThreshold}` });
-  if (cool) lines.push({ key: 'coolLine', label: `RSI(${o.rsiCoolWindow}) ${o.rsiCoolThreshold}` });
-  if (bgCenter && bgCol !== col) lines.push({ key: 'bubblePrice', label: `${o.bgAsset.toUpperCase()} price` });
-  if (bgCenter) lines.push({ key: 'bubbleLine', label: `${o.bgAsset.toUpperCase()} bubble line (+${o.bgGtfoPct}%)` });
+  // A bubble brake read on another fund gets a panel of its own (a line's
+  // group, js/signal-chart.js): that fund's price against its bubble line.
+  const ownPanel = bgCenter && bgCol !== col;
+  const main = ownPanel ? o.smaAsset.toUpperCase() : undefined, bubble = ownPanel ? o.bgAsset.toUpperCase() : undefined;
+  const lines = [{ key: 'assetPrice', label: `${o.smaAsset.toUpperCase()} price`, group: main }, { key: 'center', label: `${o.smaWindow}-day average`, group: main }];
+  if (o.entryBufferPct > 0) lines.push({ key: 'buyLine', label: `Buy line (+${o.entryBufferPct}%)`, group: main });
+  if (o.exitBufferPct > 0) lines.push({ key: 'sellLine', label: `Sell line (-${o.exitBufferPct}%)`, group: main });
+  if (overheat) lines.push({ key: 'overheatLine', label: `RSI(${o.rsiOhWindow}) ${o.rsiOverheatThreshold}`, group: main });
+  if (cool) lines.push({ key: 'coolLine', label: `RSI(${o.rsiCoolWindow}) ${o.rsiCoolThreshold}`, group: main });
+  if (ownPanel) lines.push({ key: 'bubblePrice', label: `${o.bgAsset.toUpperCase()} price`, group: bubble });
+  if (bgCenter) lines.push({ key: 'bubbleLine', label: `${o.bgAsset.toUpperCase()} bubble line (+${o.bgGtfoPct}%)`, group: bubble });
   const start = smaLog[0].date, end = smaLog[smaLog.length - 1].date;
   const trades = smaHistoryTrades(o, start).concat(smaLog);
   const rows = [];
@@ -1477,7 +1481,8 @@ function smaSignalChart() {
       const t = trades[k];
       held = _heldName(t.held);
       const trade = t.date === date ? smaChartTrade(t, o, price, c, overheat && overheat[i]) : null;
-      if (trade) { rows.push({ ...day, ...trade }); traded = true; }
+      // The bubble brake's trades are marked in its own panel when it has one.
+      if (trade) { rows.push({ ...day, ...trade, ...(bubble && /^BG-/.test(t.action) ? { firedBy: bubble } : {}) }); traded = true; }
     }
     if (!traded) rows.push({ ...day, held });
   }

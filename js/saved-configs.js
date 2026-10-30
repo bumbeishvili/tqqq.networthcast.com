@@ -147,7 +147,7 @@ function buildConfigSubChipsHtml(cfg) {
 // Chips for a CUSTOM strategy's declared signal lines — dots match the mini
 // chart's per-series colors, and unset keys count as VISIBLE.
 function buildCustomLineChipsHtml(cfg, lines) {
-  return lines.map((ln, i) => _configSubChipHtml(cfg, ln.key, ln.label, customLineColor(cfg, i), true, true)).join('');
+  return lines.map((ln, i) => _configSubChipHtml(cfg, ln.key, ln.label, customLineColorAt(cfg, lines, i), true, true)).join('');
 }
 // --- the detail run behind the zoom ---------------------------------------
 // The display log holds one plain "hold" row a week or a month (the transaction
@@ -737,12 +737,23 @@ trade fires, without working it out from the rule text. Declare them as lines:
   it resolves to (median × 0.95): the user compares prices, not percentages.
 - Declared lines draw together in a small "Signal chart" inside the strategy's side panel, on their
   own scale — never on the main portfolio chart — each with an eye-toggle (all shown by default).
-  Max 6; declare only levels a rule actually uses, in raw units, no rescaling.
+  Declare only levels a rule actually uses, in raw units, no rescaling.
 - The price being compared (the fund your rule reads, which may differ from the fund you trade) is
   the FIRST line, so the user can watch it cross your levels: { key: "assetPrice", label: "TQQQ price" }.
 - A rule on a percent that is no price (a volatility, a share of the account) draws in percent: give
-  every line unit: "%" and log the percent itself (40 for 40%). One chart has one unit, so do not
-  mix percent lines with price lines.
+  its lines unit: "%" and log the percent itself (40 for 40%). An index reading that is neither (a
+  stress index such as data.nfci) takes unit: "num". Do not mix units inside one group.
+- Rules on different things go in separate groups, one panel each, stacked on one date axis: give
+  each line group: "<short name>" (lines without one form the first panel). Two funds' prices are
+  different things, and so are a price, a percent and an index. A group needs a level of its own:
+  a fund your rule only trades, with no level on it, gets no line. Each group's FIRST line is what its
+  levels are compared with. On each trade row, firedBy: "<group name>" names the group whose rule
+  fired the trade: its mark goes in that panel only (a sale on the median line shows nothing on a
+  stress index). A trade row without firedBy is marked in the first panel. Example, a rule on
+  TQQQ's median and on TQQQ's lead over QQQ:
+    { key: "assetPrice", label: "TQQQ price", group: "TQQQ price" }, { key: "median", label: "Median (250d)", group: "TQQQ price" },
+    { key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: "TQQQ vs QQQ" }, { key: "ceiling", label: "Ceiling", unit: "%", group: "TQQQ vs QQQ" }
+  Max 6 lines per group, 3 groups.
 
 === OWN MONEY: a rule that decides how much goes in (only when the rule says so) ===
 Most strategies trade the money the app hands them (p.initial, p.contributions). Some rules decide the
@@ -1040,17 +1051,26 @@ function customWorkerMain() {
   // names a numeric field its log rows carry (e.g. a signal line like a
   // median and its overextension threshold). Toggled from the strategy's
   // panel like 9sig's Holding/Target/Cash. Same sanitize-to-primitives rule
-  // as readColumns; capped so a runaway declaration can't flood the chart.
+  // as readColumns; capped so a runaway declaration can't flood the chart:
+  // 6 lines a group, 3 groups (a group is a panel of its own, see LINES).
   function readLines(raw) {
     if (!Array.isArray(raw)) return null;
-    var out = [];
-    for (var i = 0; i < raw.length && out.length < 6; i++) {
+    var out = [], perGroup = {}, groups = 0;
+    for (var i = 0; i < raw.length; i++) {
       var l = raw[i];
       if (!l) continue;
-      if (typeof l === 'string') { out.push({ key: l, label: l }); continue; }
-      if (l.key == null) continue;
-      var line = { key: String(l.key), label: l.label != null ? String(l.label) : String(l.key) };
-      if (l.unit === '%') line.unit = '%';   // a percent line (see LINES in the prompt)
+      var line;
+      if (typeof l === 'string') line = { key: l, label: l };
+      else {
+        if (l.key == null) continue;
+        line = { key: String(l.key), label: l.label != null ? String(l.label) : String(l.key) };
+        if (l.unit === '%' || l.unit === 'num') line.unit = l.unit;   // a percent or plain-number line (see LINES in the prompt)
+        if (l.group != null && String(l.group).trim()) line.group = String(l.group).trim().slice(0, 40);
+      }
+      var g = line.group || '';
+      if (!(g in perGroup)) { if (groups >= 3) continue; perGroup[g] = 0; groups++; }
+      if (perGroup[g] >= 6) continue;
+      perGroup[g]++;
       out.push(line);
     }
     return out.length ? out : null;
