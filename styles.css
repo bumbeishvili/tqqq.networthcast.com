@@ -3076,16 +3076,19 @@
     color: var(--text-muted);
     margin-bottom: 4px;
   }
+  /* Value readouts: a row per panel, its reading and then its levels in
+     brackets, wrapping under the name past max-width. */
   #mini-chart-tip .mct-row {
-    display: flex; align-items: center; gap: 6px;
-    line-height: 1.7;
+    display: flex; align-items: flex-start; gap: 6px;
+    max-width: 340px; line-height: 1.55; margin: 2px 0;
   }
-  #mini-chart-tip .mct-row b {
+  #mini-chart-tip .mct-row .mct-dot { margin-top: 5px; }
+  #mini-chart-tip .mct-row b, #mini-chart-tip .mct-from {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    margin-left: auto;
-    padding-left: 12px;
   }
+  #mini-chart-tip .mct-from { font-weight: 400; color: var(--text-muted); }
+  #mini-chart-tip .mct-levels { color: var(--text-muted); }
   #mini-chart-tip .mct-dot {
     width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
   }
@@ -3106,7 +3109,7 @@
   .custom-lines-chart .mini-latest:hover rect { fill: rgba(134, 118, 255, 0.34); }
   .custom-lines-chart .mini-latest text { fill: #383874; }
   body.mini-panning, body.mini-panning * { user-select: none; }
-  #mini-chart-tip .mct-ev-head, #mini-chart-tip .mct-group {
+  #mini-chart-tip .mct-ev-head {
     font-size: 10px; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: .04em; margin: 2px 0;
   }
@@ -3123,7 +3126,7 @@
   #mini-chart-tip .mct-ev-note {
     flex-basis: 100%; font-size: 10.5px; color: var(--text-muted); padding-left: 14px;
   }
-  /* Drag-range readout: colored % change + exact from → to values. */
+  /* Drag-range readout: the end value coloured by direction. */
   #mini-chart-tip .mct-pos { color: var(--green, #00b929); }
   #mini-chart-tip .mct-neg { color: var(--red-text, #dc2626); }
   /* The strategy run over a dragged range, under the lines' changes. */
@@ -3131,12 +3134,6 @@
   #mini-chart-tip .mct-sim-row { display: flex; gap: 6px; line-height: 1.6; }
   #mini-chart-tip .mct-sim-row b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: auto; padding-left: 12px; }
   #mini-chart-tip .mct-sim-wait { font-size: 10.5px; color: var(--text-muted); }
-  #mini-chart-tip .mct-range {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
-    color: var(--text-muted);
-    padding-left: 8px;
-  }
   .custom-stat span { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
   .custom-stat b { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text); }
   .custom-stat b.positive { color: var(--green-text); }

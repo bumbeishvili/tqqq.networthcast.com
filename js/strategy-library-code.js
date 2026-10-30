@@ -3006,7 +3006,7 @@ function withTurnaroundMonday(base, spec) {
       { value: "tqqq", label: "TQQQ" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
     { id: "tmFund", label: "Fund bought", tip: "What a trade holds, paid for with the idle cash.", default: "tqqq", options: [
       { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" } ] },
-    { id: "tmNfci", label: "No trades while NFCI above", tip: "No Monday trades while the Chicago Fed's credit stress index is above this, and an open one is sold.", default: 0.4, options: [
+    { id: "tmNfci", label: "No trades while NFCI above", tip: "No Monday trades while the Chicago Fed's credit stress index is above this, and an open one is sold.", default: 0, options: [
       { value: 0, label: "Off" }, 0.4, 0.75, 1] },
 `;
   const setup = `    // Turnaround Monday on the signal fund, run every day on its own. A trade
@@ -3028,8 +3028,11 @@ function withTurnaroundMonday(base, spec) {
     // that close (kept instead of sold); money in another fund would need a two-day switch.
     const tmHold = (i, want) => {
       tmWhy = ""; tmKept = false; tmPauseSale = false;
-      // Credit stress pauses it: NFCI has not been above 0.4 since 2010; in 1973-74 the
-      // Monday dip-buys in the rules' cash turned the stretch's +28% into -72%.
+      // Credit stress can pause it (tmNfci, Off by default, the user's call on
+      // 2026-10-30). NFCI has not been above 0.4 since 2010, so 2010-2025 is the
+      // same either way. Before that, trading through it won in 2007-09 (+373%
+      // over the pause for #50) and lost in 1973-75 (-76%) and 1978-83 (-71%):
+      // 18.2%/yr from 1953 against 20.2% paused (scratchpad r7/tm-pause-check.cjs).
       if (!tmOn || want !== "cash" || tmStress(i)) { if (tmActive && tmStress(i)) { tmWhy = "Turnaround Monday paused, NFCI " + data.nfci[i].toFixed(2) + " above " + p.tmNfci; tmPauseSale = true; } tmActive = false; return want; }
       if (tmActive && !tmIn[i]) { tmActive = false; tmWhy = "Turnaround Monday exit, " + tmSigName + " closed above the prior close"; }
       else if (!tmActive && (held === "cash" || held === tmFund) && tmIn[i] && !(i > p.startIdx && tmIn[i - 1])) {

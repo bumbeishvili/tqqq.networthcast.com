@@ -44,11 +44,15 @@ const MINI_CHART = { W: 320, H: 148, padL: 6 };
 // Lines measured on different things (two funds' prices, a lead in percent, a
 // stress index) can name a group: each group draws as its own panel, with its
 // own scale, unit and gutter labels, stacked on the one time axis in the order
-// the groups first appear. Lines without a group form the first panel. The
-// gap between two panels is in px, divided by the render scale; addH is the
-// viewBox height each panel after the first adds to the side panel's chart (a
-// chart given an aspect keeps its height and shares it out).
-const MINI_PANEL = { gap: 13, addH: 67 };
+// the groups first appear. Lines without a group form the first panel. A
+// panel's height follows its line count: the first panel is full height, a
+// later one a quarter of a full panel per line, from half (a reading and one
+// level) to full (fullAt lines or more); in the compact layout all are equal.
+// The gap between two panels is in px, divided by the render scale, with a
+// divider `rule` px under the panel above; addH is the viewBox height a full
+// panel after the first adds to the side panel's chart, a smaller one its
+// share of it (a chart given an aspect keeps its height and shares it out).
+const MINI_PANEL = { gap: 16, rule: 3, addH: 67, fullAt: 4, minShare: 0.5 };
 // Drawn points per pixel of plot width before a window is decimated.
 const MINI_POINTS_PER_PX = 2;
 // Pixel sizes, divided by the render scale when used: the trade strip above
@@ -239,7 +243,10 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const own = shownLines.filter(ln => customLineGroup(ln) === name);
     const unit = own.every(ln => ln.unit === '%') ? '%' : own.every(ln => ln.unit === 'num') ? 'num' : '$';
     const negative = unit === '%' && own.some(ln => log.some(r => r && typeof r[ln.key] === 'number' && isFinite(r[ln.key]) && r[ln.key] < 0));
-    return { name, unit, linear: forcedLinear || unit === 'num' || negative };
+    // Its size counts the lines the strategy declares in it, hidden ones too,
+    // so hiding a line never resizes the chart.
+    const count = lines.filter(ln => customLineGroup(ln) === name).length;
+    return { name, unit, linear: forcedLinear || unit === 'num' || negative, count };
   });
   const all = [];
   lines.forEach((ln, i) => {
@@ -270,9 +277,12 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const panelSpecs = specs.filter(sp => all.some(s => s.spec === sp));
   const nPanels = panelSpecs.length;
   for (const s of all) s.panel = panelSpecs.indexOf(s.spec);
+  // Each panel's height as a share of a full panel's (MINI_PANEL). The compact
+  // layout keeps them equal: its end labels run a row per word and need the room.
+  const shares = panelSpecs.map((sp, p) => p === 0 || compact ? 1 : Math.min(1, Math.max(MINI_PANEL.minShare, sp.count / MINI_PANEL.fullAt)));
 
   const { W, padL } = MINI_CHART;
-  const H = opts && opts.aspect ? Math.max(60, Math.round(W * opts.aspect)) : MINI_CHART.H + (nPanels - 1) * MINI_PANEL.addH;
+  const H = opts && opts.aspect ? Math.max(60, Math.round(W * opts.aspect)) : MINI_CHART.H + shares.slice(1).reduce((sum, f) => sum + f * MINI_PANEL.addH, 0);
   const kPx = Math.max(1, (cw || W) / W);   // render scale: screen px per viewBox unit
   // Text, margins, ticks and buttons are sized in px and divided by k: the
   // render scale up to MINI_TEXT_REF_W, eased past it so they grow with the
@@ -326,12 +336,14 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const valColW = Math.max(0, ...gutterSeries.map(s => _valTxt(s.unit, s.endPt.v).length)) * (9 / k) * 0.6;
   const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.label, s.badge, s.color)).map(row => row.text.length)) * (7 / k) * 0.62;
   const padR = Math.min(4 / k + valColW + 4 / k + nameColW + 5 / k, 0.45 * W);
-  // The panels split the plot's height, a gap apart, each scaled to its own
-  // points in the window. A panel with none there keeps its place, empty.
+  // The panels split the plot's height by their shares, a gap apart, each
+  // scaled to its own points in the window. A panel with none there keeps its
+  // place, empty.
   const plotW = W - padL - padR, plotBottom = H - padB, plotH = plotBottom - padT;
-  const gapY = nPanels > 1 ? MINI_PANEL.gap / k : 0, panelH = (plotH - (nPanels - 1) * gapY) / nPanels;
+  const gapY = nPanels > 1 ? MINI_PANEL.gap / k : 0;
+  const fullH = (plotH - (nPanels - 1) * gapY) / shares.reduce((sum, f) => sum + f, 0);
   const panels = panelSpecs.map((sp, p) => {
-    const top = padT + p * (panelH + gapY), bottom = top + panelH, tf = _miniScaleOf(sp.linear);
+    const top = padT + shares.slice(0, p).reduce((y, f) => y + f * fullH + gapY, 0), bottom = top + shares[p] * fullH, tf = _miniScaleOf(sp.linear);
     let lo = Infinity, hi = -Infinity;
     for (const s of series) if (s.panel === p) for (const pt of s.scalePts) { if (pt.v < lo) lo = pt.v; if (pt.v > hi) hi = pt.v; }
     if (!(hi >= lo)) return { name: sp.name, unit: sp.unit, linear: sp.linear, top, bottom, yLo: 0, yHi: 1, empty: true };
@@ -350,7 +362,8 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // Trade events: a band at each trade's date, a cap in the strip above the
   // plot where the hover answers for them, and a mark at the trade's crossing,
   // coloured by action (the main chart's marker vocabulary, via
-  // customMarkerEvents). Band and mark go in the panel whose rule fired the
+  // customMarkerEvents). The band runs down every panel, so a trade's date
+  // lines up across them. The mark goes only in the panel whose rule fired the
   // trade, the group its row names in firedBy, and in the first panel when it
   // names none: a trade the median line fired has nothing to show on a stress
   // index. Trades a few days apart would stack unreadably, so events closer
@@ -403,13 +416,14 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   });
   // With more than one panel each is named just above its top left, outside
   // the plot so no line runs through the name: the first in the strip, the
-  // others in the gap above them, with a rule out to the plot's right edge.
+  // others in the gap above them, under a divider across the chart. It runs
+  // through the gutter too, so each panel's end labels stay with it, except in
+  // the compact layout, whose labels of a row per word can outgrow a panel.
   let panelTitles = '';
+  const ruleY = p => panels[p].top - gapY + MINI_PANEL.rule / k;   // the divider over panel p > 0
   if (titled) panels.forEach((P, p) => {
-    const base = P.top - 3 / k, nameW = P.name ? P.name.length * 0.6 * (7 / k) : 0;
-    if (P.name) panelTitles += `<text class="mini-panel-title" x="${(padL + 1).toFixed(1)}" y="${base.toFixed(2)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="rgba(90,90,140,0.95)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(P.name)}</text>`;
-    const x0 = padL + (P.name ? 1 + nameW + 4 / k : 0), y = (base - 2.5 / k).toFixed(2);
-    if (p > 0 && x0 < W - padR) panelTitles += `<line class="mini-panel-rule" x1="${x0.toFixed(1)}" y1="${y}" x2="${(W - padR).toFixed(1)}" y2="${y}" stroke="rgba(122,122,166,0.3)" stroke-width="${(0.6 / k).toFixed(2)}"/>`;
+    if (P.name) panelTitles += `<text class="mini-panel-title" x="${(padL + 1).toFixed(1)}" y="${(P.top - 3 / k).toFixed(2)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="rgba(90,90,140,0.95)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(P.name)}</text>`;
+    if (p > 0) panelTitles += `<line class="mini-panel-rule" x1="0" y1="${ruleY(p).toFixed(2)}" x2="${(compact ? W - padR : W).toFixed(1)}" y2="${ruleY(p).toFixed(2)}" stroke="rgba(122,122,166,0.55)" stroke-width="${(1 / k).toFixed(2)}"/>`;
   });
   // The zoom buttons, while zoomed: Reset, and Latest beside it while panned
   // away from the end (the click handler below; a double-click anywhere also
@@ -505,7 +519,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const ends = panelSeries[p].filter(s => s.shown && !s.partial)
       .map(s => ({ y: yAt(p, s.endPt.v), v: s.endPt.v, unit: s.unit, rows: nameRowsOf(s.label, s.badge, s.color), color: s.color }));
     ends.sort((a, b) => a.y - b.y);
-    const minY = p === 0 ? 0 : P.top - gapY / 2, maxY = p === nPanels - 1 ? plotBottom : P.bottom + gapY / 2;
+    const minY = p === 0 ? 0 : ruleY(p) + 2 / k, maxY = p === nPanels - 1 ? plotBottom : ruleY(p + 1) - 2 / k;
     if (compact && ends.length) ends[0].y = Math.max(ends[0].y, minY + reach(ends[0]));
     for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < room(ends[i - 1], ends[i])) ends[i].y = ends[i - 1].y + room(ends[i - 1], ends[i]);
     if (compact || titled) {
@@ -522,17 +536,17 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     }
   });
 
-  // Bands across the panel that fired them, caps in the strip, and once the
-  // window is under MINI_EVENT.marksWithinMs one mark per trade where it
-  // happened: on that panel's first drawn line at that day's close, so a sell
+  // Bands down every panel, caps in the strip, and once the window is under
+  // MINI_EVENT.marksWithinMs one mark per trade where it happened, in the
+  // panel that fired it: on that panel's first drawn line at that day's close, so a sell
   // sits where the price broke the line and a buy where it came back (a trade
   // inside a gap of that line gets no mark). Each mark is drawn twice, a white
   // halo under the symbol, and remembered in data.marks for the hover. Lines,
   // bands and marks are clipped to the plot, and lines and marks to their
   // panel, since a zoomed line keeps one point beyond each edge.
   const clipId = 'mini-clip-' + String(cfg.id).replace(/[^\w-]/g, '');
-  const eventBands = events.map((g, i) => [...new Set(g.items.map(it => it.panel))].map(p =>
-    `<rect class="mini-ev" data-mini-ev="${i}" x="${g.x0.toFixed(1)}" y="${panels[p].top.toFixed(2)}" width="${(g.x1 - g.x0).toFixed(1)}" height="${(panels[p].bottom - panels[p].top).toFixed(2)}"/>`).join('')).join('');
+  const eventBands = events.map((g, i) => panels.map(P =>
+    `<rect class="mini-ev" data-mini-ev="${i}" x="${g.x0.toFixed(1)}" y="${P.top.toFixed(2)}" width="${(g.x1 - g.x0).toFixed(1)}" height="${(P.bottom - P.top).toFixed(2)}"/>`).join('')).join('');
   const eventCaps = events.map((g, i) =>
     `<rect class="mini-ev-cap" data-mini-ev="${i}" x="${g.x0.toFixed(1)}" y="0" width="${(g.x1 - g.x0).toFixed(1)}" height="${padT.toFixed(2)}"/>`).join('');
   const markR = MINI_MARK.r / k, ringW = MINI_MARK.ring / k;
@@ -652,17 +666,22 @@ function _miniXAt(data, t) {
 }
 // Exact-value formatter for readouts: two decimals below $1000.
 function _miniFmtExact(v) { return v >= 1000 ? fmt(v) : '$' + v.toFixed(2); }
-// A readout's rows in panel order; on a chart of several panels each panel's
-// rows come under its name.
-function _miniPanelRows(data, items, row) {
-  const named = data.panels.length > 1;
-  let html = '', at = -1;
-  for (const it of items.slice().sort((a, b) => a.panel - b.panel)) {
-    if (named && it.panel !== at && data.panels[it.panel].name) html += `<div class="mct-group">${_escHtml(data.panels[it.panel].name)}</div>`;
-    at = it.panel;
-    html += row(it);
-  }
-  return html;
+// A value in a readout: exact dollars, else as its panel reads it.
+function _miniFmtReadout(unit, v) { return unit === '$' ? _miniFmtExact(v) : _miniFmtValue(unit, v); }
+// A readout's rows, one per panel in panel order: the panel's first line (the
+// price or reading its levels are compared with), then in brackets the
+// panel's other lines, the levels it is moving toward. `value` formats the
+// first line's part, `level` each bracketed one. A level's own closing
+// parenthesis is dropped ("Overextended (+55%)" reads "Overextended") so the
+// brackets never nest.
+function _miniPanelRows(data, items, value, level) {
+  return data.panels.map((_, p) => {
+    const own = items.filter(it => it.panel === p);
+    if (!own.length) return '';
+    const levels = own.slice(1).map(it => `${_escHtml(it.label.replace(/\s*\([^()]*\)$/, ''))} ${level(it)}`).join(' · ');
+    return `<div class="mct-row"><span class="mct-dot" style="background:${own[0].color}"></span>`
+      + `<span>${_escHtml(own[0].label)} ${value(own[0])}${levels ? ` <span class="mct-levels">(${levels})</span>` : ''}</span></div>`;
+  }).join('');
 }
 function _miniHoverGroup(svg) {
   let g = svg.querySelector('.mini-hover');
@@ -929,10 +948,13 @@ document.addEventListener('mousemove', (e) => {
     if (hi.t < lo.t) { lo = anchor; hi = drag; }
     const xA = _miniXAt(data, lo.t), xB = _miniXAt(data, hi.t);
     const spans = data.series.map(s => ({ ...s, p0: _miniPtAt(s.pts, lo.t), p1: _miniPtAt(s.pts, hi.t) })).filter(s => s.p0 && s.p1);
+    // Chords and their badges for each panel's first line, its reading; the
+    // levels are listed in the readout.
+    const readings = data.panels.map((_, p) => spans.find(s => s.panel === p)).filter(Boolean);
     g.innerHTML = `<rect x="${xA.toFixed(1)}" y="${data.padT}" width="${(xB - xA).toFixed(1)}" height="${(plotBottom - data.padT).toFixed(2)}" fill="rgba(134,118,255,0.10)"/>`
       + `<line x1="${xA.toFixed(1)}" y1="${data.padT}" x2="${xA.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
       + `<line x1="${xB.toFixed(1)}" y1="${data.padT}" x2="${xB.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
-      + spans.map(s => {
+      + readings.map(s => {
           const y0 = yAt(s, s.p0.v).toFixed(1), y1 = yAt(s, s.p1.v).toFixed(1);
           return `<line x1="${xA.toFixed(1)}" y1="${y0}" x2="${xB.toFixed(1)}" y2="${y1}" stroke="${s.color}" stroke-width="0.5" stroke-dasharray="2,1.5"/>
             <circle cx="${xA.toFixed(1)}" cy="${y0}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>
@@ -945,7 +967,7 @@ document.addEventListener('mousemove', (e) => {
       + (() => {
           const k = data.k, fs = 7 / k, ch = fs * 0.6, lh = 10 / k, padX = 3 / k;
           const mids = data.panels.flatMap((P, p) => {
-            const own = spans.filter(s => s.panel === p).map(s => {
+            const own = readings.filter(s => s.panel === p).map(s => {
               const move = _miniRangeMove(s.unit, s.p0.v, s.p1.v);
               return { y: (yAt(s, s.p0.v) + yAt(s, s.p1.v)) / 2 - lh / 2, move, label: s.label };
             }).sort((a, b) => a.y - b.y);
@@ -966,13 +988,12 @@ document.addEventListener('mousemove', (e) => {
           }).join('');
         })();
     const simKey = _miniRangeSimHost ? _miniRangeSimKey(data.cfgId, lo.d, hi.d) : null;
-    const exact = (s, v) => s.unit === '$' ? _miniFmtExact(v) : _miniFmtValue(s.unit, v);
+    // Each reading from the range's start to its end, coloured by direction,
+    // and its levels at the end; the chords' badges carry the moves.
     tip.innerHTML = `<div class="mct-date">${fmtLogDate(lo.d)} – ${fmtLogDate(hi.d)}</div>`
-      + _miniPanelRows(data, spans, s => {
-          const move = _miniRangeMove(s.unit, s.p0.v, s.p1.v);
-          const cls = move.up ? 'mct-pos' : 'mct-neg';
-          return `<div class="mct-row"><span class="mct-dot" style="background:${s.color}"></span>${_escHtml(s.label)}<b class="${cls}">${move.text}</b><span class="mct-range">${exact(s, s.p0.v)} → ${exact(s, s.p1.v)}</span></div>`;
-        })
+      + _miniPanelRows(data, spans,
+          s => `<span class="mct-from">${_miniFmtReadout(s.unit, s.p0.v)} →</span> <b class="${s.p1.v >= s.p0.v ? 'mct-pos' : 'mct-neg'}">${_miniFmtReadout(s.unit, s.p1.v)}</b>`,
+          s => _miniFmtReadout(s.unit, s.p1.v))
       + (simKey ? _miniRangeSimHtml(_miniRangeSimFor(data.cfgId, lo.d, hi.d)) : '');
     _miniPlaceTip(tip, e);
     window._miniRangeShown = { cfgId: data.cfgId, key: simKey, at: { clientX: e.clientX, clientY: e.clientY } };
@@ -996,7 +1017,7 @@ document.addEventListener('mousemove', (e) => {
   g.innerHTML = `<line x1="${cx.toFixed(1)}" y1="${data.padT}" x2="${cx.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
     + hits.map(h => `<circle cx="${cx.toFixed(1)}" cy="${yAt(h, h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join('');
   tip.innerHTML = `<div class="mct-date">${fmtLogDate(anchor.d)}</div>`
-    + _miniPanelRows(data, hits, h => `<div class="mct-row"><span class="mct-dot" style="background:${h.color}"></span>${_escHtml(h.label)}<b>${_miniFmtValue(h.unit, h.pt.v)}</b></div>`);
+    + _miniPanelRows(data, hits, h => `<b>${_miniFmtReadout(h.unit, h.pt.v)}</b>`, h => _miniFmtReadout(h.unit, h.pt.v));
   _miniPlaceTip(tip, e);
   window._miniHoverActive = true;
 });

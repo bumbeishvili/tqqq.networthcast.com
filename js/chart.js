@@ -1947,26 +1947,80 @@ function fitChartZoomUi(c) {
 // can't be plotted (log of 0 is undefined) and the line would vanish; 1 keeps it
 // continuous at the very bottom ("simulate zero"). Real gaps (null) are left alone.
 // A line that can go below zero (the real account's Profit, flagged `_signed`)
-// keeps its values on the linear axis, which then starts at its lowest value
+// keeps its values. On the linear axis, which then starts at its lowest value
 // instead of 0 (an unset minimum rounds down to a whole tick step: -$50K for a
-// -$6K dip); the log axis has no place for them, so there they become gaps
-// rather than a false $1.
+// -$6K dip). On the log axis, which has no place under $1, they switch it to
+// the signed log axis (registerSignedLogScale) for as long as one is there.
 const CHART_MIN = 1;
 function clampChartMin(chart) {
   if (!chart || !chart.data) return;
-  const log = chart.options.scales.y.type === 'logarithmic';
-  let lowest = 0;
+  const y = chart.options.scales.y, log = y.type !== 'linear';
+  let lowest = 0, signedUnder = false;
   for (const ds of chart.data.datasets) {
     const d = ds.data;
     if (!d) continue;
     for (let i = 0; i < d.length; i++) {
       if (typeof d[i] !== 'number' || d[i] >= CHART_MIN) continue;
       if (!ds._signed) d[i] = CHART_MIN;
-      else if (log) d[i] = null;
-      else lowest = Math.min(lowest, d[i]);
+      else { signedUnder = true; lowest = Math.min(lowest, d[i]); }
     }
   }
-  if (!log) chart.options.scales.y.min = lowest;
+  if (log) y.type = signedUnder ? 'signedLogarithmic' : 'logarithmic';
+  else y.min = lowest;
+}
+// The log axis with room for a loss. A value v sits at
+// sign(v) · log10(1 + |v| / c), where c is the largest loss on screen rounded
+// up to a 1-2-5 step ($500 for a -$340 dip). Far above c, where the
+// strategies' balances are, that is the log axis's shape; from -c to c it is
+// close to linear, so a profit crossing zero draws as one unbroken line
+// instead of diving through every decade between $1,000 and $1. With no loss
+// on screen (Profit hidden from the legend until the next render) c is 1 and
+// the axis is a log one.
+// Registered when the chart is first built: the desktop widget's page loads
+// this file without Chart.js.
+function registerSignedLogScale() {
+  const stepOf = v => Math.pow(10, Math.floor(Math.log10(v) + 1e-9));
+  const roundUp = v => Math.ceil(v / stepOf(v) - 1e-9) * stepOf(v);     // 57K → 60K
+  const roundDown = v => Math.floor(v / stepOf(v) + 1e-9) * stepOf(v);  // 340 → 300
+  const step125 = v => [1, 2, 5, 10].map(m => m * stepOf(v)).find(s => s >= v * (1 - 1e-9));   // 340 → 500
+  const next125 = v => { const m = Math.round(v / stepOf(v)); return (m === 1 ? 2 : m === 2 ? 5 : 10) * stepOf(v); };
+  class SignedLogScale extends Chart.LinearScale {
+    static id = 'signedLogarithmic';
+    _toAxis(v) { return Math.sign(v) * Math.log10(1 + Math.abs(v) / this._c); }
+    _fromAxis(a) { return Math.sign(a) * this._c * (Math.pow(10, Math.abs(a)) - 1); }
+    determineDataLimits() {
+      super.determineDataLimits();
+      this._c = this.min < 0 ? step125(-this.min) : 1;
+    }
+    // Bounds as the log axis rounds them: -c under a loss, else the lowest
+    // value rounded down; the highest rounded up. Ticks at -c and zero, then
+    // the 1-2-5 steps from c (or the first one over the lower bound) up,
+    // thinned evenly to Y_TICKS in all with both ends kept.
+    buildTicks() {
+      const lo = this.min < 0 ? -this._c : this.min > 0 ? roundDown(this.min) : 0;
+      const hi = roundUp(Math.max(this.max, this._c));
+      const fixed = lo < 0 ? [lo, 0] : lo === 0 ? [0] : [];
+      const steps = [];
+      for (let v = step125(lo > 0 ? lo : this._c); v <= hi * (1 + 1e-9); v = next125(v)) steps.push(v);
+      const room = Y_TICKS - fixed.length;
+      const kept = steps.length <= room ? steps : Array.from({ length: room }, (_, i) => steps[Math.round(i * (steps.length - 1) / (room - 1))]);
+      this.min = this.start = lo;
+      this.max = this.end = hi;
+      return fixed.concat([...new Set(kept)]).map(value => ({ value }));
+    }
+    configure() {
+      super.configure();
+      this._axisStart = this._toAxis(this.min);
+      this._axisRange = this._toAxis(this.max) - this._axisStart;
+    }
+    getPixelForValue(value) {
+      return value === null || isNaN(value) ? NaN : this.getPixelForDecimal((this._toAxis(value) - this._axisStart) / this._axisRange);
+    }
+    getValueForPixel(pixel) {
+      return this._fromAxis(this._axisStart + this.getDecimalForPixel(pixel) * this._axisRange);
+    }
+  }
+  Chart.register(SignedLogScale);
 }
 // Single delegated click handler — the legend HTML gets replaced on every
 // render, so attaching here once on document avoids leaks/duplicate
@@ -3607,6 +3661,7 @@ function render() {
     }
   };
 
+  registerSignedLogScale();
   chart = new Chart(ctx, {
     type: 'line',
     plugins: [endLabelPlugin, smaMarkerPlugin, customMarkerPlugin, rangeSelectPlugin],
@@ -3837,9 +3892,9 @@ function render() {
           },
           // On log scale, Chart.js generates a tick at every 1..9 × 10^n which
           // is way too dense. Keep only "nice" ticks (1, 2, 5 × 10^n) so the
-          // axis stays readable.
+          // axis stays readable. The signed log axis makes its own.
           afterBuildTicks: (scale) => {
-            if (document.getElementById('chart-log-toggle').getAttribute('aria-pressed') !== 'true') return;
+            if (scale.type !== 'logarithmic') return;
             scale.ticks = scale.ticks.filter(t => {
               const v = t.value;
               if (v <= 0) return false;
