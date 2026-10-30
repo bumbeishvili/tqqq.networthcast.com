@@ -2990,10 +2990,16 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #48-#50 — NFCI veto, buy-back and TQQQ vs QQQ stretch, each trading
 // Turnaround Monday in its idle cash (2026-10-29, the user's request after
 // the combination study, scratchpad r5/combo-sim.cjs and combo-cagr.cjs).
-// The rule is the user's custom "Turnaround Monday" code (the r/TQQQ
-// "Turnaround Tuesday" post): buy at a Monday close under the prior close,
-// sell at the first close above the prior close. The data has closes only,
-// so the prior close stands in for the prior day's high.
+// The rule is the r/TQQQ "Turnaround Tuesday" post's: buy at a Monday close
+// under the prior day's low, sell at the first close above the prior day's
+// high (data.<fund>High / Low, js/data.js). Until 2026-10-30 it ran on the
+// prior close both ways, as the user's first code did, and a reader of the
+// user's post pointed it out. Each entry ships the better of the two on Q1
+// 2010 - Q4 2025 (spec.levels, the other is the tmLevels setting): #50 the
+// post's rule, 151.1% against 144.0%; #48 and #49 the prior close, 88.0
+// against 87.1% and 116.8 against 116.2% with a 49% drawdown instead of 53%
+// (scratchpad ohlc/three-monday.cjs). The prior close stands in where the
+// fund has no real high or low yet.
 //
 // Each entry is its base strategy's own text with these additions, made at
 // load, so a change to the base reaches the combination too:
@@ -3018,9 +3024,11 @@ function withTurnaroundMonday(base, spec) {
     return text.slice(0, at) + repl + text.slice(at + find.length);
   };
   const params = `    { section: "Turnaround Monday — trade the idle cash" },
-    { id: "tmOn", label: "Trade down Mondays while in cash", tip: "While the rules above hold cash, buy at a Monday close under the prior close and sell at the first close above the prior close.", type: "bool", default: true, options: [
+    { id: "tmOn", label: "Trade down Mondays while in cash", tip: "While the rules above hold cash, buy at a Monday close under the prior day's low and sell at the first close above the prior day's high.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
-    { id: "tmSignal", label: "Monday signal read on", tip: "The fund whose closes decide when a trade starts and ends.", default: "${spec.signal}", options: [
+    { id: "tmLevels", label: "Compared with", tip: "Prior day's low and high is the r/TQQQ post's rule. Prior close buys on any down Monday and sells on the first up close.", default: "${spec.levels}", options: [
+      { value: "hl", label: "Prior day's low and high" }, { value: "close", label: "Prior close" } ] },
+    { id: "tmSignal", label: "Monday signal read on", tip: "The fund whose prices decide when a trade starts and ends.", default: "${spec.signal}", options: [
       { value: "tqqq", label: "TQQQ" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
     { id: "tmFund", label: "Fund bought", tip: "What a trade holds, paid for with the idle cash.", default: "tqqq", options: [
       { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" } ] },
@@ -3032,11 +3040,18 @@ function withTurnaroundMonday(base, spec) {
     // ends at the rule's exit or as soon as the rules want anything else.
     const tmOn = p.tmOn !== false, tmFund = data[p.tmFund] ? p.tmFund : "tqqq";
     const tmSig = data[p.tmSignal] ? p.tmSignal : "tqqq", tmSigName = tmSig.toUpperCase();
+    // A Monday close under the prior day's low buys, the first close over the
+    // prior day's high sells. With "Prior close", or on a day before the fund's
+    // first real high and low (TQQQ before 2010-02-11), the prior close stands in.
+    const tmHL = p.tmLevels !== "close", tmHigh = data[tmSig + "High"], tmLow = data[tmSig + "Low"];
+    if (tmOn && tmHL && !(tmHigh && tmLow)) throw new Error("Turnaround Monday needs " + tmSigName + "'s daily highs and lows (data." + tmSig + "High, data." + tmSig + "Low)");
+    const tmLevel = (arr, i) => (tmHL && arr[i] > 0 ? arr[i] : data[tmSig][i]);
+    const tmLevelName = (arr, i, word) => (tmHL && arr[i] > 0 ? "the prior day's " + word : "the prior close");
     const tmIn = new Uint8Array(p.endIdx + 1);   // 1 = the rule is in a trade at that close
     for (let i = p.startIdx, inT = false; i <= p.endIdx; i++) {
       const c = data[tmSig][i], prev = i > 0 ? data[tmSig][i - 1] : 0;
       const wd = ((Math.floor(Date.parse(data.dates[i]) / 86400000) + 4) % 7 + 7) % 7;   // 1 = Monday (1970-01-01 was a Thursday)
-      if (c > 0 && prev > 0) { if (inT) { if (c > prev) inT = false; } else if (wd === 1 && c < prev) inT = true; }
+      if (c > 0 && prev > 0) { if (inT) { if (c > tmLevel(tmHigh, i - 1)) inT = false; } else if (wd === 1 && c < tmLevel(tmLow, i - 1)) inT = true; }
       tmIn[i] = inT ? 1 : 0;
     }
     let tmActive = false, tmSince = "", tmWhy = "", tmKept = false, tmPauseSale = false;
@@ -3052,11 +3067,12 @@ function withTurnaroundMonday(base, spec) {
       // over the pause for #50) and lost in 1973-75 (-76%) and 1978-83 (-71%):
       // 18.2%/yr from 1953 against 20.2% paused (scratchpad r7/tm-pause-check.cjs).
       if (!tmOn || want !== "cash" || tmStress(i)) { if (tmActive && tmStress(i)) { tmWhy = "Turnaround Monday paused, NFCI " + data.nfci[i].toFixed(2) + " above " + p.tmNfci; tmPauseSale = true; } tmActive = false; return want; }
-      if (tmActive && !tmIn[i]) { tmActive = false; tmWhy = "Turnaround Monday exit, " + tmSigName + " closed above the prior close"; }
+      if (tmActive && !tmIn[i]) { tmActive = false; tmWhy = "Turnaround Monday exit, " + tmSigName + " closed above " + tmLevelName(tmHigh, i - 1, "high"); }
       else if (!tmActive && (held === "cash" || held === tmFund) && tmIn[i] && !(i > p.startIdx && tmIn[i - 1])) {
         tmActive = true; tmSince = data.dates[i]; tmKept = held === tmFund;
-        tmWhy = tmKept ? "Kept " + tmFund.toUpperCase() + ": the rules sold, but " + tmSigName + " closed a Monday under the prior close; held to the first close above it"
-          : "Turnaround Monday, " + tmSigName + " closed a Monday under the prior close";
+        const under = tmLevelName(tmLow, i - 1, "low");
+        tmWhy = tmKept ? "Kept " + tmFund.toUpperCase() + ": the rules sold, but " + tmSigName + " closed a Monday under " + under
+          : "Turnaround Monday, " + tmSigName + " closed a Monday under " + under;
       }
       return tmActive ? tmFund : "cash";
     };
@@ -3069,6 +3085,7 @@ function withTurnaroundMonday(base, spec) {
     const last = res.log[res.log.length - 1] || {};
     const tmF = (data[p.tmFund] ? p.tmFund : "tqqq").toUpperCase(), tmS = (data[p.tmSignal] ? p.tmSignal : "tqqq").toUpperCase();
     const tmOpen = p.tmOn !== false && !!last.tmTrade, tmIdle = last.held === "CASH";
+    const tmUp = p.tmLevels !== "close" ? "the prior day's high" : "the prior close", tmDown = p.tmLevels !== "close" ? "the prior day's low" : "the prior close";
     const nfE = data.nfci ? data.nfci[p.endIdx] : NaN, tmPausedNow = !!(+p.tmNfci && nfE > +p.tmNfci);
     // Its chart panel, and the pause beside the base's NFCI: on the veto's line
     // when the levels agree, a line of its own when they do not, or in a panel
@@ -3082,7 +3099,10 @@ function withTurnaroundMonday(base, spec) {
       // and the rest (#50: price 186, Monday 146, lead 104, NFCI none;
       // scratchpad r7/panel-trades.cjs).
       const afterFirst = lines.findIndex(l => l.group !== lines[0].group);
-      lines.splice(afterFirst < 0 ? lines.length : afterFirst, 0, { key: "tmChange", label: tmS + " vs prior close", unit: "%", group: ${panel} }, { key: "tmPrior", label: "Prior close", unit: "%", group: ${panel} });
+      const hl = p.tmLevels !== "close";
+      lines.splice(afterFirst < 0 ? lines.length : afterFirst, 0, { key: "tmChange", label: tmS + " vs prior close", unit: "%", group: ${panel} },
+        ...(hl ? [{ key: "tmHighPct", label: "Prior day's high", unit: "%", group: ${panel} }, { key: "tmLowPct", label: "Prior day's low", unit: "%", group: ${panel} }]
+          : [{ key: "tmLowPct", label: "Prior close", unit: "%", group: ${panel} }]));
       if (+p.tmNfci && data.nfci) {
         const veto = lines.find(l => l.key === "nfciVeto"), vetoAt = (res.log.find(r => r.nfciVeto != null) || {}).nfciVeto;
         if (lines.some(l => l.key === "nfci") && veto && vetoAt === +p.tmNfci) veto.label += ", Monday pause";
@@ -3094,9 +3114,9 @@ function withTurnaroundMonday(base, spec) {
     if (res.signals) {
       res.signals.cards = (res.signals.cards || []).concat([{ label: "Turnaround Monday", icon: "clock", tone: tmOpen ? "good" : "",
         value: p.tmOn === false ? "Off" : tmOpen ? "In a trade" : tmPausedNow ? "Paused" : tmIdle ? "Waiting" : "Idle",
-        sub: tmOpen ? tmF + " since " + last.tmTrade + ", sells at the first close above the prior close" : tmPausedNow ? "credit stress, NFCI " + nfE.toFixed(2) + " above " + p.tmNfci
-          : tmIdle ? "buys " + tmF + " at a Monday close under the prior close" : "the rules hold " + last.held,
-        tip: "Trades the idle cash: buys " + tmF + " when " + tmS + " closes a Monday under the prior close, sells at the first close above it." }]);
+        sub: tmOpen ? tmF + " since " + last.tmTrade + ", sells at the first close above " + tmUp : tmPausedNow ? "credit stress, NFCI " + nfE.toFixed(2) + " above " + p.tmNfci
+          : tmIdle ? "buys " + tmF + " at a Monday close under " + tmDown : "the rules hold " + last.held,
+        tip: "Trades the idle cash: buys " + tmF + " when " + tmS + " closes a Monday under " + tmDown + ", sells at the first close above " + tmUp + "." }]);
       if (tmOpen && res.signals.decision) {
         const d = res.signals.decision;
         res.signals.decision = { action: "Hold " + tmF, note: "Turnaround Monday trade since " + last.tmTrade + "; the rules themselves are in cash", tone: "good",
@@ -3109,12 +3129,14 @@ function withTurnaroundMonday(base, spec) {
   t = once(t, '  columns: [\n', '  columns: [\n    { key: "tmTrade", label: "Monday trade", tip: "The day an open Turnaround Monday trade was bought. Blank when none is open." },\n', 'the columns list');
   t = once(t, '  run(data, p) {\n', '  run(data, p) {\n    const res = (function (data, p) {\n', 'run(data, p)');
   t = once(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', 'the main loop');
-  // On every row: the signal fund against the prior close, in percent, with the
-  // prior close at 0% (a Monday under it buys, the first close over it sells),
-  // NFCI and the pause level, and a Monday trade's panel.
+  // On every row: the signal fund against the prior close, in percent, and the
+  // prior day's high and low on the same scale (a Monday close under the low
+  // buys, the first close over the high sells; both 0% where the prior close
+  // stands in), NFCI and the pause level, and a Monday trade's panel.
   t = once(t, '        log.push({\n', '        log.push({\n          tmTrade: tmActive ? tmSince : null,\n'
     + '          tmChange: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? (data[tmSig][i] / data[tmSig][i - 1] - 1) * 100 : null,\n'
-    + '          tmPrior: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? 0 : null,\n'
+    + '          tmHighPct: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmHigh, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
+    + '          tmLowPct: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmLow, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
     + '          tmNfciRead: tmPauseOn && isFinite(data.nfci[i]) ? data.nfci[i] : null,\n'
     + '          tmPause: tmPauseOn && isFinite(data.nfci[i]) ? +p.tmNfci : null,\n'
     + '          ...(tmWhy ? { firedBy: tmPanel(null) } : {}),\n', 'the log row');
@@ -3123,13 +3145,13 @@ function withTurnaroundMonday(base, spec) {
   if (!t.endsWith('\n  }\n}')) throw new Error(`withTurnaroundMonday(${spec.name}): the base must end with its run method`);
   return t.slice(0, -'\n  }\n}'.length) + '\n    })(data, p);\n' + dashboard + '    return res;\n  }\n}';
 }
-CODE[48] = withTurnaroundMonday(CODE[44], { name: "NFCI veto + Turnaround Monday", signal: "tqqq", creditPanel: "Credit stress (NFCI)", hooks: [
+CODE[48] = withTurnaroundMonday(CODE[44], { name: "NFCI veto + Turnaround Monday", signal: "tqqq", levels: "close", creditPanel: "Credit stress (NFCI)", hooks: [
   ['        if (vetoOn) want = "cash";\n', '        if (vetoOn) want = "cash";\n        want = tmHold(i, want);\n', 'the credit-veto line'],
   ['note = vetoOn ? "NFCI "', 'note = tmWhy ? tmWhy : vetoOn ? "NFCI "', 'the trade note'],
   ['fired = vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null;', 'fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);', 'the trade panel'] ] });
-CODE[49] = withTurnaroundMonday(CODE[45], { name: "Buy-back + Turnaround Monday", signal: "spy", hooks: [
+CODE[49] = withTurnaroundMonday(CODE[45], { name: "Buy-back + Turnaround Monday", signal: "spy", levels: "close", hooks: [
   ['          : (_frac > 0 ? p.asset : crashAsset);\n', '          : (_frac > 0 ? p.asset : crashAsset);\n        want = tmHold(i, want);\n        if (tmActive) _frac = 1;\n        if (tmWhy && !why) why = tmWhy;\n', 'the holding decision'] ] });
-CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Monday", signal: "tqqq", creditPanel: "Credit stress (NFCI)", hooks: [
+CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Monday", signal: "tqqq", levels: "hl", creditPanel: "Credit stress (NFCI)", hooks: [
   ['      const want = capSq(i, wantNow(i));', '      const want = tmHold(i, capSq(i, wantNow(i)));', 'the holding decision'],
   ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
   ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });

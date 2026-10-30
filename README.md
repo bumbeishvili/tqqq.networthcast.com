@@ -21,6 +21,8 @@ The default run pulls `period="max"` with `auto_adjust=True`, so every series is
 
 Price files: `synthetic-qqq.tsv`, `synthetic-qld.tsv`, `synthetic-tqqq.tsv`, `spy.tsv`, `synthetic-sso.tsv`, `synthetic-spxl.tsv`, `synthetic-sqqq.tsv`.
 
+High/low files, written on the same runs from the same bars: `tqqq-hl.tsv`, `qqq-hl.tsv`, `spy-hl.tsv` (date, high, low and that bar's close; real trading days only). The Turnaround Monday strategies read them.
+
 Two flags cover the rest:
 
 - `--refresh-rates` re-pulls DFF and TB3MS from FRED and rewrites `fed-funds-effective.tsv`, `t-bill-3mo.tsv`, and `short-rates.tsv`. Nothing else refreshes these, so they drift stale until you run it.

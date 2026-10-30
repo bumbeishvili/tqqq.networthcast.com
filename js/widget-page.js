@@ -14,7 +14,7 @@
 // widget/tqqq.widget frames this page.
 (function widgetPage() {
   const REFRESH_MS = 5 * 60 * 1000;           // re-reads the sheet and the market data; the data files change hourly
-  const FALLBACK_ENTRY = 45;                   // library strategy shown when the link carries no custom one
+  const WIDGET_ENTRY = 50;                     // the strategy the widget tracks: TQQQ vs QQQ + Turnaround Monday
   const DEFAULT_COLOR = '#e879f9';             // a library copy's colour when the link gives none
   const PORTFOLIO_PX = 190;                    // height of the top chart
   const BOTTOM_PX = 240;                       // height of the signal chart
@@ -34,8 +34,11 @@
   // "Sell line (-3%)" reads "Sell line" in the widget.
   const PERCENT_SETTING = /\s*\([^)]*%\)\s*$/;
   // Shorter names for the narrow label column, which stacks a name's words:
-  // "Overextended" reads "Over" over "extend" (the user's wording).
-  const DISPLAY_NAMES = { Overextended: 'Over extend' };
+  // "Overextended" reads "Over" over "extend" (the user's wording). TQQQ vs
+  // QQQ + Turnaround Monday has eleven labels in four panels, so its long
+  // names go to one or two words each; the panel titles say what they are of.
+  const DISPLAY_NAMES = { Overextended: 'Over extend', 'TQQQ vs prior close': 'Day', "Prior day's high": 'High',
+    "Prior day's low": 'Low', 'TQQQ ahead of QQQ': 'Lead', 'Credit veto': 'Veto' };
   const displayName = label => {
     const name = String(label).replace(PERCENT_SETTING, '');
     return DISPLAY_NAMES[name] || name;
@@ -83,12 +86,13 @@
 
   // ---- market data: the same files and derived globals js/init.js sets up ----
   async function loadMarketData() {
-    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, nfci] = await Promise.all([
+    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, nfci, highLow] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
-      loadSQQQDaily().catch(() => []), loadNFCIWeekly().catch(() => []),
+      loadSQQQDaily().catch(() => []), loadNFCIWeekly().catch(() => []), Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
     ]);
     daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq);
     nfciDaily = buildNfciDaily(daily, nfci);
+    highLowDaily = buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]])));
     quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
     monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
     dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
@@ -97,14 +101,16 @@
     _customDataSent = false;
   }
 
-  // ---- the strategy: the buy-back copy in the link, else its first custom
-  // strategy, else the library's. A library copy runs the current library code,
-  // as the site does for a shared copy (withCurrentCustomCode).
+  // ---- the strategy: WIDGET_ENTRY, with the settings and colour of its copy in
+  // the link when the link has one (the user, 2026-10-30: "make sure widget
+  // tracks the new strategy"). Other strategies in the link are not shown. A
+  // library copy runs the current library code, as the site does for a shared
+  // copy (withCurrentCustomCode).
   function pickStrategy(cfgs) {
     const customs = (Array.isArray(cfgs) ? cfgs : []).filter(c => c && c.type === 'custom' && c.code);
-    const shared = customs.find(c => libraryEntryOf(c.code) === FALLBACK_ENTRY) || customs[0];
+    const shared = customs.find(c => libraryEntryOf(c.code) === WIDGET_ENTRY);
     const base = shared ? withCurrentCustomCode([shared])[0]
-      : { type: 'custom', name: null, params: {}, color: DEFAULT_COLOR, code: STRATEGY_CODE[FALLBACK_ENTRY] };
+      : { type: 'custom', name: null, params: {}, color: DEFAULT_COLOR, code: STRATEGY_CODE[WIDGET_ENTRY] };
     return { ...base, id: 'widget-strategy', color: base.color || DEFAULT_COLOR, subShown: Object.fromEntries(HIDDEN_SIGNAL_LINES.map(key => [key, false])) };
   }
   // The site's default money: its $10,000 from the given day to today.
@@ -298,7 +304,7 @@
       await loadMarketData();
       if (!cfg) {
         [cfgs, txRows] = await Promise.all([payload('scz', 'sc'), sheet ? null : payload('txz', 'tx')]);
-        cfg = pickStrategy(cfgs);
+        cfg = pickStrategy(Array.isArray(cfgs) ? expandLibraryShares(cfgs) : cfgs);
       }
       if (sheet) txRows = await sheetRows(sheet);   // the sheet is re-read on every refresh
       const money = moneyContext(txRows);

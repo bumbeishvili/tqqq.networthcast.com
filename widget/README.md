@@ -31,7 +31,7 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
 |---|---|
 | `sheetUrl` | Your transaction sheet's published CSV link (Google Sheets: File, Share, Publish to web, CSV). |
 | `sheetColumns` | Header names of the sheet's `date`, `amount` and portfolio `value` columns. |
-| `shareLink` | The site's Share link. It supplies your strategy and its settings. Without one, the widget runs the buy-back strategy at its defaults. |
+| `shareLink` | The site's Share link. The widget shows TQQQ vs QQQ + Turnaround Monday, with the settings and colour of your copy of it in the link. Without one, it runs that strategy at its defaults. |
 | `intraday` | The intraday chart's settings: `similarDaysOnly`; `from`, the period's first day as `YYYY-MM-DD` (the period ends at the latest day); `log`, a log scale instead of the default linear one. |
 | `pageUrl` | The page the widget shows. Default: the copy the installer puts in the widget's `lib/site` folder. Set `https://tqqq.networthcast.com/widget.html` to show the deployed page instead; on the desktop that page answers hover only (see Troubleshooting). |
 | `dataUrl` | Where the page reads the market data files. Default: `https://tqqq.networthcast.com/`. |
@@ -52,8 +52,8 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
   see earlier years, and Reset or a double-click brings you back. Its trades
   come from one run of the strategy over that whole history on the site's
   default $10,000.
-- The signal chart leaves out the strategy's center line, the 250-day median
-  at the buy-back defaults, and names its lines without their percent
+- The signal chart leaves out the strategy's 250-day median, the crash
+  guard's buy-back level, and names its lines without their percent
   settings.
 - Hover any chart for its readout.
 - On the portfolio and signal charts, ⌘ + scroll zooms and ⌘ + drag pans. A plain drag

@@ -20,10 +20,39 @@ function parseDataFile(text) {
 // window.TQQQ_DATA_BASE first (the desktop widget's local copy of widget.html
 // reads the live site's files).
 const DATA_BASE = (typeof window !== 'undefined' && window.TQQQ_DATA_BASE) || '';
-async function loadSeries(file) {
+async function fetchDataText(file) {
   const resp = await fetch(DATA_BASE + 'data/' + file, { cache: 'no-cache' });
   if (!resp.ok) throw new Error('Failed to load ' + file + ' (HTTP ' + resp.status + ')');
-  return parseDataFile(await resp.text());
+  return resp.text();
+}
+async function loadSeries(file) { return parseDataFile(await fetchDataText(file)); }
+
+// Daily highs and lows (data/<fund>-hl.tsv, written by update_data.py) of the
+// funds the Turnaround Monday rule can read. A row also carries its bar's own
+// close, and a high or low goes onto the price file's close of that day as a
+// ratio to it, so a difference in dividend adjustment between the two files
+// cannot move it. NaN on days without a real bar: TQQQ before 2010-02-11, QQQ
+// before 1999-03-10, SPY before 1993-01-29.
+const HIGH_LOW_FUNDS = ['tqqq', 'qqq', 'spy'];
+let highLowDaily = null; // populated by init()
+function parseHighLowFile(text) {
+  return text.trim().split(/\r?\n/).slice(1).map(line => {
+    const [dateStr, high, low, close] = line.split('\t');
+    const [m, d, y] = dateStr.split(' ')[0].split('/');
+    return [y + '-' + m.padStart(2, '0') + '-' + d.padStart(2, '0'), +high, +low, +close];
+  });
+}
+async function loadHighLow(fund) { return parseHighLowFile(await fetchDataText(fund + '-hl.tsv')); }
+// { tqqqHigh, tqqqLow, qqqHigh, qqqLow, spyHigh, spyLow }, aligned to dailyArr.
+function buildHighLowDaily(dailyArr, rowsByFund) {
+  const out = {};
+  for (const f of HIGH_LOW_FUNDS) {
+    const byDate = new Map(rowsByFund[f].map(r => [r[0], r]));
+    const onClose = col => dailyArr.map(d => { const r = byDate.get(d.date); return r && r[3] > 0 && d[f] > 0 ? d[f] * r[col] / r[3] : NaN; });
+    out[f + 'High'] = onClose(1);
+    out[f + 'Low'] = onClose(2);
+  }
+  return out;
 }
 
 async function loadQQQDaily()  { return loadSeries('synthetic-qqq.tsv'); }

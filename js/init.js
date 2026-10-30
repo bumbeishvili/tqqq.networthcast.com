@@ -1,8 +1,8 @@
 // Initialize: load CSV, derive data, set slider max, restore state, render
 (async function init() {
-  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, NFCI_WEEKLY;
+  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, NFCI_WEEKLY, HIGH_LOW;
   try {
-    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, NFCI_WEEKLY] = await Promise.all([
+    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, NFCI_WEEKLY, HIGH_LOW] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
       // SQQQ is a first-class column (0-filled on failure): every engine
       // guards zero prices, so a fetch failure degrades SQQQ options to
@@ -11,6 +11,9 @@
       // NFCI is a signal series, not a price: on failure the credit-veto
       // strategy sees NaN and the veto never fires — degraded, not broken.
       loadNFCIWeekly().catch(() => []),
+      // Highs and lows decide Turnaround Monday's trades, so like the prices
+      // a failed load stops the page instead of trading on something else.
+      Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
     ]);
   } catch(e) {
     console.error('Failed to load data:', e);
@@ -27,6 +30,7 @@
   }
   daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY);
   nfciDaily = buildNfciDaily(daily, NFCI_WEEKLY);
+  highLowDaily = buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, HIGH_LOW[k]])));
   // "Last updated" freshness note in the header subtitle — the actual
   // wall-clock time the data was last fetched (written by
   // .github/workflows/update-data.yml into this file in the SAME commit as
@@ -246,7 +250,7 @@
     if (json) {
       try {
         const parsed = JSON.parse(json);
-        const arr = Array.isArray(parsed) ? withCurrentCustomCode(parsed) : parsed;
+        const arr = Array.isArray(parsed) ? withCurrentCustomCode(expandLibraryShares(parsed)) : parsed;
         importSharedConfigs(arr);
         if (Array.isArray(arr)) _sharedCfgArr = arr;
       } catch (e) {}

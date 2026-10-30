@@ -618,6 +618,10 @@ data.nfci  : Chicago Fed National Financial Conditions Index, weekly since 1971,
              trading days with a 7-day publication lag (no look-ahead). NOT a price: a z-score-like
              level where above 0 = tighter-than-average financial conditions, above +0.5 = credit
              stress. NaN before 1971 — ALWAYS guard with isFinite() before comparing.
+data.tqqqHigh, data.tqqqLow, data.qqqHigh, data.qqqLow, data.spyHigh, data.spyLow : each day's
+             high and low of that fund, on the same scale as its closes. Real bars only: NaN
+             before TQQQ's 2010-02-11, QQQ's 1999-03-10 and SPY's 1993-01-29. Guard with
+             isFinite() and say in your rule what stands in before then.
 - data[id] works for any of those ids, which is how an asset dropdown gets used.
 - Prices are positive numbers; a few of the earliest values may be 0 (missing history) — guard divisions.
 - The arrays span the FULL history. You MAY read indices before p.startIdx for warm-up (e.g. to seed a
@@ -1002,6 +1006,11 @@ function buildCustomData() {
     // lag in js/data.js). NaN before 1971 or if the fetch failed — strategy
     // code must treat non-finite as "no signal".
     nfci:  (typeof nfciDaily !== 'undefined' && nfciDaily) ? nfciDaily : daily.map(() => NaN),
+    // Daily highs and lows of TQQQ, QQQ and SPY (js/data.js's
+    // buildHighLowDaily): tqqqHigh, tqqqLow, qqqHigh, ... NaN before each
+    // fund's first real bar. A page that did not load them leaves the keys out,
+    // and code that needs them (Turnaround Monday) stops with an error.
+    ...((typeof highLowDaily !== 'undefined' && highLowDaily) ? highLowDaily : {}),
   };
   return _customDataCache;
 }
@@ -2432,6 +2441,38 @@ function refreshedLibraryName(cfg) {
 const LIBRARY_STAMP_KEYS = ['libraryN', 'libraryFingerprint', 'libraryDescFingerprint'];
 function libraryStampOf(cfg) {
   return Object.fromEntries(LIBRARY_STAMP_KEYS.filter(key => cfg[key] != null).map(key => [key, cfg[key]]));
+}
+// A saved strategy as a share link carries it (shareConfig in
+// js/controls.js). A copy of a library code strategy whose code is still the
+// library's goes by its library number, `lib`, with its description only when
+// the sender changed it: the code is the bulk of a link, and the recipient's
+// page has it. Changed code goes in full, with the library stamp. Settings
+// (params) always ride along; they hold only what the sender changed.
+function sharedConfigOf(c) {
+  const o = { type: c.type, name: c.name, params: c.params || {}, color: c.color };
+  if (c.type !== 'custom') return o;
+  const n = libraryEntryNumber(c);
+  const entry = n != null && typeof STRATEGY_LIBRARY !== 'undefined' ? STRATEGY_LIBRARY.find(e => e.n === n) : null;
+  if (entry && STRATEGY_CODE[n] && c.code === STRATEGY_CODE[n]) {
+    o.lib = n;
+    if ((c.desc || '') !== (entry.rules || '')) o.desc = c.desc || '';
+    return o;
+  }
+  return { ...o, code: c.code || '', desc: c.desc || '', ...libraryStampOf(c) };
+}
+// The reverse, on arrival: a `lib` entry takes this page's library code and,
+// unless the link brought its own, the library description, stamped as an
+// unedited copy. A number this library lacks is skipped with a console
+// warning, and stays as a null so the link's indices (spc, cfg:<n>) still line up.
+function expandLibraryShares(arr) {
+  return arr.map(c => {
+    if (!c || c.type !== 'custom' || c.lib == null) return c;
+    const n = +c.lib, code = STRATEGY_CODE[n], entry = STRATEGY_LIBRARY.find(e => e.n === n);
+    if (!code || !entry) { console.warn(`Share link: library strategy ${n} is not in this library, skipped.`); return null; }
+    const { lib, ...rest } = c;
+    return { ...rest, code, desc: c.desc != null ? c.desc : entry.rules, libraryN: n,
+      libraryFingerprint: codeFingerprint(code), libraryDescFingerprint: codeFingerprint(entry.rules || '') };
+  });
 }
 function applyLibraryRefresh(cfg, up) {
   if (up.code !== cfg.code) { cfg.codeBefore = cfg.code; cfg.code = up.code; }

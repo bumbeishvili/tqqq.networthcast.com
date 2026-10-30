@@ -46,10 +46,10 @@ const MINI_CHART = { W: 320, H: 148, padL: 6 };
 // own scale, unit and gutter labels, stacked on the one time axis in the order
 // the groups first appear. Lines without a group form the first panel. A
 // panel's height follows its line count: the first panel is full height; a
-// later one with a reading and one level (two lines, such as NFCI and its veto
-// or Turnaround Monday's prior close) is minShare of a full panel, and with
-// more lines a quarter per line up to full (fullAt lines or more); in the
-// compact layout all are equal.
+// later one with a reading and one or two levels (up to three lines, such as
+// NFCI and its veto, or Turnaround Monday's close against the prior day's high
+// and low) is minShare of a full panel, and one with more lines full (fullAt);
+// in the compact layout all are equal.
 // The gap between two panels is in px, divided by the render scale, with a
 // divider `rule` px under the panel above; addH is the viewBox height a full
 // panel after the first adds to the side panel's chart, a smaller one its
@@ -284,7 +284,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   for (const s of all) s.panel = panelSpecs.indexOf(s.spec);
   // Each panel's height as a share of a full panel's (MINI_PANEL). The compact
   // layout keeps them equal: its end labels run a row per word and need the room.
-  const shares = panelSpecs.map((sp, p) => p === 0 || compact ? 1 : sp.count <= 2 ? MINI_PANEL.minShare : Math.min(1, sp.count / MINI_PANEL.fullAt));
+  const shares = panelSpecs.map((sp, p) => p === 0 || compact ? 1 : sp.count <= 3 ? MINI_PANEL.minShare : Math.min(1, sp.count / MINI_PANEL.fullAt));
 
   const { W, padL } = MINI_CHART;
   const H = opts && opts.aspect ? Math.max(60, Math.round(W * opts.aspect)) : MINI_CHART.H + shares.slice(1).reduce((sum, f) => sum + f * MINI_PANEL.addH, 0);

@@ -33,6 +33,7 @@ const daily = buildDaily(series('synthetic-qqq.tsv'), series('synthetic-tqqq.tsv
 const data = {
   dates: daily.map(d => d.date),
   nfci: buildNfciDaily(daily, series('nfci.tsv')),
+  ...buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map(f => [f, parseHighLowFile(fs.readFileSync(path.join(ROOT, 'data', f + '-hl.tsv'), 'utf8'))]))),
   ...Object.fromEntries(TICKERS.map(t => [t, daily.map(d => d[t] || 0)])),
 };
 

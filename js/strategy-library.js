@@ -181,17 +181,19 @@ const STRATEGY_LIBRARY = [
 // user's Turnaround Monday rule in its idle cash (js/strategy-library-code.js
 // withTurnaroundMonday). A card is its base card's rules plus the Monday
 // paragraph, so a change to the base's rules text reaches it too.
-const turnaroundMondayRules = (signal) => `Turnaround Monday: when the rules want cash and ${signal} closes down on a Monday, buy TQQQ. Hold it until ${signal} first closes up, or until the rules want something else. Money still in SQQQ that Monday sits it out.`;
+const turnaroundMondayRules = (signal, levels) => levels === 'hl'
+  ? `Turnaround Monday: when the rules want cash and ${signal} closes a Monday under the prior day's low, buy TQQQ. Hold it until ${signal} closes above the prior day's high, or until the rules want something else. Money still in SQQQ that Monday sits it out. Before ${signal}'s first real high and low, the prior close stands in.`
+  : `Turnaround Monday: when the rules want cash and ${signal} closes down on a Monday, buy TQQQ. Hold it until ${signal} first closes up, or until the rules want something else. Money still in SQQQ that Monday sits it out.`;
 STRATEGY_LIBRARY.push(...[
-  { n: 48, base: 44, name: 'NFCI veto + Turnaround Monday', signal: 'TQQQ',
-    reported: 'Your Turnaround Monday rule (the r/TQQQ post) trading NFCI veto’s idle cash, Q1 2010 to Q4 2025: 88.0% a year (max drawdown 60%, worst 12 months −35%) against 82.5% for NFCI veto alone (worst 12 months −47%) and 40.0% for buy & hold TQQQ. The same trades on random days inside the same cash stretches did as well in 4% of 500 draws. January to October 2026: up 136%, the same as NFCI veto alone' },
-  { n: 49, base: 45, name: 'Buy-back + Turnaround Monday', signal: 'SPY',
-    reported: 'Your Turnaround Monday rule (the r/TQQQ post) trading buy-back’s idle cash, with the Monday signal read on SPY, the best of TQQQ, QQQ and SPY, Q1 2010 to Q4 2025: 116.8% a year (max drawdown 49%, worst 12 months −26%) against 100.8% for buy-back alone (53%, −33%) and 40.0% for buy & hold TQQQ. The same trades on random days inside the same cash stretches never did as well in 500 draws. January to October 2026: up 56% against 51% for buy-back alone' },
-  { n: 50, base: 47, name: 'TQQQ vs QQQ + Turnaround Monday', signal: 'TQQQ',
-    reported: 'Your Turnaround Monday rule (the r/TQQQ post) trading the stretch strategy’s idle cash, Q1 2010 to Q4 2025: 144.0% a year (max drawdown 47%, worst 12 months −6%) against 138.2% for TQQQ vs QQQ stretch alone (−10%) and 40.0% for buy & hold TQQQ. The same trades on random days inside the same cash stretches did as well in 14% of 500 draws (tested on the earlier ceiling 90 and re-entry 30), so this gain could be luck. January to October 2026: up 153%, the same as the stretch alone' },
-].map(({ n, base, name, signal, reported }) => ({
+  { n: 48, base: 44, name: 'NFCI veto + Turnaround Monday', signal: 'TQQQ', levels: 'close',
+    reported: 'Your Turnaround Monday rule (the r/TQQQ post) trading NFCI veto’s idle cash, Q1 2010 to Q4 2025: 88.0% a year (max drawdown 60%, worst 12 months −35%) against 82.5% for NFCI veto alone (worst 12 months −47%) and 40.0% for buy & hold TQQQ. The same trades on random days inside the same cash stretches did as well in 4% of 500 draws. The r/TQQQ post’s rule, Monday close under the prior day’s low and exit over its high (a setting): 87.1%. January to October 2026: up 106%, the same as NFCI veto alone' },
+  { n: 49, base: 45, name: 'Buy-back + Turnaround Monday', signal: 'SPY', levels: 'close',
+    reported: 'Your Turnaround Monday rule (the r/TQQQ post) trading buy-back’s idle cash, with the Monday signal read on SPY, the best of TQQQ, QQQ and SPY, Q1 2010 to Q4 2025: 116.8% a year (max drawdown 49%, worst 12 months −28%) against 100.8% for buy-back alone (53%, −33%) and 40.0% for buy & hold TQQQ. The same trades on random days inside the same cash stretches never did as well in 500 draws. The r/TQQQ post’s rule, Monday close under the prior day’s low and exit over its high (a setting): 116.2% with a 53% drawdown. January to October 2026: up 42% against 38% for buy-back alone' },
+  { n: 50, base: 47, name: 'TQQQ vs QQQ + Turnaround Monday', signal: 'TQQQ', levels: 'hl',
+    reported: 'Your Turnaround Monday rule (the r/TQQQ post) trading the stretch strategy’s idle cash, Q1 2010 to Q4 2025, on the r/TQQQ post’s rule (Monday close under the prior day’s low, exit over its high): 151.1% a year (max drawdown 47%, worst 12 months −4%) against 138.2% for TQQQ vs QQQ stretch alone (−10%) and 40.0% for buy & hold TQQQ; on the prior close both ways, 144.0%. The same trades on random days inside the same cash stretches did as well in 14% of 500 draws (tested on the prior-close rule with the earlier ceiling 90 and re-entry 30), so this gain could be luck. January to October 2026: up 151%, the same as the stretch alone' },
+].map(({ n, base, name, signal, levels, reported }) => ({
   n, name, tag: 'picked', runnable: true,
-  rules: STRATEGY_LIBRARY.find(e => e.n === base).rules + '\n\n' + turnaroundMondayRules(signal),
+  rules: STRATEGY_LIBRARY.find(e => e.n === base).rules + '\n\n' + turnaroundMondayRules(signal, levels),
   here: '—', reported,
 })));
 

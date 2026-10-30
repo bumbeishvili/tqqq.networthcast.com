@@ -846,12 +846,9 @@ async function shareConfig() {
   // Worker sandbox (no DOM, storage, cookies, or network), so running someone
   // else's strategy is safe.
   if (activeCfgs.length) {
-    const lean = activeCfgs.map(c => {
-      const o = { type: c.type, name: c.name, params: c.params || {}, color: c.color };
-      // A library copy's stamp rides along so its edits survive the trip.
-      if (c.type === 'custom') { o.code = c.code || ''; o.desc = c.desc || ''; Object.assign(o, libraryStampOf(c)); }
-      return o;
-    });
+    // An unedited library strategy goes by its library number, an edited or
+    // own one with its code (sharedConfigOf in js/saved-configs.js).
+    const lean = activeCfgs.map(sharedConfigOf);
     // `scz` is the deflated payload (see packSharePayload) — a custom
     // strategy's source is long enough that the plain form blows the URL
     // length limit. `sc` stays as the fallback for browsers without

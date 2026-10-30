@@ -180,6 +180,15 @@ tickers = [
     ('SPXL',   'synthetic-spxl.tsv'),
     ('SQQQ',   'synthetic-sqqq.tsv'),
 ]
+# Daily highs and lows of the funds the Turnaround Monday rule can read (its
+# signal: a Monday close under the prior day's low buys, a close over the
+# prior day's high sells). Real bars only, from the same download as the
+# closes; js/data.js places them against the price file's close.
+high_low = {
+    'TQQQ': 'tqqq-hl.tsv',
+    'QQQ':  'qqq-hl.tsv',
+    'SPY':  'spy-hl.tsv',
+}
 
 
 def cell(value):
@@ -516,6 +525,19 @@ def write_price_tsv(path, prefix_pairs, real_df):
             f.write(f'{date_str}\t{render(date_str, cell(row["Close"]))}\n')
 
 
+def write_high_low_tsv(path, real_df):
+    """Write Date\\tHigh\\tLow\\tClose for every real yfinance bar (high_low
+    above). The bar's own close rides along so js/data.js places the high and
+    low against the price file's close as ratios, and a difference in dividend
+    adjustment between the two files cannot shift them (the first copies, from
+    Yahoo's chart API, sat up to 0.7% off the price files)."""
+    with open(path, 'w') as f:
+        f.write('Date\tHigh\tLow\tClose\n')
+        for date, row in real_df.iterrows():
+            date_str = date.strftime('%-m/%-d/%Y 16:00:00')
+            f.write(f'{date_str}\t{fmt_close(cell(row["High"]))}\t{fmt_close(cell(row["Low"]))}\t{fmt_close(cell(row["Close"]))}\n')
+
+
 def incremental_refresh():
     """Default daily-cron path. The synthesized pre-IPO prefix of each TSV
     is permanent and lives in the committed file; we only need to refresh
@@ -541,6 +563,9 @@ def incremental_refresh():
         write_price_tsv(path, prefix_pairs, real_df)
         last = real_df.index[-1].strftime('%Y-%m-%d')
         print(f"  {filename}: {len(prefix_pairs)} preserved + {len(real_df)} real, through {last}")
+        if ticker in high_low:
+            write_high_low_tsv(os.path.join(data_dir, high_low[ticker]), real_df)
+            print(f"  {high_low[ticker]}: {len(real_df)} real bars, through {last}")
 
     # NFCI (weekly) is a LIVE decision input for the credit-veto strategy, so
     # the cron keeps it current — unlike the historical rate files, which only
@@ -830,6 +855,10 @@ for ticker, filename in tickers:
         start = data.index[0].strftime('%Y-%m-%d')
         end = data.index[-1].strftime('%Y-%m-%d')
         print(f"  {filename}: {len(data)} rows, {start} to {end}")
+
+for ticker, filename in high_low.items():
+    write_high_low_tsv(os.path.join(data_dir, filename), real_by_ticker[ticker])
+    print(f"  {filename}: {len(real_by_ticker[ticker])} real bars")
 
 # === Write rate files =====================================================
 # Same TSV format as the price files so they're trivial to load with the same

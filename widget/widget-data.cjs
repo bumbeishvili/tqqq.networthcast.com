@@ -25,7 +25,7 @@ require('dns').setDefaultResultOrder('ipv4first');
 
 const ROOT = path.resolve(__dirname, '..');
 const LIB = require(path.join(ROOT, 'js', 'strategy-library-code.js'));
-const BUY_BACK = 45;   // library entry used when the share link carries no custom strategy
+const WIDGET_ENTRY = 50;   // the strategy the widget tracks: TQQQ vs QQQ + Turnaround Monday
 const SIGNAL_MONTHS = 6;
 const CACHE_DIR = path.join(os.homedir(), 'Library', 'Caches', 'tqqq-widget');
 // The files js/init.js loads, in the argument order of buildDaily (js/data.js).
@@ -89,8 +89,8 @@ function siteContext() {
   const lift = (file, names) => { const src = fs.readFileSync(path.join(ROOT, file), 'utf8'); return names.map(n => declaration(src, n)).join('\n'); };
   vm.runInContext([
     'let _customDataCache = null;',
-    lift('js/saved-configs.js', ['sanitize', 'asMod', 'evalMod', 'coerceCustomVal', 'buildCustomData', 'customTradeShare',
-      'CUSTOM_MINI_COLORS', 'LINE_COLOR_FLOORS', 'customLineColor']),
+    lift('js/saved-configs.js', ['sanitize', 'asMod', 'evalMod', 'coerceCustomVal', 'buildCustomData']),
+    lift('js/signal-chart.js', ['customTradeShare', 'CUSTOM_MINI_COLORS', 'LINE_COLOR_FLOORS', 'customLineColor']),
     lift('js/chart.js', ['CUSTOM_EVENT_STYLE', 'customActionKind']),
   ].join('\n'), ctx, { filename: 'widget-helpers' });
   return ctx;
@@ -110,15 +110,19 @@ function readShareLink(link) {
   const txJson = json(param('txz'), param('tx'));
   return { cfgs: cfgJson ? JSON.parse(cfgJson) : [], txRows: txJson ? JSON.parse(txJson) : null, entrySlider: url.searchParams.get('e') };
 }
-// The buy-back copy in the link, else its first custom strategy, else the
-// library defaults. A library copy runs the current library code, as the site
-// does for a shared copy (withCurrentCustomCode).
+// WIDGET_ENTRY, with the settings and colour of its copy in the link when the
+// link has one, else at the library's defaults; js/widget-page.js picks the
+// same. A library copy runs the current library code, as the site does for a
+// shared copy (withCurrentCustomCode).
 function pickStrategy(cfgs) {
-  const customs = (Array.isArray(cfgs) ? cfgs : []).filter(c => c && c.type === 'custom' && c.code);
-  const cfg = customs.find(c => LIB.libraryEntryOf(c.code) === BUY_BACK) || customs[0];
-  if (!cfg) return { name: null, color: '#e879f9', params: {}, code: LIB[BUY_BACK], fromLink: false };
-  const n = LIB.libraryEntryOf(cfg.code);
-  return { name: cfg.name || null, color: cfg.color || '#e879f9', params: cfg.params || {}, code: n != null && LIB[n] ? LIB[n] : LIB.upgradeSavedCode(cfg.code), fromLink: true };
+  // An unedited library strategy arrives by its number (`lib`, the site's
+  // sharedConfigOf), an edited one with its code.
+  const customs = (Array.isArray(cfgs) ? cfgs : [])
+    .map(c => (c && c.type === 'custom' && c.lib != null && LIB[c.lib] ? { ...c, code: LIB[c.lib] } : c))
+    .filter(c => c && c.type === 'custom' && c.code);
+  const cfg = customs.find(c => LIB.libraryEntryOf(c.code) === WIDGET_ENTRY);
+  if (!cfg) return { name: null, color: '#e879f9', params: {}, code: LIB[WIDGET_ENTRY], fromLink: false };
+  return { name: cfg.name || null, color: cfg.color || '#e879f9', params: cfg.params || {}, code: LIB[WIDGET_ENTRY], fromLink: true };
 }
 
 // ---- small helpers ------------------------------------------------------------
@@ -202,16 +206,19 @@ async function main() {
   const site = String(config.siteUrl || 'https://tqqq.networthcast.com').replace(/\/+$/, '');
   const warnings = [];
   const get = f => fetchCached(`${site}/data/${f}`, warnings);
-  const [priceTexts, nfciText, intradayText, updatedText] = await Promise.all([
+  const ctx = siteContext(), HL_FUNDS = vm.runInContext('HIGH_LOW_FUNDS', ctx);
+  const [priceTexts, nfciText, intradayText, updatedText, highLowTexts] = await Promise.all([
     Promise.all(PRICE_FILES.map(([, f]) => get(f))), get('nfci.tsv'), get('intraday/tqqq-today-1m.tsv'), get('last-updated.txt'),
+    Promise.all(HL_FUNDS.map(f => get(f + '-hl.tsv'))),
   ]);
 
-  const ctx = siteContext();
   ctx.__series = priceTexts.map(t => ctx.parseDataFile(t));
   ctx.__nfci = ctx.parseDataFile(nfciText);
+  ctx.__highLow = Object.fromEntries(HL_FUNDS.map((f, k) => [f, ctx.parseHighLowFile(highLowTexts[k])]));
   // The same globals js/init.js fills on page load.
   vm.runInContext(`daily = buildDaily(...__series);
     nfciDaily = buildNfciDaily(daily, __nfci);
+    highLowDaily = buildHighLowDaily(daily, __highLow);
     dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));`, ctx);
   const data = vm.runInContext('buildCustomData()', ctx);
   const lastIdx = data.dates.length - 1;
