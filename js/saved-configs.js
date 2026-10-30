@@ -2167,13 +2167,50 @@ function restoreBaseAfterEditing() {
 // "open sig tqqq" always starts from a clean canonical copy.
 function resetBaseControlsToCanonical(type) {
   if (!CONFIG_PARAM_IDS[type]) return;
-  applyParams(type, captureDefaultParams(type));
+  applyControlParams(type, captureDefaultParams(type));
+}
+// Set a panel's knob controls to `params` and bring the readouts that depend
+// on them up to date.
+function applyControlParams(type, params) {
+  applyParams(type, params);
   if (typeof refresh9sigDisplayLabels === 'function') refresh9sigDisplayLabels();
   if (typeof update9sigCashSpans === 'function') update9sigCashSpans();
   if (typeof updateSmaCashRateVisibility === 'function') updateSmaCashRateVisibility();
   if (typeof syncBgSmaWindowLabel === "function") syncBgSmaWindowLabel();
   if (typeof updateDeployAvailability === 'function') updateDeployAvailability();
   if (typeof window.refreshPreviewTriggers === 'function') window.refreshPreviewTriggers();
+}
+// What "Reset to default" returns a 9sig, SMA, Buy & Hold or Invested panel
+// to: a copy of a library preset goes back to the preset (found by its
+// library stamp, or by its name for a copy saved before presets were
+// stamped), anything else to the canonical defaults.
+function strategyDefaultParams(type, cfg) {
+  const defaults = captureDefaultParams(type);
+  if (!cfg || typeof STRATEGY_LIBRARY === 'undefined') return defaults;
+  const name = String(cfg.name || '').replace(/ \(\d+\)$/, '');
+  const entry = STRATEGY_LIBRARY.find(e => e.preset && e.preset.type === type
+    && (cfg.libraryN != null ? e.n === +cfg.libraryN : e.name === name));
+  return entry ? { ...defaults, ...entry.preset.params } : defaults;
+}
+// The saved strategy of this type open in the panel, or null for the base line.
+function savedConfigInPanel(type) {
+  return (window._editingConfigId && savedConfigs.find(c => c.id === window._editingConfigId && c.type === type)) || null;
+}
+// "Reset to default" on a 9sig, SMA, Buy & Hold or Invested panel. The render
+// that follows saves a saved strategy's new values (syncEditingConfig).
+function resetPanelToDefaults(type) {
+  applyControlParams(type, strategyDefaultParams(type, savedConfigInPanel(type)));
+  if (typeof saveSliders === 'function') saveSliders();
+  if (typeof render === 'function') render();
+}
+// "Reset to default" on a code strategy: cfg.params holds only the settings
+// the user changed, so emptying it puts each back to its declared default.
+function resetCustomToDefaults(cfgId) {
+  const cfg = savedConfigs.find(c => c.id === cfgId);
+  if (!cfg) return;
+  cfg.params = {};
+  persistSavedConfigs();
+  if (typeof render === 'function') render();
 }
 // Create a new (empty) custom strategy and open the build modal. The describe →
 // prompt → paste flow happens in the modal; the sidebar only shows the result.
@@ -2628,13 +2665,14 @@ function buildPanelSaveBarHtml(type) {
   if (!CONFIG_PARAM_IDS[type]) return '';
   // Editing a SAVED strategy auto-saves live (see syncEditingConfig) and can't be
   // forked — so it shows no save button. Only the main/base strategy offers
-  // "Save as strategy", which spins off a new saved strategy.
-  const editingSaved = window._editingConfigId
-    && savedConfigs.find(c => c.id === window._editingConfigId && c.type === type);
-  if (editingSaved) return '';
+  // "Save as strategy", which spins off a new saved strategy. Both get
+  // "Reset to default", greyed out while every setting is at its default.
+  const editingSaved = savedConfigInPanel(type);
+  const atDefaults = paramsEqual(captureParams(type), strategyDefaultParams(type, editingSaved), type);
   return `
     <div class="config-savebar">
-      <button type="button" class="config-savebar-btn primary" data-sc-savenew="${type}" title="Save the current settings as a new saved strategy">Save as strategy</button>
+      ${editingSaved ? '' : `<button type="button" class="config-savebar-btn primary" data-sc-savenew="${type}" title="Save the current settings as a new saved strategy">Save as strategy</button>`}
+      <button type="button" class="config-savebar-btn" data-sc-reset="${type}"${atDefaults ? ' disabled' : ''}>Reset to default</button>
     </div>`;
 }
 
@@ -3236,8 +3274,12 @@ function renderCustomPanelBody(cfgId) {
 
   // Generated controls from the strategy's `params` (what it declared configurable).
   // Each change is passed back into run() as p.<id>.
-  const controls = buildCustomControlsHtml(cfg, getCustomSchema(cfg));
-  if (controls) html += `<div class="strategy-panel-section-label" style="margin-top:14px">Settings</div>${controls}`;
+  const schema = getCustomSchema(cfg), controls = buildCustomControlsHtml(cfg, schema);
+  if (controls) {
+    const atDefaults = schema.every(sp => sp.id == null || String(customParamValue(cfg, sp)) === String(coerceCustomVal(sp, sp.default)));
+    html += `<div class="strategy-panel-section-label" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px"><span>Settings</span>`
+      + `<button type="button" class="settings-reset-btn" data-custom-reset="${_escHtml(cfg.id)}"${atDefaults ? ' disabled' : ''}>Reset to default</button></div>${controls}`;
+  }
 
   // The signal mini chart: the lines the strategy declares (`lines:` in its
   // code) drawn on their own scale in the panel, with per-line eye chips.
@@ -3458,6 +3500,10 @@ document.addEventListener('click', (e) => {
   // In-sidebar save bar.
   const savenew = e.target.closest('[data-sc-savenew]');
   if (savenew) { saveConfigFromType(savenew.getAttribute('data-sc-savenew')); return; }
+  const reset = e.target.closest('[data-sc-reset]');
+  if (reset) { resetPanelToDefaults(reset.getAttribute('data-sc-reset')); return; }
+  const resetCustom = e.target.closest('[data-custom-reset]');
+  if (resetCustom) { resetCustomToDefaults(resetCustom.getAttribute('data-custom-reset')); return; }
 
   // Parameters-panel config pills.
   const pill = e.target.closest('.saved-config-pill');

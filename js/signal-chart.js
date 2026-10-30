@@ -45,14 +45,16 @@ const MINI_CHART = { W: 320, H: 148, padL: 6 };
 // stress index) can name a group: each group draws as its own panel, with its
 // own scale, unit and gutter labels, stacked on the one time axis in the order
 // the groups first appear. Lines without a group form the first panel. A
-// panel's height follows its line count: the first panel is full height, a
-// later one a quarter of a full panel per line, from half (a reading and one
-// level) to full (fullAt lines or more); in the compact layout all are equal.
+// panel's height follows its line count: the first panel is full height; a
+// later one with a reading and one level (two lines, such as NFCI and its veto
+// or Turnaround Monday's prior close) is minShare of a full panel, and with
+// more lines a quarter per line up to full (fullAt lines or more); in the
+// compact layout all are equal.
 // The gap between two panels is in px, divided by the render scale, with a
 // divider `rule` px under the panel above; addH is the viewBox height a full
 // panel after the first adds to the side panel's chart, a smaller one its
 // share of it (a chart given an aspect keeps its height and shares it out).
-const MINI_PANEL = { gap: 16, rule: 3, addH: 67, fullAt: 4, minShare: 0.5 };
+const MINI_PANEL = { gap: 16, rule: 3, addH: 67, fullAt: 4, minShare: 0.25 };
 // Drawn points per pixel of plot width before a window is decimated.
 const MINI_POINTS_PER_PX = 2;
 // Pixel sizes, divided by the render scale when used: the trade strip above
@@ -95,7 +97,10 @@ function _miniAssetKey(held) {
 // so a re-render (resize, fresh log) preserves it.
 const MINI_ZOOM = { minSpanMs: 30 * 86400000, wheelK: 0.002, rightAnchorPx: 200 };
 const MINI_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const MINI_WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const _miniShortDate = t => { const d = new Date(t); return `${d.getUTCDate()} ${MINI_MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+// A trade's day for its tooltip: weekday, then the log's date ("Tue 21 Dec 21").
+const _miniTradeDay = dateStr => `${MINI_WEEKDAY[new Date(dateStr + 'T00:00:00Z').getUTCDay()]} ${fmtLogDate(dateStr)}`;
 window._miniZooms = window._miniZooms || {};   // cfg id → { t0, t1 }; absent = the full range
 // fmt() rounds sub-$1000 values to whole dollars, which turns the low end of
 // a log axis (TQQQ opened at $0.42) into a "$0" label — keep decimals on
@@ -279,7 +284,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   for (const s of all) s.panel = panelSpecs.indexOf(s.spec);
   // Each panel's height as a share of a full panel's (MINI_PANEL). The compact
   // layout keeps them equal: its end labels run a row per word and need the room.
-  const shares = panelSpecs.map((sp, p) => p === 0 || compact ? 1 : Math.min(1, Math.max(MINI_PANEL.minShare, sp.count / MINI_PANEL.fullAt)));
+  const shares = panelSpecs.map((sp, p) => p === 0 || compact ? 1 : sp.count <= 2 ? MINI_PANEL.minShare : Math.min(1, sp.count / MINI_PANEL.fullAt));
 
   const { W, padL } = MINI_CHART;
   const H = opts && opts.aspect ? Math.max(60, Math.round(W * opts.aspect)) : MINI_CHART.H + shares.slice(1).reduce((sum, f) => sum + f * MINI_PANEL.addH, 0);
@@ -397,17 +402,19 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   window._miniCharts[cfg.id] = chartData;
   window._miniChartHover = chartData;
 
-  // Horizontal gridlines per panel, labeled with fmt(): three log-spaced
-  // levels, or on a linear axis the round values a step apart, zero among
-  // them once the axis reaches below it.
+  // Horizontal gridlines per panel, labeled with fmt(): log-spaced levels, or
+  // on a linear axis the round values a step apart, zero among them once the
+  // axis reaches below it. As many as the panel's height fits with room for
+  // their labels, at most three: a quarter-height panel gets one.
   const titled = nPanels > 1;
   let grid = '';
   panels.forEach(P => {
     if (P.empty) return;
-    const step = P.linear ? _miniNiceStep(P.yHi - P.yLo, 3) : 0;
+    const fit = Math.max(1, Math.min(3, Math.floor((P.bottom - P.top) / (2.4 * 8 / k))));
+    const step = P.linear ? _miniNiceStep(P.yHi - P.yLo, fit) : 0;
     const levels = P.linear
       ? Array.from({ length: Math.floor(P.yHi / step) - Math.ceil(P.yLo / step) + 1 }, (_, i) => (Math.ceil(P.yLo / step) + i) * step).filter(v => v > 0 || P.yLo < 0)
-      : [0, 1, 2].map(g => Math.pow(10, P.yLo + (P.yHi - P.yLo) * (0.15 + 0.35 * g)));
+      : [[0.5], [0.25, 0.75], [0.15, 0.5, 0.85]][fit - 1].map(f => Math.pow(10, P.yLo + (P.yHi - P.yLo) * f));
     for (const lv of levels) {
       const y = _miniPanelY(P, lv).toFixed(1);
       grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(122,122,166,0.14)" stroke-width="0.5"/>
@@ -782,7 +789,7 @@ function _miniEventRows(group) {
   const listed = group.items.slice(0, MINI_EVENT.maxListed), unlisted = group.items.length - listed.length;
   return (group.items.length > 1 ? `<div class="mct-ev-head">${group.items.length} trades in this band</div>` : '')
     + listed.map(it => `<div class="mct-ev"><span class="mct-dot" style="background:${it.color};box-shadow:0 0 0 2px ${it.ring}${it.part ? `;clip-path:${_miniWedgeClip(it.part[0], it.part[1])}` : ''}"></span>`
-        + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${fmtLogDate(it.date)}</span>`
+        + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${_miniTradeDay(it.date)}</span>`
         + (it.note ? `<div class="mct-ev-note">${_escHtml(it.note)}</div>` : '') + `</div>`).join('')
     + (unlisted > 0 ? `<div class="mct-ev-head">and ${unlisted} more — zoom in to split this band</div>` : '');
 }

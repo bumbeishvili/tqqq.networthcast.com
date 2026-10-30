@@ -3113,8 +3113,11 @@
     font-size: 10px; color: var(--text-muted);
     text-transform: uppercase; letter-spacing: .04em; margin: 2px 0;
   }
+  /* A trade: what moved and its day on one line, the note wrapping under it
+     past max-width. */
   #mini-chart-tip .mct-ev {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    max-width: 280px;
     line-height: 1.6; padding: 2px 0 3px;
     border-bottom: 1px dashed rgba(134, 118, 255, 0.3);
     margin-bottom: 3px;
@@ -3983,7 +3986,9 @@
   }
   .strategy-panel-body .log-contrib-toggle input { cursor: pointer; margin: 0; }
   /* CSV download button in each transaction-log section header. */
-  .log-csv-btn {
+  /* Small buttons in a section header: a log's CSV download, a code
+     strategy's Reset to default. */
+  .log-csv-btn, .settings-reset-btn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
@@ -4000,11 +4005,12 @@
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s, background 0.15s;
   }
-  .log-csv-btn:hover {
+  .log-csv-btn:hover, .settings-reset-btn:hover:not(:disabled) {
     color: var(--accent-text);
     border-color: var(--accent);
     background: rgba(134, 118, 255, 0.08);
   }
+  .settings-reset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   /* Collapsed state: drop the monthly-contribution rows from the table. */
   .strategy-panel-body .quarter-table-wrap.hide-contrib tr.log-row-contrib { display: none; }
   /* Collapsed state: drop the ease-in "Buy more" slice rows. */
