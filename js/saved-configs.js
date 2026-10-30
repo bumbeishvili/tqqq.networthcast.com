@@ -723,7 +723,13 @@ fee) — describe those only if your strategy uses them unusually, and always de
 === LINES: the signal mini chart for your computed levels ===
 Every level a rule trades against goes on the chart: each entry line, each exit line, each switch or
 hedge level, and the center they are measured from. The user must see at a glance where the next
-trade fires, without working it out from the rule text. Declare them as lines:
+trade fires, without working it out from the rule text. Before you finish, go through your rules one
+by one and name the line each one's trades cross: a level on a price is a line in that price's
+group; a rule on anything else (an index such as data.nfci, a percent, a close against the prior
+close) gets a group of its own with that reading as its first line and its threshold as a line; a
+stop or target that exists only while a position is open is a line that logs null while flat. Only
+timing has no line (checked at month end, N days held, N closes in a row), and its trade note says
+which timing fired. A rule with no line is a bug. Declare them as lines:
   lines: [ { key: "assetPrice", label: "TQQQ price" }, { key: "median", label: "Median (250d)" },
            { key: "upper", label: "Sell above (+55%)" }, { key: "lower", label: "Buy back below (−28%)" } ]
 - "key" names a numeric field you add to EVERY log row once the value exists (median: 405.2 — the raw
@@ -753,7 +759,7 @@ trade fires, without working it out from the rule text. Declare them as lines:
   TQQQ's median and on TQQQ's lead over QQQ:
     { key: "assetPrice", label: "TQQQ price", group: "TQQQ price" }, { key: "median", label: "Median (250d)", group: "TQQQ price" },
     { key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: "TQQQ vs QQQ" }, { key: "ceiling", label: "Ceiling", unit: "%", group: "TQQQ vs QQQ" }
-  Max 6 lines per group, 3 groups.
+  Max 6 lines per group, 4 groups.
 
 === OWN MONEY: a rule that decides how much goes in (only when the rule says so) ===
 Most strategies trade the money the app hands them (p.initial, p.contributions). Some rules decide the
@@ -1052,7 +1058,7 @@ function customWorkerMain() {
   // median and its overextension threshold). Toggled from the strategy's
   // panel like 9sig's Holding/Target/Cash. Same sanitize-to-primitives rule
   // as readColumns; capped so a runaway declaration can't flood the chart:
-  // 6 lines a group, 3 groups (a group is a panel of its own, see LINES).
+  // 6 lines a group, 4 groups (a group is a panel of its own, see LINES).
   function readLines(raw) {
     if (!Array.isArray(raw)) return null;
     var out = [], perGroup = {}, groups = 0;
@@ -1068,7 +1074,7 @@ function customWorkerMain() {
         if (l.group != null && String(l.group).trim()) line.group = String(l.group).trim().slice(0, 40);
       }
       var g = line.group || '';
-      if (!(g in perGroup)) { if (groups >= 3) continue; perGroup[g] = 0; groups++; }
+      if (!(g in perGroup)) { if (groups >= 4) continue; perGroup[g] = 0; groups++; }
       if (perGroup[g] >= 6) continue;
       perGroup[g]++;
       out.push(line);

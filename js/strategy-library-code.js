@@ -2496,6 +2496,12 @@ ${WEEKLY_MONTH_END_SNIPPET}
           ...(state === "crashCash" ? { closesAbove: Math.min(bbArmed ? aboveBB : aboveRe, confirmDays) } : {}),
           ...(tr ? { slice: Math.round(sliceF * 100) + "%" } : {}),
           ...(dipF > 0 && state === "crashCash" && !bbArmed && lowRel * dipF < exitB ? { reentryLine: medPlot * (1 + Math.max(bbB, lowRel * dipF)) } : {}),
+          // The chart's line for the stint: the re-entry while sold out after a
+          // correction, the slice's stop while a slice is held (a slice is only
+          // bought under the buy-back line, where no re-entry line exists), in
+          // price as the other lines are drawn.
+          ...(dipF > 0 && state === "crashCash" && !bbArmed && lowRel * dipF < exitB ? { stintLine: medPlot * (1 + Math.max(bbB, lowRel * dipF)) }
+            : tr ? { stintLine: (mainRsi ? px[i] / sigM : 1) * trEntry * (1 - SLICE_STOP) } : {}),
           overLine: medPlot * (1 + over), exitLine: medPlot * (1 + exitB),
           ...(bbPct === 999 ? {} : { buyBackLine: medPlot * (1 + bbB) })
         });
@@ -2515,7 +2521,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
       { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)" }
     ];
     if (bbPct !== 999) chartLines.push({ key: "buyBackLine", label: "Buy-back (" + bbPct + "%)" });
-    if (dipF > 0) chartLines.push({ key: "reentryLine", label: "Re-entry" });
+    if (dipF > 0 || sliceF > 0) chartLines.push({ key: "stintLine", label: dipF > 0 && sliceF > 0 ? "Re-entry, slice stop" : dipF > 0 ? "Re-entry" : "Slice stop (-" + Math.round(SLICE_STOP * 100) + "%)" });
     if (inCrash && stintLen > 0) stints.push(stintLen);
     return {
       log: log,
@@ -2986,6 +2992,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // Every insertion point must appear exactly once in the base text; a base
 // edited so that one moves fails here at load instead of running half-wired.
 function withTurnaroundMonday(base, spec) {
+  // Its chart panels: the rule's own, and NFCI for its pause (the base's when it has one).
+  const panel = JSON.stringify("Turnaround Monday"), creditPanel = JSON.stringify(spec.creditPanel || "Credit stress (NFCI)");
   const once = (text, find, repl, what) => {
     const at = text.indexOf(find);
     if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withTurnaroundMonday(${spec.name}): ${what} must appear exactly once in the base`);
@@ -3031,20 +3039,32 @@ function withTurnaroundMonday(base, spec) {
       }
       return tmActive ? tmFund : "cash";
     };
-    // The chart panel a trade at this close is marked in: the rules' own (t);
-    // a Monday trade's is the first panel, since no line of its own fires it,
-    // and a sale on credit stress goes in the NFCI panel when there is one.
-    const tmPanel = (t) => !tmWhy ? t : tmPauseSale ? ${JSON.stringify(spec.creditPanel || null)} : null;
+    // The chart panel a trade at this close is marked in: the rules' own (t),
+    // Turnaround Monday's for a Monday trade, NFCI's for a sale on credit stress.
+    const TM_PANEL = ${panel}, TM_CREDIT = ${creditPanel}, tmPauseOn = !!(+p.tmNfci && data.nfci);
+    const tmPanel = (t) => !tmWhy ? t : tmPauseSale ? TM_CREDIT : TM_PANEL;
 `;
   const dashboard = `    // Turnaround Monday on the dashboard: its card, and today's call while a trade is open.
     const last = res.log[res.log.length - 1] || {};
     const tmF = (data[p.tmFund] ? p.tmFund : "tqqq").toUpperCase(), tmS = (data[p.tmSignal] ? p.tmSignal : "tqqq").toUpperCase();
     const tmOpen = p.tmOn !== false && !!last.tmTrade, tmIdle = last.held === "CASH";
     const nfE = data.nfci ? data.nfci[p.endIdx] : NaN, tmPausedNow = !!(+p.tmNfci && nfE > +p.tmNfci);
-    // No chart line of its own: what a trade compares with is the prior close,
-    // a new price every day that matters only on Mondays and during a trade, so
-    // a line for it would be broken most of the time. Its trades are marked in
-    // the chart's first panel (tmPanel).
+    // Its chart panel, and the pause beside the base's NFCI: on the veto's line
+    // when the levels agree, a line of its own when they do not, or in a panel
+    // of its own when the base has no NFCI. The base's lines name their panel
+    // now that there are several.
+    if (p.tmOn !== false) {
+      const lines = res.lines || [], first = lines.length ? lines[0].label : "";
+      for (const l of lines) if (!l.group) l.group = first;
+      lines.push({ key: "tmChange", label: tmS + " vs prior close", unit: "%", group: ${panel} }, { key: "tmPrior", label: "Prior close", unit: "%", group: ${panel} });
+      if (+p.tmNfci && data.nfci) {
+        const veto = lines.find(l => l.key === "nfciVeto"), vetoAt = (res.log.find(r => r.nfciVeto != null) || {}).nfciVeto;
+        if (lines.some(l => l.key === "nfci") && veto && vetoAt === +p.tmNfci) veto.label += ", Monday pause";
+        else if (lines.some(l => l.key === "nfci")) lines.push({ key: "tmPause", label: "Monday pause", unit: "num", group: ${creditPanel} });
+        else lines.push({ key: "tmNfciRead", label: "NFCI", unit: "num", group: ${creditPanel} }, { key: "tmPause", label: "Monday pause", unit: "num", group: ${creditPanel} });
+      }
+      res.lines = lines;
+    }
     if (res.signals) {
       res.signals.cards = (res.signals.cards || []).concat([{ label: "Turnaround Monday", icon: "clock", tone: tmOpen ? "good" : "",
         value: p.tmOn === false ? "Off" : tmOpen ? "In a trade" : tmPausedNow ? "Paused" : tmIdle ? "Waiting" : "Idle",
@@ -3063,7 +3083,15 @@ function withTurnaroundMonday(base, spec) {
   t = once(t, '  columns: [\n', '  columns: [\n    { key: "tmTrade", label: "Monday trade", tip: "The day an open Turnaround Monday trade was bought. Blank when none is open." },\n', 'the columns list');
   t = once(t, '  run(data, p) {\n', '  run(data, p) {\n    const res = (function (data, p) {\n', 'run(data, p)');
   t = once(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', 'the main loop');
-  t = once(t, '        log.push({\n', '        log.push({\n          tmTrade: tmActive ? tmSince : null,\n', 'the log row');
+  // On every row: the signal fund against the prior close, in percent, with the
+  // prior close at 0% (a Monday under it buys, the first close over it sells),
+  // NFCI and the pause level, and a Monday trade's panel.
+  t = once(t, '        log.push({\n', '        log.push({\n          tmTrade: tmActive ? tmSince : null,\n'
+    + '          tmChange: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? (data[tmSig][i] / data[tmSig][i - 1] - 1) * 100 : null,\n'
+    + '          tmPrior: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? 0 : null,\n'
+    + '          tmNfciRead: tmPauseOn && isFinite(data.nfci[i]) ? data.nfci[i] : null,\n'
+    + '          tmPause: tmPauseOn && isFinite(data.nfci[i]) ? +p.tmNfci : null,\n'
+    + '          ...(tmWhy ? { firedBy: tmPanel(null) } : {}),\n', 'the log row');
   t = once(t, '      if (i === p.endIdx) action = "end";\n', '      if (tmKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + tmWhy : tmWhy; }   // a sale the Monday trade held off\n      if (i === p.endIdx) action = "end";\n', 'the end-of-run action');
   for (const [find, repl, what] of spec.hooks) t = once(t, find, repl, what);
   if (!t.endsWith('\n  }\n}')) throw new Error(`withTurnaroundMonday(${spec.name}): the base must end with its run method`);
