@@ -3089,6 +3089,8 @@
   }
   #mini-chart-tip .mct-from { font-weight: 400; color: var(--text-muted); }
   #mini-chart-tip .mct-levels { color: var(--text-muted); }
+  /* The line nearest the cursor. */
+  #mini-chart-tip .mct-hot { font-weight: 700; color: var(--text); }
   #mini-chart-tip .mct-dot {
     width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
   }

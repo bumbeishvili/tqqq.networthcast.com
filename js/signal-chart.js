@@ -679,13 +679,15 @@ function _miniFmtReadout(unit, v) { return unit === '$' ? _miniFmtExact(v) : _mi
 // first line's part, `level` each bracketed one. A level's own closing
 // parenthesis is dropped ("Overextended (+55%)" reads "Overextended") so the
 // brackets never nest.
-function _miniPanelRows(data, items, value, level) {
+// `hot` is the line nearest the cursor: its entry is bold, a level in full ink.
+function _miniPanelRows(data, items, value, level, hot) {
+  const mark = (it, html) => (it === hot ? `<span class="mct-hot">${html}</span>` : html);
   return data.panels.map((_, p) => {
     const own = items.filter(it => it.panel === p);
     if (!own.length) return '';
-    const levels = own.slice(1).map(it => `${_escHtml(it.label.replace(/\s*\([^()]*\)$/, ''))} ${level(it)}`).join(' · ');
+    const levels = own.slice(1).map(it => mark(it, `${_escHtml(it.label.replace(/\s*\([^()]*\)$/, ''))} ${level(it)}`)).join(' · ');
     return `<div class="mct-row"><span class="mct-dot" style="background:${own[0].color}"></span>`
-      + `<span>${_escHtml(own[0].label)} ${value(own[0])}${levels ? ` <span class="mct-levels">(${levels})</span>` : ''}</span></div>`;
+      + `<span>${mark(own[0], `${_escHtml(own[0].label)} ${value(own[0])}`)}${levels ? ` <span class="mct-levels">(${levels})</span>` : ''}</span></div>`;
   }).join('');
 }
 function _miniHoverGroup(svg) {
@@ -1016,13 +1018,16 @@ document.addEventListener('mousemove', (e) => {
     return;
   }
 
-  // Plain hover: crosshair + values at the snapped day.
-  const cx = _miniXAt(data, anchor.t);
+  // Plain hover: crosshair + values at the snapped day. The line nearest the
+  // cursor, within the panel the cursor is over, is bold in the readout.
+  const cx = _miniXAt(data, anchor.t), cy = _miniCursorY(svg, e, data);
   const hits = data.series.map(s => ({ ...s, pt: _miniPtAt(s.pts, anchor.t) })).filter(h => h.pt);
+  const over = data.panels.findIndex(P => cy >= P.top && cy <= P.bottom);
+  const hot = hits.filter(h => h.panel === over).sort((a, b) => Math.abs(yAt(a, a.pt.v) - cy) - Math.abs(yAt(b, b.pt.v) - cy))[0] || null;
   g.innerHTML = `<line x1="${cx.toFixed(1)}" y1="${data.padT}" x2="${cx.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
     + hits.map(h => `<circle cx="${cx.toFixed(1)}" cy="${yAt(h, h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join('');
   tip.innerHTML = `<div class="mct-date">${fmtLogDate(anchor.d)}</div>`
-    + _miniPanelRows(data, hits, h => `<b>${_miniFmtReadout(h.unit, h.pt.v)}</b>`, h => _miniFmtReadout(h.unit, h.pt.v));
+    + _miniPanelRows(data, hits, h => `<b>${_miniFmtReadout(h.unit, h.pt.v)}</b>`, h => _miniFmtReadout(h.unit, h.pt.v), hot);
   _miniPlaceTip(tip, e);
   window._miniHoverActive = true;
 });
