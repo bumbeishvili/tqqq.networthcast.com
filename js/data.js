@@ -27,6 +27,29 @@ async function fetchDataText(file) {
 }
 async function loadSeries(file) { return parseDataFile(await fetchDataText(file)); }
 
+// When the data files were last refreshed: data/last-updated.txt, a UTC stamp
+// the update workflow writes in the same commit as the data it describes.
+async function loadDataFetchedAt() {
+  const text = (await fetchDataText('last-updated.txt')).trim();
+  const stamp = new Date(text);
+  if (Number.isNaN(stamp.getTime())) throw new Error('data/last-updated.txt holds no date: "' + text + '"');
+  return stamp;
+}
+
+// The data's latest row is a day still trading when the refresh that wrote it
+// came on that day, before the close in New York: its price is the price so
+// far, not a close. Returns the minutes from that refresh to the close, or
+// null when the row holds a close. A half day (a 1 pm close) still reads as
+// trading until the refresh after 4 pm.
+const MARKET_CLOSE_NY_MIN = 16 * 60;
+const NY_CLOCK = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+function minutesBeforeClose(lastDate, fetchedAt) {
+  if (!(fetchedAt instanceof Date)) return null;
+  const part = Object.fromEntries(NY_CLOCK.formatToParts(fetchedAt).map(p => [p.type, p.value]));
+  const nyDate = `${part.year}-${part.month}-${part.day}`, nyMin = +part.hour * 60 + +part.minute;
+  return nyDate === lastDate && nyMin < MARKET_CLOSE_NY_MIN ? MARKET_CLOSE_NY_MIN - nyMin : null;
+}
+
 // Daily highs and lows (data/<fund>-hl.tsv, written by update_data.py) of the
 // funds the Turnaround Monday rule can read. A row also carries its bar's own
 // close, and a high or low goes onto the price file's close of that day as a
@@ -154,6 +177,22 @@ function getWeek(dateStr) {
   const week = 1 + Math.round((diff - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7);
   return d.getUTCFullYear() + '-W' + String(week).padStart(2, '0');
 }
+
+// The rebalance periods by the names the 9sig period setting uses.
+const PERIOD_KEY_BY_NAME = { weekly: getWeek, monthly: getMonth, quarterly: getQuarter, yearly: getYear };
+// The weekday after a date: the next trading day as far as the calendar can
+// tell, for the day past the data's end.
+function nextWeekday(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00Z');
+  do d.setUTCDate(d.getUTCDate() + 1); while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+  return d.toISOString().slice(0, 10);
+}
+// Whether the data's latest day closes its period (a PERIOD_KEY_BY_NAME
+// function) by the calendar. The engines take the latest day as its period's
+// end either way; when it is not, a trade there is the one the rule would
+// make if the period ended today. A period whose last weekday is a holiday
+// is closed a day late, once the next row exists.
+function closesPeriod(dateStr, periodFn) { return periodFn(nextWeekday(dateStr)) !== periodFn(dateStr); }
 
 // Period-name → trading days per period. Used both for envelope-shift sizing
 // (how many "rebalance-day-of-period" variants to render) and for the simulate

@@ -1519,6 +1519,16 @@ function nineSigSignalChart() {
     else if (verb === 'RESET') rows.push({ ...day, action: 'sell', held: 'cash', value: r.total, note: `Spike reset: ${UL} doubled in a quarter, sold ${amount} back to 60%` });
     else rows.push(day);
   }
+  // The engine's last period ends on the data's latest day. Unless the
+  // calendar says that day closes the period, a rebalance there is the one it
+  // would make if the period ended today: projected, so the signal chart
+  // offers no action for it, and its note says so.
+  const period = (document.getElementById('select-9sig-period') || {}).value || 'quarterly';
+  const last = rows[rows.length - 1];
+  if (last.action && last.date === daily[daily.length - 1].date && !closesPeriod(last.date, PERIOD_KEY_BY_NAME[period])) {
+    last.projected = true;
+    last.note += `; the rebalance if the ${period.replace(/ly$/, '')} ended today`;
+  }
   return { lines, rows, home: null };
 }
 // Which signal lines a base line's chart shows; a saved strategy keeps its

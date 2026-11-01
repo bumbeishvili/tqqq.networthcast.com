@@ -38,22 +38,23 @@
   // covers. `cache: 'no-store'` because this specific file needs to always
   // reflect the live repo state, unlike the ?v=-busted JS/CSS assets which
   // only change on a real code deploy.
-  fetch('data/last-updated.txt', { cache: 'no-store' }).then(r => r.ok ? r.text() : null).then(stamp => {
+  loadDataFetchedAt().then(d => {
+    // Exposed so other "as of" stamps (e.g. a custom strategy's signal-metrics
+    // panel) can show the same fetch time without re-fetching or reformatting,
+    // and so the signal chart can tell a day still trading from a close
+    // (minutesBeforeClose); a chart drawn before the stamp arrived is redrawn.
+    window._dataFetchedAt = d;
+    redrawPanelSignalChart();
     const wrap = document.getElementById('data-through');
     const el = document.getElementById('data-fetched-at');
-    if (!wrap || !el || !stamp) return;
+    if (!wrap || !el) return;
     // The file is UTC ISO-8601; `new Date()` parses that reliably and its
     // getDate()/getHours()/etc. read back in the VIEWER'S local time zone —
     // that conversion is the whole point of fetching a UTC stamp.
-    const d = new Date(stamp.trim());
-    if (Number.isNaN(d.getTime())) return;
     const pad2 = (n) => n < 10 ? '0' + n : '' + n;
     el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
     wrap.removeAttribute('hidden');
-    // Exposed so other "as of" stamps (e.g. a custom strategy's signal-metrics
-    // panel) can show the same fetch time without re-fetching or reformatting.
-    window._dataFetchedAt = d;
-  }).catch(() => {});
+  }).catch(err => console.error(err));
   quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
   monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
   dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));

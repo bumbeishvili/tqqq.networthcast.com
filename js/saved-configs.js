@@ -698,11 +698,13 @@ action vocabulary (lowercase, exactly these words; the app draws chart markers a
   "ease-in"      — one slice of a deliberately phased buy (many small rows)
   "contribution" — money landed or left (a deposit, or a withdrawal with contributed < 0), no trade decision
   "hold"         — periodic snapshot, nothing traded
-  "end"          — final snapshot on p.endIdx
+  "end"          — final snapshot on p.endIdx, when nothing else happened that day
 You may append detail after the word ("buy — 3 of 5 slices"); the app matches on the leading word.
 
 When to push a row:
-- ALWAYS on p.startIdx ("start") and on p.endIdx ("end").
+- ALWAYS on p.startIdx ("start") and on p.endIdx ("end"). A trade on p.endIdx keeps its own word
+  ("buy", "sell"…): the data's last day is today, and the chart marks that trade as the action to take
+  at today's close. Write: if (i === p.endIdx && action === "hold") action = "end";
 - ALWAYS for every trade, every rebalance, and every ease-in slice.
 - ALWAYS for every day in p.contributions, deposit or withdrawal (action "contribution", contributed = that day's amount).
 - Plus at least one "hold" snapshot per month when p.weeklyDisplay is false/undefined — or per WEEK
@@ -715,6 +717,9 @@ When to push a row:
     var weekEnd = p.weeklyDisplay && (i === p.endIdx ||
       Math.floor((Date.parse(data.dates[i]) / 86400000 + 3) / 7) !== Math.floor((Date.parse(data.dates[i + 1]) / 86400000 + 3) / 7));
     if (contributed || action !== "hold" || monthEnd || weekEnd || p.dailyDisplay) { /* push the row */ }
+  Those two checks are for logging only. A rule that TRADES at a month or week end must not count
+  p.endIdx as one: past the last row, take the next weekday as the next date, so the latest day
+  trades only when it really ends the month or week.
 
 === COLUMNS: tooltips for your table ===
 Optional but strongly wanted: a top-level "columns" array describing your log's keys. Each entry is
@@ -933,7 +938,7 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
       const stockVal = shares * px;
       const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
       if (i === p.startIdx) action = "start";
-      if (i === p.endIdx) action = "end";
+      if (i === p.endIdx && action === "hold") action = "end";
       if (contributed !== 0 || monthEnd || p.dailyDisplay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,

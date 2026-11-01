@@ -28,6 +28,24 @@ const WEEKLY_MONTH_END_SNIPPET = `      // Whether today gets a plain "hold" row
           ? (i === p.endIdx || Math.floor((Date.parse(data.dates[i]) / 86400000 + 3) / 7) !== Math.floor((Date.parse(data.dates[i + 1]) / 86400000 + 3) / 7))
           : (i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month));`;
 
+// The last day's action: "end" when nothing else happened that day, else its
+// own word, so a trade on the data's latest day stays a trade and the charts
+// mark it as the action to take at that close (js/signal-chart.js).
+// withTurnaroundMonday finds the line by this text.
+const END_ROW_ACTION = `      if (i === p.endIdx && action === "hold") action = "end";`;
+
+// The trading day after row i, for a rule that fires on a calendar month's or
+// week's last trading day: the next row, or past the data's end the next
+// weekday. So the data's latest day counts as a period end only when it is
+// one, and a trade logged there is one to make at that close. When that
+// weekday is a holiday, the true last day fires once the next row exists.
+const NEXT_DATE_SNIPPET = `    const nextDate = (i) => {
+      if (i + 1 < data.dates.length) return data.dates[i + 1];
+      const d = new Date(data.dates[i] + "T00:00:00Z");
+      do d.setUTCDate(d.getUTCDate() + 1); while (d.getUTCDay() === 0 || d.getUTCDay() === 6);
+      return d.toISOString().slice(0, 10);
+    };`;
+
 // The Center line statistic every rolling-level strategy offers: the moving
 // average (the original arithmetic of the SMA strategies, unchanged) or the
 // median of the same trailing window. A real function so there is ONE readable
@@ -202,6 +220,7 @@ ${CENTER_LINE_SNIPPET}
     let cash = p.initial, sh = 0, invested = false, prevMonth = null;
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
     const lineName = W + "-day " + (useMed ? "median" : "average");
+${NEXT_DATE_SNIPPET}
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "";
@@ -214,10 +233,10 @@ ${SELL_SH_TO_COVER}
       const px = lev[i];
 ${WEEKLY_MONTH_END_SNIPPET}
       // The rule is monthly: it fires on the calendar month's last trading day
-      // (and the run's last day), whatever cadence the log is kept at. Until
-      // 2026-10 it keyed off the logging flag and so traded weekly whenever the
-      // chart window was under ten years.
-      const monthEnd = i === p.endIdx || data.dates[i + 1].slice(0, 7) !== month;
+      // (nextDate), whatever cadence the log is kept at. Until 2026-10 it keyed
+      // off the logging flag and so traded weekly whenever the chart window was
+      // under ten years; until 2026-11 it also fired on the run's last day.
+      const monthEnd = nextDate(i).slice(0, 7) !== month;
       if (monthEnd) {
         const sma = centerLine(sig, W, i, useMed), bull = sma > 0 && sig[i] > sma;
         if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: month end, QQQ closed above its " + lineName; }
@@ -650,6 +669,7 @@ ${CENTER_LINE_SNIPPET}
     const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
     const lineName = W + "-day " + (useMed ? "median" : "average");
     const dow = (ds) => new Date(Date.UTC(+ds.slice(0, 4), +ds.slice(5, 7) - 1, +ds.slice(8, 10))).getUTCDay();
+${NEXT_DATE_SNIPPET}
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
       let contributed = 0, action = "hold", note = "";
@@ -660,7 +680,7 @@ ${SELL_SH_TO_COVER}
       }
       prevMonth = month;
       const px = lev[i];
-      const weekEnd = i === p.endIdx || dow(data.dates[i + 1]) <= dow(data.dates[i]);
+      const weekEnd = dow(nextDate(i)) <= dow(data.dates[i]);   // the week's last trading day (nextDate)
       if (weekEnd) {
         const sma = centerLine(sig, W, i, useMed), bull = sma > 0 && sig[i] > sma;
         if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: week end, QQQ closed above its " + lineName; }
@@ -1055,7 +1075,7 @@ ${SELL_HELD_TO_COVER}
       const stockVal = shares * hp;
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
-      if (i === p.endIdx) action = "end";
+${END_ROW_ACTION}
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
@@ -1208,7 +1228,7 @@ ${SELL_HELD_TO_COVER}
       const stockVal = shares * px;
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
-      if (i === p.endIdx) action = "end";
+${END_ROW_ACTION}
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
@@ -1434,7 +1454,7 @@ ${SELL_HELD_TO_COVER_TRADED}
       const stockVal = shares * hp;
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
-      if (i === p.endIdx) action = "end";
+${END_ROW_ACTION}
       feesPaid += fee;
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
@@ -1766,7 +1786,7 @@ ${SELL_HELD_TO_COVER}
       const stockVal = shares * hp;
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
-      if (i === p.endIdx) action = "end";
+${END_ROW_ACTION}
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
@@ -2129,7 +2149,7 @@ ${SELL_HELD_TO_COVER}
       const stockVal = shares * hp;
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
-      if (i === p.endIdx) action = "end";
+${END_ROW_ACTION}
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
@@ -2485,7 +2505,7 @@ ${SELL_HELD_TO_COVER}
       const stockVal = shares * hp;
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) action = "start";
-      if (i === p.endIdx) action = "end";
+${END_ROW_ACTION}
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: data.dates[i], value: stockVal + cash, action: action, note: note,
@@ -2614,8 +2634,9 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // SQQQ run is 95 days, so the default limit is 126 days: identical from 2010
 // (135.8%), 8.6% a year from 1953 instead of 4.4%. 20 days is the best count
 // over the full history (14.9%) but costs 8 points from 2010 (scratchpad
-// r5/defence-grid.cjs). The two median defences, off by default, keep the
-// money over 1953-2009 but cost 25-35 points from 2010. A plain stop on the
+// r5/defence-grid.cjs). Two median defences (SQQQ only under the median, cash
+// far under it) kept the money over 1953-2009 but cost 25-35 points from 2010;
+// they were off by default and were removed on 2026-11-01. A plain stop on the
 // deep buy lost on both counts; the deep buy guard (25% under the buy price,
 // cash until TQQQ closes above its median, then bought again) and the credit
 // veto (NFCI above 0.4, the NFCI strategy's level) never fire after 2009, so
@@ -2648,8 +2669,6 @@ CODE[47] = `{
       [{ value: -9999, label: "Off" }].concat(Array.from({ length: 101 }, (_, k) => k - 70)) },
     { id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken.", default: "sqqq", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" } ] },
-    { id: "floorDays", label: "SQQQ for at most (days)", tip: "After this many days SQQQ is sold to cash, which waits for the re-entry.", default: 0, options: [
-      { value: 0, label: "No limit" }, 3,5,10,15,21,42,63] },
     { id: "reentryLead", label: "Back at lead ≥ (%)", tip: "TQQQ is bought again after the closes in a row below at or above this lead.", default: 23, options:
       Array.from({ length: 151 }, (_, k) => k - 70) },
     { id: "reentryCloses", label: "Closes in a row", tip: "How many closes in a row at or above the re-entry lead buy TQQQ again.", default: 3, options: [1,2,3,5,7,10] },
@@ -2662,10 +2681,6 @@ CODE[47] = `{
     { section: "Defence" },
     { id: "sqqqMaxDays", label: "SQQQ at most (days in a row)", tip: "After this many days in a row in SQQQ, hold cash until the rules want something else.", default: 126, options: [
       { value: 0, label: "No limit" }, 5, 10, 15, 20, 30, 42, 63, 100, 126, 252] },
-    { id: "sqqqNeedsDown", label: "SQQQ only under the median", tip: "The ceiling and the floor hold SQQQ only while TQQQ closes under its median, cash otherwise. The overextended line is not affected.", type: "bool", default: false, options: [
-      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
-    { id: "sellLine", label: "Cash under median (%)", tip: "Holds cash instead of TQQQ while TQQQ closes this far under its median.", default: 0, options:
-      [{ value: 0, label: "Off" }].concat(Array.from({ length: 41 }, (_, k) => -10 - k)) },
     { id: "deepGuard", label: "Deep buy guard (% under its price)", tip: "A deep buy that closes this far under its buy price goes to cash, and buys back once TQQQ closes above its median.", default: 25, options:
       [{ value: 0, label: "Off" }].concat(Array.from({ length: 36 }, (_, k) => 15 + k)) },
     { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "Cash instead of TQQQ while the Chicago Fed's credit stress index is above this. Each weekly reading is used a week later.", default: 0.4, options: [
@@ -2690,7 +2705,7 @@ CODE[47] = `{
     const years = p.lookbackYears || 2.25, L = Math.round(years * 252);
     const top = p.topLead == null ? 92 : +p.topLead, back = p.backLead == null ? 80 : +p.backLead, band = back < top;
     const topOn = top < 9999, topHold = p.topHold || "sqqq", topDays = +p.topDays || 0;
-    const floor = p.floorLead == null ? 10 : +p.floorLead, floorOn = floor > -9999, floorHold = p.floorHold || "sqqq", floorDays = +p.floorDays || 0;
+    const floor = p.floorLead == null ? 10 : +p.floorLead, floorOn = floor > -9999, floorHold = p.floorHold || "sqqq";
     const reentry = p.reentryLead == null ? 23 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 1);
     const deep = p.deepLead == null ? -30 : +p.deepLead, deepOn = floorOn && deep > -9999;
     const over = (+p.overPct || 0) / 100, OW = +p.overWindow || 250;
@@ -2708,11 +2723,11 @@ CODE[47] = `{
     }
     // TQQQ against its own median over the window, today's close included,
     // from the start of the memory window before the entry (when the
-    // overextended line or a median defence is on).
-    const sqMax = +p.sqqqMaxDays || 0, needsDown = !!p.sqqqNeedsDown, sellLine = (+p.sellLine || 0) / 100;
+    // overextended line or the deep buy guard is on).
+    const sqMax = +p.sqqqMaxDays || 0;
     const dGuard = (+p.deepGuard || 0) / 100, nfTh = +p.nfciVeto || 0;
     const rel = new Float64Array(n).fill(NaN);
-    if (over > 0 || needsDown || sellLine || dGuard) {
+    if (over > 0 || dGuard) {
       const win = [];
       const lb = (v) => { let lo = 0, hi = win.length; while (lo < hi) { const m = (lo + hi) >> 1; if (win[m] < v) lo = m + 1; else hi = m; } return lo; };
       for (let i = Math.max(0, p.startIdx - L - OW - 1); i <= p.endIdx; i++) {
@@ -2761,17 +2776,13 @@ CODE[47] = `{
     const decide = (i) => {
       const base = state === "deep" && deepPaused ? "cash" : state === "in" || state === "deep" ? "tqqq"
         : state === "top" ? (topHold === "sqqq" && topDays && days >= topDays ? "cash" : topHold)
-        : (floorHold === "sqqq" && floorDays && days >= floorDays ? "cash" : floorHold);
+        : floorHold;   // no limit of its own: the crash defence caps every SQQQ stretch (sqqqMaxDays)
       const overNow = over > 0 && rel[i] === rel[i] && rel[i] > over;
-      const downNow = needsDown && !(rel[i] < 0), cashNow = !!sellLine && rel[i] === rel[i] && rel[i] < sellLine;
       const vetoNow = !!nfTh && !!data.nfci && data.nfci[i] > nfTh;
       let w = overNow ? "sqqq" : base;
-      // Defences: the ceiling's and floor's SQQQ only in a downtrend, cash far under the median.
-      if (w === "sqqq" && !overNow && downNow) w = "cash";
-      if (w === "tqqq" && cashNow) w = "cash";
       // The credit veto: never above 0.4 since 2010 (0.31 in April 2020), 5.2 in 1974, 3.1 in 2008.
       if (w === "tqqq" && vetoNow) w = "cash";
-      return { w, base, overNow, downNow, cashNow, vetoNow };
+      return { w, base, overNow, vetoNow };
     };
     const wantNow = (i) => decide(i).w;
     // SQQQ at most sqMax days in a row, counted on the rules' choice; cash once past it.
@@ -2783,7 +2794,7 @@ CODE[47] = `{
     };
     // The panel a trade at this close is marked in: the rule whose reading
     // changed at it, the stretch rules' state first, then the +55% line, the
-    // credit veto and the median defences. The deep buy guard's release is a
+    // credit veto. The deep buy guard's release is a
     // close above the median; a trade none of them explains, the SQQQ limit,
     // goes with the rule that wanted SQQQ. Once a day, in order.
     let lastDec = null, prevDec = null;
@@ -2791,8 +2802,7 @@ CODE[47] = `{
       const d = decide(i), y = lastDec || d;
       prevDec = y; lastDec = d;
       return releasedAt === i ? PRICE : d.base !== y.base ? LEAD : d.overNow !== y.overNow ? PRICE
-        : d.vetoNow !== y.vetoNow ? CREDIT : d.downNow !== y.downNow || d.cashNow !== y.cashNow ? PRICE
-        : d.overNow ? PRICE : LEAD;
+        : d.vetoNow !== y.vetoNow ? CREDIT : d.overNow ? PRICE : LEAD;
     };
     const lbl = (id) => id === "cash" ? "cash" : id.toUpperCase();
     const zoneOf = (s) => ({ in: "between the floor and the ceiling", top: "stepped aside at the ceiling", brk: "under the floor", deep: "bought back far behind" })[s];
@@ -2804,12 +2814,9 @@ CODE[47] = `{
     // A defence that put the money in cash is the whole reason for it.
     const defenceWhy = (i) => capped() ? capWhy(i)
       : state === "deep" && deepPaused ? "the deep buy guard, TQQQ fell " + Math.round(dGuard * 100) + "% under its buy price; back once it closes above its median"
-      : nfTh && data.nfci && data.nfci[i] > nfTh && (state === "in" || state === "deep") ? "credit veto, NFCI " + data.nfci[i].toFixed(2) + " above " + nfTh
-      : sellLine && rel[i] < sellLine && (state === "in" || state === "deep") ? "TQQQ " + Math.abs(rel[i] * 100).toFixed(0) + "% under its median, past the cash line"
-      : needsDown && !(rel[i] < 0) && (state === "top" || state === "brk") ? "TQQQ above its median, so no SQQQ" : "";
+      : nfTh && data.nfci && data.nfci[i] > nfTh && (state === "in" || state === "deep") ? "credit veto, NFCI " + data.nfci[i].toFixed(2) + " above " + nfTh : "";
     const cashWhy = (i) => defenceWhy(i) ? defenceWhy(i) + "; "
-      : state === "top" && topHold === "sqqq" && topDays && days >= topDays ? "SQQQ held for its " + topDays + " days; "
-      : state === "brk" && floorHold === "sqqq" && floorDays && days >= floorDays ? "SQQQ held for its " + floorDays + " days; " : "";
+      : state === "top" && topHold === "sqqq" && topDays && days >= topDays ? "SQQQ held for its " + topDays + " days; " : "";
     // The rules' levels as TQQQ prices for a day's close: a close past one is
     // the trade it names. A lead threshold x is the close that puts TQQQ x%
     // ahead of QQQ over the lookback.
@@ -2833,7 +2840,6 @@ CODE[47] = `{
       if (deepOn && state === "brk") add("Deep buy (" + leadLbl(deep) + ")", atLead(i, deep), "down", "buy", "a close under it buys TQQQ");
       if (dGuard && state === "deep" && !deepPaused) add("Deep buy guard (−" + Math.round(dGuard * 100) + "%)", deepPx * (1 - dGuard), "down", holdsT ? "sell" : "", "a close under it sells to cash");
       if (dGuard && state === "deep" && deepPaused && med) add(OW + "-day median", med, "up", "buy", "a close above it buys the deep buy back");
-      if (sellLine && med && (state === "in" || state === "deep")) add("Cash line (" + Math.round(sellLine * 100) + "%)", med * (1 + sellLine), "down", holdsT ? "sell" : "", "a close under it sells to cash");
       return { med, out };
     };
     // A day's chart row for three panels: TQQQ's price with its median and the
@@ -2852,7 +2858,6 @@ CODE[47] = `{
         assetPrice: T[i] > 0 ? T[i] : null,
         medianPrice: med,
         overLine: over > 0 && med ? med * (1 + over) : null,
-        cashLine: sellLine && med ? med * (1 + sellLine) : null,
         ceilingLine: topOn && led ? (state === "top" && band ? back : top) : null,
         floorLine: floorOn && led ? (out ? reentry : floor) : null,
         deepLine: deepOn && led ? (state === "deep" && dGuard && !deepPaused ? (deepPx * (1 - dGuard) / atLead(i, 0) - 1) * 100 : deep) : null,
@@ -2871,8 +2876,6 @@ CODE[47] = `{
       : w === "cash" && defenceWhy(i) ? defenceWhy(i)
       : lifted("overNow") ? "TQQQ closed " + (rel[i] * 100).toFixed(0) + "% above its " + OW + "-day median, back under the +" + Math.round(over * 100) + "% line; " + (w === "cash" ? cashWhy(i) : "") + stretchNow(i)
       : lifted("vetoNow") && w === "tqqq" ? "credit veto lifted, NFCI " + data.nfci[i].toFixed(2) + " at or under " + nfTh + "; " + stretchNow(i)
-      : lifted("cashNow") && w === "tqqq" ? "TQQQ back above the cash line; " + stretchNow(i)
-      : lifted("downNow") && w === "sqqq" ? "TQQQ back under its median, so SQQQ again; " + stretchNow(i)
       : (w === "cash" ? cashWhy(i) : "") + (why || "TQQQ is " + leadTxt(lead[i])) +
         (whyIdx >= 0 && whyIdx < p.startIdx ? "; that was on " + dates[whyIdx] + ", before the entry" : "");
     // Memory before the entry: the rules run over the lookback window before
@@ -2926,7 +2929,7 @@ ${SELL_HELD_TO_COVER}
       const hp = priceOf(held, i), holdingsValue = shares * hp;
 ${WEEKLY_MONTH_END_SNIPPET}
       if (i === p.startIdx) { action = "start"; if (!note) note = "Holding " + lbl(held) + ": " + reason(i, held); }
-      if (i === p.endIdx) action = "end";
+${END_ROW_ACTION}
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
           date: dates[i], value: holdingsValue + cash, action: action, note: note,
@@ -2947,9 +2950,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
     const zone = zoneOf(state);
     // The chart's panels (chartRow, the names at decide), each with the rules that read its first line.
     const lines = [{ key: "assetPrice", label: "TQQQ price", group: PRICE }];
-    if (over > 0 || needsDown || sellLine || dGuard) lines.push({ key: "medianPrice", label: OW + "-day median", group: PRICE });
+    if (over > 0 || dGuard) lines.push({ key: "medianPrice", label: OW + "-day median", group: PRICE });
     if (over > 0) lines.push({ key: "overLine", label: "Overextended (+" + Math.round(over * 100) + "%)", group: PRICE });
-    if (sellLine) lines.push({ key: "cashLine", label: "Cash line (" + Math.round(sellLine * 100) + "%)", group: PRICE });
     lines.push({ key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: LEAD });
     if (topOn) lines.push({ key: "ceilingLine", label: "Ceiling", unit: "%", group: LEAD });
     if (floorOn) lines.push({ key: "floorLine", label: "Floor", unit: "%", group: LEAD });
@@ -2995,15 +2997,17 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // high (data.<fund>High / Low, js/data.js). Until 2026-10-30 it ran on the
 // prior close both ways, as the user's first code did, and a reader of the
 // user's post pointed it out. Each entry ships the better of the two on Q1
-// 2010 - Q4 2025 (spec.levels, the other is the tmLevels setting): #50 the
-// post's rule, 151.1% against 144.0%; #48 and #49 the prior close, 88.0
-// against 87.1% and 116.8 against 116.2% with a 49% drawdown instead of 53%
-// (scratchpad ohlc/three-monday.cjs). The prior close stands in where the
-// fund has no real high or low yet.
+// 2010 - Q4 2025 (spec.levels): #50 the post's rule, 151.1% against 144.0%;
+// #48 and #49 the prior close, 88.0 against 87.1% and 116.8 against 116.2%
+// with a 49% drawdown instead of 53% (scratchpad ohlc/three-monday.cjs). The
+// prior close stands in where the fund has no real high or low yet. The rule
+// has no settings since 2026-11-01 (the user: "it's assumed already"): each
+// entry runs its own signal fund and levels, buys TQQQ, and never pauses (the
+// NFCI pause had been Off; NFCI has not been above 0.4 since 2010).
 //
 // Each entry is its base strategy's own text with these additions, made at
 // load, so a change to the base reaches the combination too:
-//   - the Turnaround Monday settings before Execution & costs, and a column;
+//   - a column;
 //   - the rule run on the signal fund every day, before the main loop;
 //   - a hook on the line where the base decides what to hold: while the base
 //     wants cash, an open Turnaround Monday trade holds the fund instead, and
@@ -3016,35 +3020,27 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // Every insertion point must appear exactly once in the base text; a base
 // edited so that one moves fails here at load instead of running half-wired.
 function withTurnaroundMonday(base, spec) {
-  // Its chart panels: the rule's own, and NFCI for its pause (the base's when it has one).
-  const panel = JSON.stringify("Turnaround Monday"), creditPanel = JSON.stringify(spec.creditPanel || "Credit stress (NFCI)");
+  // Its chart panel, and the rule as the entry fixes it: the fund whose closes
+  // it reads, and whether it compares them with the prior day's low and high
+  // or with the prior close.
+  const panel = JSON.stringify("Turnaround Monday"), sigName = spec.signal.toUpperCase(), hl = spec.levels === "hl";
+  // The panel's level lines, on the same scale as the signal fund's move: the
+  // prior day's high and low, or the prior close.
+  const levelLines = hl
+    ? `{ key: "tmHighPct", label: "Prior day's high", unit: "%", group: ${panel} }, { key: "tmLowPct", label: "Prior day's low", unit: "%", group: ${panel} }`
+    : `{ key: "tmLowPct", label: "Prior close", unit: "%", group: ${panel} }`;
   const once = (text, find, repl, what) => {
     const at = text.indexOf(find);
     if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withTurnaroundMonday(${spec.name}): ${what} must appear exactly once in the base`);
     return text.slice(0, at) + repl + text.slice(at + find.length);
   };
-  const params = `    { section: "Turnaround Monday — trade the idle cash" },
-    { id: "tmOn", label: "Trade down Mondays while in cash", tip: "While the rules above hold cash, buy at a Monday close under the prior day's low and sell at the first close above the prior day's high.", type: "bool", default: true, options: [
-      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
-    { id: "tmLevels", label: "Compared with", tip: "Prior day's low and high is the r/TQQQ post's rule. Prior close buys on any down Monday and sells on the first up close.", default: "${spec.levels}", options: [
-      { value: "hl", label: "Prior day's low and high" }, { value: "close", label: "Prior close" } ] },
-    { id: "tmSignal", label: "Monday signal read on", tip: "The fund whose prices decide when a trade starts and ends.", default: "${spec.signal}", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
-    { id: "tmFund", label: "Fund bought", tip: "What a trade holds, paid for with the idle cash.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" } ] },
-    { id: "tmNfci", label: "No trades while NFCI above", tip: "No Monday trades while the Chicago Fed's credit stress index is above this, and an open one is sold.", default: 0, options: [
-      { value: 0, label: "Off" }, 0.4, 0.75, 1] },
-`;
-  const setup = `    // Turnaround Monday on the signal fund, run every day on its own. A trade
-    // it opens at a Monday close while the rules want cash buys the fund; it
-    // ends at the rule's exit or as soon as the rules want anything else.
-    const tmOn = p.tmOn !== false, tmFund = data[p.tmFund] ? p.tmFund : "tqqq";
-    const tmSig = data[p.tmSignal] ? p.tmSignal : "tqqq", tmSigName = tmSig.toUpperCase();
-    // A Monday close under the prior day's low buys, the first close over the
-    // prior day's high sells. With "Prior close", or on a day before the fund's
-    // first real high and low (TQQQ before 2010-02-11), the prior close stands in.
-    const tmHL = p.tmLevels !== "close", tmHigh = data[tmSig + "High"], tmLow = data[tmSig + "Low"];
-    if (tmOn && tmHL && !(tmHigh && tmLow)) throw new Error("Turnaround Monday needs " + tmSigName + "'s daily highs and lows (data." + tmSig + "High, data." + tmSig + "Low)");
+  const setup = `    // Turnaround Monday on ${sigName}, run every day on its own. A trade it
+    // opens at a Monday close while the rules want cash buys TQQQ; it ends at
+    // the rule's exit or as soon as the rules want anything else.
+    const tmFund = "tqqq", tmSig = "${spec.signal}", tmSigName = "${sigName}";
+    // ${hl ? "A Monday close under the prior day's low buys, the first close over the prior day's high sells. Before the fund's first real high and low (TQQQ before 2010-02-11), the prior close stands in." : "A Monday close under the prior close buys, the first close over it sells."}
+    const tmHL = ${hl}, tmHigh = data[tmSig + "High"], tmLow = data[tmSig + "Low"];
+    if (tmHL && !(tmHigh && tmLow)) throw new Error("Turnaround Monday needs " + tmSigName + "'s daily highs and lows (data." + tmSig + "High, data." + tmSig + "Low)");
     const tmLevel = (arr, i) => (tmHL && arr[i] > 0 ? arr[i] : data[tmSig][i]);
     const tmLevelName = (arr, i, word) => (tmHL && arr[i] > 0 ? "the prior day's " + word : "the prior close");
     const tmIn = new Uint8Array(p.endIdx + 1);   // 1 = the rule is in a trade at that close
@@ -3054,19 +3050,13 @@ function withTurnaroundMonday(base, spec) {
       if (c > 0 && prev > 0) { if (inT) { if (c > tmLevel(tmHigh, i - 1)) inT = false; } else if (wd === 1 && c < tmLevel(tmLow, i - 1)) inT = true; }
       tmIn[i] = inT ? 1 : 0;
     }
-    let tmActive = false, tmSince = "", tmWhy = "", tmKept = false, tmPauseSale = false;
-    const tmStress = (i) => !!(+p.tmNfci && data.nfci && data.nfci[i] > +p.tmNfci);
+    let tmActive = false, tmSince = "", tmWhy = "", tmKept = false;
     // What to hold today: the rules' choice, or the fund while a trade opened in their cash is open.
     // A trade starts at the Monday close on money in cash, or on the fund the rules are selling
     // that close (kept instead of sold); money in another fund would need a two-day switch.
     const tmHold = (i, want) => {
-      tmWhy = ""; tmKept = false; tmPauseSale = false;
-      // Credit stress can pause it (tmNfci, Off by default, the user's call on
-      // 2026-10-30). NFCI has not been above 0.4 since 2010, so 2010-2025 is the
-      // same either way. Before that, trading through it won in 2007-09 (+373%
-      // over the pause for #50) and lost in 1973-75 (-76%) and 1978-83 (-71%):
-      // 18.2%/yr from 1953 against 20.2% paused (scratchpad r7/tm-pause-check.cjs).
-      if (!tmOn || want !== "cash" || tmStress(i)) { if (tmActive && tmStress(i)) { tmWhy = "Turnaround Monday paused, NFCI " + data.nfci[i].toFixed(2) + " above " + p.tmNfci; tmPauseSale = true; } tmActive = false; return want; }
+      tmWhy = ""; tmKept = false;
+      if (want !== "cash") { tmActive = false; return want; }
       if (tmActive && !tmIn[i]) { tmActive = false; tmWhy = "Turnaround Monday exit, " + tmSigName + " closed above " + tmLevelName(tmHigh, i - 1, "high"); }
       else if (!tmActive && (held === "cash" || held === tmFund) && tmIn[i] && !(i > p.startIdx && tmIn[i - 1])) {
         tmActive = true; tmSince = data.dates[i]; tmKept = held === tmFund;
@@ -3076,45 +3066,31 @@ function withTurnaroundMonday(base, spec) {
       }
       return tmActive ? tmFund : "cash";
     };
-    // The chart panel a trade at this close is marked in: the rules' own (t),
-    // Turnaround Monday's for a Monday trade, NFCI's for a sale on credit stress.
-    const TM_PANEL = ${panel}, TM_CREDIT = ${creditPanel}, tmPauseOn = !!(+p.tmNfci && data.nfci);
-    const tmPanel = (t) => !tmWhy ? t : tmPauseSale ? TM_CREDIT : TM_PANEL;
+    // The chart panel a trade at this close is marked in: Turnaround Monday's
+    // for a Monday trade, the rules' own (t) otherwise.
+    const TM_PANEL = ${panel};
+    const tmPanel = (t) => (tmWhy ? TM_PANEL : t);
 `;
   const dashboard = `    // Turnaround Monday on the dashboard: its card, and today's call while a trade is open.
     const last = res.log[res.log.length - 1] || {};
-    const tmF = (data[p.tmFund] ? p.tmFund : "tqqq").toUpperCase(), tmS = (data[p.tmSignal] ? p.tmSignal : "tqqq").toUpperCase();
-    const tmOpen = p.tmOn !== false && !!last.tmTrade, tmIdle = last.held === "CASH";
-    const tmUp = p.tmLevels !== "close" ? "the prior day's high" : "the prior close", tmDown = p.tmLevels !== "close" ? "the prior day's low" : "the prior close";
-    const nfE = data.nfci ? data.nfci[p.endIdx] : NaN, tmPausedNow = !!(+p.tmNfci && nfE > +p.tmNfci);
-    // Its chart panel, and the pause beside the base's NFCI: on the veto's line
-    // when the levels agree, a line of its own when they do not, or in a panel
-    // of its own when the base has no NFCI. The base's lines name their panel
-    // now that there are several.
-    if (p.tmOn !== false) {
-      const lines = res.lines || [], first = lines.length ? lines[0].label : "";
-      for (const l of lines) if (!l.group) l.group = first;
-      // Panels stack from the most trades to the fewest, so the Monday panel
-      // goes second: since 2010 its trades fall between the base's main panel
-      // and the rest (#50: price 186, Monday 146, lead 104, NFCI none;
-      // scratchpad r7/panel-trades.cjs).
-      const afterFirst = lines.findIndex(l => l.group !== lines[0].group);
-      const hl = p.tmLevels !== "close";
-      lines.splice(afterFirst < 0 ? lines.length : afterFirst, 0, { key: "tmChange", label: tmS + " vs prior close", unit: "%", group: ${panel} },
-        ...(hl ? [{ key: "tmHighPct", label: "Prior day's high", unit: "%", group: ${panel} }, { key: "tmLowPct", label: "Prior day's low", unit: "%", group: ${panel} }]
-          : [{ key: "tmLowPct", label: "Prior close", unit: "%", group: ${panel} }]));
-      if (+p.tmNfci && data.nfci) {
-        const veto = lines.find(l => l.key === "nfciVeto"), vetoAt = (res.log.find(r => r.nfciVeto != null) || {}).nfciVeto;
-        if (lines.some(l => l.key === "nfci") && veto && vetoAt === +p.tmNfci) veto.label += ", Monday pause";
-        else if (lines.some(l => l.key === "nfci")) lines.push({ key: "tmPause", label: "Monday pause", unit: "num", group: ${creditPanel} });
-        else lines.push({ key: "tmNfciRead", label: "NFCI", unit: "num", group: ${creditPanel} }, { key: "tmPause", label: "Monday pause", unit: "num", group: ${creditPanel} });
-      }
-      res.lines = lines;
-    }
+    const tmF = "TQQQ", tmS = "${sigName}";
+    const tmOpen = !!last.tmTrade, tmIdle = last.held === "CASH";
+    const tmUp = "${hl ? "the prior day's high" : "the prior close"}", tmDown = "${hl ? "the prior day's low" : "the prior close"}";
+    // Its chart panel. The base's lines name their panel now that there are several.
+    const lines = res.lines || [], first = lines.length ? lines[0].label : "";
+    for (const l of lines) if (!l.group) l.group = first;
+    // Panels stack from the most trades to the fewest, so the Monday panel
+    // goes second: since 2010 its trades fall between the base's main panel
+    // and the rest (#50: price 186, Monday 146, lead 104, NFCI none;
+    // scratchpad r7/panel-trades.cjs).
+    const afterFirst = lines.findIndex(l => l.group !== lines[0].group);
+    lines.splice(afterFirst < 0 ? lines.length : afterFirst, 0, { key: "tmChange", label: tmS + " close vs prior close", unit: "%", group: ${panel} },
+      ${levelLines});
+    res.lines = lines;
     if (res.signals) {
       res.signals.cards = (res.signals.cards || []).concat([{ label: "Turnaround Monday", icon: "clock", tone: tmOpen ? "good" : "",
-        value: p.tmOn === false ? "Off" : tmOpen ? "In a trade" : tmPausedNow ? "Paused" : tmIdle ? "Waiting" : "Idle",
-        sub: tmOpen ? tmF + " since " + last.tmTrade + ", sells at the first close above " + tmUp : tmPausedNow ? "credit stress, NFCI " + nfE.toFixed(2) + " above " + p.tmNfci
+        value: tmOpen ? "In a trade" : tmIdle ? "Waiting" : "Idle",
+        sub: tmOpen ? tmF + " since " + last.tmTrade + ", sells at the first close above " + tmUp
           : tmIdle ? "buys " + tmF + " at a Monday close under " + tmDown : "the rules hold " + last.held,
         tip: "Trades the idle cash: buys " + tmF + " when " + tmS + " closes a Monday under " + tmDown + ", sells at the first close above " + tmUp + "." }]);
       if (tmOpen && res.signals.decision) {
@@ -3125,33 +3101,30 @@ function withTurnaroundMonday(base, spec) {
     }
 `;
   let t = base.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
-  t = once(t, '    { section: "Execution & costs" },', params + '    { section: "Execution & costs" },', 'the Execution & costs section');
   t = once(t, '  columns: [\n', '  columns: [\n    { key: "tmTrade", label: "Monday trade", tip: "The day an open Turnaround Monday trade was bought. Blank when none is open." },\n', 'the columns list');
   t = once(t, '  run(data, p) {\n', '  run(data, p) {\n    const res = (function (data, p) {\n', 'run(data, p)');
   t = once(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', 'the main loop');
   // On every row: the signal fund against the prior close, in percent, and the
   // prior day's high and low on the same scale (a Monday close under the low
   // buys, the first close over the high sells; both 0% where the prior close
-  // stands in), NFCI and the pause level, and a Monday trade's panel.
+  // stands in), and a Monday trade's panel.
   t = once(t, '        log.push({\n', '        log.push({\n          tmTrade: tmActive ? tmSince : null,\n'
-    + '          tmChange: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? (data[tmSig][i] / data[tmSig][i - 1] - 1) * 100 : null,\n'
-    + '          tmHighPct: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmHigh, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
-    + '          tmLowPct: tmOn && i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmLow, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
-    + '          tmNfciRead: tmPauseOn && isFinite(data.nfci[i]) ? data.nfci[i] : null,\n'
-    + '          tmPause: tmPauseOn && isFinite(data.nfci[i]) ? +p.tmNfci : null,\n'
+    + '          tmChange: i > 0 && data[tmSig][i - 1] > 0 ? (data[tmSig][i] / data[tmSig][i - 1] - 1) * 100 : null,\n'
+    + '          tmHighPct: i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmHigh, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
+    + '          tmLowPct: i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmLow, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
     + '          ...(tmWhy ? { firedBy: tmPanel(null) } : {}),\n', 'the log row');
-  t = once(t, '      if (i === p.endIdx) action = "end";\n', '      if (tmKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + tmWhy : tmWhy; }   // a sale the Monday trade held off\n      if (i === p.endIdx) action = "end";\n', 'the end-of-run action');
+  t = once(t, END_ROW_ACTION + '\n', '      if (tmKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + tmWhy : tmWhy; }   // a sale the Monday trade held off\n' + END_ROW_ACTION + '\n', 'the end-of-run action');
   for (const [find, repl, what] of spec.hooks) t = once(t, find, repl, what);
   if (!t.endsWith('\n  }\n}')) throw new Error(`withTurnaroundMonday(${spec.name}): the base must end with its run method`);
   return t.slice(0, -'\n  }\n}'.length) + '\n    })(data, p);\n' + dashboard + '    return res;\n  }\n}';
 }
-CODE[48] = withTurnaroundMonday(CODE[44], { name: "NFCI veto + Turnaround Monday", signal: "tqqq", levels: "close", creditPanel: "Credit stress (NFCI)", hooks: [
+CODE[48] = withTurnaroundMonday(CODE[44], { name: "NFCI veto + Turnaround Monday", signal: "tqqq", levels: "close", hooks: [
   ['        if (vetoOn) want = "cash";\n', '        if (vetoOn) want = "cash";\n        want = tmHold(i, want);\n', 'the credit-veto line'],
   ['note = vetoOn ? "NFCI "', 'note = tmWhy ? tmWhy : vetoOn ? "NFCI "', 'the trade note'],
   ['fired = vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null;', 'fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);', 'the trade panel'] ] });
 CODE[49] = withTurnaroundMonday(CODE[45], { name: "Buy-back + Turnaround Monday", signal: "spy", levels: "close", hooks: [
   ['          : (_frac > 0 ? p.asset : crashAsset);\n', '          : (_frac > 0 ? p.asset : crashAsset);\n        want = tmHold(i, want);\n        if (tmActive) _frac = 1;\n        if (tmWhy && !why) why = tmWhy;\n', 'the holding decision'] ] });
-CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Monday", signal: "tqqq", levels: "hl", creditPanel: "Credit stress (NFCI)", hooks: [
+CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Monday", signal: "tqqq", levels: "hl", hooks: [
   ['      const want = capSq(i, wantNow(i));', '      const want = tmHold(i, capSq(i, wantNow(i)));', 'the holding decision'],
   ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
   ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });

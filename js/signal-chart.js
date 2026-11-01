@@ -98,6 +98,9 @@ const MINI_ZOOM = { minSpanMs: 30 * 86400000, wheelK: 0.002, rightAnchorPx: 200 
 const MINI_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MINI_WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const _miniShortDate = t => { const d = new Date(t); return `${d.getUTCDate()} ${MINI_MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
+const _miniDayMonth = t => { const d = new Date(t); return `${d.getUTCDate()} ${MINI_MON[d.getUTCMonth()]}`; };
+// Minutes to the close as a person says them: "26 min", "2 h", "2 h 26 min".
+const _miniCloseGap = min => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h` + (min % 60 ? ` ${min % 60} min` : '');
 // A trade's day for its tooltip: weekday, then the log's date ("Tue 21 Dec 21").
 const _miniTradeDay = dateStr => `${MINI_WEEKDAY[new Date(dateStr + 'T00:00:00Z').getUTCDay()]} ${fmtLogDate(dateStr)}`;
 window._miniZooms = window._miniZooms || {};   // cfg id → { t0, t1 }; absent = the full range
@@ -296,7 +299,16 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // layout drops the strip when the log has none (the whole log, so zooming
   // never moves the plot), unless the first of several panels needs its name there.
   const markerEvents = customMarkerEvents(log);
-  const padT = (compact && !markerEvents.length && nPanels === 1 ? MINI_PX.edge : MINI_PX.strip) / k, padB = MINI_PX.axis / k;
+  // The latest day's trade: one the strategy makes on its log's last row when
+  // that row is the data's latest day, the action to take at that day's close.
+  // While that day still trades (the data was refreshed before its close,
+  // minutesBeforeClose), its price is the price so far: the trade stands only
+  // if the close stays on the same side. A row marked projected (a built-in
+  // engine's rebalance on a day that does not close its period) is not one.
+  const lastEv = markerEvents[markerEvents.length - 1];
+  const latestTrade = lastEv && lastEv.i === log.length - 1 && String(lastEv.row.date) === daily[daily.length - 1].date && !lastEv.row.projected ? lastEv : null;
+  const beforeClose = latestTrade ? minutesBeforeClose(String(latestTrade.row.date), window._dataFetchedAt) : null;
+  const padT =(compact && !markerEvents.length && nPanels === 1 ? MINI_PX.edge : MINI_PX.strip) / k, padB = MINI_PX.axis / k;
   // The full extent, then the zoom window inside it. A zoom saved from an
   // older, longer run is clamped so it can never show an empty plot.
   let T0 = Infinity, T1 = -Infinity;
@@ -386,13 +398,17 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const kind = customActionKind(ev.row.action);
     const assetKey = _miniAssetKey(kind === 'sell' ? from : to);
     const part = kind === 'buy' ? customTradeShare(log, ev.i) : null, firedAt = panelSpecs.findIndex(sp => sp.name === ev.row.firedBy);
+    const latest = ev === latestTrade;
     const item = { x, t, date: String(ev.row.date), kind, label: ev.st.label, color: ev.st.color, shape: ev.st.shape, from, to, held: to, part, panel: firedAt >= 0 ? firedAt : 0,
-      ring: assetKey ? MINI_ASSET_RING[assetKey] : 'rgba(255,255,255,0.95)', dashed: !!(assetKey && MINI_ASSET_DASHED[assetKey]), note: String(ev.row.note || '') };
+      ring: assetKey ? MINI_ASSET_RING[assetKey] : 'rgba(255,255,255,0.95)', dashed: !!(assetKey && MINI_ASSET_DASHED[assetKey]), note: String(ev.row.note || ''),
+      latest, beforeClose: latest ? beforeClose : null };
     const last = eventGroups[eventGroups.length - 1];
     if (last && x - last.x1 < MINI_EVENT.mergeX && x - last.x0 <= MINI_EVENT.maxSpanX) { last.items.push(item); last.x1 = x; }
     else eventGroups.push({ x0: x, x1: x, items: [item] });
   }
   const events = eventGroups.map(g => ({ x0: g.x0 - MINI_EVENT.halfW, x1: g.x1 + MINI_EVENT.halfW, items: g.items }));
+  // The latest day's trade while that day is on screen.
+  const latestItem = atEnd ? events.flatMap(g => g.items).find(it => it.latest) || null : null;
   // Everything the hover and zoom handlers need to resolve a cursor position
   // back to dates, values and bands, under the chart's id (its svg carries
   // it); window._miniChartHover is the most recently built one.
@@ -481,14 +497,18 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // The end of the data, when it is on screen: a dotted line at the latest
   // date with its date above it, and a dot closing each line. Drawn outside
   // the clip so the dots at the plot's edge render whole. Absent while panned
-  // away from the end, when the strip's Latest chip says so instead.
+  // away from the end, when the strip's Latest chip says so instead. On a
+  // latest-day trade the line wears the trade's colour and the strip's action
+  // chip stands in for the date.
   let latestMark = '';
   if (atEnd) {
     const xEnd = (W - padR).toFixed(1);
     const dots = series.filter(s => Math.abs(s.endPt.t - T1) < 86400000).map(s =>
       `<circle cx="${xEnd}" cy="${yAt(s.panel, s.endPt.v).toFixed(1)}" r="${(1.4 / k).toFixed(2)}" fill="${s.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(0.7 / k).toFixed(2)}"/>`).join('');
-    latestMark = `<line class="mini-latest-line" x1="${xEnd}" y1="${padT.toFixed(2)}" x2="${xEnd}" y2="${plotBottom.toFixed(2)}" stroke="rgba(122,122,166,0.55)" stroke-width="${(0.6 / k).toFixed(2)}" stroke-dasharray="${(1.6 / k).toFixed(2)} ${(1.6 / k).toFixed(2)}"/>
-      <text class="mini-latest-label" x="${(W - padR - 2 / k).toFixed(1)}" y="${(padT + 7.5 / k).toFixed(2)}" text-anchor="end" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="rgba(122,122,166,0.95)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">latest · ${_miniShortDate(T1)}</text>${dots}`;
+    const lineStroke = latestItem ? `stroke="${latestItem.color}" stroke-width="${(1 / k).toFixed(2)}"` : `stroke="rgba(122,122,166,0.55)" stroke-width="${(0.6 / k).toFixed(2)}"`;
+    latestMark = `<line class="mini-latest-line" x1="${xEnd}" y1="${padT.toFixed(2)}" x2="${xEnd}" y2="${plotBottom.toFixed(2)}" ${lineStroke} stroke-dasharray="${(1.6 / k).toFixed(2)} ${(1.6 / k).toFixed(2)}"/>`
+      + (latestItem ? '' : `<text class="mini-latest-label" x="${(W - padR - 2 / k).toFixed(1)}" y="${(padT + 7.5 / k).toFixed(2)}" text-anchor="end" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="rgba(122,122,166,0.95)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">latest · ${_miniShortDate(T1)}</text>`)
+      + dots;
   }
 
   // Polylines + right-edge end labels (pushed apart when endpoints collide).
@@ -555,13 +575,15 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const eventCaps = events.map((g, i) =>
     `<rect class="mini-ev-cap" data-mini-ev="${i}" x="${g.x0.toFixed(1)}" y="0" width="${(g.x1 - g.x0).toFixed(1)}" height="${padT.toFixed(2)}"/>`).join('');
   const markR = MINI_MARK.r / k, ringW = MINI_MARK.ring / k;
-  const marks = t1 - t0 >= MINI_EVENT.marksWithinMs ? [] : events.flatMap(g => g.items).map(it => {
+  const markAt = it => {
     const first = panelSeries[it.panel][0], pt = first ? _miniPtAt(first.pts, it.t) : null;
     return pt ? { x: it.x, y: yAt(it.panel, pt.v), r: markR, item: it, panel: it.panel } : null;
-  }).filter(Boolean);
-  chartData.marks = marks;
+  };
+  const marks = t1 - t0 >= MINI_EVENT.marksWithinMs ? [] : events.flatMap(g => g.items).filter(it => it !== latestItem).map(markAt).filter(Boolean);
+  const latestMarkAt = latestItem ? markAt(latestItem) : null;
+  chartData.marks = latestMarkAt ? marks.concat(latestMarkAt) : marks;
+  const haloAttrs = `fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="${(ringW + 1.8 / k).toFixed(2)}"`;
   const markSvg = m => {
-    const haloAttrs = `fill="none" stroke="rgba(255,255,255,0.95)" stroke-width="${(ringW + 1.8 / k).toFixed(2)}"`;
     const dash = m.item.dashed ? ` stroke-dasharray="${(1.5 / k).toFixed(2)} ${(1.2 / k).toFixed(2)}"` : '';
     if (m.item.part && m.item.shape === 'circle') {
       // A partial buy: only the bought share of the circle, outline and halo included.
@@ -575,8 +597,37 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const clips = `<clipPath id="${clipId}"><rect x="${padL}" y="${padT.toFixed(2)}" width="${plotW.toFixed(1)}" height="${plotH.toFixed(2)}"/></clipPath>`
     + panels.map((P, p) => `<clipPath id="${clipId}-${p}"><rect x="${padL}" y="${P.top.toFixed(2)}" width="${plotW.toFixed(1)}" height="${(P.bottom - P.top).toFixed(2)}"/></clipPath>`).join('');
   const panelLayers = panels.map((P, p) => `<g clip-path="url(#${clipId}-${p})">${panelPaths[p]}${marks.filter(m => m.panel === p).map(markSvg).join('')}</g>`).join('');
+  // The latest day's trade, while that day is on screen: its mark at the end
+  // of its line at any zoom, outside the clip so it renders whole, and open
+  // while the day still trades; and in the strip a chip in its colour saying
+  // what to do at which close, the price's age beside it while the day still
+  // trades, or under it, in the latest date's place, where the strip has no
+  // room. The chip keeps clear of the first panel's name and the zoom
+  // buttons: past them it says the move alone.
+  let latestTradeSvg = '';
+  if (latestItem) {
+    const it = latestItem, open = it.beforeClose != null;
+    if (latestMarkAt) latestTradeSvg += open
+      ? _miniMarkSvg(it.shape, latestMarkAt.x, latestMarkAt.y, markR, haloAttrs)
+        + _miniMarkSvg(it.shape, latestMarkAt.x, latestMarkAt.y, markR, `class="mini-ev-mark" fill="rgba(255,255,255,0.95)" stroke="${it.color}" stroke-width="${(1.2 / k).toFixed(2)}"`)
+      : markSvg(latestMarkAt);
+    const fs = 7 / k, charW = 0.6 * fs, padX = 3 / k, actH = 10 / k, actY = Math.max(0, (padT - actH) / 2);
+    const right = Math.min(W - padR, offRest && !compact ? btnX - 4 / k : Infinity);
+    const left = titled && panels[0].name ? padL + 1 + panels[0].name.length * 0.62 * fs + 4 / k : padL;
+    const move = _miniMoveText(it), full = `${move} at ${open ? "today's close" : `the ${_miniDayMonth(it.t)} close`}`;
+    const text = right - (full.length * charW + 2 * padX) >= left ? full : move;
+    const actW = text.length * charW + 2 * padX, actX = right - actW;
+    const age = open ? `price ${_miniCloseGap(it.beforeClose)} before the close` : '';
+    const ageAttrs = `font-family="JetBrains Mono" font-size="${fs.toFixed(2)}" font-weight="600" fill="rgba(122,122,166,0.95)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke"`;
+    latestTradeSvg += `<g class="mini-action-chip" pointer-events="none"><rect x="${actX.toFixed(1)}" y="${actY.toFixed(2)}" width="${actW.toFixed(1)}" height="${actH.toFixed(2)}" rx="${(3 / k).toFixed(2)}" fill="${it.color}"/>`
+      + `<text x="${(actX + actW / 2).toFixed(1)}" y="${(actY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${fs.toFixed(2)}" font-weight="700" fill="#fff">${_escHtml(text)}</text>`
+      + (age ? (actX - 4 / k - age.length * charW >= left
+        ? `<text x="${(actX - 4 / k).toFixed(1)}" y="${(actY + 7.3 / k).toFixed(2)}" text-anchor="end" ${ageAttrs}>${age}</text>`
+        : `<text x="${(W - padR - 2 / k).toFixed(1)}" y="${(padT + 7.5 / k).toFixed(2)}" text-anchor="end" ${ageAttrs}>${age}</text>`) : '')
+      + '</g>';
+  }
 
-  return `<svg class="custom-lines-chart" data-mini-id="${_escHtml(String(cfg.id))}" viewBox="0 0 ${W} ${H}"><defs>${clips}</defs>${grid}<g clip-path="url(#${clipId})">${eventBands}</g>${panelLayers}${latestMark}${lineTags}${eventCaps}${panelTitles}${endLabels}${xAxis}${zoomUi}</svg>`;
+  return `<svg class="custom-lines-chart" data-mini-id="${_escHtml(String(cfg.id))}" viewBox="0 0 ${W} ${H}"><defs>${clips}</defs>${grid}<g clip-path="url(#${clipId})">${eventBands}</g>${panelLayers}${latestMark}${lineTags}${eventCaps}${panelTitles}${endLabels}${xAxis}${zoomUi}${latestTradeSvg}</svg>`;
 }
 
 // The panel opens through a width transition (and can be resized), so the
@@ -790,7 +841,8 @@ function _miniEventRows(group) {
   return (group.items.length > 1 ? `<div class="mct-ev-head">${group.items.length} trades in this band</div>` : '')
     + listed.map(it => `<div class="mct-ev"><span class="mct-dot" style="background:${it.color};box-shadow:0 0 0 2px ${it.ring}${it.part ? `;clip-path:${_miniWedgeClip(it.part[0], it.part[1])}` : ''}"></span>`
         + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${_miniTradeDay(it.date)}</span>`
-        + (it.note ? `<div class="mct-ev-note">${_escHtml(it.note)}</div>` : '') + `</div>`).join('')
+        + (it.note ? `<div class="mct-ev-note">${_escHtml(it.note)}</div>` : '')
+        + (it.beforeClose != null ? `<div class="mct-ev-note mct-ev-open">Not final: the price is from ${_miniCloseGap(it.beforeClose)} before the close.</div>` : '') + `</div>`).join('')
     + (unlisted > 0 ? `<div class="mct-ev-head">and ${unlisted} more — zoom in to split this band</div>` : '');
 }
 // Wheel over the chart with the modifier held zooms the time axis around the

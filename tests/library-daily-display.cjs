@@ -63,7 +63,7 @@ const sameRow = (a, b) => a.value === b.value && a.held === b.held && a.action =
 // p says, and without the Faber strategy's own calendar line, which came with
 // the flag (an old Faber copy keys its rule off the cadence variable).
 const FLAG_IN_CADENCE_LINE = 'const logDay = p.dailyDisplay\n        || (';
-const FABER_CALENDAR_LINE = /\n\s*const monthEnd = i === p\.endIdx \|\| data\.dates\[i \+ 1\]\.slice\(0, 7\) !== month;\n/;
+const FABER_CALENDAR_LINE = /\n\s*const monthEnd = nextDate\(i\)\.slice\(0, 7\) !== month;\n/;
 const oldCopyOf = code => {
   if (!code.includes(FLAG_IN_CADENCE_LINE)) throw new Error('library cadence line changed; update this test');
   return code.replace(FLAG_IN_CADENCE_LINE, 'const monthEnd = (').replace(/\|\| logDay/g, '|| monthEnd').replace(FABER_CALENDAR_LINE, '\n')

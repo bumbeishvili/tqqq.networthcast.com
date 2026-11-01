@@ -3131,6 +3131,8 @@
   #mini-chart-tip .mct-ev-note {
     flex-basis: 100%; font-size: 10.5px; color: var(--text-muted); padding-left: 14px;
   }
+  /* A latest-day trade on a price so far: the trade stands only if the close agrees. */
+  #mini-chart-tip .mct-ev-open { color: var(--text); font-weight: 600; }
   /* Drag-range readout: the end value coloured by direction. */
   #mini-chart-tip .mct-pos { color: var(--green, #00b929); }
   #mini-chart-tip .mct-neg { color: var(--red-text, #dc2626); }

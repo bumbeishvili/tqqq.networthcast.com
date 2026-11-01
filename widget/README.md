@@ -54,6 +54,13 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
   default $10,000.
 - The signal chart is the strategy panel's chart from the site, drawn the
   same way: the same lines, names and panel heights.
+- When the strategy trades on the latest day, a chip above the chart says
+  what to do, such as "Sell TQQQ at today's close", and the latest-day line
+  turns the trade's colour. While the market is open, the price is the one
+  from the last hourly data refresh. The chip then says how long before the
+  close that was, and the trade's mark is open: it stands only if the close
+  stays on the same side. The last refresh before the close comes about
+  25 minutes before it. After the close the chip names the day instead.
 - Hover any chart for its readout.
 - On the portfolio and signal charts, ⌘ + scroll zooms and ⌘ + drag pans. A plain drag
   measures the change over a range. While zoomed, Reset and Latest sit in the

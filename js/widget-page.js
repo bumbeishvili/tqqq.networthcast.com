@@ -74,10 +74,14 @@
 
   // ---- market data: the same files and derived globals js/init.js sets up ----
   async function loadMarketData() {
-    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, nfci, highLow] = await Promise.all([
+    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, nfci, highLow, fetchedAt] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
       loadSQQQDaily().catch(() => []), loadNFCIWeekly().catch(() => []), Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
+      loadDataFetchedAt(),
     ]);
+    // The refresh time, as the site keeps it: the signal chart reads it to
+    // tell a day still trading from a close (minutesBeforeClose).
+    window._dataFetchedAt = fetchedAt;
     daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq);
     nfciDaily = buildNfciDaily(daily, nfci);
     highLowDaily = buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]])));
