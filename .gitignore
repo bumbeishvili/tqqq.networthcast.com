@@ -4,3 +4,9 @@
 __pycache__/
 .figma.env
 .env
+
+# Local-only data (data/local/README.md): the downloaded series are never committed
+# or deployed; the script that fetches them and its README are.
+data/local/*
+!data/local/fetch.cjs
+!data/local/README.md

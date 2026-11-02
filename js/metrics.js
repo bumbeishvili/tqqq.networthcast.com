@@ -135,9 +135,11 @@ function computeDailyMaxDrawdown(controls, dailyRows, priceKey) {
 // map + cash; between controls the holding is constant and the portfolio is
 // revalued at every daily close. This fixes the single-asset reconstruction
 // that ignored the out-asset bucket entirely.
-//   controls:  [{ date, h: { asset: shares, ... }, cash }]  ascending by date
-//   dailyRows: [{ date, tqqq, qqq, spy, ... }]  e.g. the global `daily`
-function computeDailyMaxDrawdownMulti(controls, dailyRows) {
+//   controls:    [{ date, h: { asset: shares, ... }, cash }]  ascending by date
+//   dailyRows:   [{ date, tqqq, qqq, spy, ... }]  e.g. the global `daily`
+//   extraPrices: optional { asset: [price per dailyRows index] } for funds the
+//                rows do not carry, e.g. the local-only series (js/data.js localDaily)
+function computeDailyMaxDrawdownMulti(controls, dailyRows, extraPrices) {
   const empty = { pct: 0, peakDate: null, troughDate: null };
   if (!controls || !controls.length || !dailyRows || !dailyRows.length) return empty;
   const startDate = controls[0].date;
@@ -151,7 +153,7 @@ function computeDailyMaxDrawdownMulti(controls, dailyRows) {
     const c = controls[ci];
     let v = c.cash || 0;
     const h = c.h || {};
-    for (const a in h) { const px = row[a]; if (px > 0) v += h[a] * px; }
+    for (const a in h) { const px = a in row ? row[a] : extraPrices && extraPrices[a] ? extraPrices[a][i] : NaN; if (px > 0) v += h[a] * px; }
     if (!Number.isFinite(v) || v <= 0) continue;
     if (v > peak) { peak = v; peakDate = row.date; }
     if (peak > 0) {
@@ -170,8 +172,11 @@ function computeDailyMaxDrawdownMulti(controls, dailyRows) {
 //
 // Only usable when EVERY row carries held/shares/cash (the custom-strategy
 // contract requires just date+value), so this returns null when it can't.
+// A fund outside the site's own series counts when extraPrices carries it
+// (the local-only series a strategy can read, js/data.js localDaily); pass the
+// same extraPrices to computeDailyMaxDrawdownMulti.
 const DD_ASSET_KEYS = { tqqq: 1, qqq: 1, spy: 1, qld: 1, sso: 1, spxl: 1, sqqq: 1 };
-function buildCustomDDControls(log) {
+function buildCustomDDControls(log, extraPrices) {
   if (!log || !log.length) return null;
   const out = [];
   for (const r of log) {
@@ -181,7 +186,7 @@ function buildCustomDDControls(log) {
     if (!held) return null;
     const c = { date: r.date, cash: r.cash, h: {} };
     if (held !== 'cash') {
-      if (!DD_ASSET_KEYS[held]) return null;           // unknown ticker — can't revalue
+      if (!DD_ASSET_KEYS[held] && !(extraPrices && extraPrices[held])) return null;   // unknown ticker — can't revalue
       if (typeof r.shares !== 'number' || !Number.isFinite(r.shares)) return null;
       c.h[held] = r.shares;
     }

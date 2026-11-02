@@ -37,6 +37,9 @@ const data = {
   ...buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map(f => [f, parseHighLowFile(fs.readFileSync(path.join(ROOT, 'data', f + '-hl.tsv'), 'utf8'))]))),
   ...Object.fromEntries(TICKERS.map(t => [t, daily.map(d => d[t] || 0)])),
 };
+// The local-only series when data/local exists; entries that need them are skipped otherwise.
+const LOCAL = require('./local-data.cjs').localDataFor(ROOT, daily, CODE);
+Object.assign(data, LOCAL.arrays);
 
 // A fixed stretch of settled history, so the daily data refresh cannot move the results.
 const START = data.dates.findIndex(d => d >= '2015-01-02');
@@ -67,7 +70,7 @@ function run(code, contributions) {
   return { log: Array.isArray(result) ? result : result.log, tradeCost: (params.tradeCost || 0) / 100 };
 }
 const holdings = row => row.value - row.__cash;
-const strategyIds = Object.keys(CODE).map(Number).sort((a, b) => a - b);
+const strategyIds = Object.keys(CODE).map(Number).filter(n => !LOCAL.skipped.includes(n)).sort((a, b) => a - b);
 
 // ---- 1. Several withdrawals: no borrowing, ever ----
 {

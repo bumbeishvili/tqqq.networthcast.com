@@ -196,6 +196,22 @@ STRATEGY_LIBRARY.push(...[
   rules: STRATEGY_LIBRARY.find(e => e.n === base).rules + '\n\n' + turnaroundMondayRules(signal, levels),
   here: '—', reported,
 })));
+// #51: another trader's rule file. Its funds and signals come from the
+// local-only data folder (data/local/README.md), so it runs only where that
+// folder is loaded (strategyRunnable, js/strategy-library-code.js LOCAL_DATA);
+// elsewhere its card says what it needs.
+STRATEGY_LIBRARY.push({ n: 51, name: 'ALLWEATHER V15', tag: 'community', runnable: true, needs: 'local data (data/local)',
+  rules: 'Every close, the first rule that fits puts all the money in one fund. Every threshold is the file’s own.\n\n'
+    + 'Overbought: SPY RSI(11) over 77 buys UVXY while QQQ trends (ADX over 20), else SPMO. QQQ RSI(8) over 83 with tech leading buys UVXY.\n'
+    + 'Oversold: QQQ RSI(14) under 35 buys TECL, or SPMO when silver trends up.\n'
+    + 'Bull: SOXL when trend, credit, volatility and breadth checks all agree. Otherwise, with QQQ above its 10-day EMA and 140-day Hull average: TECL when small caps agree, else SPMO.\n'
+    + 'Dip: QQQ above its 16-day EMA and 140-day Hull average buys TECL when VIX, VVIX and momentum stocks agree, else SPMO.\n'
+    + 'Gold: QQQ under its Hull average with GLD above its 100-day WMA buys GLD, or UGL when silver trends too.\n'
+    + 'Weak bull: QQQ above its 210-day WMA buys SPMO when financials lead tech or energy stalls. Rising gold buys UGL.\n'
+    + 'Risk off: bonds, VVIX and QQQ all turning down buys BIL. Anything else: GLD.\n\n'
+    + 'Needs the local data folder (data/local). A switch sells and buys at the same close; One trade per day: Yes buys the next day instead.',
+  here: '—',
+  reported: 'Another trader’s rule file (ALLWEATHER V15 XLE XLF XLK, dated April to June 2026), rebuilt here. 2016 to 2025: 294.6% a year switching at one close as the file assumes (max drawdown 15%); with one trade per day, 163.7% (19%); a day late, 81.3% (61%). With every number nudged up to 8%, the median falls to 209%: it is tuned to its own history. Deciding 30 minutes before the close, January 2024 to October 2026: 226% a year against 357% at the close. Since the file’s date (11 June to 30 October 2026): −10%, against +23% for TQQQ vs QQQ + Turnaround Monday' });
 
 const STRATEGY_SRC_LINKS = {
   F:   'https://mebfaber.com/wp-content/uploads/2016/05/SSRN-id962461.pdf',
@@ -287,8 +303,9 @@ function slCagrDD(res) {
   } else if (rows && typeof buildCustomDDControls === 'function' && typeof computeDailyMaxDrawdownMulti === 'function') {
     // Code entries: rebuild daily control points from the log so the card is
     // measured exactly like the app's — see customSeriesResult().
-    const cc = buildCustomDDControls(log);
-    if (cc) dd = computeDailyMaxDrawdownMulti(cc, rows).pct;
+    const extraPrices = (typeof localDaily !== 'undefined' && localDaily) ? localDaily : null;
+    const cc = buildCustomDDControls(log, extraPrices);
+    if (cc) dd = computeDailyMaxDrawdownMulti(cc, rows, extraPrices).pct;
   }
   if (dd == null) {
     let peak = -Infinity; dd = 0;
@@ -456,8 +473,13 @@ function slRunPreset(preset, si, ei) {
   return null;
 }
 
-// An entry is runnable if it has code OR a native preset.
-function strategyRunnable(s) { return !!(s.preset || strategyHasCode(s.n)); }
+// An entry is runnable if it has code OR a native preset, and the local-only
+// series it reads (js/strategy-library-code.js LOCAL_DATA, loaded by js/data.js
+// loadLocalSeries) are there.
+function strategyRunnable(s) {
+  const needs = (typeof window !== 'undefined' && window.STRATEGY_LOCAL_DATA && window.STRATEGY_LOCAL_DATA[s.n]) || [];
+  return !!(s.preset || strategyHasCode(s.n)) && needs.every(k => typeof localDaily !== 'undefined' && !!localDaily[k]);
+}
 
 // Buy & hold baseline (SPY, same lump sum) on the quarter grid.
 // Buys SL_MONTHLY of SPY at the first close of each new month, so the baseline
@@ -507,7 +529,7 @@ function slStatsFor(n) {
   const s = STRATEGY_LIBRARY.find(x => x.n === n);
   if (!s) return null;
   const code = strategyHasCode(n);
-  if (!code && !s.preset) return (st.byN[n] = null);
+  if (!strategyRunnable(s)) return (st.byN[n] = null);
   const { data, dates, quarters } = st;
   const sparkEi = dates.length - 1;
   // Code entries index the daily series; presets index quarterlyData. Both start
@@ -745,7 +767,7 @@ function addStrategyFromLibrary(n) {
   if (!SL_ADD_ENABLED) return; // disabled for now
   const entry = STRATEGY_LIBRARY.find(s => s.n === n);
   const code = strategyHasCode(n);
-  if (!entry || (!code && !entry.preset)) return;
+  if (!entry || !strategyRunnable(entry)) return;
   if (typeof savedConfigs === 'undefined' || typeof persistSavedConfigs !== 'function') return;
   const cfg = {
     ...libraryEntryConfig(entry),

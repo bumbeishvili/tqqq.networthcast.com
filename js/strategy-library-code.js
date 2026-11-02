@@ -3129,8 +3129,251 @@ CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Mond
   ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
   ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
 
+// #51 — ALLWEATHER V15, another trader's rule file (2026-11-02, the user:
+// "put it into lib"). Runs only where the local-only series in data/local/
+// exist; the library shows it as needing that data everywhere else
+// (LOCAL_DATA below). Rebuilt and checked in scratchpad r11: 2016-2025 294.6%
+// a year switching at one close (the default), 163.7% with one trade per day.
+CODE[51] = `{
+  // ALLWEATHER V15 XLE XLF XLK, another trader's strategy, transcribed from
+  // its YAML. Every threshold is the file's own, so the only settings are how
+  // it trades. Needs the local-only series in data/local/ (data.gld, data.vix,
+  // ...; data/local/README.md): without them it holds cash and its dashboard
+  // says what is missing. A signal with a band ("hysteresis") turns on past its threshold
+  // moved by the band and off once back past it the other way; "exit_only"
+  // turns on at the threshold. The first rule whose signals all hold picks
+  // the fund; a day where a signal has no data yet keeps what is held.
+  name: "ALLWEATHER V15",
+  params: [
+    { section: "Execution & costs" },
+    // No by default, the user's call (2026-11-02): IBKR takes a sale and a purchase in the same
+    // closing auction, as the strategy's file assumes. The other entries keep Yes.
+    { id: "splitDays", label: "One trade per day", tip: "No: going from one fund to another sells and buys at the same close, as the strategy's file assumes. Yes: it buys the next day.", options: [{ value: true, label: "Yes" }, { value: false, label: "No" }], default: false },
+    { id: "cashRate", label: "Cash interest (%/yr)", tip: "What money earns on a day it waits in cash between two funds.", options: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8], default: 4 },
+    { id: "tradeCost", label: "Trading cost (%)", tip: "Charged on every buy and every sell.", default: 0.02, options: [0, 0.01, 0.02, 0.03, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.5, 0.75, 1] }
+  ],
+  columns: [
+    { key: "rule", label: "Rule", tip: "The first rule whose signals all held that day; it picks the fund." },
+    { key: "target", label: "Rule's fund", tip: "The fund that rule holds. With one trade per day, a move between two funds waits a day in cash." },
+    { key: "qqqPrice", label: "QQQ", tip: "QQQ's close." },
+    { key: "qqqHma", label: "QQQ HMA(140)", tip: "Rule signal D: QQQ above it is the trend." },
+    { key: "spyRsi", label: "SPY RSI(11)", tip: "Rule signal A: above 77 is overbought." },
+    { key: "qqqRsi14", label: "QQQ RSI(14)", tip: "Rule signal C: under 35 is oversold." },
+    { key: "gldPrice", label: "GLD", tip: "GLD's close." },
+    { key: "gldWma", label: "GLD WMA(100)", tip: "Rule signal H: GLD above it confirms gold." },
+    { key: "vix", label: "VIX", tip: "The VIX index." },
+    { key: "vixEma", label: "VIX EMA(14)", tip: "Rule signal V_CALM: VIX under it is calm." }
+  ],
+  lines: [
+    { key: "qqqPrice", label: "QQQ price", group: "QQQ trend" },
+    { key: "qqqHma", label: "HMA(140)", group: "QQQ trend" },
+    { key: "qqqEma10", label: "EMA(10)", group: "QQQ trend" },
+    { key: "qqqWma210", label: "WMA(210)", group: "QQQ trend" },
+    { key: "qqqSma330", label: "SMA(330)", group: "QQQ trend" },
+    // Panels from the most trades to the fewest (2016-2025: QQQ trend 689, gold 283, RSI 114, VIX none).
+    { key: "gldPrice", label: "GLD price", group: "Gold" },
+    { key: "gldWma", label: "WMA(100)", group: "Gold" },
+    { key: "gldSma40", label: "SMA(40)", group: "Gold" },
+    { key: "spyRsi", label: "SPY RSI(11)", unit: "num", group: "RSI" },
+    { key: "rsiTop", label: "Overbought (77)", unit: "num", group: "RSI" },
+    { key: "qqqRsi14", label: "QQQ RSI(14)", unit: "num", group: "RSI" },
+    { key: "rsiLow", label: "Oversold (35)", unit: "num", group: "RSI" },
+    { key: "vix", label: "VIX", unit: "num", group: "VIX" },
+    { key: "vixEma", label: "EMA(14)", unit: "num", group: "VIX" }
+  ],
+  run(data, p) {
+    const n = data.dates.length, log = [];
+    const LOCAL = ["vix", "vvix", "gld", "slv", "iwm", "tlt", "btal", "hyg", "mtum", "xlf", "xlk", "xle", "spmo", "uvxy", "soxl", "tecl", "ugl", "bil"];
+    const missing = LOCAL.filter(k => !data[k]);
+    const cost = (+p.tradeCost || 0) / 100, dayRate = Math.pow(1 + (+p.cashRate || 0) / 100, 1 / 252) - 1;
+    const ok = v => typeof v === "number" && v === v;
+
+    // ---- indicators over the full history (NaN until enough data; a gap restarts them) ----
+    const memo = {};
+    const sma = (x, w) => { const o = new Array(n).fill(NaN); let s = 0, k = 0; for (let i = 0; i < n; i++) { if (!ok(x[i])) { s = 0; k = 0; continue; } s += x[i]; k++; if (k > w) s -= x[i - w]; if (k >= w) o[i] = s / w; } return o; };
+    const ema = (x, w) => { const o = new Array(n).fill(NaN), a = 2 / (w + 1); let e = NaN, k = 0, s = 0; for (let i = 0; i < n; i++) { if (!ok(x[i])) { e = NaN; k = 0; s = 0; continue; } if (k < w) { s += x[i]; k++; if (k === w) { e = s / w; o[i] = e; } continue; } e = a * x[i] + (1 - a) * e; o[i] = e; } return o; };
+    const wma = (x, w) => { const o = new Array(n).fill(NaN), den = w * (w + 1) / 2; let S = 0, W = 0, k = 0; for (let i = 0; i < n; i++) { if (!ok(x[i])) { S = 0; W = 0; k = 0; continue; } if (k < w) { k++; S += x[i]; W += k * x[i]; } else { W += w * x[i] - S; S += x[i] - x[i - w]; } if (k >= w) o[i] = W / den; } return o; };
+    const hma = (x, w) => { const a = wma(x, Math.floor(w / 2)), b = wma(x, w); return wma(a.map((v, i) => 2 * v - b[i]), Math.floor(Math.sqrt(w))); };
+    const rsi = (x, w) => { const o = new Array(n).fill(NaN); let g = 0, l = 0, k = 0; for (let i = 1; i < n; i++) { if (!ok(x[i]) || !ok(x[i - 1])) { g = l = 0; k = 0; continue; } const ch = x[i] - x[i - 1], up = Math.max(ch, 0), dn = Math.max(-ch, 0); if (k < w) { g += up / w; l += dn / w; k++; if (k < w) continue; } else { g = (g * (w - 1) + up) / w; l = (l * (w - 1) + dn) / w; } o[i] = l === 0 ? 100 : 100 - 100 / (1 + g / l); } return o; };
+    const adx = (h, lo, c, w) => { const o = new Array(n).fill(NaN); let T = 0, P = 0, M = 0, k = 0, a = NaN, dxs = []; for (let i = 1; i < n; i++) { if (![h[i], lo[i], c[i - 1], h[i - 1], lo[i - 1]].every(ok)) continue; const tr = Math.max(h[i] - lo[i], Math.abs(h[i] - c[i - 1]), Math.abs(lo[i] - c[i - 1])), up = h[i] - h[i - 1], dn = lo[i - 1] - lo[i], pd = up > dn && up > 0 ? up : 0, md = dn > up && dn > 0 ? dn : 0; if (k < w) { T += tr; P += pd; M += md; k++; if (k < w) continue; } else { T = T - T / w + tr; P = P - P / w + pd; M = M - M / w + md; } const pdi = 100 * P / T, mdi = 100 * M / T, dx = pdi + mdi > 0 ? 100 * Math.abs(pdi - mdi) / (pdi + mdi) : 0; if (!ok(a)) { dxs.push(dx); if (dxs.length === w) { a = dxs.reduce((s, v) => s + v, 0) / w; o[i] = a; } } else { a = (a * (w - 1) + dx) / w; o[i] = a; } } return o; };
+    const price = t => data[t].map(v => (v > 0 ? v : NaN));
+    // ind("qqq", "hma", 140), ind("qqq", "adx", 14), ind("vix", "price")
+    const ind = (t, f, w) => {
+      const key = t + "|" + f + "|" + w;
+      if (memo[key]) return memo[key];
+      const x = price(t);
+      const v = f === "price" ? x : f === "sma" ? sma(x, w) : f === "ema" ? ema(x, w) : f === "wma" ? wma(x, w) : f === "hma" ? hma(x, w) : f === "rsi" ? rsi(x, w)
+        : adx(data[t + "High"] || [], data[t + "Low"] || [], x, w);
+      return (memo[key] = v);
+    };
+    const shifted = (x, d) => (i => (i - d >= 0 ? x[i - d] : NaN));
+
+    // ---- the file's signals: [left, op, right, band, mode]; none without the local data ----
+    const L = (t, f, w) => { const x = ind(t, f, w); return i => x[i]; };
+    const C = v => () => v;
+    const S = missing.length ? {} : {
+      V_CALM: [L("vix", "price"), "<", L("vix", "ema", 14), 0.05, "both"],
+      A: [L("spy", "rsi", 11), ">", C(77), 0.0069, "both"],
+      A_BUFFER: [L("spy", "rsi", 14), ">", C(65), 0.005, "both"],
+      B: [L("qqq", "rsi", 8), ">", C(83), 0.001, "both"],
+      C: [L("qqq", "rsi", 14), "<", C(35), 0.013, "both"],
+      D: [L("qqq", "price"), ">", L("qqq", "hma", 140), 0, "both"],
+      E: [L("slv", "rsi", 14), ">", C(84), 0.007, "both"],
+      F: [L("slv", "sma", 154), ">", L("slv", "ema", 198), 0.019, "both"],
+      H: [L("gld", "price"), ">", L("gld", "wma", 100), 0.005, "both"],
+      L: [L("gld", "price"), ">", L("gld", "sma", 40), 0.005, "both"],
+      G: [L("qqq", "price"), ">", L("qqq", "ema", 10), 0.005, "both"],
+      K: [L("qqq", "price"), ">", L("qqq", "ema", 16), 0.005, "both"],
+      I: [L("qqq", "price"), ">", L("qqq", "wma", 210), 0.0066, "both"],
+      N: [L("qqq", "price"), ">", L("qqq", "sma", 330), 0.02, "both"],
+      M: [L("iwm", "price"), ">", L("iwm", "sma", 50), 0.01, "both"],
+      TLT_TREND: [L("tlt", "price"), ">", L("tlt", "sma", 50), 0.005, "both"],
+      BTAL_RISKOFF_14_60: [L("btal", "rsi", 16), ">", C(60), 0, "both"],
+      SPY_TLT_FAST: [L("spy", "rsi", 5), ">", L("tlt", "rsi", 5), 0.06, "exit_only"],
+      TECH_LEADS: [L("qqq", "rsi", 17), ">", L("spy", "rsi", 17), 0, "both"],
+      EQUITY_BONDS: [L("spy", "rsi", 15), ">", L("tlt", "rsi", 12), 0, "both"],
+      QQQ_MACD: [L("qqq", "ema", 12), ">", L("qqq", "ema", 29), 0.00735, "both"],
+      VVIX_CONFIRM: [L("vvix", "rsi", 5), ">", C(73), 0, "both"],
+      CREDIT_HYG: [L("hyg", "price"), ">", L("hyg", "sma", 48), 0.01152, "both"],
+      QQQ_SPY_FAST: [L("qqq", "rsi", 5), ">", L("spy", "rsi", 5), 0.054, "both"],
+      QQQ_ADX: [L("qqq", "adx", 14), ">", C(20), 0.03, "both"],
+      GLD_SLOPE: [L("gld", "ema", 5), ">", shifted(ind("gld", "ema", 5), 2), 0, "both"],
+      VIX_FALLING: [L("vix", "ema", 7), "<", shifted(ind("vix", "ema", 7), 3), 0.005, "exit_only"],
+      KAMA_SLOPE: [L("qqq", "hma", 24), ">", shifted(ind("qqq", "hma", 16), 5), 0, "both"],
+      HYG_SLOPE: [L("hyg", "ema", 10), ">", shifted(ind("hyg", "ema", 10), 3), 0, "both"],
+      VIX_LT_VVIX_RSI10: [L("vix", "rsi", 10), "<", L("vvix", "rsi", 10), 0, "both"],
+      GLD_SPY_RSI14: [L("gld", "rsi", 14), ">", L("spy", "rsi", 14), 0, "both"],
+      VVIX_CALM_SMA50: [L("vvix", "price"), "<", L("vvix", "sma", 50), 0.01, "both"],
+      VVIX_CALM_SMA20: [L("vvix", "price"), "<", L("vvix", "sma", 20), 0.01, "both"],
+      QQQ_ROC_S5S20: [L("qqq", "sma", 5), ">", L("qqq", "sma", 20), 0.005, "both"],
+      MTUM_SPY_RSI10: [L("mtum", "rsi", 10), ">", L("spy", "rsi", 10), 0, "both"],
+      VVIX_CALM_EMA20: [L("vvix", "price"), "<", L("vvix", "ema", 20), 0.01, "both"],
+      XLF_SPY_RSI14: [L("xlf", "rsi", 14), ">", L("spy", "rsi", 14), 0, "both"],
+      XLK_SPY_RSI5: [L("xlk", "rsi", 5), ">", L("spy", "rsi", 5), 0, "both"],
+      XLK_SPY_RSI14: [L("xlk", "rsi", 14), ">", L("spy", "rsi", 14), 0, "both"],
+      XLE_SLOPE: [L("xle", "ema", 10), ">", shifted(ind("xle", "ema", 10), 3), 0, "both"],
+      SPMO_SLOPE: [L("spmo", "ema", 10), ">", shifted(ind("spmo", "ema", 10), 3), 0, "both"]
+    };
+    // The rules in order: [label, signals, fund, chart panel].
+    const RULES = [
+      ["1 Overbought, trending", ["A", "QQQ_ADX"], "uvxy", "RSI"],
+      ["2 Overbought", ["A"], "spmo", "RSI"],
+      ["3 Overbought, tech leading", ["B", "SPY_TLT_FAST", "XLK_SPY_RSI5"], "uvxy", "RSI"],
+      ["4 Oversold, stocks over bonds", ["C", "EQUITY_BONDS"], "tecl", "RSI"],
+      ["5 Oversold, long trend up, VVIX stirred", ["C", "N", "!VVIX_CALM_EMA20"], "tecl", "RSI"],
+      ["6 Oversold, silver trend up", ["C", "F"], "spmo", "RSI"],
+      ["7 Everything aligned", ["VIX_FALLING", "!A_BUFFER", "M", "N", "CREDIT_HYG", "KAMA_SLOPE", "TECH_LEADS", "!VVIX_CONFIRM", "!BTAL_RISKOFF_14_60", "QQQ_SPY_FAST", "SPMO_SLOPE"], "soxl", "QQQ trend"],
+      ["8 Everything aligned, credit rising", ["G", "!A_BUFFER", "I", "CREDIT_HYG", "HYG_SLOPE", "QQQ_MACD", "!BTAL_RISKOFF_14_60", "!SPY_TLT_FAST"], "soxl", "QQQ trend"],
+      ["9 Strong bull", ["D", "G", "!A_BUFFER", "M", "I"], "tecl", "QQQ trend"],
+      ["10 Confirmed bull, VIX calm", ["D", "G", "V_CALM"], "spmo", "QQQ trend"],
+      ["11 Confirmed bull", ["D", "G"], "spmo", "QQQ trend"],
+      ["12 Shallow dip, all calm", ["D", "K", "V_CALM", "KAMA_SLOPE", "VVIX_CALM_SMA20", "MTUM_SPY_RSI10"], "tecl", "QQQ trend"],
+      ["13 Shallow dip, VIX calm", ["D", "K", "V_CALM"], "spmo", "QQQ trend"],
+      ["14 Shallow dip", ["D", "K"], "spmo", "QQQ trend"],
+      ["15 Gold trending", ["!D", "!E", "H", "!GLD_SLOPE", "!GLD_SPY_RSI14"], "gld", "Gold"],
+      ["16 Gold and silver trending", ["!D", "!E", "F", "H"], "ugl", "Gold"],
+      ["17 Weak bull, financials leading", ["I", "M", "XLF_SPY_RSI14", "!XLK_SPY_RSI14"], "spmo", "QQQ trend"],
+      ["18 Weak bull", ["I", "!VIX_LT_VVIX_RSI10", "!XLE_SLOPE"], "spmo", "QQQ trend"],
+      ["19 Gold momentum", ["L", "H", "GLD_SLOPE"], "ugl", "Gold"],
+      ["20 Risk off", ["!TLT_TREND", "!VVIX_CALM_SMA50", "!QQQ_ROC_S5S20"], "bil", "QQQ trend"],
+      ["21 Nothing else", [], "gld", "Gold"]
+    ];
+
+    // ---- each signal's state on every day, its band carried from day to day ----
+    const on = {}, valid = new Array(n).fill(missing.length === 0);
+    if (!missing.length) for (const k in S) {
+      const [lf, op, rf, band, mode] = S[k], gt = op === ">", st = new Array(n).fill(false);
+      let cur = false;
+      for (let i = 0; i < n; i++) {
+        const l = lf(i), r = rf(i);
+        if (!ok(l) || !ok(r)) { cur = false; valid[i] = false; continue; }
+        const enter = mode === "both" ? r * (gt ? 1 + band : 1 - band) : r, exit = r * (gt ? 1 - band : 1 + band);
+        cur = cur ? (gt ? !(l < exit) : !(l > exit)) : (gt ? l > enter : l < enter);
+        st[i] = cur;
+      }
+      on[k] = st;
+    }
+    const pick = i => {
+      if (!valid[i]) return null;
+      for (const r of RULES) if (r[1].every(s => (s[0] === "!" ? !on[s.slice(1)][i] : on[s][i]))) return r;
+      return null;
+    };
+
+    // ---- the account ----
+    const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
+    const U = t => t.toUpperCase();
+    const lineVals = i => ({
+      qqqPrice: data.qqq[i], qqqHma: ind("qqq", "hma", 140)[i], qqqEma10: ind("qqq", "ema", 10)[i], qqqWma210: ind("qqq", "wma", 210)[i], qqqSma330: ind("qqq", "sma", 330)[i],
+      spyRsi: ind("spy", "rsi", 11)[i], rsiTop: 77, qqqRsi14: ind("qqq", "rsi", 14)[i], rsiLow: 35,
+      gldPrice: missing.length ? null : data.gld[i], gldWma: missing.length ? null : ind("gld", "wma", 100)[i], gldSma40: missing.length ? null : ind("gld", "sma", 40)[i],
+      vix: missing.length ? null : data.vix[i], vixEma: missing.length ? null : ind("vix", "ema", 14)[i]
+    });
+    let cash = p.initial, shares = 0, held = "cash", invested = p.initial, lastRule = null;
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      const date = data.dates[i], month = date.slice(0, 7);
+      let action = "hold", note = "", fee = 0, contributed = 0, firedBy;
+      if (i > p.startIdx) cash *= 1 + dayRate;
+      const amt = p.contributions[date] || 0;
+      if (amt !== 0) {
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+${SELL_HELD_TO_COVER}
+      }
+      const rule = pick(i);
+      if (rule) lastRule = rule;
+      const want = rule ? rule[2] : held;
+      if (want !== held && (want === "cash" || priceOf(want, i) > 0)) {
+        const from = held;
+        if (from !== "cash") { const gross = shares * priceOf(from, i), f = gross * cost; cash += gross - f; fee += f; shares = 0; held = "cash"; }
+        const wait = p.splitDays && from !== "cash";
+        if (!wait && cash > 0) { const f = cash * cost; shares = (cash - f) / priceOf(want, i); fee += f; cash = 0; held = want; }
+        action = from === "cash" ? "buy" : held === "cash" ? "sell" : "switch";
+        note = action === "buy" ? "Bought " + U(want) : action === "switch" ? "Switched " + U(from) + " to " + U(want) : "Sold " + U(from) + "; " + U(want) + " is bought tomorrow";
+        note += " (rule " + rule[0] + ")";
+        firedBy = rule[3];
+      } else if (held !== "cash" && cash > 0 && priceOf(held, i) > 0) {   // new money joins what is held
+        const f = cash * cost; shares += (cash - f) / priceOf(held, i); fee += f; cash = 0;
+      }
+      const hv = held === "cash" ? 0 : shares * priceOf(held, i), value = cash + hv;
+${WEEKLY_MONTH_END_SNIPPET}
+      if (i === p.startIdx && action === "hold") action = "start";
+${END_ROW_ACTION}
+      if (missing.length && i === p.startIdx) note = "Needs local data (data/local/README.md); missing: " + missing.join(", ");
+      if (contributed !== 0 || logDay || action !== "hold") {
+        log.push({ date, value, action, note, held: U(held), price: held === "cash" ? 0 : priceOf(held, i), shares, holdingsValue: hv, cash, invested, contributed, fee,
+          rule: rule ? rule[0] : "", target: rule ? U(rule[2]) : "", ...lineVals(i), ...(firedBy ? { firedBy } : {}) });
+      }
+    }
+
+    // ---- where it stands on the last day ----
+    const e = p.endIdx, r = lastRule, pct = (a, b) => (ok(a) && ok(b) && b ? ((a / b - 1) * 100 >= 0 ? "▲ +" : "▼ ") + ((a / b - 1) * 100).toFixed(2) + "%" : "n/a");
+    const fmt = v => (ok(v) ? v.toFixed(1) : "n/a");
+    const cards = missing.length ? [{ label: "Local data", value: "Missing", sub: missing.join(", "), tip: "Run node data/local/fetch.cjs and reload the page.", tone: "bad", icon: "shield" }] : [
+      { label: "Rule now", value: r ? "Rule " + r[0].split(" ")[0] : "None", sub: r ? r[0].replace(/^[0-9]+ /, "") + " → " + U(r[2]) : "a signal has no data yet", tip: "The first rule whose signals all hold picks the fund.", icon: "shield" },
+      { label: "QQQ vs HMA(140)", value: pct(data.qqq[e], ind("qqq", "hma", 140)[e]), sub: "above it is the trend (D)", tone: on.D[e] ? "good" : "bad", tip: "Most bull rules need QQQ over its 140-day Hull average." },
+      { label: "SPY RSI(11)", value: fmt(ind("spy", "rsi", 11)[e]), sub: "overbought above 77", tone: on.A[e] ? "bad" : "good", tip: "Above 77 the overbought rules take over (UVXY or SPMO)." },
+      { label: "QQQ RSI(14)", value: fmt(ind("qqq", "rsi", 14)[e]), sub: "oversold under 35", tip: "Under 35 the oversold rules buy (TECL or SPMO)." },
+      { label: "GLD vs WMA(100)", value: pct(data.gld[e], ind("gld", "wma", 100)[e]), sub: "above it confirms gold (H)", tone: on.H[e] ? "good" : "", tip: "The gold rules need GLD over its 100-day weighted average." },
+      { label: "VIX vs EMA(14)", value: pct(data.vix[e], ind("vix", "ema", 14)[e]), sub: "under it is calm", tone: on.V_CALM[e] ? "good" : "bad", tip: "Several bull rules need VIX under its 14-day average." }
+    ];
+    return {
+      log,
+      signals: {
+        cards,
+        decision: missing.length ? { action: "Stay in cash", note: "Local data missing: " + missing.join(", "), tone: "bad", reasons: [] }
+          : { action: "Hold " + (r ? U(r[2]) : U(held)), note: r ? "Rule " + r[0] : "no rule yet", tone: r && ["soxl", "tecl", "spmo"].includes(r[2]) ? "good" : "",
+            reasons: r ? [{ name: "Rule", val: r[0], tag: U(r[2]), lean: ["gld", "ugl", "bil", "uvxy"].includes(r[2]) ? "out" : "buy" }] : [] }
+      }
+    };
+  }
+}`;
+
+// The local-only series (data/local/, js/data.js loadLocalSeries) an entry
+// reads: it runs only where they are loaded (js/strategy-library.js
+// strategyRunnable), and the library tests skip it without them.
+const LOCAL_DATA = { 51: ['vix', 'vvix', 'gld', 'slv', 'iwm', 'tlt', 'btal', 'hyg', 'mtum', 'xlf', 'xlk', 'xle', 'spmo', 'uvxy', 'soxl', 'tecl', 'ugl', 'bil'] };
+
 // Browser global + Node export.
-if (typeof window !== 'undefined') window.STRATEGY_CODE = CODE;
+if (typeof window !== 'undefined') { window.STRATEGY_CODE = CODE; window.STRATEGY_LOCAL_DATA = LOCAL_DATA; }
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = CODE;
   // Reachable from tests without becoming a strategy key.
@@ -3139,4 +3382,5 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });
   Object.defineProperty(module.exports, 'codeFingerprint', { value: codeFingerprint });
+  Object.defineProperty(module.exports, 'localData', { value: LOCAL_DATA });
 }

@@ -36,6 +36,9 @@ const data = {
   ...buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map(f => [f, parseHighLowFile(fs.readFileSync(path.join(ROOT, 'data', f + '-hl.tsv'), 'utf8'))]))),
   ...Object.fromEntries(TICKERS.map(t => [t, daily.map(d => d[t] || 0)])),
 };
+// The local-only series when data/local exists; entries that need them are skipped otherwise.
+const LOCAL = require('./local-data.cjs').localDataFor(ROOT, daily, CODE);
+Object.assign(data, LOCAL.arrays);
 
 // A fixed stretch of settled history, so the daily data refresh cannot move the results.
 const START = data.dates.findIndex(d => d >= '2015-01-02');
@@ -80,7 +83,7 @@ const checkDetailRun = (tag, code, flags) => {
   ck(`${tag} every ordinary row appears unchanged in the detail run`, differing.length === 0, differing.slice(0, 3).map(r => r.date).join(', '));
 };
 
-Object.keys(CODE).map(Number).sort((a, b) => a - b).forEach(n => {
+Object.keys(CODE).map(Number).filter(n => !LOCAL.skipped.includes(n)).sort((a, b) => a - b).forEach(n => {
   ck(`#${n} the current code needs no upgrade`, CODE.upgradeSavedCode(CODE[n]) === CODE[n]);
   const old = oldCopyOf(CODE[n]);
   ck(`#${n} an old copy ignores the flag`, run(old, { dailyDisplay: true }).length === run(old, {}).length);
@@ -96,4 +99,4 @@ ck('a strategy whose params object is not `p` is left alone', CODE.upgradeDailyD
 ck('a strategy without the library cadence line is left alone', CODE.upgradeDailyDisplay('({ run(data, p) { if (contributed !== 0 || x) {} } })').includes('if (contributed !== 0 || x)'));
 
 if (failures) { console.log(`library daily display: ${failures} check(s) failed`); process.exit(1); }
-console.log(`library daily display: all checks passed (${Object.keys(CODE).length} strategies)`);
+console.log(`library daily display: all checks passed (${Object.keys(CODE).length - LOCAL.skipped.length} strategies)`);

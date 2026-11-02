@@ -27,6 +27,32 @@ async function fetchDataText(file) {
 }
 async function loadSeries(file) { return parseDataFile(await fetchDataText(file)); }
 
+// Local-only series (data/local/, ignored by git; data/local/README.md): extra
+// funds and indexes a custom strategy can read on a local copy of the site,
+// listed in data/local/index.json. The deployed site has no such folder, and a
+// 404 on the index means none. A key may not shadow one of the site's own.
+const RESERVED_DATA_KEYS = ['dates', 'tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'nfci'];
+async function loadLocalSeries() {
+  const resp = await fetch(DATA_BASE + 'data/local/index.json', { cache: 'no-cache' });
+  if (resp.status === 404) return {};
+  if (!resp.ok) throw new Error('Failed to load data/local/index.json (HTTP ' + resp.status + ')');
+  const index = await resp.json();
+  const clash = index.series.map(s => s.key).filter(k => RESERVED_DATA_KEYS.includes(k) || HIGH_LOW_FUNDS.some(f => k === f + 'High' || k === f + 'Low'));
+  if (clash.length) throw new Error('data/local/index.json reuses the site\'s own keys: ' + clash.join(', '));
+  const rows = await Promise.all(index.series.map(s => fetchDataText('local/' + s.file).then(parseDataFile)));
+  return Object.fromEntries(index.series.map((s, k) => [s.key, rows[k]]));
+}
+// Each local series on the site's trading days: NaN before its first value, a
+// missing day carrying the last close forward.
+let localDaily = {};   // populated by init()
+function buildLocalDaily(dailyArr, seriesByKey) {
+  return Object.fromEntries(Object.entries(seriesByKey).map(([key, rows]) => {
+    const byDate = new Map(rows);
+    let last = NaN;
+    return [key, dailyArr.map(d => { const v = byDate.get(d.date); if (v > 0) last = v; return last; })];
+  }));
+}
+
 // When the data files were last refreshed: data/last-updated.txt, a UTC stamp
 // the update workflow writes in the same commit as the data it describes.
 async function loadDataFetchedAt() {

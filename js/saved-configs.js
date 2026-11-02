@@ -1016,6 +1016,10 @@ function buildCustomData() {
     // fund's first real bar. A page that did not load them leaves the keys out,
     // and code that needs them (Turnaround Monday) stops with an error.
     ...((typeof highLowDaily !== 'undefined' && highLowDaily) ? highLowDaily : {}),
+    // Local-only series from data/local/ (js/data.js's loadLocalSeries), on a
+    // local copy of the site only: data.gld, data.vix, ... NaN before each
+    // series starts. Absent keys mean the folder is not there.
+    ...((typeof localDaily !== 'undefined' && localDaily) ? localDaily : {}),
   };
   return _customDataCache;
 }
@@ -1559,11 +1563,13 @@ function customSeriesResult(log, ctx, error, tcOverride, stale) {
   // strategy doesn't emit held/shares/cash. CAGR is money-weighted, unaffected.
   const cagr = cfgMoneyWeightedCAGR(ctx, finalV);
   const ddVals = points.map(p => p.value), ddDates = points.map(p => p.date);
-  const ddCtrl = (typeof buildCustomDDControls === 'function') ? buildCustomDDControls(log) : null;
+  // Funds from the local-only series (js/data.js localDaily) are revalued too.
+  const extraPrices = (typeof localDaily !== 'undefined' && localDaily) ? localDaily : null;
+  const ddCtrl = (typeof buildCustomDDControls === 'function') ? buildCustomDDControls(log, extraPrices) : null;
   const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
   let dd = null;
   if (ddCtrl && dailyRows && typeof computeDailyMaxDrawdownMulti === 'function') {
-    dd = computeDailyMaxDrawdownMulti(ddCtrl, dailyRows);
+    dd = computeDailyMaxDrawdownMulti(ddCtrl, dailyRows, extraPrices);
   }
   if (!dd && typeof computeMaxDrawdown === 'function') {
     dd = computeMaxDrawdown(ddVals.length ? ddVals : series, ddVals.length ? ddDates : labels);
@@ -3298,7 +3304,10 @@ function renderCustomPanelBody(cfgId) {
   // needs nothing beyond rendering the control here, and its choice persists to
   // cfg.color like any saved strategy's.
   if (typeof buildColorPickerHtml === 'function') html += buildColorPickerHtml(cfg.type);
-  html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qld</code>, <code>qqq</code>, <code>spy</code>, <code>sso</code>, <code>spxl</code>, <code>sqqq</code> (daily closes). Base your rules on any of them.</div>`;
+  // Local-only series (data/local/) join the list on a local copy of the site.
+  const localKeys = Object.keys(localDaily);
+  html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qld</code>, <code>qqq</code>, <code>spy</code>, <code>sso</code>, <code>spxl</code>, <code>sqqq</code> (daily closes). Base your rules on any of them.`
+    + (localKeys.length ? ` Local data adds ${localKeys.map(k => `<code>${_escHtml(k)}</code>`).join(', ')}.` : '') + `</div>`;
   html += `<button type="button" id="custom-edit-builder" class="custom-edit-btn">Edit strategy</button>`;
   if (cfg.desc) html += `<div class="custom-desc-readout">${_escHtml(cfg.desc)}</div>`;
   if (err) html += `<div class="custom-error"><b>Couldn't run it:</b> ${_escHtml(err)} <span class="custom-error-hint">— click Edit strategy to fix the code.</span></div>`;
