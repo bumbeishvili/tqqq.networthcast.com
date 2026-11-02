@@ -171,6 +171,10 @@ TBMS_START  = '1934-01-01'
 
 DATA_DIR = 'data'
 
+# How FRED requests name themselves (fetch_fred). FRED serves this and
+# Python's default label; it stalls a bare "Mozilla/5.0" until timeout.
+FRED_USER_AGENT = 'tqqq-networthcast-data-updater (+https://tqqq.networthcast.com)'
+
 tickers = [
     ('QQQ',    'synthetic-qqq.tsv'),
     ('QLD',    'synthetic-qld.tsv'),
@@ -296,7 +300,10 @@ def fetch_fred(series_id, start_date, fallback_path=None, attempts=3, force_remo
     for attempt in range(1, attempts + 1):
         try:
             print(f"Fetching FRED {series_id} (attempt {attempt}/{attempts})...")
-            req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+            # FRED's bot screen stalls a request that claims to be a bare
+            # "Mozilla/5.0" browser until it times out (NFCI stuck at
+            # 2026-08-28 for two months); an honest client name gets through.
+            req = urllib.request.Request(url, headers={'User-Agent': FRED_USER_AGENT})
             raw = urllib.request.urlopen(req, timeout=60).read().decode('utf-8')
             out = []
             reader = csv.reader(io.StringIO(raw))
