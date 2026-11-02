@@ -2667,7 +2667,10 @@ CODE[47] = `{
     { section: "Floor — sell the breakdown" },
     { id: "floorLead", label: "Sell at lead under (%)", tip: "A close with TQQQ's lead under this sells TQQQ; negative means TQQQ is behind QQQ.", default: 10, options:
       [{ value: -9999, label: "Off" }].concat(Array.from({ length: 101 }, (_, k) => k - 70)) },
-    { id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken.", default: "sqqq", options: [
+    // Cash since 2026-11-02 (the user): SQQQ bought after a floor break lost on
+    // average over 169 break days since 2010 across nearby settings, and cash
+    // beat it in 86% of 105 nearby settings (scratchpad r12/, r10/).
+    { id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken.", default: "cash", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" } ] },
     { id: "reentryLead", label: "Back at lead ≥ (%)", tip: "TQQQ is bought again after the closes in a row below at or above this lead.", default: 23, options:
       Array.from({ length: 151 }, (_, k) => k - 70) },
@@ -3124,7 +3127,14 @@ CODE[48] = withTurnaroundMonday(CODE[44], { name: "NFCI veto + Turnaround Monday
   ['fired = vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null;', 'fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);', 'the trade panel'] ] });
 CODE[49] = withTurnaroundMonday(CODE[45], { name: "Buy-back + Turnaround Monday", signal: "spy", levels: "close", hooks: [
   ['          : (_frac > 0 ? p.asset : crashAsset);\n', '          : (_frac > 0 ? p.asset : crashAsset);\n        want = tmHold(i, want);\n        if (tmActive) _frac = 1;\n        if (tmWhy && !why) why = tmWhy;\n', 'the holding decision'] ] });
+// #50's floor holds cash, like #47's, and the Monday rule trades it (the user,
+// 2026-11-02: "swap it for floor"). 2010-2025 141.1% against 151.1% with SQQQ,
+// but far steadier: at lookbacks of 1.75 to 2.75 years 54-141% a year (worst
+// drawdown 74%) against 10-151% (96%), and from 2005 a 47% drawdown against
+// 75% (scratchpad r10/no-sqqq.cjs, r12/).
 CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Monday", signal: "tqqq", levels: "hl", hooks: [
+  ['{ id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken.",',
+    '{ id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken. Cash is traded by the Monday rule.",', 'the floor tip'],
   ['      const want = capSq(i, wantNow(i));', '      const want = tmHold(i, capSq(i, wantNow(i)));', 'the holding decision'],
   ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
   ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
