@@ -413,6 +413,48 @@
     select.addEventListener('change', () => syncTrigger(select));
   }
 
+  // Copying settings sentences: left to the browser, each dropdown copies as
+  // its hidden select, its label and its caret on lines of their own. A
+  // selection holding a dropdown copies as the sentences read instead: each
+  // dropdown as its current value, one line per sentence, no ⓘ marks.
+  const LINE_TAGS = /^(DIV|P|LI|TR|H[1-6]|SECTION|ARTICLE|UL|OL|TABLE)$/;
+  // A cloned select keeps its options' markup, not the live choice, so the
+  // value is read from the page's own select when it has an id.
+  function selectedText(select) {
+    const live = select.id ? document.getElementById(select.id) : null;
+    const s = live && live.tagName === 'SELECT' ? live : select;
+    const o = s.options[s.selectedIndex];
+    return o ? o.text : '';
+  }
+  function sentenceText(node, out) {
+    node.childNodes.forEach(n => {
+      if (n.nodeType === Node.TEXT_NODE) { out.push(n.nodeValue.replace(/\s+/g, ' ')); return; }
+      if (n.nodeType !== Node.ELEMENT_NODE || n.matches('.info-icon, .pdrop-caret, script, style, [hidden]')) return;
+      if (n.matches('.pdrop-trigger')) { const label = n.querySelector('.pdrop-trigger-label'); out.push((label || n).textContent); return; }
+      if (n.tagName === 'SELECT') { if (!n.classList.contains('pdrop-native-hidden')) out.push(selectedText(n)); return; }
+      if (n.tagName === 'BR') { out.push('\n'); return; }
+      if (n.tagName === 'TD' || n.tagName === 'TH') out.push('\t');
+      const line = LINE_TAGS.test(n.tagName);
+      if (line) out.push('\n');
+      sentenceText(n, out);
+      if (line) out.push('\n');
+    });
+  }
+  document.addEventListener('copy', (e) => {
+    const sel = window.getSelection();
+    if (!e.clipboardData || !sel || sel.isCollapsed || !sel.rangeCount) return;
+    const frag = sel.getRangeAt(0).cloneContents();
+    if (!frag.querySelector('.pdrop-trigger, select')) return;
+    const out = [];
+    sentenceText(frag, out);
+    const text = out.join('').split('\n')
+      .map(l => l.replace(/[  ]+/g, ' ').replace(/ ([.,;:!?])/g, '$1').trim())
+      .filter(l => l)
+      .join('\n');
+    e.clipboardData.setData('text/plain', text);
+    e.preventDefault();
+  });
+
   function init() {
     PREVIEW_SELECT_IDS.forEach(id => enhance(document.getElementById(id)));
   }

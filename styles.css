@@ -3152,13 +3152,12 @@
     margin-top: 1px;
     white-space: nowrap;
   }
-  .custom-params { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
-  .custom-param-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
+  /* One sentence per setting with its dropdown inline, in the 9sig panel's
+     type; a section's sentences run on as one paragraph. The line height
+     leaves room for the dropdowns when the paragraph wraps. */
+  .custom-params { margin-top: 8px; }
+  .custom-param-line { font-size: 12px; line-height: 2.3; color: var(--text-muted); }
+  .custom-param-line .cp-tail { white-space: nowrap; }
   /* { section: "Label" } schema entries — sub-headers dividing a long
      settings list into logical blocks. */
   .custom-param-group {
@@ -3176,20 +3175,6 @@
     padding-top: 0;
     border-top: 0;
   }
-  .custom-param-row label { font-size: 12px; color: var(--text); }
-  .custom-param-row .inline-select,
-  .custom-param-row .custom-text-input {
-    background: var(--surface2);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 5px 8px;
-    font-size: 12px;
-    max-width: 55%;
-  }
-  .custom-param-row .custom-text-input { width: 90px; }
-  .custom-param-row .inline-select:focus,
-  .custom-param-row .custom-text-input:focus { outline: none; border-color: var(--accent); }
   .custom-error {
     margin-top: 12px;
     padding: 10px 12px;

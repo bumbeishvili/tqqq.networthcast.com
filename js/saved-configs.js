@@ -543,15 +543,20 @@ const CUSTOM_PROMPT = `You are writing ONE backtest strategy for a charting app.
 
 === PARAMS: one dropdown per knob the DESCRIPTION actually specifies ===
 Each param becomes a dropdown in the sidebar; the chosen value arrives in run() as p.<id>.
-Shape:  { id, label, options: [...], default: <one of the options> }
+Shape:  { id, label, text, options: [...], default: <one of the options> }
+- "text" is the sentence the setting reads as in the sidebar, with {} where its dropdown sits:
+  text: "Sell when TQQQ closes {} above its median."   Write it as a plain rule, one sentence,
+  so the settings read top to bottom as the strategy. "label" stays a short name for the setting.
+- Add unit: "%" to a percent setting: every plain number on its dropdown then reads "55%". A
+  labelled option ({ value: 0, label: "Off" }) keeps its label.
 - "id" must be a valid JS identifier. Options may be numbers, strings, or { value, label } objects
   ({ value: "tqqq", label: "TQQQ" } shows a label but passes "tqqq"). Keep labels PLAIN — the bare
   ticker. Do not decorate them ("TQQQ · 3x Nasdaq" is noise; write "TQQQ").
 - For an on/off toggle use options: [true, false].
 - A long list scans badly — group it: insert { section: "Label" } entries (no id) between params
   and they render as sub-headers ("Holdings", "Signal lines", "Execution & costs").
-- An optional "tip" string on a param (or a section entry) renders an ⓘ hover note next to its
-  label: one or two plain sentences saying what the setting does. No filler.
+- An optional "tip" string on a param (or a section entry) renders an ⓘ hover note at the end of
+  its sentence: one or two plain sentences saying what the setting does. No filler.
 
 *** THE TEST EVERY PARAM MUST PASS ***
 Point at the words in my description that this knob comes from. If you cannot, DO NOT ADD IT.
@@ -562,7 +567,7 @@ for, silently changing what my strategy does.
 *** ONE EXCEPTION — median and moving average are interchangeable ***
 Whenever a rule uses a rolling MEDIAN or a MOVING AVERAGE, add one extra param that lets the user
 swap the statistic, defaulting to whichever one the description names:
-  { id: "stat", label: "Center line", options: [
+  { id: "stat", label: "Center line", text: "Use the {} of those closes as the line.", options: [
     { value: "sma", label: "Moving average" }, { value: "median", label: "Median" } ], default: "sma" }
 Compute the level with the chosen statistic over the SAME window (the example below shows a rolling
 window kept as a running sum AND a sorted array, so both are cheap). This knob is wanted even though
@@ -586,11 +591,11 @@ WHAT DOES BECOME A PARAM:
    "cash" means hold dollars, buy nothing. Guard for it (data["cash"] does not exist).
 3. Every threshold, window, percentage and lookback I DID state — "55% above", "250-day median",
    "300 SMA" each become a dropdown, never baked into the code as a literal.
-4. "Cash interest (%/yr)" ([0,0.5,1,...,6,7,8]) — only when cash can actually be held, so parked
+4. "Cash interest (%/yr)" ([0,0.5,1,...,6,7,8], text: "Cash earns {} a year.", unit: "%") — only when cash can actually be held, so parked
    money is not silently dead.
 5. ALWAYS include a trading-cost dropdown, exactly this one (it matches the app's other strategies):
-     { id: "tradeCost", label: "Trading cost (%)", default: 0.02,
-       options: [0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
+     { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.",
+       unit: "%", default: 0.02, options: [0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
    Charge it as a percentage of the dollar amount TRADED, on every leg of every trade — each sell,
    each buy, both halves of a switch, and every ease-in slice — deduct it from the proceeds (or from
    the cash being deployed), and log it as "fee" on that row. A strategy that trades often has to pay
@@ -841,27 +846,27 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
   // ticker is a param ONLY because the description measures QQQ but trades TQQQ, and the buffer
   // is a param ONLY because the description asks for one. Nothing else was invented.
   params: [
-    { id: "asset", label: "Fund traded", default: "tqqq", options: [
+    { id: "asset", label: "Fund traded", text: "Hold {} while the trend is up.", default: "tqqq", options: [
       { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" },
       { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" },
       { value: "qqq",  label: "QQQ" },  { value: "spy", label: "SPY" } ] },
-    { id: "park", label: "Held when out", default: "cash", options: [
+    { id: "park", label: "Held when out", text: "Hold {} while it is down.", default: "cash", options: [
       { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy",  label: "SPY" },  { value: "sso", label: "SSO" } ] },
-    { id: "signal", label: "Signal read from", default: "qqq", options: [
+    { id: "signal", label: "Signal read from", text: "The trend is up while {} closes above its line.", default: "qqq", options: [
       { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }, { value: "tqqq", label: "TQQQ" } ] },
-    { id: "window", label: "Window (days)", default: 200, options: [
+    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 200, options: [
       20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,
       210,220,230,240,250,260,270,280,300,320,350,400] },
     // The one always-wanted extra knob (see PARAMS): median and moving average
     // are interchangeable center lines, defaulting to what the description names.
-    { id: "stat", label: "Center line", options: [
+    { id: "stat", label: "Center line", text: "Use the {} of those closes as the line.", options: [
       { value: "sma", label: "Moving average" }, { value: "median", label: "Median" } ], default: "sma" },
-    { id: "band", label: "Cross buffer (%)", default: 1, options: [
+    { id: "band", label: "Cross buffer (%)", text: "A cross counts once the close is {} past the line.", unit: "%", default: 1, options: [
       0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,3.5,4,4.5,5,6,7,8,10] },
-    { id: "cashRate", label: "Cash interest (%/yr)", default: 4, options: [
+    { id: "cashRate", label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
-    { id: "tradeCost", label: "Trading cost (%)", default: 0.02, options: [
+    { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
       0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
   ],
   columns: [
@@ -2886,31 +2891,52 @@ function customParamOptions(sp) {
   }
   return [{ value: sp.default, label: String(sp.default) }];
 }
+// How an option reads on the sidebar dropdown and in its popup: its label,
+// with the param's `unit` ("%", " days") after each plain number, so a
+// percent setting shows "125%" the way the 9sig dropdowns show "40%". An
+// option with a label of its own ("Off", "No limit") keeps it as it is.
+function customOptionText(sp, o) {
+  const plainNumber = String(o.label) === String(o.value) && o.value !== '' && Number.isFinite(Number(o.value));
+  return sp.unit != null && plainNumber ? String(o.label) + String(sp.unit) : String(o.label);
+}
 function customOptionLabel(sp, val) {
   const m = customParamOptions(sp).find(o => String(o.value) === String(val));
-  return m ? String(m.label) : String(val);
+  return m ? customOptionText(sp, m) : String(val);
 }
-// Each param is a bar-preview dropdown (same look as the 9sig selectors): the
-// popup runs the strategy once per option (in the sandbox) and shows each
-// option's resulting final value as a proportional bar.
+// The sentence a param reads as, with {} where its dropdown sits: its `text`,
+// or else its label, with a unit in brackets moved after the dropdown
+// ("Lookback (trading days)" reads "Lookback {} trading days").
+function customParamSentence(sp) {
+  if (sp.text != null && String(sp.text).includes('{}')) return String(sp.text);
+  const label = String(sp.label || sp.id);
+  const m = label.match(/^(.*\S)\s*\(([^()]+)\)\s*$/);
+  if (m && /^(%|(trading )?(days|weeks|months|years)\b)/.test(m[2])) return m[1] + ' {}' + (m[2][0] === '%' ? '' : ' ') + m[2];
+  return label + ' {}';
+}
+// Each param reads as a sentence with its bar-preview dropdown inline, like
+// the 9sig panel, and a section's sentences run on as one paragraph; the popup runs the strategy once per option (in the
+// sandbox) and shows each option's final value as a proportional bar.
 function buildCustomControlsHtml(cfg, schema) {
   if (!schema || !schema.length) return '';
   const rows = schema.map(sp => {
     if (!sp) return '';
     // { section: "Label" } entries (no id) group the params under sub-headers
     // so a long settings list reads in blocks instead of one flat scan.
-    // An optional `tip` on the entry becomes the shared ⓘ hover tooltip next to the label.
-    const tip = sp.tip != null && String(sp.tip).trim() ? ` <span class="info-icon" tabindex="0" data-tip="${_escHtml(String(sp.tip))}">ⓘ</span>` : '';
-    if (sp.id == null) return sp.section ? `<div class="custom-param-group">${_escHtml(sp.section)}${tip}</div>` : '';
-    const label = _escHtml(sp.label || sp.id);
+    // An optional `tip` becomes the shared ⓘ hover tooltip at the end of the line.
+    const tip = sp.tip != null && String(sp.tip).trim() ? `<span class="info-icon" tabindex="0" data-tip="${_escHtml(String(sp.tip))}">ⓘ</span>` : '';
+    if (sp.id == null) return sp.section ? `<div class="custom-param-group">${_escHtml(sp.section)}${tip ? ' ' + tip : ''}</div>` : '';
+    const sentence = customParamSentence(sp), at = sentence.indexOf('{}');
+    const before = sentence.slice(0, at), after = sentence.slice(at + 2);
     const curLabel = _escHtml(customOptionLabel(sp, customParamValue(cfg, sp)));
-    return `<div class="custom-param-row">
-      <label>${label}${tip}</label>
-      <button type="button" class="pdrop-trigger inline-select cp-trigger" data-cp-cfg="${_escHtml(cfg.id)}" data-cp-id="${_escHtml(sp.id)}">
-        <span class="pdrop-trigger-label">${curLabel}</span><span class="pdrop-caret">▾</span>
-      </button>
-    </div>`;
-  }).join('');
+    const dropdown = `<button type="button" class="pdrop-trigger inline-select cp-trigger" data-cp-cfg="${_escHtml(cfg.id)}" data-cp-id="${_escHtml(sp.id)}" aria-label="${_escHtml(sp.label || sp.id)}">`
+      + `<span class="pdrop-trigger-label">${curLabel}</span><span class="pdrop-caret">▾</span></button>`;
+    if (!tip) return `<span class="custom-param-line">${_escHtml(before)}${dropdown}${_escHtml(after)}</span>`;
+    // The ⓘ stays on the line of the sentence's last word (or of the dropdown,
+    // when only punctuation follows it) instead of wrapping onto a line alone.
+    const cut = after.lastIndexOf(' ');
+    const tail = (cut >= 0 ? _escHtml(after.slice(cut + 1)) : dropdown + _escHtml(after)) + ' ' + tip;
+    return `<span class="custom-param-line">${_escHtml(before)}${cut >= 0 ? dropdown + _escHtml(after.slice(0, cut + 1)) : ''}<span class="cp-tail">${tail}</span></span>`;
+  }).join(' ');
   return `<div class="custom-params">${rows}</div>`;
 }
 
@@ -2959,7 +2985,7 @@ function openCustomParamPopup(trigger, cfg, sp) {
   popup.className = 'pdrop-popup';
   popup.innerHTML = `<div class="pdrop-head">final value if chosen</div>` + opts.map((o, i) =>
     `<div class="pdrop-row${String(o.value) === String(cur) ? ' selected' : ''}" data-cp-i="${i}">
-       <span class="pdrop-rlabel">${_escHtml(o.label)}</span>
+       <span class="pdrop-rlabel">${_escHtml(customOptionText(sp, o))}</span>
        <span class="pdrop-track"><span class="pdrop-fill"></span></span>
        <span class="pdrop-rval">…</span>
      </div>`).join('');
