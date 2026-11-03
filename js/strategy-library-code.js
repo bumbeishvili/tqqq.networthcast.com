@@ -2653,41 +2653,59 @@ CODE[47] = `{
     { section: "Stretch" },
     // Every percent setting steps by 1% (the user's call, 2026-10-30): the
     // results move sharply between neighbours, 5% steps hid the best ones.
-    { id: "lookbackYears", label: "Lookback (years)", tip: "How many years of buy & hold growth are compared: TQQQ's against QQQ's.", default: 2.25, options: [
-      1,1.25,1.5,1.75,2,2.25,2.5,2.75,3,3.25,3.5,3.75,4,4.5,5,5.5,6,7,8,9,10] },
+    // In trading days since 2026-11-02 (the user: "can you have the days
+    // instead of years"), every week from 462 to 672 and every 3-4 days from
+    // 518 to 588; the other coarse lists got steps around their defaults too
+    // (2026-11-03, the user: "flexibility to choose more around plateaus").
+    // The defaults since
+    // 2026-11-03 come from a hill-climb on the worst dropdown neighbour (the
+    // user: "cagr above 135 but still plateau"; the overextended line's two
+    // settings left out of the score at the user's call), then set by the
+    // user in the middle of the flat stretch each dropdown shows ("have these
+    // defaults", 2026-11-03): #50 makes 140.7% a year 2010-2025 with a 41%
+    // drawdown; 135-141% at the lookbacks 532-553 (556: 118), 135-141% at
+    // start windows 56-65 (70: 122), 138-141% with the floor 3-8, 141% with
+    // re-entry 24-37, 139-141% with the deep buy -33..-24. The one-day start
+    // at 567 made 141% at 567 alone and 88-97% a week either side; the
+    // 609-day plateau tried first made 119% (scratchpad r13/ca*.cjs,
+    // option-curves.cjs, floor-bars.cjs).
+    { id: "lookbackDays", label: "Lookback (trading days)", tip: "How many trading days of buy & hold growth are compared: TQQQ's against QQQ's. 252 is about a year.", default: 550, options:
+      [252, 315, 378, 441].concat(Array.from({ length: 31 }, (_, k) => 462 + 7 * k), Array.from({ length: 10 }, (_, k) => 521 + 7 * k), [550, 693, 756, 819, 882, 1008]).sort((a, b) => a - b) },
+    { id: "startAvgDays", label: "Start averaged over ± (days)", tip: "Growth is measured from the average close this many trading days either side of the lookback's start, so no single day there decides the lead. 0 uses that day's close alone.", default: 65, options:
+      [0, 10, 21, 31, 42, 49, 56, 63, 65, 70, 77, 84, 95, 105, 126, 147, 168] },
     { section: "Ceiling — step aside" },
-    { id: "topLead", label: "TQQQ ahead by at least (%)", tip: "TQQQ's growth over the lookback against QQQ's: 90 means TQQQ grew 1.9 times as much.", default: 92, options:
+    { id: "topLead", label: "TQQQ ahead by at least (%)", tip: "TQQQ's growth over the lookback against QQQ's: 90 means TQQQ grew 1.9 times as much.", default: 125, options:
       Array.from({ length: 281 }, (_, k) => 20 + k).concat([{ value: 9999, label: "Off" }]) },
     { id: "topHold", label: "Held instead", tip: "What is held from the ceiling until the lead falls back.", default: "sqqq", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" } ] },
-    { id: "topDays", label: "SQQQ for at most (days)", tip: "After this many days SQQQ is sold to cash, which waits for the lead to fall back.", default: 10, options: [
-      { value: 0, label: "No limit" }, 3,5,10,15,21,42,63,126] },
-    { id: "backLead", label: "Back to TQQQ at lead ≤ (%)", tip: "At or above the ceiling means no band: back on the first close under the ceiling.", default: 80, options:
+    { id: "topDays", label: "SQQQ for at most (days)", tip: "After this many days SQQQ is sold to cash, which waits for the lead to fall back.", default: 20, options: [
+      { value: 0, label: "No limit" }, 3,5,7,10,12,15,18,20,21,25,30,42,63,126] },
+    { id: "backLead", label: "Back to TQQQ at lead ≤ (%)", tip: "At or above the ceiling means no band: back on the first close under the ceiling.", default: 25, options:
       Array.from({ length: 271 }, (_, k) => k - 20) },
     { section: "Floor — sell the breakdown" },
-    { id: "floorLead", label: "Sell at lead under (%)", tip: "A close with TQQQ's lead under this sells TQQQ; negative means TQQQ is behind QQQ.", default: 10, options:
+    { id: "floorLead", label: "Sell at lead under (%)", tip: "A close with TQQQ's lead under this sells TQQQ; negative means TQQQ is behind QQQ.", default: 5, options:
       [{ value: -9999, label: "Off" }].concat(Array.from({ length: 101 }, (_, k) => k - 70)) },
     // Cash since 2026-11-02 (the user): SQQQ bought after a floor break lost on
     // average over 169 break days since 2010 across nearby settings, and cash
     // beat it in 86% of 105 nearby settings (scratchpad r12/, r10/).
     { id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken.", default: "cash", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" } ] },
-    { id: "reentryLead", label: "Back at lead ≥ (%)", tip: "TQQQ is bought again after the closes in a row below at or above this lead.", default: 23, options:
+    { id: "reentryLead", label: "Back at lead ≥ (%)", tip: "TQQQ is bought again after the closes in a row below at or above this lead.", default: 25, options:
       Array.from({ length: 151 }, (_, k) => k - 70) },
-    { id: "reentryCloses", label: "Closes in a row", tip: "How many closes in a row at or above the re-entry lead buy TQQQ again.", default: 3, options: [1,2,3,5,7,10] },
+    { id: "reentryCloses", label: "Closes in a row", tip: "How many closes in a row at or above the re-entry lead buy TQQQ again.", default: 5, options: [1,2,3,4,5,6,7,8,10] },
     { id: "deepLead", label: "Deep buy at lead ≤ (%)", tip: "While the floor is broken, a close this far behind or worse buys TQQQ. The floor stays off until the lead is back at the re-entry level.", default: -30, options:
       [{ value: -9999, label: "Off" }].concat(Array.from({ length: 66 }, (_, k) => k - 85)) },
     { section: "Overextended price — the buy-back strategy's SQQQ line" },
     { id: "overPct", label: "SQQQ above median (%)", tip: "SQQQ while TQQQ closes this far above its own median, back on the first close under.", default: 55, options:
       [{ value: 0, label: "Off" }].concat(Array.from({ length: 51 }, (_, k) => 30 + k)) },
-    { id: "overWindow", label: "Median window (days)", tip: "How many days of TQQQ closes the median covers.", default: 250, options: [150,200,250,300] },
+    { id: "overWindow", label: "Median window (days)", tip: "How many days of TQQQ closes the median covers.", default: 250, options: [150,175,200,225,250,275,300,350] },
     { section: "Defence" },
-    { id: "sqqqMaxDays", label: "SQQQ at most (days in a row)", tip: "After this many days in a row in SQQQ, hold cash until the rules want something else.", default: 126, options: [
-      { value: 0, label: "No limit" }, 5, 10, 15, 20, 30, 42, 63, 100, 126, 252] },
+    { id: "sqqqMaxDays", label: "SQQQ at most (days in a row)", tip: "After this many days in a row in SQQQ, hold cash until the rules want something else.", default: 100, options: [
+      { value: 0, label: "No limit" }, 5, 10, 15, 20, 30, 42, 63, 84, 100, 126, 150, 189, 252] },
     { id: "deepGuard", label: "Deep buy guard (% under its price)", tip: "A deep buy that closes this far under its buy price goes to cash, and buys back once TQQQ closes above its median.", default: 25, options:
       [{ value: 0, label: "Off" }].concat(Array.from({ length: 36 }, (_, k) => 15 + k)) },
-    { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "Cash instead of TQQQ while the Chicago Fed's credit stress index is above this. Each weekly reading is used a week later.", default: 0.4, options: [
-      { value: 0, label: "Off" }, 0.2, 0.3, 0.4, 0.5, 0.75, 1] },
+    { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "Cash instead of TQQQ while the Chicago Fed's credit stress index is above this. Each weekly reading is used a week later.", default: 0.5, options: [
+      { value: 0, label: "Off" }, 0.2, 0.3, 0.35, 0.4, 0.45, 0.5, 0.75, 1] },
     { section: "Execution & costs" },
     { id: "splitDays", label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
@@ -2705,24 +2723,36 @@ CODE[47] = `{
   ],
   run(data, p) {
     const log = [], dates = data.dates, n = dates.length, T = data.tqqq, Q = data.qqq;
-    const years = p.lookbackYears || 2.25, L = Math.round(years * 252);
-    const top = p.topLead == null ? 92 : +p.topLead, back = p.backLead == null ? 80 : +p.backLead, band = back < top;
+    const L = Math.round(+p.lookbackDays || 550), years = +(L / 252).toFixed(2);
+    const W = p.startAvgDays == null ? 65 : Math.max(0, Math.round(+p.startAvgDays));
+    const top = p.topLead == null ? 125 : +p.topLead, back = p.backLead == null ? 25 : +p.backLead, band = back < top;
     const topOn = top < 9999, topHold = p.topHold || "sqqq", topDays = +p.topDays || 0;
-    const floor = p.floorLead == null ? 10 : +p.floorLead, floorOn = floor > -9999, floorHold = p.floorHold || "sqqq";
-    const reentry = p.reentryLead == null ? 23 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 1);
+    const floor = p.floorLead == null ? 5 : +p.floorLead, floorOn = floor > -9999, floorHold = p.floorHold || "sqqq";
+    const reentry = p.reentryLead == null ? 25 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 5);
     const deep = p.deepLead == null ? -30 : +p.deepLead, deepOn = floorOn && deep > -9999;
     const over = (+p.overPct || 0) / 100, OW = +p.overWindow || 250;
     const cost = (p.tradeCost || 0) / 100;
     const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
     const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
     // The lead: TQQQ's growth over the lookback divided by QQQ's, minus 1, in
-    // percent — from the last L closes only.
+    // percent. Growth runs from the start price: the average close (geometric
+    // mean) over the W closes either side of the day L back, or that day's
+    // close when W is 0. With one day's close, lookbacks a week apart made 80%
+    // to 141% a year (2010-2025): the lead swung with the day it started on.
     const lead = new Float64Array(n).fill(NaN), gT = new Float64Array(n).fill(NaN), gQ = new Float64Array(n).fill(NaN);
-    for (let i = L; i < n; i++) {
-      if (T[i] > 0 && T[i - L] > 0 && Q[i] > 0 && Q[i - L] > 0) {
-        gT[i] = T[i] / T[i - L]; gQ[i] = Q[i] / Q[i - L];
-        lead[i] = (Math.exp(Math.log(T[i] / T[i - L]) - Math.log(Q[i] / Q[i - L])) - 1) * 100;
-      }
+    const baseT = new Float64Array(n).fill(NaN), baseQ = new Float64Array(n).fill(NaN);
+    const logT = new Float64Array(n + 1), logQ = new Float64Array(n + 1), priced = new Int32Array(n + 1);
+    for (let i = 0; i < n; i++) {
+      const ok = T[i] > 0 && Q[i] > 0;
+      logT[i + 1] = logT[i] + (ok ? Math.log(T[i]) : 0); logQ[i + 1] = logQ[i] + (ok ? Math.log(Q[i]) : 0); priced[i + 1] = priced[i] + (ok ? 1 : 0);
+    }
+    for (let i = L + W; i < n; i++) {
+      const a = i - L - W, b = i - L + W + 1;
+      if (!(T[i] > 0 && Q[i] > 0) || priced[b] - priced[a] !== b - a) continue;
+      baseT[i] = W ? Math.exp((logT[b] - logT[a]) / (b - a)) : T[i - L];
+      baseQ[i] = W ? Math.exp((logQ[b] - logQ[a]) / (b - a)) : Q[i - L];
+      gT[i] = T[i] / baseT[i]; gQ[i] = Q[i] / baseQ[i];
+      lead[i] = (Math.exp(Math.log(gT[i]) - Math.log(gQ[i])) - 1) * 100;
     }
     // TQQQ against its own median over the window, today's close included,
     // from the start of the memory window before the entry (when the
@@ -2765,7 +2795,7 @@ CODE[47] = `{
       // The deep buy guard: a deep buy closing dGuard under its buy price waits in
       // cash until TQQQ closes above its median, then is bought again. 1973, 2000
       // and 2008 each fell another 89-99% after a deep buy; since 2010 a deep buy
-      // fell at most 17% further, so the guard has never fired there.
+      // fell at most 16% further, so the guard has never fired there.
       if (state !== "deep") deepPaused = false;
       else if (dGuard > 0) {
         if (!deepPaused && T[i] < deepPx * (1 - dGuard)) { deepPaused = true; why = "the deep buy guard, TQQQ " + Math.round(dGuard * 100) + "% under its buy price"; whyIdx = i; }
@@ -2783,7 +2813,7 @@ CODE[47] = `{
       const overNow = over > 0 && rel[i] === rel[i] && rel[i] > over;
       const vetoNow = !!nfTh && !!data.nfci && data.nfci[i] > nfTh;
       let w = overNow ? "sqqq" : base;
-      // The credit veto: never above 0.4 since 2010 (0.31 in April 2020), 5.2 in 1974, 3.1 in 2008.
+      // The credit veto: never above 0.5 since 2010 (0.31 in April 2020), 5.2 in 1974, 3.1 in 2008.
       if (w === "tqqq" && vetoNow) w = "cash";
       return { w, base, overNow, vetoNow };
     };
@@ -2824,7 +2854,7 @@ CODE[47] = `{
     // the trade it names. A lead threshold x is the close that puts TQQQ x%
     // ahead of QQQ over the lookback.
     const leadLbl = (x) => x >= 0 ? x + "% ahead" : -x + "% behind";
-    const atLead = (i, x) => lead[i] === lead[i] ? T[i - L] * (Q[i] / Q[i - L]) * (1 + x / 100) : null;
+    const atLead = (i, x) => lead[i] === lead[i] ? baseT[i] * (Q[i] / baseQ[i]) * (1 + x / 100) : null;
     // The levels that can fire from the current state, for the Nearest signal
     // card. Each says whether crossing it sells TQQQ or buys it (kind).
     const signalLevels = (i) => {
