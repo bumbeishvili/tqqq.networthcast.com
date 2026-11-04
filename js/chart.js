@@ -1343,6 +1343,11 @@ function renderStrategyPanelBody(idx) {
   }
   // Restore any <select> values the DOM moves reverted.
   for (const [s, v] of _selSnap) { if (s.value !== v) s.value = v; }
+  // The Settings header above the controls, read from the restored values:
+  // Fit and Reset to default (js/saved-configs.js).
+  if (PANEL_KEY_BY_IDX[idx] != null && typeof buildNativeSettingsHeaderHtml === 'function') {
+    body.insertAdjacentHTML('afterbegin', buildNativeSettingsHeaderHtml(PANEL_KEY_BY_IDX[idx]));
+  }
   // Preview-dropdown trigger labels read the (now-correct) select values.
   if (typeof window.refreshPreviewTriggers === 'function') window.refreshPreviewTriggers();
   // Restore the pre-rebuild scroll position.
@@ -2513,6 +2518,9 @@ function render() {
     initial, monthly, annualRaise, log[0].date, finalLog.date,
     years, finalValue, (typeof monthlyData !== 'undefined' ? monthlyData : null), totalContributed,
     contribSchedule);
+  // The same CAGR for any final value on this window and money: the Fit
+  // search's result line for the 9sig and SMA panels (js/saved-configs.js).
+  window._mwCagrOfFinal = _mw;
   const ret9 = _mw(finalLog.total);
   const retBH = _mw(finalBH);
   const retQQQ = _mw(finalQQQ);
@@ -2664,8 +2672,7 @@ function render() {
   const bhKeyName = bhKey === 'qqq' ? 'qqq' : bhKey === 'spy' ? 'spy' : bhKey === 'qld' ? 'qld' : bhKey === 'sso' ? 'sso' : bhKey === 'spxl' ? 'spxl' : bhKey === 'sqqq' ? 'sqqq' : 'tqqq';
   const dailyDDByIdx = {};
   if (dailyRows) {
-    const sigCtl = log.map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: l.cash }));
-    dailyDDByIdx[0] = computeDailyMaxDrawdown(sigCtl, dailyRows, sigKey);
+    dailyDDByIdx[0] = computeDailyMaxDrawdown(nineSigDDControls(log), dailyRows, sigKey);
     dailyDDByIdx[1] = computeDailyMaxDrawdown(
       log.map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: 0 })), dailyRows, sigKey);
     if (bhPicked.series && bhPicked.series.length && bhPicked.series[0].shares != null) {

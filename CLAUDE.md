@@ -23,10 +23,11 @@ A new `select-*` control is not done until ALL of these are touched:
    array) AND read it in the opts builder (`+pget(p, 'select-...', default)`).
 7. **js/preview-dropdown.js** — THREE spots (this is what gives the dropdown its bar-chart
    preview and makes it look "data-driven like the others" — do NOT skip it):
-   - register it in the `PREVIEW_SELECTS` map with `{ kind: 'sma', apply: (p, v) => { p.<field> = +v; } }`,
+   - register it in the `PREVIEW_SELECTS` map with `{ kind: 'sma', name: 'Short name', apply: (p, v) => { p.<field> = +v; } }`
+     (`name` labels it in the Fit summary; add `fit: false` when it is a cost or execution setting the Fit button must not tune),
    - add it to the `readSmaParams()` (or `read9sigParams()`) params object,
-   - pass it through in the `simulateSMA({...})` / `simulate({...})` call inside `smaFinal`/`nineSigFinal`.
-   Without the `PREVIEW_SELECTS` entry it renders as a plain native `<select>` with no bars.
+   - pass it through in the `simulateSMA({...})` / `simulate({...})` call inside `smaRun`/`nineSigRun`.
+   Without the `PREVIEW_SELECTS` entry it renders as a plain native `<select>` with no bars, and Fit never tries it.
 8. **js/analytics.js** — add it to BOTH SMA-opts builders (the DOM path ~1378 and the
    saved-params path ~1454).
 9. **js/controls.js migrations** — if the new control changes behavior for existing shared links,

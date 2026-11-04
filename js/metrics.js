@@ -162,6 +162,13 @@ function computeDailyMaxDrawdownMulti(controls, dailyRows) {
   return { pct: maxDD, peakDate: bestPeakDate, troughDate: bestTroughDate };
 }
 
+// A 9sig run's log as daily-revaluation control points: the fund's shares and
+// the cash after each rebalance (js/chart.js's 9sig drawdown and the Fit
+// search's both read it).
+function nineSigDDControls(log) {
+  return log.map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: l.cash }));
+}
+
 // Turn a custom strategy's log into daily-revaluation control points, so its
 // drawdown can be measured at every daily close like the built-in engines'
 // instead of only on the rows it chose to emit. A strategy that logs just
@@ -192,5 +199,5 @@ function buildCustomDDControls(log) {
 
 // Node test harness export (no-op in the browser).
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, computeDailyMaxDrawdown, computeDailyMaxDrawdownMulti, buildCustomDDControls };
+  module.exports = { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, computeDailyMaxDrawdown, computeDailyMaxDrawdownMulti, buildCustomDDControls, nineSigDDControls };
 }

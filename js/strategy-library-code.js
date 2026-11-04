@@ -210,7 +210,8 @@ function codeFingerprint(code) {
 // #1 Faber 10-month: QQQ vs 200-SMA checked ONLY on the last trading day of each month.
 CODE[1] = `{
   name: "Faber 10-mo / 200-day (monthly) → TQQQ/cash",
-  params: [{ id: "window", label: "Window (days)", text: "Hold TQQQ while QQQ ends the month above its line over the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "window", label: "Window (days)", text: "Hold TQQQ while QQQ ends the month above its line over the last {} days.", options:
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 12 }, (_, k) => 230 + 10 * k), Array.from({ length: 96 }, (_, k) => 342 + k), [440, 450], Array.from({ length: 31 }, (_, k) => 454 + k), [490, 500]), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "QQQ's average or median close over the window (the Center line setting). Checked only on the month end." }],
@@ -254,7 +255,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #2 Gayed LRS 3×: SPY vs 200-SMA daily → SPXL (3× S&P) else cash.
 CODE[2] = `{
   name: "Gayed LRS 3× — SPY 200SMA → SPXL/cash",
-  params: [{ id: "window", label: "Window (days)", text: "Hold SPXL while SPY closes above its line over the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "window", label: "Window (days)", text: "Hold SPXL while SPY closes above its line over the last {} days.", options:
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -289,7 +291,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #3 Gayed LRS 2×: SPY vs 200-SMA daily → SSO (2× S&P) else cash.
 CODE[3] = `{
   name: "Gayed LRS 2× — SPY 200SMA → SSO/cash",
-  params: [{ id: "window", label: "Window (days)", text: "Hold SSO while SPY closes above its line over the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "window", label: "Window (days)", text: "Hold SSO while SPY closes above its line over the last {} days.", options:
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -324,8 +327,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #8 Siegel ±band: SPY vs 200-SMA symmetric band → TQQQ/cash.
 CODE[8] = `{
   name: "Siegel ±band SPY 200SMA → TQQQ/cash",
-  params: [{ id: "band", label: "Band (% around line)", text: "Buy TQQQ when SPY closes {} above its line, and sell when it closes that far below.", unit: "%", options: [0, 1, 2, 3], default: 1 },
-           { id: "window", label: "Window", text: "The line covers the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "band", label: "Band (% around line)", text: "Buy TQQQ when SPY closes {} above its line, and sell when it closes that far below.", unit: "%", options:
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 1 },
+           { id: "window", label: "Window", text: "The line covers the last {} days.", options:
+      [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), Array.from({ length: 31 }, (_, k) => 74 + k), Array.from({ length: 4 }, (_, k) => 110 + 10 * k), Array.from({ length: 82 }, (_, k) => 149 + k), [240], Array.from({ length: 31 }, (_, k) => 246 + k), Array.from({ length: 23 }, (_, k) => 280 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -367,7 +372,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[9] = `{
   name: "Canonical SPY 200SMA → TQQQ/cash",
   params: [{ id: "signal", label: "Signal", text: "Hold TQQQ while {} closes above its line.", options: [{ value: "spy", label: "SPY" }, { value: "qqq", label: "QQQ" }], default: "spy" },
-           { id: "window", label: "Window", text: "The line covers the last {} days.", options: [100, 150, 200, 250], default: 200 },
+           { id: "window", label: "Window", text: "The line covers the last {} days.", options:
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -404,7 +410,8 @@ CODE[10] = `{
   name: "QQQ 200-day SMA → TQQQ else cash",
   params: [{ id: "signal", label: "Signal asset", text: "Watch {} against its line.", options: [{ value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }], default: "qqq" },
            { id: "lev", label: "Leveraged ETF", text: "Hold {} while it is above the line, and cash while it is below.", options: [{ value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "sso", label: "SSO" }, { value: "spxl", label: "SPXL" }], default: "tqqq" },
-           { id: "window", label: "Window (days)", text: "The line covers the last {} days.", options: [100, 150, 200, 250], default: 200 },
+           { id: "window", label: "Window (days)", text: "The line covers the last {} days.", options:
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -439,7 +446,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #11 SPY 200SMA → UPRO (SPXL 3× S&P) else cash.
 CODE[11] = `{
   name: "SPY 200SMA → UPRO (SPXL) / cash",
-  params: [{ id: "window", label: "Window", text: "Hold SPXL while SPY closes above its line over the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "window", label: "Window", text: "Hold SPXL while SPY closes above its line over the last {} days.", options:
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -474,7 +482,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #12 SSO own-price 200SMA → SSO else cash.
 CODE[12] = `{
   name: "SSO own 200SMA → SSO/cash (2×)",
-  params: [{ id: "window", label: "Window", text: "Hold SSO while it closes above its own line over the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "window", label: "Window", text: "Hold SSO while it closes above its own line over the last {} days.", options:
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 44 }, (_, k) => 181 + k), [230, 240], Array.from({ length: 31 }, (_, k) => 250 + k), Array.from({ length: 7 }, (_, k) => 290 + 10 * k), Array.from({ length: 81 }, (_, k) => 357 + k), Array.from({ length: 7 }, (_, k) => 440 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "center", label: "Center", tip: "SSO's average or median close over the window (the Center line setting). The rule holds SSO while SSO closes above it." }],
   run(data, p) {
@@ -508,9 +517,12 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #13 Hollywood SPY 200SMA +4/-3 → TQQQ/QQQ.
 CODE[13] = `{
   name: "Hollywood SPY 200SMA +4/-3 → TQQQ/QQQ",
-  params: [{ id: "entry", label: "Enter band (% above)", text: "Hold TQQQ once SPY closes {} above its line.", unit: "%", options: [0, 2, 3, 4, 5], default: 4 },
-           { id: "exit", label: "Exit band (% below)", text: "Switch to QQQ once SPY closes {} below it.", unit: "%", options: [0, 2, 3, 4, 5], default: 3 },
-           { id: "window", label: "Window", text: "The line covers the last {} days.", options: [100, 150, 200, 250], default: 200 },
+  params: [{ id: "entry", label: "Enter band (% above)", text: "Hold TQQQ once SPY closes {} above its line.", unit: "%", options:
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 4 },
+           { id: "exit", label: "Exit band (% below)", text: "Switch to QQQ once SPY closes {} below it.", unit: "%", options:
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 3 },
+           { id: "window", label: "Window", text: "The line covers the last {} days.", options:
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -560,8 +572,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #15 Composer: QQQ 200-SMA trend AND RSI(14) not overbought → TQQQ else cash.
 CODE[15] = `{
   name: "Composer 200MA + RSI trend → TQQQ/cash",
-  params: [{ id: "rsiMax", label: "Max RSI(14) to hold", text: "Hold TQQQ while QQQ is above its line and QQQ's RSI(14) is under {}.", options: [60, 70, 80, 100], default: 80 },
-           { id: "window", label: "Window", text: "The line covers the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "rsiMax", label: "Max RSI(14) to hold", text: "Hold TQQQ while QQQ is above its line and QQQ's RSI(14) is under {}.", options:
+      Array.from({ length: 101 }, (_, k) => +(50 + 0.5 * k).toFixed(1)), default: 80 },
+           { id: "window", label: "Window", text: "The line covers the last {} days.", options:
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -608,7 +622,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #17 MACD(12/26/9) on QQQ → TQQQ/cash + trailing stop.
 CODE[17] = `{
   name: "MACD(12/26) → TQQQ/cash (+trailing stop)",
-  params: [{ id: "trail", label: "Trailing stop (% from peak)", text: "Sell on a trailing stop {} under TQQQ's high since the buy.", unit: "%", options: [{ value: 0, label: "Off" }, 20, 30, 40], default: 30 }],
+  params: [{ id: "trail", label: "Trailing stop (% from peak)", text: "Sell on a trailing stop {} under TQQQ's high since the buy.", unit: "%", options:
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1))), default: 30 }],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "triggerLine", label: "MACD trigger", tip: "The QQQ close that would put MACD exactly on its signal line or zero, whichever is higher. Above it the buy rule holds." },
              { key: "stopLine", label: "Trailing stop", tip: "While holding: TQQQ's high since the buy, less the stop setting. A TQQQ close under it sells." }],
@@ -658,7 +673,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #18 40-week SMA crossover: QQQ vs 200-day SMA checked WEEKLY (last trading day of ISO week).
 CODE[18] = `{
   name: "40-week SMA (weekly) → TQQQ/cash",
-  params: [{ id: "window", label: "Window (days)", text: "Hold TQQQ while QQQ's weekly close is above its line over the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "window", label: "Window (days)", text: "Hold TQQQ while QQQ's weekly close is above its line over the last {} days.", options:
+      [5].concat(Array.from({ length: 16 }, (_, k) => 10 + 10 * k), Array.from({ length: 55 }, (_, k) => 166 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 31 }, (_, k) => 306 + k), Array.from({ length: 12 }, (_, k) => 340 + 10 * k), Array.from({ length: 44 }, (_, k) => 457 + k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "QQQ's average or median close over the window (the Center line setting). Checked only on the week end." }],
@@ -699,8 +715,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #19 Golden/Death cross 50/200 on QQQ → TQQQ/cash.
 CODE[19] = `{
   name: "Golden/Death Cross 50/200 → TQQQ/cash",
-  params: [{ id: "fast", label: "Fast window", text: "Hold TQQQ while QQQ's fast line, over {} days, is above its slow line.", options: [20, 50, 100], default: 50 },
-           { id: "slow", label: "Slow window", text: "The slow line covers the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "fast", label: "Fast window", text: "Hold TQQQ while QQQ's fast line, over {} days, is above its slow line.", options:
+      Array.from({ length: 146 }, (_, k) => 5 + k), default: 50 },
+           { id: "slow", label: "Slow window", text: "The slow line covers the last {} days.", options:
+      Array.from({ length: 14 }, (_, k) => 50 + 10 * k).concat(Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 100 }, (_, k) => 301 + k)), default: 200 },
            { id: "stat", label: "Center line", text: "Use the {} for both lines.", options: [{ value: "sma", label: "Moving average" }, { value: "median", label: "Median" }], default: "sma" }],
   columns: [{ key: "fastLine", label: "Fast line", tip: "QQQ's average or median close over the fast window." },
              { key: "slowLine", label: "Slow line", tip: "QQQ's average or median close over the slow window. The rule holds TQQQ while the fast line is above it." },
@@ -736,8 +754,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #20 Volatility targeting: hold TQQQ scaled so trailing vol ≈ target; rest cash. Rebalance monthly.
 CODE[20] = `{
   name: "Vol-target TQQQ (scale to target vol)",
-  params: [{ id: "target", label: "Target vol (%/yr)", text: "Size TQQQ so the holding swings about {} a year.", unit: "%", options: [15, 20, 25, 30], default: 25 },
-           { id: "lookback", label: "Vol lookback (days)", text: "Measure the swings over the last {} days.", options: [20, 40, 60], default: 20 }],
+  params: [{ id: "target", label: "Target vol (%/yr)", text: "Size TQQQ so the holding swings about {} a year.", unit: "%", options:
+      Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)), default: 25 },
+           { id: "lookback", label: "Vol lookback (days)", text: "Measure the swings over the last {} days.", options:
+      Array.from({ length: 246 }, (_, k) => 5 + k), default: 20 }],
   columns: [{ key: "share", label: "TQQQ share", tip: "Share of the account in TQQQ at the close." },
              { key: "vol", label: "Volatility", tip: "TQQQ's annualised volatility over the lookback. Each month the share is reset to the target divided by it, at most 100%." },
              { key: "target", label: "Target", tip: "The target volatility setting." }],
@@ -785,8 +805,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #22 Connors RSI(2) dip-buy within a 200-SMA uptrend.
 CODE[22] = `{
   name: "Connors RSI(2) dip-buy (200SMA trend)",
-  params: [{ id: "buy", label: "Buy RSI(2) below", text: "Buy TQQQ when QQQ's RSI(2) drops under {} while QQQ is above its 200-day line.", options: [5, 10, 15], default: 10 },
-           { id: "sell", label: "Sell RSI(2) above", text: "Sell when RSI(2) rises over {}, or when QQQ closes under the line.", options: [60, 70, 80], default: 70 },
+  params: [{ id: "buy", label: "Buy RSI(2) below", text: "Buy TQQQ when QQQ's RSI(2) drops under {} while QQQ is above its 200-day line.", options:
+      Array.from({ length: 100 }, (_, k) => +(0.5 + 0.5 * k).toFixed(1)), default: 10 },
+           { id: "sell", label: "Sell RSI(2) above", text: "Sell when RSI(2) rises over {}, or when QQQ closes under the line.", options:
+      Array.from({ length: 120 }, (_, k) => +(40 + 0.5 * k).toFixed(1)), default: 70 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -834,8 +856,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #23 TFTLT: QQQ 200SMA → TQQQ, RSI(10) overheat exit + cool-gate re-entry.
 CODE[23] = `{
   name: "200-day SMA + RSI exit & re-entry",
-  params: [{ id: "oh", label: "Overheat exit RSI(10) ≥", text: "Sell TQQQ when QQQ's RSI(10) reaches {}, even above the line.", options: [60, 70, 80, { value: 100, label: "Off" }], default: 80 },
-           { id: "cool", label: "Cool-gate re-entry RSI(10) <", text: "Then buy back only once RSI(10) is under {}.", options: [40, 50, 60, { value: 100, label: "Off" }], default: 60 },
+  params: [{ id: "oh", label: "Overheat exit RSI(10) ≥", text: "Sell TQQQ when QQQ's RSI(10) reaches {}, even above the line.", options:
+      Array.from({ length: 100 }, (_, k) => +(50 + 0.5 * k).toFixed(1)).concat([{ value: 100, label: "Off" }]), default: 80 },
+           { id: "cool", label: "Cool-gate re-entry RSI(10) <", text: "Then buy back only once RSI(10) is under {}.", options:
+      Array.from({ length: 160 }, (_, k) => +(20 + 0.5 * k).toFixed(1)).concat([{ value: 100, label: "Off" }]), default: 60 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -884,9 +908,12 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #24 200SMA + Bodyguard (delever to QQQ, GTFO to cash).
 CODE[24] = `{
   name: "200SMA + Bodyguard (delever/GTFO)",
-  params: [{ id: "delev", label: "Delever→QQQ at (% above line)", text: "Switch TQQQ to QQQ when QQQ closes {} above its line.", unit: "%", options: [{ value: 0, label: "Off" }, 20, 25, 30, 35, 40], default: 30 },
-           { id: "gtfo", label: "Sell→cash at (% above line)", text: "Sell everything to cash when it closes {} above it.", unit: "%", options: [{ value: 0, label: "Off" }, 35, 40, 45, 50], default: 40 },
-           { id: "window", label: "Window", text: "Below the line, hold cash. The line covers the last {} days.", options: [150, 200, 250], default: 200 },
+  params: [{ id: "delev", label: "Delever→QQQ at (% above line)", text: "Switch TQQQ to QQQ when QQQ closes {} above its line.", unit: "%", options:
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 151 }, (_, k) => +(5 + 0.5 * k).toFixed(1))), default: 30 },
+           { id: "gtfo", label: "Sell→cash at (% above line)", text: "Sell everything to cash when it closes {} above it.", unit: "%", options:
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 181 }, (_, k) => +(10 + 0.5 * k).toFixed(1))), default: 40 },
+           { id: "window", label: "Window", text: "Below the line, hold cash. The line covers the last {} days.", options:
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 20 }, (_, k) => 260 + 10 * k), Array.from({ length: 30 }, (_, k) => 451 + k), [490, 500]), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -943,7 +970,8 @@ CODE[25] = `{
   name: "200SMA → TQQQ else QQQ (always in)",
   params: [{ id: "signal", label: "Signal / park", text: "Watch {} against its line, and hold it while it is below.", options: [{ value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }], default: "qqq" },
            { id: "lev", label: "Leveraged ETF", text: "Hold {} while it is above.", options: [{ value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "sso", label: "SSO" }, { value: "spxl", label: "SPXL" }], default: "tqqq" },
-           { id: "window", label: "Window", text: "The line covers the last {} days.", options: [100, 150, 200, 250], default: 200 },
+           { id: "window", label: "Window", text: "The line covers the last {} days.", options:
+      Array.from({ length: 32 }, (_, k) => 5 + k).concat(Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 200 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting). Above it the strategy holds the leveraged fund, under it the signal fund." }],
@@ -996,14 +1024,14 @@ CODE[26] = `{
       { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" },
       { value: "qld", label: "QLD" } ] },
-    { id: "threshold", label: "Sell when above line (%)", text: "It is overextended when it closes {} above its line.", unit: "%", default: 55, options: [
-      10,15,20,25,30,35,40,42,44,46,48,50,52,54,55,56,58,60,62,64,66,68,70,75,80,85,90,100,110,125,150,175,200] },
+    { id: "threshold", label: "Sell when above line (%)", text: "It is overextended when it closes {} above its line.", unit: "%", default: 55, options:
+      Array.from({ length: 191 }, (_, k) => 10 + k) },
     ${STAT_PARAM_MEDIAN_SNIPPET},
-    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options: [
-      40,60,80,100,120,140,160,180,190,200,210,220,230,240,250,260,270,280,290,300,310,320,340,360,380,400,450,500] },
-    { id: "cashRate", label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options:
+      [5].concat(Array.from({ length: 20 }, (_, k) => 10 + 10 * k), Array.from({ length: 82 }, (_, k) => 209 + k), Array.from({ length: 21 }, (_, k) => 300 + 10 * k)) },
+    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
-    { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
       0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
   ],
   columns: [
@@ -1145,17 +1173,16 @@ CODE[39] = `{
       { value: "sso", label: "SSO" }, { value: "spy", label: "SPY" },
       { value: "qqq", label: "QQQ" }, { value: "tqqq", label: "TQQQ" } ] },
     ${STAT_PARAM_SNIPPET},
-    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 150, options: [
-      20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,
-      210,220,230,240,250,260,270,280,300,320,350,400] },
-    { id: "stretch", label: "Sell when above line (%)", text: "Sell when the signal closes {} above its line.", unit: "%", default: 20, options: [
-      5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,28,30,32,35,40,45,50] },
+    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 150, options:
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 81 }, (_, k) => 117 + k), [200, 210], Array.from({ length: 31 }, (_, k) => 218 + k), Array.from({ length: 26 }, (_, k) => 250 + 10 * k)) },
+    { id: "stretch", label: "Sell when above line (%)", text: "Sell when the signal closes {} above its line.", unit: "%", default: 20, options:
+      Array.from({ length: 117 }, (_, k) => +(2 + 0.5 * k).toFixed(1)) },
     { id: "park", label: "Held when out", text: "Then hold {} until it is back under.", default: "cash", options: [
       { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" } ] },
-    { id: "cashRate", label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
-    { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
       0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
   ],
   columns: [
@@ -1316,17 +1343,17 @@ CODE[40] = `{
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
     ${STAT_PARAM_MEDIAN_SNIPPET},
-    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options: [
-      20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
-    { id: "overPct", label: "Exit when above line (%)", text: "Far above means a close {} above the line, and it switches back on the first close under it.", unit: "%", default: 55, options: [
-      10,15,20,25,30,35,40,42.5,45,47.5,50,52.5,55,57.5,60,62.5,65,67.5,70,75,80,85,90,95,100,110,125,150,175,200] },
+    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options:
+      [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), [75], Array.from({ length: 10 }, (_, k) => 80 + 10 * k), [175, 180, 190, 200], Array.from({ length: 82 }, (_, k) => 209 + k), Array.from({ length: 21 }, (_, k) => 300 + 10 * k)) },
+    { id: "overPct", label: "Exit when above line (%)", text: "Far above means a close {} above the line, and it switches back on the first close under it.", unit: "%", default: 55, options:
+      [2].concat(Array.from({ length: 6 }, (_, k) => 5 + 5 * k), Array.from({ length: 82 }, (_, k) => +(34.5 + 0.5 * k).toFixed(1)), Array.from({ length: 45 }, (_, k) => 80 + 5 * k)) },
     // type:"bool" is required — without it the sandbox coerces the pick to the
     // STRING "false", which is truthy, and the toggle silently does nothing.
-    { id: "splitDays", label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", fit: false, label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
-    { id: "cashRate", label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
-    { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
       0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
   ],
   columns: [
@@ -1561,11 +1588,11 @@ CODE[41] = `{
     { id: "stat", label: "Center line", text: "Compare its close with its {}.", default: "median", options: [
       { value: "median", label: "Median" }, { value: "sma", label: "Moving average" },
       { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
-    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options: [
-      5,7,10,14,20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options:
+      [5, 7, 10, 14].concat(Array.from({ length: 6 }, (_, k) => 20 + 10 * k), [75], Array.from({ length: 10 }, (_, k) => 80 + 10 * k), [175, 180, 190, 200], Array.from({ length: 82 }, (_, k) => 209 + k), Array.from({ length: 21 }, (_, k) => 300 + 10 * k)) },
     { section: "Overextended — sell the melt-up" },
-    { id: "overPct", label: "Above line (%)", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options: [
-      2,4,5,6,8,10,12,15,18,20,22,25,28,30,32,35,38,40,42.5,45,47.5,50,52.5,55,57.5,60,62.5,65,67.5,70,72.5,75,80,85,90,95,100,110,120,125,130,140,150,160,175,200,225,250,300] },
+    { id: "overPct", label: "Above line (%)", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options:
+      [2, 4, 5].concat(Array.from({ length: 4 }, (_, k) => 6 + 2 * k), [15, 18, 20, 22, 25, 28, 30, 32], Array.from({ length: 82 }, (_, k) => +(34.5 + 0.5 * k).toFixed(1)), Array.from({ length: 45 }, (_, k) => 80 + 5 * k)) },
     { id: "park", label: "Then hold", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
@@ -1573,29 +1600,25 @@ CODE[41] = `{
     { id: "crashStat", label: "Center line", text: "The crash exit measures against {}.", default: "same", options: [
       { value: "same", label: "Same as main" }, { value: "median", label: "Median" },
       { value: "sma", label: "Moving average" }, { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
-    { id: "crashWindow", label: "Window (days)", text: "That line covers {}.", unit: " days", default: 0, options: [
-      { value: 0, label: "Same as main" },
-      5,7,10,14,20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { id: "crashWindow", label: "Window (days)", text: "That line covers {}.", unit: " days", default: 0, options:
+      [{ value: 0, label: "Same as main" }].concat(Array.from({ length: 28 }, (_, k) => 5 + k), Array.from({ length: 4 }, (_, k) => 40 + 10 * k), [75], Array.from({ length: 10 }, (_, k) => 80 + 10 * k), [175], Array.from({ length: 4 }, (_, k) => 180 + 10 * k), Array.from({ length: 96 }, (_, k) => 217 + k), Array.from({ length: 19 }, (_, k) => 320 + 10 * k)) },
     { section: "Crash exit — leave when it breaks down" },
-    { id: "exitPct", label: "Below line (%)", text: "Sell on the first close under a level {} from that line.", unit: "%", default: -28, options: [
-      10,8,6,5,4,3,2,1,0,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12,-13,-14,-15,-16,-17,-18,-19,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
+    { id: "exitPct", label: "Below line (%)", text: "Sell on the first close under a level {} from that line.", unit: "%", default: -28, options:
+      Array.from({ length: 201 }, (_, k) => +(20 - 0.5 * k).toFixed(1)) },
     { id: "crashAsset", label: "Then hold", text: "Then hold {} until the price recovers above that level.", default: "cash", options: [
       { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
       { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
-    { id: "slopeGate", label: "Only if line slope below (%/yr)", text: "Only while the line rises less than {} a year.", unit: "%", default: 20, options: [
-      { value: 999, label: "Off" }, { value: -40, label: "-40" }, { value: -20, label: "-20" },
-      { value: -10, label: "-10" }, { value: 0, label: "0" }, { value: 10, label: "10" },
-      { value: 20, label: "20" }, { value: 30, label: "30" }, { value: 40, label: "40" },
-      { value: 60, label: "60" }, { value: 80, label: "80" }, { value: 120, label: "120" } ] },
-    { id: "belowGate", label: "Only after days below line", text: "And only after {} closes in a row under the line.", default: 10, options: [
-      { value: 0, label: "Off" }, 1,2,3,5,8,10,15,20,30] },
+    { id: "slopeGate", label: "Only if line slope below (%/yr)", text: "Only while the line rises less than {} a year.", unit: "%", default: 20, options:
+      [{ value: 999, label: "Off" }].concat(Array.from({ length: 201 }, (_, k) => -50 + k)) },
+    { id: "belowGate", label: "Only after days below line", text: "And only after {} closes in a row under the line.", default: 10, options:
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 100 }, (_, k) => 1 + k)) },
     { section: "Execution & costs" },
-    { id: "splitDays", label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", fit: false, label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
-    { id: "cashRate", label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
-    { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
       0,0.01,0.02,0.03,0.04,0.05,0.06,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,1] }
   ],
   columns: [
@@ -1906,11 +1929,11 @@ CODE[44] = `{
     { id: "stat", label: "Center line", text: "Compare its close with its {}.", default: "median", options: [
       { value: "median", label: "Median" }, { value: "sma", label: "Moving average" },
       { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
-    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options: [
-      5,7,10,14,20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options:
+      [5, 7, 10, 14].concat(Array.from({ length: 6 }, (_, k) => 20 + 10 * k), [75], Array.from({ length: 10 }, (_, k) => 80 + 10 * k), [175, 180, 190, 200], Array.from({ length: 82 }, (_, k) => 209 + k), Array.from({ length: 21 }, (_, k) => 300 + 10 * k)) },
     { section: "Overextended — sell the melt-up" },
-    { id: "overPct", label: "Above line (%)", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options: [
-      2,4,5,6,8,10,12,15,18,20,22,25,28,30,32,35,38,40,42.5,45,47.5,50,52.5,55,57.5,60,62.5,65,67.5,70,72.5,75,80,85,90,95,100,110,120,125,130,140,150,160,175,200,225,250,300] },
+    { id: "overPct", label: "Above line (%)", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options:
+      [2, 4, 5].concat(Array.from({ length: 4 }, (_, k) => 6 + 2 * k), [15, 18, 20, 22, 25, 28, 30, 32], Array.from({ length: 82 }, (_, k) => +(34.5 + 0.5 * k).toFixed(1)), Array.from({ length: 45 }, (_, k) => 80 + 5 * k)) },
     { id: "park", label: "Then hold", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
@@ -1918,35 +1941,31 @@ CODE[44] = `{
     { id: "crashStat", label: "Center line", text: "The crash exit measures against {}.", default: "same", options: [
       { value: "same", label: "Same as main" }, { value: "median", label: "Median" },
       { value: "sma", label: "Moving average" }, { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
-    { id: "crashWindow", label: "Window (days)", text: "That line covers {}.", unit: " days", default: 0, options: [
-      { value: 0, label: "Same as main" },
-      5,7,10,14,20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { id: "crashWindow", label: "Window (days)", text: "That line covers {}.", unit: " days", default: 0, options:
+      [{ value: 0, label: "Same as main" }].concat(Array.from({ length: 28 }, (_, k) => 5 + k), Array.from({ length: 4 }, (_, k) => 40 + 10 * k), [75], Array.from({ length: 10 }, (_, k) => 80 + 10 * k), [175], Array.from({ length: 4 }, (_, k) => 180 + 10 * k), Array.from({ length: 96 }, (_, k) => 217 + k), Array.from({ length: 19 }, (_, k) => 320 + 10 * k)) },
     { section: "Crash exit — leave when it breaks down" },
-    { id: "exitPct", label: "Below line (%)", text: "Sell on the first close under a level {} from that line.", unit: "%", default: -28, options: [
-      10,8,6,5,4,3,2,1,0,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12,-13,-14,-15,-16,-17,-18,-19,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
+    { id: "exitPct", label: "Below line (%)", text: "Sell on the first close under a level {} from that line.", unit: "%", default: -28, options:
+      Array.from({ length: 201 }, (_, k) => +(20 - 0.5 * k).toFixed(1)) },
     { id: "crashAsset", label: "Then hold", text: "Then hold {} until the price recovers above that level.", default: "cash", options: [
       { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
       { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
-    { id: "slopeGate", label: "Only if line slope below (%/yr)", text: "Only while the line rises less than {} a year.", unit: "%", default: 20, options: [
-      { value: 999, label: "Off" }, { value: -40, label: "-40" }, { value: -20, label: "-20" },
-      { value: -10, label: "-10" }, { value: 0, label: "0" }, { value: 10, label: "10" },
-      { value: 20, label: "20" }, { value: 30, label: "30" }, { value: 40, label: "40" },
-      { value: 60, label: "60" }, { value: 80, label: "80" }, { value: 120, label: "120" } ] },
-    { id: "belowGate", label: "Only after days below line", text: "And only after {} closes in a row under the line.", default: 10, options: [
-      { value: 0, label: "Off" }, 1,2,3,5,8,10,15,20,30] },
+    { id: "slopeGate", label: "Only if line slope below (%/yr)", text: "Only while the line rises less than {} a year.", unit: "%", default: 20, options:
+      [{ value: 999, label: "Off" }].concat(Array.from({ length: 201 }, (_, k) => -50 + k)) },
+    { id: "belowGate", label: "Only after days below line", text: "And only after {} closes in a row under the line.", default: 10, options:
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 100 }, (_, k) => 1 + k)) },
     { section: "Credit veto — NFCI (Chicago Fed)" },
-    { id: "nfciTh", label: "Go to cash when NFCI above", text: "Go to cash while the NFCI is above {}.", default: 0.4, options: [
-      { value: 999, label: "Off" }, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 1.0, 1.5, 2.0 ] },
+    { id: "nfciTh", label: "Go to cash when NFCI above", text: "Go to cash while the NFCI is above {}.", default: 0.4, options:
+      [{ value: 999, label: "Off" }].concat(Array.from({ length: 101 }, (_, k) => +(0.02 * k).toFixed(2))) },
     { id: "vetoEnd", label: "Veto lifts when", text: "The veto lifts when {}.", default: "cycle", options: [
       { value: "cycle", label: "NFCI calms OR a crash exit→recovery completes" },
       { value: "nfci", label: "NFCI calms only" } ] },
     { section: "Execution & costs" },
-    { id: "splitDays", label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", fit: false, label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
-    { id: "cashRate", label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
-    { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
       0,0.01,0.02,0.03,0.04,0.05,0.06,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,1] }
   ],
   columns: [
@@ -2269,42 +2288,40 @@ CODE[45] = `{
     { id: "stat", label: "Center line", tip: "What the price is compared to. A median is not pulled by spikes; a moving average is.", text: "Compare its close with its {}.", default: "median", options: [
       { value: "median", label: "Median" }, { value: "sma", label: "Moving average" },
       { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
-    { id: "window", label: "Window (days)", tip: "Trading days the center line covers. Longer is smoother and slower.", text: "The line covers the last {} days.", default: 250, options: [
-      5,7,10,14,20,30,40,50,60,75,90,100,110,120,130,140,150,160,175,190,200,210,220,230,240,250,260,270,280,290,300,320,340,360,400,450,500] },
+    { id: "window", label: "Window (days)", tip: "Trading days the center line covers. Longer is smoother and slower.", text: "The line covers the last {} days.", default: 250, options:
+      [5, 7, 10, 14].concat(Array.from({ length: 6 }, (_, k) => 20 + 10 * k), [75], Array.from({ length: 10 }, (_, k) => 80 + 10 * k), [175, 180, 190, 200], Array.from({ length: 82 }, (_, k) => 209 + k), Array.from({ length: 21 }, (_, k) => 300 + 10 * k)) },
     { section: "Overextended — sell the melt-up" },
-    { id: "overPct", label: "Above line (%)", tip: "Switch to the fund below when the price closes this far above the center line, and back on the first close under it.", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options: [
-      2,4,5,6,8,10,12,15,18,20,22,25,28,30,32,35,38,40,42.5,45,47.5,50,52.5,55,57.5,60,62.5,65,67.5,70,72.5,75,80,85,90,95,100,110,120,125,130,140,150,160,175,200,225,250,300] },
+    { id: "overPct", label: "Above line (%)", tip: "Switch to the fund below when the price closes this far above the center line, and back on the first close under it.", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options:
+      [2, 4, 5].concat(Array.from({ length: 4 }, (_, k) => 6 + 2 * k), [15, 18, 20, 22, 25, 28, 30, 32], Array.from({ length: 82 }, (_, k) => +(34.5 + 0.5 * k).toFixed(1)), Array.from({ length: 45 }, (_, k) => 80 + 5 * k)) },
     { id: "park", label: "Then hold", tip: "What to hold until the price closes back under that line.", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
     { section: "Sell line — leave when it breaks down" },
-    { id: "exitPct", label: "Level vs center line (%)", tip: "Sell on the first close under this level. Negative is below the center line, positive above it.", text: "Sell on the first close under a level {} from the line.", unit: "%", default: 10, options: [
-      10,8,6,5,4,3,2,1,0,-1,-2,-3,-4,-5,-6,-7,-8,-9,-10,-11,-12,-13,-14,-15,-16,-17,-18,-19,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
+    { id: "exitPct", label: "Level vs center line (%)", tip: "Sell on the first close under this level. Negative is below the center line, positive above it.", text: "Sell on the first close under a level {} from the line.", unit: "%", default: 10, options:
+      Array.from({ length: 201 }, (_, k) => +(20 - 0.5 * k).toFixed(1)) },
     { id: "crashAsset", label: "Then hold", tip: "What to hold after selling, until the strategy buys back.", text: "Then hold {} until it buys back.", default: "cash", options: [
       { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
       { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
-    { id: "confirmDays", label: "Buy back after closes above line", tip: "Closes in a row above the line before buying back. Selling needs one.", text: "Buy back after {} closes in a row above the line.", default: 4, options: [1, 2, 3, 4, 5, 6] },
-    { id: "dipReentry", label: "Re-enter a correction", tip: "How far the price must climb from its low toward the center line before buying back.", text: "In a correction, buy back {}.", default: 50, options: [
-      { value: 0, label: "At the sell line" }, { value: 25, label: "A quarter of the way back from its low" },
-      { value: 33, label: "A third of the way back from its low" }, { value: 50, label: "Half way back from its low" },
-      { value: 67, label: "Two thirds of the way back from its low" } ] },
+    { id: "confirmDays", label: "Buy back after closes above line", tip: "Closes in a row above the line before buying back. Selling needs one.", text: "Buy back after {} closes in a row above the line.", default: 4, options:
+      Array.from({ length: 100 }, (_, k) => 1 + k) },
+    { id: "dipReentry", label: "Re-enter a correction", tip: "How far the price must climb from its low toward the center line before buying back. 0% waits for the sell line.", text: "In a correction, buy back {} of the way from its low.", unit: "%", default: 50, options:
+      Array.from({ length: 101 }, (_, k) => k) },
     { section: "Buy-back line — after a crash, re-enter here instead of waiting for the sell line; it sells again below it" },
-    { id: "bbPct", label: "Below line (%)", tip: "How far under the center line counts as a crash.", text: "A crash is a close {} from the line.", unit: "%", default: -32, options: [
-      { value: 999, label: "Off" }, -10,-12,-14,-15,-16,-18,-20,-22,-24,-25,-26,-28,-30,-32,-34,-35,-36,-38,-40,-42,-44,-45,-46,-48,-50,-52,-55,-58,-60,-65,-70,-75,-80] },
-    { id: "bbSlice", label: "Buy a slice at the line right away", tip: "Bought at the first close under the line. The rest waits for the closes above it.", text: "At the first close under it, buy back with {}.", default: 100, options: [
-      { value: 0, label: "No — wait for the closes above it" }, { value: 25, label: "A quarter of the money" },
-      { value: 33, label: "A third of the money" }, { value: 50, label: "Half of the money" },
-      { value: 75, label: "Three quarters of the money" }, { value: 100, label: "All of the money" } ] },
-    { id: "sliceStop", label: "Slice stop (% under its price)", tip: "Sells the slice if the price falls this far below its buy price.", text: "Sell that slice if it falls {} under its price.", unit: "%", default: 20, options: [10, 15, 20, 25, 30] },
-    { id: "sliceCap", label: "Slices per sold-out stint", tip: "Slices allowed before the strategy is fully back in.", text: "Slices allowed per sold-out stint: {}.", default: 1, options: [
-      { value: 1, label: "One" }, { value: 2, label: "Two" }, { value: 999, label: "No limit" } ] },
+    { id: "bbPct", label: "Below line (%)", tip: "How far under the center line counts as a crash.", text: "A crash is a close {} from the line.", unit: "%", default: -32, options:
+      [{ value: 999, label: "Off" }].concat(Array.from({ length: 141 }, (_, k) => +(-80 + 0.5 * k).toFixed(1))) },
+    { id: "bbSlice", label: "Buy a slice at the line right away", tip: "Bought at the first close under the line. The rest waits for the closes above it. 0% buys nothing there.", text: "At the first close under it, buy back with {} of the money.", unit: "%", default: 100, options:
+      Array.from({ length: 101 }, (_, k) => k) },
+    { id: "sliceStop", label: "Slice stop (% under its price)", tip: "Sells the slice if the price falls this far below its buy price.", text: "Sell that slice if it falls {} under its price.", unit: "%", default: 20, options:
+      Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)) },
+    { id: "sliceCap", label: "Slices per sold-out stint", tip: "Slices allowed before the strategy is fully back in.", text: "Slices allowed per sold-out stint: {}.", default: 1, options:
+      Array.from({ length: 100 }, (_, k) => 1 + k).concat([{ value: 999, label: "No limit" }]) },
     { section: "Execution & costs" },
-    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
-    { id: "cashRate", label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
-    { id: "tradeCost", label: "Trading cost (%)", tip: "Charged on every buy and sell, as a share of the amount traded.", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", tip: "Charged on every buy and sell, as a share of the amount traded.", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
       0,0.01,0.02,0.03,0.04,0.05,0.06,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,1] }
   ],
   columns: [
@@ -2385,7 +2402,7 @@ CODE[45] = `{
     // Such a buy-back behaves like a crash buy-back: the buy-back line is the
     // sell line until the sell line is reclaimed. 0 = the sell line, as before.
     const dipF = Math.max(0, Math.min(1, (+p.dipReentry || 0) / 100));
-    const dipText = dipF >= 0.66 ? "two thirds of the way back" : dipF >= 0.5 ? "half way back" : dipF >= 0.33 ? "a third of the way back" : "a quarter of the way back";
+    const dipText = Math.round(dipF * 100) + "% of the way back";
     // sellArmed: the normal sell line is live. A buy-back switches it off until the price has closed
     // back above that line; until then the buy-back line is the sell line, so a close back under it
     // sells again. bbArmed: while sold out, the price has closed at or below the buy-back line.
@@ -2671,52 +2688,54 @@ CODE[47] = `{
     // 609-day plateau tried first made 119% (scratchpad r13/ca*.cjs,
     // option-curves.cjs, floor-bars.cjs).
     { id: "lookbackDays", label: "Lookback (trading days)", tip: "How many trading days of buy & hold growth are compared: TQQQ's against QQQ's. 252 is about a year.", text: "Compare TQQQ's growth with QQQ's over the last {} trading days.", default: 550, options:
-      [252, 315, 378, 441].concat(Array.from({ length: 31 }, (_, k) => 462 + 7 * k), Array.from({ length: 10 }, (_, k) => 521 + 7 * k), [550, 693, 756, 819, 882, 1008]).sort((a, b) => a - b) },
+      [252, 260, 280, 300, 315, 320, 340, 360, 378].concat(Array.from({ length: 4 }, (_, k) => 380 + 20 * k), [441, 460, 462, 469, 476, 480, 483, 490, 497, 500, 504], Array.from({ length: 82 }, (_, k) => 511 + k), [595, 600, 602, 609, 616, 620, 623, 630, 637, 640, 644, 651, 658, 660, 665, 672, 680, 693, 700, 720, 740, 756, 760, 780, 800, 819], Array.from({ length: 4 }, (_, k) => 820 + 20 * k), [882], Array.from({ length: 6 }, (_, k) => 900 + 20 * k), [1008]) },
     { id: "startAvgDays", label: "Start averaged over ± (days)", tip: "Example: with a 550-day lookback and ±65, the start price is the average close from 615 to 485 days ago, so one day's price can't decide the lead. At 0 it is the close 550 days ago.", text: "Average the start price over ±{} days.", default: 65, options:
-      [0, 10, 21, 31, 42, 49, 56, 63, 65, 70, 77, 84, 95, 105, 126, 147, 168] },
+      Array.from({ length: 201 }, (_, k) => k) },
     { section: "Ceiling — step aside" },
     { id: "topLead", label: "TQQQ ahead by at least (%)", tip: "TQQQ's growth over the lookback against QQQ's: 90 means TQQQ grew 1.9 times as much.", text: "Step aside when TQQQ is {} ahead of QQQ.", unit: "%", default: 125, options:
       Array.from({ length: 281 }, (_, k) => 20 + k).concat([{ value: 9999, label: "Off" }]) },
     { id: "topHold", label: "Held instead", tip: "What is held from the ceiling until the lead falls back.", text: "Then hold {}.", default: "sqqq", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" } ] },
-    { id: "topDays", label: "SQQQ for at most (days)", tip: "After this many days SQQQ is sold to cash, which waits for the lead to fall back.", text: "Keep SQQQ for at most {} days, then cash.", default: 20, options: [
-      { value: 0, label: "No limit" }, 3,5,7,10,12,15,18,20,21,25,30,42,63,126] },
+    { id: "topDays", label: "SQQQ for at most (days)", tip: "After this many days SQQQ is sold to cash, which waits for the lead to fall back.", text: "Keep SQQQ for at most {} days, then cash.", default: 20, options:
+      [{ value: 0, label: "No limit" }].concat(Array.from({ length: 126 }, (_, k) => 1 + k)) },
     { id: "backLead", label: "Back to TQQQ at lead ≤ (%)", tip: "At or above the ceiling means no band: back on the first close under the ceiling.", text: "Go back to TQQQ once the lead is down to {}.", unit: "%", default: 25, options:
-      Array.from({ length: 271 }, (_, k) => k - 20) },
+      Array.from({ length: 271 }, (_, k) => -20 + k) },
     { section: "Floor — sell the breakdown" },
     { id: "floorLead", label: "Sell at lead under (%)", tip: "A close with TQQQ's lead under this sells TQQQ; negative means TQQQ is behind QQQ.", text: "Sell TQQQ when its lead falls under {}.", unit: "%", default: 5, options:
-      [{ value: -9999, label: "Off" }].concat(Array.from({ length: 101 }, (_, k) => k - 70)) },
+      [{ value: -9999, label: "Off" }].concat(Array.from({ length: 101 }, (_, k) => -70 + k)) },
     // Cash since 2026-11-02 (the user): SQQQ bought after a floor break lost on
     // average over 169 break days since 2010 across nearby settings, and cash
     // beat it in 86% of 105 nearby settings (scratchpad r12/, r10/).
     { id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken.", text: "Hold {} after the break.", default: "cash", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" } ] },
     { id: "reentryLead", label: "Back at lead ≥ (%)", tip: "TQQQ is bought again after the closes in a row below at or above this lead.", text: "Buy TQQQ back once the lead is {} or more.", unit: "%", default: 25, options:
-      Array.from({ length: 151 }, (_, k) => k - 70) },
-    { id: "reentryCloses", label: "Closes in a row", tip: "How many closes in a row at or above the re-entry lead buy TQQQ again.", text: "It has to stay there for {} closes in a row.", default: 5, options: [1,2,3,4,5,6,7,8,10] },
+      Array.from({ length: 151 }, (_, k) => -70 + k) },
+    { id: "reentryCloses", label: "Closes in a row", tip: "How many closes in a row at or above the re-entry lead buy TQQQ again.", text: "It has to stay there for {} closes in a row.", default: 5, options:
+      Array.from({ length: 100 }, (_, k) => 1 + k) },
     { id: "deepLead", label: "Deep buy at lead ≤ (%)", tip: "While the floor is broken, a close this far behind or worse buys TQQQ. The floor stays off until the lead is back at the re-entry level.", text: "While sold, make a deep buy at a lead of {}.", unit: "%", default: -30, options:
-      [{ value: -9999, label: "Off" }].concat(Array.from({ length: 66 }, (_, k) => k - 85)) },
+      [{ value: -9999, label: "Off" }].concat(Array.from({ length: 131 }, (_, k) => +(-85 + 0.5 * k).toFixed(1))) },
     { section: "Overextended price — the buy-back strategy's SQQQ line" },
     { id: "overPct", label: "SQQQ above median (%)", tip: "SQQQ while TQQQ closes this far above its own median, back on the first close under.", text: "Hold SQQQ while TQQQ closes {} above its median.", unit: "%", default: 55, options:
-      [{ value: 0, label: "Off" }].concat(Array.from({ length: 51 }, (_, k) => 30 + k)) },
-    { id: "overWindow", label: "Median window (days)", tip: "How many days of TQQQ closes the median covers.", text: "The median covers the last {} days.", default: 250, options: [150,175,200,225,250,275,300,350] },
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 161 }, (_, k) => +(20 + 0.5 * k).toFixed(1))) },
+    { id: "overWindow", label: "Median window (days)", tip: "How many days of TQQQ closes the median covers.", text: "The median covers the last {} days.", default: 250, options:
+      Array.from({ length: 23 }, (_, k) => 100 + 5 * k).concat(Array.from({ length: 80 }, (_, k) => 211 + k), Array.from({ length: 22 }, (_, k) => 295 + 5 * k)) },
     { section: "Defence" },
     // Every day up to 50 and every 5 days from 50 to 120 (the user, 2026-11-04),
     // then the old long steps. 40 by default since 2026-11-04 (the user): the
     // long holds since 2010 ended by day 35, and 100 let 1999 run its full
     // course (two 100-day holds, -71% and -89%, scratchpad sqqq-runs/).
     { id: "sqqqMaxDays", label: "SQQQ at most (days in a row)", tip: "After this many days in a row in SQQQ, hold cash until the rules want something else.", text: "Hold SQQQ at most {} days in a row, then cash.", default: 40, options:
-      [{ value: 0, label: "No limit" }].concat(Array.from({ length: 50 }, (_, k) => 1 + k), Array.from({ length: 14 }, (_, k) => 55 + 5 * k), [126, 150, 189, 252]) },
+      [{ value: 0, label: "No limit" }].concat(Array.from({ length: 50 }, (_, k) => 1 + k), Array.from({ length: 15 }, (_, k) => 55 + 5 * k), [126], Array.from({ length: 12 }, (_, k) => 130 + 5 * k), [189], Array.from({ length: 13 }, (_, k) => 190 + 5 * k), [252], Array.from({ length: 10 }, (_, k) => 255 + 5 * k)) },
     { id: "deepGuard", label: "Deep buy guard (% under its price)", tip: "A deep buy that closes this far under its buy price goes to cash, and buys back once TQQQ closes above its median.", text: "Sell a deep buy that falls {} under its price.", unit: "%", default: 25, options:
-      [{ value: 0, label: "Off" }].concat(Array.from({ length: 36 }, (_, k) => 15 + k)) },
-    { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "Cash instead of TQQQ while the Chicago Fed's credit stress index is above this. Each weekly reading is used a week later.", text: "Hold cash instead of TQQQ while credit stress (NFCI) is above {}.", default: 0.5, options: [
-      { value: 0, label: "Off" }, 0.2, 0.3, 0.35, 0.4, 0.45, 0.5, 0.75, 1] },
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1))) },
+    { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "Cash instead of TQQQ while the Chicago Fed's credit stress index is above this. Each weekly reading is used a week later.", text: "Hold cash instead of TQQQ while credit stress (NFCI) is above {}.", default: 0.5, options:
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 141 }, (_, k) => +(0.1 + 0.01 * k).toFixed(2))) },
     { section: "Execution & costs" },
-    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
-    { id: "cashRate", label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
-    { id: "tradeCost", label: "Trading cost (%)", tip: "Charged on every buy and sell, as a share of the amount traded.", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", tip: "Charged on every buy and sell, as a share of the amount traded.", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
       0,0.01,0.02,0.03,0.04,0.05,0.06,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,1] }
   ],
   columns: [

@@ -2858,17 +2858,6 @@
     transition: background 0.15s;
   }
   .custom-edit-btn:hover { background: rgba(134, 118, 255, 0.26); }
-  .custom-desc-readout {
-    margin-top: 10px;
-    padding: 10px 12px;
-    border-radius: 8px;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    font-size: 12px;
-    line-height: 1.55;
-    color: var(--text-muted);
-    white-space: pre-wrap;
-  }
   .custom-error-hint { color: var(--text-muted); font-weight: 400; }
 
   /* "Work in progress" banner shown on not-yet-finalized strategies (SMA, custom). */
@@ -4000,6 +3989,23 @@
     background: rgba(134, 118, 255, 0.08);
   }
   .settings-reset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  /* Fit (js/saved-configs.js buildFitButtonHtml): beside Reset to default, with its goal menu and result line. */
+  .settings-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .settings-actions { display: inline-flex; align-items: center; gap: 8px; }
+  .settings-fit-wrap { display: inline-flex; align-items: center; gap: 3px; }
+  .settings-fit-btn.running {
+    color: var(--accent-text); border-color: var(--accent); text-transform: none; letter-spacing: 0;
+    /* fills left to right as the search runs (js/saved-configs.js fitShowProgress) */
+    background: linear-gradient(to right, rgba(134, 118, 255, 0.18) var(--fit-pct, 0%), transparent var(--fit-pct, 0%));
+  }
+  .fit-menu { padding: 4px; }
+  .fit-menu-item { display: flex; flex-direction: column; gap: 2px; max-width: 280px; padding: 7px 9px; border-radius: 6px; cursor: pointer; }
+  .fit-menu-item:hover { background: rgba(134, 118, 255, 0.08); }
+  .fit-menu-item b { font-size: 12px; color: var(--text); }
+  .fit-menu-item span { font-size: 11px; line-height: 1.35; color: var(--text-muted); }
+  .fit-note { margin: 6px 0 2px; font-size: 11.5px; line-height: 1.4; color: var(--text-muted); }
+  .fit-changes { margin: 4px 0 0; padding: 0; list-style: none; }
+  .fit-changes b { color: var(--text); font-weight: 600; }
   /* Collapsed state: drop the monthly-contribution rows from the table. */
   .strategy-panel-body .quarter-table-wrap.hide-contrib tr.log-row-contrib { display: none; }
   /* Collapsed state: drop the ease-in "Buy more" slice rows. */

@@ -557,6 +557,9 @@ Shape:  { id, label, text, options: [...], default: <one of the options> }
   and they render as sub-headers ("Holdings", "Signal lines", "Execution & costs").
 - An optional "tip" string on a param (or a section entry) renders an ⓘ hover note at the end of
   its sentence: one or two plain sentences saying what the setting does. No filler.
+- Add fit: false to a setting that describes the market or the account rather than the rule
+  (trading cost, cash interest, how a switch is executed). The sidebar's Fit button searches every
+  other setting for the best result and leaves these alone.
 
 *** THE TEST EVERY PARAM MUST PASS ***
 Point at the words in my description that this knob comes from. If you cannot, DO NOT ADD IT.
@@ -591,11 +594,11 @@ WHAT DOES BECOME A PARAM:
    "cash" means hold dollars, buy nothing. Guard for it (data["cash"] does not exist).
 3. Every threshold, window, percentage and lookback I DID state — "55% above", "250-day median",
    "300 SMA" each become a dropdown, never baked into the code as a literal.
-4. "Cash interest (%/yr)" ([0,0.5,1,...,6,7,8], text: "Cash earns {} a year.", unit: "%") — only when cash can actually be held, so parked
+4. "Cash interest (%/yr)" ([0,0.5,1,...,6,7,8], text: "Cash earns {} a year.", unit: "%", fit: false) — only when cash can actually be held, so parked
    money is not silently dead.
 5. ALWAYS include a trading-cost dropdown, exactly this one (it matches the app's other strategies):
      { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.",
-       unit: "%", default: 0.02, options: [0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
+       unit: "%", fit: false, default: 0.02, options: [0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
    Charge it as a percentage of the dollar amount TRADED, on every leg of every trade — each sell,
    each buy, both halves of a switch, and every ease-in slice — deduct it from the proceeds (or from
    the cash being deployed), and log it as "fee" on that row. A strategy that trades often has to pay
@@ -864,9 +867,9 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
       { value: "sma", label: "Moving average" }, { value: "median", label: "Median" } ], default: "sma" },
     { id: "band", label: "Cross buffer (%)", text: "A cross counts once the close is {} past the line.", unit: "%", default: 1, options: [
       0,0.25,0.5,0.75,1,1.25,1.5,1.75,2,2.5,3,3.5,4,4.5,5,6,7,8,10] },
-    { id: "cashRate", label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+    { id: "cashRate", label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", fit: false, default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
-    { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+    { id: "tradeCost", label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", fit: false, default: 0.02, options: [
       0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1] }
   ],
   columns: [
@@ -1221,12 +1224,16 @@ let _customWorker = null, _customWorkerSeq = 0, _customDataSent = false;
 const _customPending = {};   // reqId -> { cfgId, sig, timer }
 const _customRunTimers = {}; // cfgId -> { sig, t }
 
+// A fresh sandbox worker running customWorkerMain: the live line's worker and
+// each of the Fit search's pool (fitPool).
+function newCustomWorker() {
+  const src = '(' + customWorkerMain.toString() + ')()';
+  return new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
+}
 function ensureCustomWorker() {
   if (_customWorker) return _customWorker;
   try {
-    const src = '(' + customWorkerMain.toString() + ')()';
-    const url = URL.createObjectURL(new Blob([src], { type: 'application/javascript' }));
-    const w = new Worker(url);
+    const w = newCustomWorker();
     w.onmessage = onCustomWorkerMessage;
     w.onerror = function () { try { w.terminate(); } catch (e) {} _customWorker = null; _customDataSent = false; };
     _customWorker = w;
@@ -1542,6 +1549,15 @@ function cfgMoneyWeightedCAGR(ctx, finalV) {
     ? (Math.pow(finalV / ctx.totalContributed, 1 / ctx.years) - 1) * 100 : 0;
 }
 
+// A custom log's max drawdown revalued at every daily close, or null when its
+// rows don't all carry held/shares/cash (buildCustomDDControls). The panel's
+// Max DD and the Fit search both read it, so a fit minimises the number shown.
+function customDailyDrawdown(log) {
+  const ddCtrl = (typeof buildCustomDDControls === 'function') ? buildCustomDDControls(log) : null;
+  const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
+  return (ddCtrl && dailyRows && typeof computeDailyMaxDrawdownMulti === 'function')
+    ? computeDailyMaxDrawdownMulti(ddCtrl, dailyRows) : null;
+}
 // Turn a (worker-computed) log into a label-aligned series + stats. No code eval.
 function customSeriesResult(log, ctx, error, tcOverride, stale) {
   const labels = ctx.labels;
@@ -1564,12 +1580,7 @@ function customSeriesResult(log, ctx, error, tcOverride, stale) {
   // strategy doesn't emit held/shares/cash. CAGR is money-weighted, unaffected.
   const cagr = cfgMoneyWeightedCAGR(ctx, finalV);
   const ddVals = points.map(p => p.value), ddDates = points.map(p => p.date);
-  const ddCtrl = (typeof buildCustomDDControls === 'function') ? buildCustomDDControls(log) : null;
-  const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
-  let dd = null;
-  if (ddCtrl && dailyRows && typeof computeDailyMaxDrawdownMulti === 'function') {
-    dd = computeDailyMaxDrawdownMulti(ddCtrl, dailyRows);
-  }
+  let dd = customDailyDrawdown(log);
   if (!dd && typeof computeMaxDrawdown === 'function') {
     dd = computeMaxDrawdown(ddVals.length ? ddVals : series, ddVals.length ? ddDates : labels);
   }
@@ -2218,6 +2229,7 @@ function savedConfigInPanel(type) {
 // "Reset to default" on a 9sig, SMA, Buy & Hold or Invested panel. The render
 // that follows saves a saved strategy's new values (syncEditingConfig).
 function resetPanelToDefaults(type) {
+  delete _fitNotes['panel:' + type];
   applyControlParams(type, strategyDefaultParams(type, savedConfigInPanel(type)));
   if (typeof saveSliders === 'function') saveSliders();
   if (typeof render === 'function') render();
@@ -2228,6 +2240,7 @@ function resetCustomToDefaults(cfgId) {
   const cfg = savedConfigs.find(c => c.id === cfgId);
   if (!cfg) return;
   cfg.params = {};
+  delete _fitNotes[cfg.id];
   persistSavedConfigs();
   if (typeof render === 'function') render();
 }
@@ -2716,16 +2729,32 @@ function buildPanelSaveBarHtml(type) {
   if (!CONFIG_PARAM_IDS[type]) return '';
   // Editing a SAVED strategy auto-saves live (see syncEditingConfig) and can't be
   // forked — so it shows no save button. Only the main/base strategy offers
-  // "Save as strategy", which spins off a new saved strategy. Both get
-  // "Reset to default", greyed out while every setting is at its default.
-  const editingSaved = savedConfigInPanel(type);
-  const atDefaults = paramsEqual(captureParams(type), strategyDefaultParams(type, editingSaved), type);
+  // "Save as strategy", which spins off a new saved strategy. "Reset to
+  // default" sits in the Settings header (buildNativeSettingsHeaderHtml).
+  if (savedConfigInPanel(type)) return '';
   return `
     <div class="config-savebar">
-      ${editingSaved ? '' : `<button type="button" class="config-savebar-btn primary" data-sc-savenew="${type}" title="Save the current settings as a new saved strategy">Save as strategy</button>`}
-      <button type="button" class="config-savebar-btn" data-sc-reset="${type}"${atDefaults ? ' disabled' : ''}>Reset to default</button>
+      <button type="button" class="config-savebar-btn primary" data-sc-savenew="${type}" title="Save the current settings as a new saved strategy">Save as strategy</button>
     </div>`;
 }
+// A built-in panel's Settings header, above its controls (js/chart.js
+// renderStrategyPanelBody), as code strategies have one: Fit where the panel
+// can be searched (FIT_PANELS), then "Reset to default", greyed out while
+// every setting is at its default or a fit is running; the last fit's result under it.
+function buildNativeSettingsHeaderHtml(type) {
+  if (!CONFIG_PARAM_IDS[type]) return '';
+  const key = 'panel:' + type;
+  const atDefaults = paramsEqual(captureParams(type), strategyDefaultParams(type, savedConfigInPanel(type)), type);
+  const note = _fitNotes[key] ? buildFitNoteHtml(_fitNotes[key]) : '';
+  return `<div class="strategy-panel-section-label settings-head"><span>Settings</span><span class="settings-actions">`
+    + `${FIT_PANELS[type] ? buildFitButtonHtml(key) : ''}`
+    + `<button type="button" class="settings-reset-btn" data-sc-reset="${type}"${atDefaults || (_fit && _fit.key === key) ? ' disabled' : ''}>Reset to default</button>`
+    + `</span></div>${note}`;
+}
+// A setting changed by hand replaces the panel's last fit result.
+document.addEventListener('change', (e) => {
+  for (const type of Object.keys(FIT_PANELS)) if ((CONFIG_PARAM_IDS[type] || []).includes(e.target.id)) delete _fitNotes['panel:' + type];
+}, true);
 
 // --- Parameters-panel pill list ----------------------------------------
 function buildConfigPillHtml(cfg) {
@@ -2901,7 +2930,20 @@ function customOptionText(sp, o) {
 }
 function customOptionLabel(sp, val) {
   const m = customParamOptions(sp).find(o => String(o.value) === String(val));
-  return m ? customOptionText(sp, m) : String(val);
+  return customOptionText(sp, m || { value: val, label: String(val) });
+}
+// The dropdown's options, plus the current value in its place when it lies
+// between them (Fit can set such a value), so the popup shows it selected.
+function customParamOptionsWithCurrent(sp, cur) {
+  const opts = customParamOptions(sp);
+  const x = Number(cur);
+  if (opts.some(o => String(o.value) === String(cur)) || !Number.isFinite(x) || !opts.every(o => typeof o.value === 'number')) return opts;
+  const plain = opts.map((o, i) => ({ o, i })).filter(({ o }) => String(o.label) === String(o.value));
+  if (!plain.length) return opts;
+  const descending = plain.length > 1 && plain[1].o.value < plain[0].o.value;
+  const after = plain.find(({ o }) => descending ? o.value < x : o.value > x);
+  const at = after ? after.i : plain[plain.length - 1].i + 1;
+  return opts.slice(0, at).concat([{ value: x, label: x }], opts.slice(at));
 }
 // The sentence a param reads as, with {} where its dropdown sits: its `text`,
 // or else its label, with a unit in brackets moved after the dropdown
@@ -2979,8 +3021,8 @@ function _cpDocDown(e) {
 function openCustomParamPopup(trigger, cfg, sp) {
   if (_cpOpen && _cpOpen.trigger === trigger) { closeCustomParamPopup(); return; }
   closeCustomParamPopup();
-  const opts = customParamOptions(sp);
   const cur = customParamValue(cfg, sp);
+  const opts = customParamOptionsWithCurrent(sp, cur);
   const popup = document.createElement('div');
   popup.className = 'pdrop-popup';
   popup.innerHTML = `<div class="pdrop-head">final value if chosen</div>` + opts.map((o, i) =>
@@ -3000,7 +3042,7 @@ function openCustomParamPopup(trigger, cfg, sp) {
     const i = +row.getAttribute('data-cp-i');
     const o = opts[i]; if (!o) return;
     const c = savedConfigs.find(x => x.id === cfg.id);
-    if (c) { c.params = c.params || {}; c.params[sp.id] = (typeof o.value === 'boolean') ? o.value : String(o.value); persistSavedConfigs(); if (typeof render === 'function') render(); }
+    if (c) { c.params = c.params || {}; c.params[sp.id] = (typeof o.value === 'boolean') ? o.value : String(o.value); delete _fitNotes[c.id]; persistSavedConfigs(); if (typeof render === 'function') render(); }
     closeCustomParamPopup();
   });
   const sel = popup.querySelector('.pdrop-row.selected');
@@ -3062,6 +3104,360 @@ function cpFillBars(popup, finals) {
     row.classList.toggle('best', complete && i === bestIdx && maxT > 0);
   });
 }
+
+// ---- Fit: search a strategy's settings for the best CAGR or lowest drawdown ----
+// The user (2026-11-04): a Fit dropdown in the sidebar, "Best CAGR" and
+// "Lowest drawdown", that finds the best settings and sets them. "Lowest
+// drawdown" counts only settings whose final value beats buy & hold of the
+// fund the strategy holds most (the user's pick: the plain lowest drawdown
+// ends in cash). Settings marked fit: false (trading cost, cash interest, how
+// a switch is executed) stay as they are.
+//
+// The search runs on the chart's current period and money, like the bar
+// previews. Each setting in turn tries every option with the others held and
+// keeps the best; passes repeat until one changes nothing. Then each numeric
+// setting tries the values between its pick and the options next to it (whole
+// numbers for whole-number lists, fifths of the gap otherwise), so the result
+// can land between the dropdown's options. The runs go to a pool of sandbox
+// workers, one per spare core.
+const FIT_MAX_PASSES = 4;
+const FIT_JOB_TIMEOUT_MS = 15000;
+const FIT_BETWEEN_MAX = 20;   // values tried on each side of a pick, between the options
+const FIT_GOALS = {
+  cagr: { label: 'Best CAGR', tip: "The settings with the highest CAGR on the chart's period." },
+  dd:   { label: 'Lowest drawdown', tip: 'The smallest max drawdown among settings that still beat buy & hold.' },
+};
+let _fit = null;          // the running search: { key, goal, phase, round, done, total, stopped, close }
+let _fitMenu = null;      // { menu, btn, key } while the goal menu is open
+// key (a code strategy's cfg id, or "panel:9sig" / "panel:sma") -> the last
+// fit's result { text, changes: [{ label, from, to }] }, until a setting is changed by hand
+const _fitNotes = {};
+
+// Sandbox workers sharing a job queue; run() resolves with the worker's
+// message, or null when the run failed, timed out or the pool was closed.
+function fitPool() {
+  const size = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
+  const data = buildCustomData();
+  const spawn = () => { const w = newCustomWorker(); w.postMessage({ type: 'data', data }); return w; };
+  const slots = Array.from({ length: size }, () => ({ w: spawn(), finish: null }));
+  const queue = [];
+  let seq = 0, closed = false;
+  const pump = () => {
+    for (const slot of slots) {
+      if (closed || slot.finish || !queue.length) continue;
+      const job = queue.shift(), reqId = ++seq;
+      const timer = setTimeout(() => { slot.w.terminate(); slot.w = spawn(); slot.finish(null); }, FIT_JOB_TIMEOUT_MS);
+      slot.finish = (msg) => { clearTimeout(timer); slot.finish = null; job.resolve(msg); pump(); };
+      slot.w.onmessage = (e) => { if (e.data && e.data.reqId === reqId && slot.finish) slot.finish(e.data.error ? null : e.data); };
+      slot.w.postMessage({ type: 'run', reqId, code: job.code, globals: job.globals, rawParams: job.rawParams });
+    }
+  };
+  return {
+    run: (code, globals, rawParams) => new Promise(resolve => {
+      if (closed) { resolve(null); return; }
+      queue.push({ code, globals, rawParams, resolve });
+      pump();
+    }),
+    close: () => {
+      if (closed) return;
+      closed = true;
+      queue.splice(0).forEach(job => job.resolve(null));
+      slots.forEach(s => { s.w.terminate(); if (s.finish) s.finish(null); });
+    },
+  };
+}
+
+// The final value and max drawdown (the panel's own measure) of one run.
+function fitScore(msg) {
+  const log = msg && msg.log;
+  if (!log || !log.length) return null;
+  let final = null;
+  for (let k = log.length - 1; k >= 0 && final == null; k--) { const v = log[k].value; if (typeof v === 'number' && isFinite(v)) final = v; }
+  if (final == null) return null;
+  const dd = customDailyDrawdown(log) || computeMaxDrawdown(log.map(r => r.value), log.map(r => r.date));
+  return { final, dd: dd.pct };
+}
+
+// Is a better than b for the goal? A failed run is never better. With the
+// drawdown goal a setting over the hurdle beats one under it; under it the
+// higher final value wins, so a search that starts under the hurdle climbs.
+function fitBetter(goal, a, b, hurdle) {
+  if (!a) return false;
+  if (!b) return true;
+  const more = a.final > b.final * (1 + 1e-9), sameFinal = Math.abs(a.final - b.final) <= b.final * 1e-9;
+  if (goal === 'cagr') return more || (sameFinal && a.dd < b.dd - 1e-9);
+  const aOver = a.final > hurdle, bOver = b.final > hurdle;
+  if (aOver !== bOver) return aOver;
+  if (!aOver) return more;
+  return a.dd < b.dd - 1e-9 || (Math.abs(a.dd - b.dd) <= 1e-9 && more);
+}
+
+// A value as the dropdown stores it (strings, booleans as they are).
+const fitStored = (v) => typeof v === 'boolean' ? v : String(v);
+const fitDecimals = (v) => (String(v).split('.')[1] || '').length;
+
+// Values between a numeric pick and the plain options on either side of it.
+function fitBetween(sp, picked) {
+  const opts = customParamOptions(sp);
+  if (!opts.every(o => typeof o.value === 'number')) return [];
+  const plain = opts.filter(o => String(o.label) === String(o.value)).map(o => o.value).sort((a, b) => a - b);
+  const x = Number(picked), k = plain.indexOf(x);
+  if (k < 0) return [];
+  const whole = plain.every(v => Number.isInteger(v)), out = new Set();
+  for (const nb of [plain[k - 1], plain[k + 1]]) {
+    if (nb == null) continue;
+    const gap = nb - x;
+    if (whole) {
+      const n = Math.min(Math.abs(gap) - 1, FIT_BETWEEN_MAX);
+      for (let i = 1; i <= n; i++) out.add(Math.round(x + gap * i / (n + 1)));
+    } else {
+      const d = Math.max(fitDecimals(x), fitDecimals(nb)) + 1;
+      for (let i = 1; i < 5; i++) out.add(+(x + gap * i / 5).toFixed(d));
+    }
+  }
+  out.delete(x);
+  return [...out].map(fitStored);
+}
+
+// The drawdown goal's hurdle: buy & hold of the fund the strategy holds most
+// in its current run, with the chart's money (the bar previews' B&H finals).
+function fitHurdle(cfg) {
+  const rows = {};
+  ((window._customLogs || {})[cfg.id] || []).forEach(r => {
+    const h = typeof r.held === 'string' ? r.held.toLowerCase() : '';
+    if (h && h !== 'cash') rows[h] = (rows[h] || 0) + 1;
+  });
+  const fund = Object.keys(rows).sort((a, b) => rows[b] - rows[a])[0];
+  const finals = fund && typeof window.previewBhFinals === 'function' ? window.previewBhFinals() : null;
+  return finals && finals[fund] > 0 ? { fund, final: finals[fund] } : { fund: fund || null, final: null };
+}
+
+// One percentage for the whole search (the user: "can we have a clear
+// progress"): the rounds share the first 90%, a quarter of it each, and a
+// round that changes nothing jumps to 90%; the values between the options
+// take the last 10%.
+const FIT_ROUNDS_SHARE = 0.9;
+function fitPercent(f) {
+  const part = f.total ? f.done / f.total : 0;
+  const share = f.phase === 'between'
+    ? FIT_ROUNDS_SHARE + (1 - FIT_ROUNDS_SHARE) * part
+    : FIT_ROUNDS_SHARE * (f.round - 1 + part) / FIT_MAX_PASSES;
+  return Math.min(99, Math.floor(100 * share));
+}
+function fitProgressText(f) { return `Fitting ${fitPercent(f)}% · Stop`; }
+// What the search is doing now, on hover.
+function fitStepText(f) {
+  return f.phase === 'between'
+    ? 'Last step: trying values between the options next to each pick.'
+    : `Round ${f.round} of up to ${FIT_MAX_PASSES}: each setting tries every option while the others stay put. A round that changes nothing ends the rounds early.`;
+}
+function fitShowProgress() {
+  if (!_fit) return;
+  document.querySelectorAll(`[data-fit-key="${CSS.escape(_fit.key)}"]`).forEach(b => {
+    b.textContent = fitProgressText(_fit);
+    b.title = fitStepText(_fit);
+    b.style.setProperty('--fit-pct', fitPercent(_fit) + '%');
+  });
+}
+
+// The search, shared by code strategies and the built-in panels. space lists
+// the settings it may change: { id, values, between(v) } with each setting's
+// candidate values and the values between the options next to a pick (none
+// for a built-in <select>, which can only hold its options). measure(values)
+// resolves to { final, dd } or null. cur holds every setting and ends on the
+// search's picks.
+async function fitSearch(state, space, cur, measure, goal, hurdleFinal) {
+  const start = await measure(Object.assign({}, cur));
+  let best = start;
+  // One setting tries its values with the others held; the best stays.
+  const sweep = async (s, values) => {
+    const tries = values.filter(v => String(v) !== String(cur[s.id]));
+    const results = await Promise.all(tries.map(v => measure(Object.assign({}, cur, { [s.id]: v }))
+      .then(r => { state.done++; fitShowProgress(); return r; })));
+    if (state.stopped) return false;
+    let pick = -1;
+    results.forEach((r, i) => { if (fitBetter(goal, r, pick < 0 ? best : results[pick], hurdleFinal)) pick = i; });
+    if (pick < 0) return false;
+    cur[s.id] = tries[pick];
+    best = results[pick];
+    return true;
+  };
+  for (let round = 1; round <= FIT_MAX_PASSES && !state.stopped; round++) {
+    Object.assign(state, { round, done: 0, total: space.reduce((n, s) => n + s.values.length, 0) });
+    let changed = false;
+    for (const s of space) { if (state.stopped) break; if (await sweep(s, s.values)) changed = true; }
+    if (!changed) break;
+  }
+  if (!state.stopped) {
+    const between = space.map(s => ({ s, values: s.between(cur[s.id]) }));
+    Object.assign(state, { phase: 'between', done: 0, total: between.reduce((n, b) => n + b.values.length, 0) });
+    fitShowProgress();
+    for (const b of between) { if (state.stopped) break; await sweep(b.s, b.values); }
+  }
+  return { start, best };
+}
+// One fit from start to the result note: runs the search, sets what it found
+// (job.apply), and writes the change list.
+async function fitRun(job) {
+  const state = _fit = { key: job.key, goal: job.goal, phase: 'rounds', round: 1, done: 0, total: 0, stopped: false, close: job.close };
+  delete _fitNotes[job.key];
+  render();
+  const before = Object.assign({}, job.cur);
+  const { start, best } = await fitSearch(state, job.space, job.cur, job.measure, job.goal, job.hurdle && job.hurdle.final);
+  job.close();
+  _fit = null;
+  if (state.stopped) { render(); return; }
+  const changed = job.space.filter(s => String(job.cur[s.id]) !== String(before[s.id]));
+  // Each changed setting, old → new, as its dropdown reads (the user: "a quick summary of what changed").
+  const changes = changed.map(s => ({ label: s.label, from: s.text(before[s.id]), to: s.text(job.cur[s.id]) }));
+  if (changed.length) job.apply(job.cur, changed);
+  _fitNotes[job.key] = { text: fitNoteText(job.goal, job.cagrOf, start, best, job.hurdle, changed.length), changes };
+  render();
+}
+// Runs each distinct setting combination once per fit.
+const fitMemo = (memo, run) => (values) => {
+  const k = JSON.stringify(values);
+  if (!memo.has(k)) memo.set(k, run(values));
+  return memo.get(k);
+};
+// The drawdown goal with no buy & hold line to beat: say so, change nothing.
+function fitNoHurdle(key, fund) {
+  _fitNotes[key] = { text: fund ? `No buy & hold line for ${fund.toUpperCase()} to compare with, so nothing changed.` : 'The strategy holds no fund on this period, so nothing changed.', changes: [] };
+  render();
+}
+// Fit for a code strategy (runs in the sandbox worker pool).
+async function runCustomFit(cfgId, goal) {
+  const cfg = savedConfigs.find(c => c.id === cfgId), ctx = window._customCtx;
+  if (_fit || !cfg || !cfg.code || !ctx) return;
+  const schema = getCustomSchema(cfg);
+  const params = schema.filter(sp => sp && sp.id != null && sp.fit !== false && customParamOptions(sp).length > 1);
+  if (!params.length) return;
+  let hurdle = null;
+  if (goal === 'dd') {
+    const h = fitHurdle(cfg);
+    if (!h.final) { fitNoHurdle(cfgId, h.fund); return; }
+    hurdle = h;
+  }
+  const globals = computeCustomGlobals(cfg, ctx), pool = fitPool();
+  const cur = {};
+  schema.forEach(sp => { if (sp && sp.id != null) cur[sp.id] = fitStored(customParamValue(cfg, sp)); });
+  await fitRun({
+    key: cfgId, goal, hurdle, cur, close: pool.close,
+    space: params.map(sp => ({ id: sp.id, label: fitLabel(schema, sp), values: customParamOptions(sp).map(o => fitStored(o.value)),
+      between: v => fitBetween(sp, v), text: v => customOptionLabel(sp, v) })),
+    measure: fitMemo(new Map(), p => pool.run(cfg.code, globals, p).then(fitScore)),
+    cagrOf: f => cfgMoneyWeightedCAGR(ctx, f),
+    apply: (values, changed) => {
+      cfg.params = cfg.params || {};
+      changed.forEach(s => { cfg.params[s.id] = values[s.id]; });
+      persistSavedConfigs();
+    },
+  });
+}
+// The built-in panels Fit can search, and the select naming the fund each buys
+// (the drawdown goal's buy & hold hurdle).
+const FIT_PANELS = { '9sig': { fund: 'select-9sig-underlying' }, sma: { fund: 'select-sma-underlying' } };
+const FIT_YIELD_MS = 25;
+// Fit for a built-in 9sig or SMA panel. Their engines run on the page, so the
+// runs go one at a time with a pause every FIT_YIELD_MS for the progress and
+// Stop. Which selects it may change, their names and one run's result come
+// from js/preview-dropdown.js (window.previewFit), which owns those engines'
+// option previews.
+async function runNativeFit(type, goal) {
+  const pf = window.previewFit, key = 'panel:' + type;
+  if (_fit || !FIT_PANELS[type] || !pf) return;
+  const selects = pf.selects(type).map(id => document.getElementById(id)).filter(el => el && !el.disabled && el.options.length > 1);
+  if (!selects.length) return;
+  let hurdle = null;
+  if (goal === 'dd') {
+    const fund = document.getElementById(FIT_PANELS[type].fund).value, finals = window.previewBhFinals();
+    if (!(finals[fund] > 0)) { fitNoHurdle(key, fund); return; }
+    hurdle = { fund, final: finals[fund] };
+  }
+  const base = pf.base(type), cur = {};
+  selects.forEach(el => { cur[el.id] = el.value; });
+  let chain = Promise.resolve(), lastYield = performance.now();
+  const runOne = (values) => (chain = chain.then(async () => {
+    if (performance.now() - lastYield > FIT_YIELD_MS) { await new Promise(r => setTimeout(r, 0)); lastYield = performance.now(); }
+    if (!_fit || _fit.stopped) return null;
+    try { return pf.measure(type, base, values); } catch (e) { console.error('Fit: a run failed', e); return null; }
+  }));
+  const optionText = (el, v) => { const o = Array.from(el.options).find(x => x.value === String(v)); return o ? o.textContent.trim() : String(v); };
+  await fitRun({
+    key, goal, hurdle, cur, close: () => {},
+    space: selects.map(el => ({ id: el.id, label: pf.name(el.id), values: Array.from(el.options).filter(o => !o.disabled).map(o => o.value),
+      between: () => [], text: v => optionText(el, v) })),
+    measure: fitMemo(new Map(), runOne),
+    cagrOf: f => window._mwCagrOfFinal(f),
+    apply: (values) => {
+      applyControlParams(type, Object.assign(captureParams(type), values));
+      if (typeof saveSliders === 'function') saveSliders();
+    },
+  });
+}
+function runFit(key, goal) { return key.startsWith('panel:') ? runNativeFit(key.slice(6), goal) : runCustomFit(key, goal); }
+
+// A setting's name for the change list: its section's head ("Ceiling" of
+// "Ceiling — step aside") and its label without the unit in brackets, so two
+// settings with similar labels in different sections read apart.
+function fitLabel(schema, sp) {
+  let section = '';
+  for (const s of schema) {
+    if (s === sp) break;
+    if (s && s.id == null && s.section) section = String(s.section).split(' — ')[0];
+  }
+  const name = String(sp.label || sp.id).replace(/\s*\([^()]*\)\s*$/, '');
+  return section ? `${section} · ${name}` : name;
+}
+// The result under Settings: what moved, then each changed setting.
+function buildFitNoteHtml(note) {
+  const list = note.changes.length
+    ? `<ul class="fit-changes">${note.changes.map(c => `<li>${_escHtml(c.label)}: ${_escHtml(c.from)} → <b>${_escHtml(c.to)}</b></li>`).join('')}</ul>` : '';
+  return `<div class="fit-note">${_escHtml(note.text)}${list}</div>`;
+}
+// The result line under Settings: what moved, on the chart's period.
+function fitNoteText(goal, cagrOf, start, best, hurdle, nChanged) {
+  if (!best) return 'The runs failed, so nothing changed.';
+  const cagr = (r) => cagrOf(r.final).toFixed(1) + '%';
+  const dd = (r) => (r.dd * 100).toFixed(1) + '%';
+  if (goal === 'dd' && !(best.final > hurdle.final)) return `No setting beat buy & hold ${hurdle.fund.toUpperCase()} (${cagr(hurdle)} a year) here, so nothing changed.`;
+  if (!nChanged) return `${FIT_GOALS[goal].label}: the current settings are already the best found.`;
+  const moved = `CAGR ${start ? cagr(start) + ' → ' : ''}${cagr(best)}, max drawdown ${start ? dd(start) + ' → ' : ''}${dd(best)}`;
+  const changed = `${nChanged} setting${nChanged > 1 ? 's' : ''} changed`;
+  if (goal === 'cagr') return `${FIT_GOALS.cagr.label}: ${changed}. ${moved}.`;
+  const bh = `buy & hold ${hurdle.fund.toUpperCase()} (${cagr(hurdle)} a year)`;
+  // Settings under the hurdle climb to it first, so the drawdown can grow.
+  return start && !(start.final > hurdle.final)
+    ? `The current settings don't beat ${bh}. The lowest drawdown that does, ${changed}: ${moved}.`
+    : `${FIT_GOALS.dd.label} that still beats ${bh}, ${changed}: ${moved}.`;
+}
+
+// The Fit button beside "Reset to default"; a running search shows its progress and stops on click.
+function buildFitButtonHtml(key) {
+  const running = _fit && _fit.key === key;
+  const tip = "Searches the settings for the best result on the chart's current period and money, and sets them. Costs, cash interest and how trades execute stay as they are.";
+  return `<span class="settings-fit-wrap"><button type="button" class="settings-reset-btn settings-fit-btn${running ? ' running' : ''}" data-fit-key="${_escHtml(key)}"${_fit && !running ? ' disabled' : ''}${running ? ` title="${_escHtml(fitStepText(_fit))}" style="--fit-pct:${fitPercent(_fit)}%"` : ''}>${running ? _escHtml(fitProgressText(_fit)) : 'Fit ▾'}</button>`
+    + `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span></span>`;
+}
+function openFitMenu(btn, key) {
+  closeFitMenu();
+  const menu = document.createElement('div');
+  menu.className = 'pdrop-popup fit-menu';
+  menu.innerHTML = Object.keys(FIT_GOALS).map(k =>
+    `<div class="fit-menu-item" data-fit-goal="${k}"><b>${_escHtml(FIT_GOALS[k].label)}</b><span>${_escHtml(FIT_GOALS[k].tip)}</span></div>`).join('');
+  document.body.appendChild(menu);
+  positionCpPopup(menu, btn);
+  menu.style.maxHeight = '';
+  _fitMenu = { menu, btn, key };
+  document.addEventListener('keydown', _fitMenuKey, true);
+}
+function closeFitMenu() {
+  if (!_fitMenu) return;
+  _fitMenu.menu.remove();
+  _fitMenu = null;
+  document.removeEventListener('keydown', _fitMenuKey, true);
+}
+function _fitMenuKey(e) { if (e.key === 'Escape') closeFitMenu(); }
 
 // Built-in header labels + tooltips for the log keys the build prompt asks a
 // strategy to write. Following the contract therefore buys an SMA-quality
@@ -3326,7 +3722,8 @@ function renderCustomPanelBody(cfgId) {
   if (typeof buildColorPickerHtml === 'function') html += buildColorPickerHtml(cfg.type);
   html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qld</code>, <code>qqq</code>, <code>spy</code>, <code>sso</code>, <code>spxl</code>, <code>sqqq</code> (daily closes). Base your rules on any of them.</div>`;
   html += `<button type="button" id="custom-edit-builder" class="custom-edit-btn">Edit strategy</button>`;
-  if (cfg.desc) html += `<div class="custom-desc-readout">${_escHtml(cfg.desc)}</div>`;
+  // The description stays in the Edit strategy dialog only: the settings read
+  // as sentences and library entries show their rules (the user, 2026-11-04).
   if (err) html += `<div class="custom-error"><b>Couldn't run it:</b> ${_escHtml(err)} <span class="custom-error-hint">— click Edit strategy to fix the code.</span></div>`;
 
   // CAGR / Max DD / End (when the strategy ran successfully).
@@ -3349,8 +3746,10 @@ function renderCustomPanelBody(cfgId) {
   const schema = getCustomSchema(cfg), controls = buildCustomControlsHtml(cfg, schema);
   if (controls) {
     const atDefaults = schema.every(sp => sp.id == null || String(customParamValue(cfg, sp)) === String(coerceCustomVal(sp, sp.default)));
-    html += `<div class="strategy-panel-section-label" style="margin-top:14px;display:flex;align-items:center;justify-content:space-between;gap:12px"><span>Settings</span>`
-      + `<button type="button" class="settings-reset-btn" data-custom-reset="${_escHtml(cfg.id)}"${atDefaults ? ' disabled' : ''}>Reset to default</button></div>${controls}`;
+    const fitNote = _fitNotes[cfg.id] ? buildFitNoteHtml(_fitNotes[cfg.id]) : '';
+    html += `<div class="strategy-panel-section-label settings-head" style="margin-top:14px"><span>Settings</span>`
+      + `<span class="settings-actions">${buildFitButtonHtml(cfg.id)}`
+      + `<button type="button" class="settings-reset-btn" data-custom-reset="${_escHtml(cfg.id)}"${atDefaults || (_fit && _fit.key === cfg.id) ? ' disabled' : ''}>Reset to default</button></span></div>${fitNote}${controls}`;
   }
 
   // The signal mini chart: the lines the strategy declares (`lines:` in its
@@ -3576,6 +3975,16 @@ document.addEventListener('click', (e) => {
   if (reset) { resetPanelToDefaults(reset.getAttribute('data-sc-reset')); return; }
   const resetCustom = e.target.closest('[data-custom-reset]');
   if (resetCustom) { resetCustomToDefaults(resetCustom.getAttribute('data-custom-reset')); return; }
+  // Fit: the button opens the goal menu, or stops a running search; a menu item starts one.
+  const fitGoal = e.target.closest('[data-fit-goal]');
+  if (fitGoal && _fitMenu) { const key = _fitMenu.key; closeFitMenu(); runFit(key, fitGoal.getAttribute('data-fit-goal')); return; }
+  const fitBtn = e.target.closest('[data-fit-key]');
+  if (fitBtn) {
+    if (_fit && _fit.key === fitBtn.getAttribute('data-fit-key')) { _fit.stopped = true; _fit.close(); return; }
+    if (_fitMenu) closeFitMenu(); else openFitMenu(fitBtn, fitBtn.getAttribute('data-fit-key'));
+    return;
+  }
+  if (_fitMenu && !e.target.closest('.fit-menu')) closeFitMenu();
 
   // Parameters-panel config pills.
   const pill = e.target.closest('.saved-config-pill');
