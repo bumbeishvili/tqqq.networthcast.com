@@ -211,7 +211,7 @@ function codeFingerprint(code) {
 CODE[1] = `{
   name: "Faber 10-mo / 200-day (monthly) → TQQQ/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold TQQQ while QQQ ends the month above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 12 }, (_, k) => 230 + 10 * k), Array.from({ length: 96 }, (_, k) => 342 + k), [440, 450], Array.from({ length: 31 }, (_, k) => 454 + k), [490, 500]), default: 200 },
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 12 }, (_, k) => 230 + 10 * k), Array.from({ length: 96 }, (_, k) => 342 + k), [440, 450], Array.from({ length: 31 }, (_, k) => 454 + k), [490, 500], Array.from({ length: 40 }, (_, k) => 505 + 5 * k), Array.from({ length: 12 }, (_, k) => 725 + 25 * k)), default: 500 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "QQQ's average or median close over the window (the Center line setting). Checked only on the month end." }],
@@ -256,7 +256,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[2] = `{
   name: "Gayed LRS 3× — SPY 200SMA → SPXL/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold SPXL while SPY closes above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 200 },
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 295 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -292,7 +292,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[3] = `{
   name: "Gayed LRS 2× — SPY 200SMA → SSO/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold SSO while SPY closes above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 200 },
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 295 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -328,9 +328,9 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[8] = `{
   name: "Siegel ±band SPY 200SMA → TQQQ/cash",
   params: [{ id: "band", label: "Band (% around line)", text: "Buy TQQQ when SPY closes {} above its line, and sell when it closes that far below.", unit: "%", options:
-      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 1 },
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 3.5 },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), Array.from({ length: 31 }, (_, k) => 74 + k), Array.from({ length: 4 }, (_, k) => 110 + 10 * k), Array.from({ length: 82 }, (_, k) => 149 + k), [240], Array.from({ length: 31 }, (_, k) => 246 + k), Array.from({ length: 23 }, (_, k) => 280 + 10 * k)), default: 200 },
+      [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), Array.from({ length: 31 }, (_, k) => 74 + k), Array.from({ length: 4 }, (_, k) => 110 + 10 * k), Array.from({ length: 82 }, (_, k) => 149 + k), [240], Array.from({ length: 31 }, (_, k) => 246 + k), Array.from({ length: 23 }, (_, k) => 280 + 10 * k)), default: 145 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -368,51 +368,14 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #9 Canonical (SPY signal) 200-SMA → TQQQ/cash.
-CODE[9] = `{
-  name: "Canonical SPY 200SMA → TQQQ/cash",
-  params: [{ id: "signal", label: "Signal", text: "Hold TQQQ while {} closes above its line.", options: [{ value: "spy", label: "SPY" }, { value: "qqq", label: "QQQ" }], default: "spy" },
-           { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 200 },
-           ${STAT_PARAM_SNIPPET}],
-  columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
-             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
-  run(data, p) {
-    const log = [], W = p.window, sig = data[p.signal], lev = data.tqqq;
-${CENTER_LINE_SNIPPET}
-    let cash = p.initial, sh = 0, invested = false, prevMonth = null;
-    const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
-    const lineName = W + "-day " + (useMed ? "median" : "average"), sigName = p.signal.toUpperCase();
-    for (let i = p.startIdx; i <= p.endIdx; i++) {
-      const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold", note = "";
-      if (p.contributions && p.contributions[data.dates[i]]) {
-        const amt = p.contributions[data.dates[i]];
-        cash += amt; contributed = amt; action = "contribution";
-${SELL_SH_TO_COVER}
-      }
-      prevMonth = month;
-      const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought " + "TQQQ" + ": " + sigName + " closed above its " + lineName; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold " + "TQQQ" + ": " + sigName + " closed under its " + lineName; }
-      else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
-          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma });
-    }
-    return { log, lines: [{ key: "assetPrice", label: sigName + " price" }, { key: "center", label: lineName }] };
-  }
-}`;
-
 // #10 Canonical QQQ 200SMA → TQQQ else cash.
 CODE[10] = `{
   name: "QQQ 200-day SMA → TQQQ else cash",
   params: [{ id: "signal", label: "Signal asset", text: "Watch {} against its line.", options: [{ value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }], default: "qqq" },
            { id: "lev", label: "Leveraged ETF", text: "Hold {} while it is above the line, and cash while it is below.", options: [{ value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "sso", label: "SSO" }, { value: "spxl", label: "SPXL" }], default: "tqqq" },
            { id: "window", label: "Window (days)", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 200 },
-           ${STAT_PARAM_SNIPPET}],
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 160 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
   run(data, p) {
@@ -443,47 +406,11 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #11 SPY 200SMA → UPRO (SPXL 3× S&P) else cash.
-CODE[11] = `{
-  name: "SPY 200SMA → UPRO (SPXL) / cash",
-  params: [{ id: "window", label: "Window", text: "Hold SPXL while SPY closes above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 200 },
-           ${STAT_PARAM_SNIPPET}],
-  columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
-             { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
-  run(data, p) {
-    const log = [], W = p.window, sig = data.spy, lev = data.spxl;
-${CENTER_LINE_SNIPPET}
-    let cash = p.initial, sh = 0, invested = false, prevMonth = null;
-    const y0 = parseInt(data.dates[p.startIdx].slice(0, 4));
-    const lineName = W + "-day " + (useMed ? "median" : "average");
-    for (let i = p.startIdx; i <= p.endIdx; i++) {
-      const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold", note = "";
-      if (p.contributions && p.contributions[data.dates[i]]) {
-        const amt = p.contributions[data.dates[i]];
-        cash += amt; contributed = amt; action = "contribution";
-${SELL_SH_TO_COVER}
-      }
-      prevMonth = month;
-      const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought " + "SPXL" + ": " + "SPY" + " closed above its " + lineName; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = "Sold " + "SPXL" + ": " + "SPY" + " closed under its " + lineName; }
-      else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
-${WEEKLY_MONTH_END_SNIPPET}
-      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
-        log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
-          held: invested ? "SPXL" : "CASH", note: note, assetPrice: sig[i], center: sma });
-    }
-    return { log, lines: [{ key: "assetPrice", label: "SPY" + " price" }, { key: "center", label: lineName }] };
-  }
-}`;
-
 // #12 SSO own-price 200SMA → SSO else cash.
 CODE[12] = `{
   name: "SSO own 200SMA → SSO/cash (2×)",
   params: [{ id: "window", label: "Window", text: "Hold SSO while it closes above its own line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 44 }, (_, k) => 181 + k), [230, 240], Array.from({ length: 31 }, (_, k) => 250 + k), Array.from({ length: 7 }, (_, k) => 290 + 10 * k), Array.from({ length: 81 }, (_, k) => 357 + k), Array.from({ length: 7 }, (_, k) => 440 + 10 * k)), default: 200 },
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 44 }, (_, k) => 181 + k), [230, 240], Array.from({ length: 31 }, (_, k) => 250 + k), Array.from({ length: 7 }, (_, k) => 290 + 10 * k), Array.from({ length: 81 }, (_, k) => 357 + k), Array.from({ length: 7 }, (_, k) => 440 + 10 * k)), default: 400 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "center", label: "Center", tip: "SSO's average or median close over the window (the Center line setting). The rule holds SSO while SSO closes above it." }],
   run(data, p) {
@@ -518,12 +445,12 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[13] = `{
   name: "Hollywood SPY 200SMA +4/-3 → TQQQ/QQQ",
   params: [{ id: "entry", label: "Enter band (% above)", text: "Hold TQQQ once SPY closes {} above its line.", unit: "%", options:
-      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 4 },
-           { id: "exit", label: "Exit band (% below)", text: "Switch to QQQ once SPY closes {} below it.", unit: "%", options:
       Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 3 },
+           { id: "exit", label: "Exit band (% below)", text: "Switch to QQQ once SPY closes {} below it.", unit: "%", options:
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 5.5 },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)), default: 200 },
-           ${STAT_PARAM_SNIPPET}],
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)), default: 15 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
              { key: "tqqqLine", label: "TQQQ line", tip: "Where SPY must close to switch to TQQQ: the center plus the enter band." },
@@ -573,10 +500,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[15] = `{
   name: "Composer 200MA + RSI trend → TQQQ/cash",
   params: [{ id: "rsiMax", label: "Max RSI(14) to hold", text: "Hold TQQQ while QQQ is above its line and QQQ's RSI(14) is under {}.", options:
-      Array.from({ length: 101 }, (_, k) => +(50 + 0.5 * k).toFixed(1)), default: 80 },
+      Array.from({ length: 101 }, (_, k) => +(50 + 0.5 * k).toFixed(1)), default: 75 },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 200 },
-           ${STAT_PARAM_SNIPPET}],
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 160 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
              { key: "rsiCapLine", label: "RSI cap", tip: "The QQQ close that would put RSI(14) at the cap today. Above it the strategy is out." }],
@@ -623,7 +550,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[17] = `{
   name: "MACD(12/26) → TQQQ/cash (+trailing stop)",
   params: [{ id: "trail", label: "Trailing stop (% from peak)", text: "Sell on a trailing stop {} under TQQQ's high since the buy.", unit: "%", options:
-      [{ value: 0, label: "Off" }].concat(Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1))), default: 30 }],
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1))), default: 15 }],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "triggerLine", label: "MACD trigger", tip: "The QQQ close that would put MACD exactly on its signal line or zero, whichever is higher. Above it the buy rule holds." },
              { key: "stopLine", label: "Trailing stop", tip: "While holding: TQQQ's high since the buy, less the stop setting. A TQQQ close under it sells." }],
@@ -674,8 +601,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[18] = `{
   name: "40-week SMA (weekly) → TQQQ/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold TQQQ while QQQ's weekly close is above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 16 }, (_, k) => 10 + 10 * k), Array.from({ length: 55 }, (_, k) => 166 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 31 }, (_, k) => 306 + k), Array.from({ length: 12 }, (_, k) => 340 + 10 * k), Array.from({ length: 44 }, (_, k) => 457 + k)), default: 200 },
-           ${STAT_PARAM_SNIPPET}],
+      [5].concat(Array.from({ length: 16 }, (_, k) => 10 + 10 * k), Array.from({ length: 55 }, (_, k) => 166 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 31 }, (_, k) => 306 + k), Array.from({ length: 12 }, (_, k) => 340 + 10 * k), Array.from({ length: 44 }, (_, k) => 457 + k)), default: 495 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "QQQ's average or median close over the window (the Center line setting). Checked only on the week end." }],
   run(data, p) {
@@ -716,10 +643,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[19] = `{
   name: "Golden/Death Cross 50/200 → TQQQ/cash",
   params: [{ id: "fast", label: "Fast window", text: "Hold TQQQ while QQQ's fast line, over {} days, is above its slow line.", options:
-      Array.from({ length: 146 }, (_, k) => 5 + k), default: 50 },
+      Array.from({ length: 146 }, (_, k) => 5 + k), default: 75 },
            { id: "slow", label: "Slow window", text: "The slow line covers the last {} days.", options:
-      Array.from({ length: 14 }, (_, k) => 50 + 10 * k).concat(Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 100 }, (_, k) => 301 + k)), default: 200 },
-           { id: "stat", label: "Center line", text: "Use the {} for both lines.", options: [{ value: "sma", label: "Moving average" }, { value: "median", label: "Median" }], default: "sma" }],
+      Array.from({ length: 14 }, (_, k) => 50 + 10 * k).concat(Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 100 }, (_, k) => 301 + k)), default: 335 },
+           { id: "stat", label: "Center line", text: "Use the {} for both lines.", options: [{ value: "sma", label: "Moving average" }, { value: "median", label: "Median" }], default: "median" }],
   columns: [{ key: "fastLine", label: "Fast line", tip: "QQQ's average or median close over the fast window." },
              { key: "slowLine", label: "Slow line", tip: "QQQ's average or median close over the slow window. The rule holds TQQQ while the fast line is above it." },
              { key: "assetPrice", label: "QQQ", tip: "QQQ's close." }],
@@ -755,9 +682,9 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[20] = `{
   name: "Vol-target TQQQ (scale to target vol)",
   params: [{ id: "target", label: "Target vol (%/yr)", text: "Size TQQQ so the holding swings about {} a year.", unit: "%", options:
-      Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)), default: 25 },
+      Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)).concat(Array.from({ length: 40 }, (_, k) => 61 + k)), default: 60 },
            { id: "lookback", label: "Vol lookback (days)", text: "Measure the swings over the last {} days.", options:
-      Array.from({ length: 246 }, (_, k) => 5 + k), default: 20 }],
+      Array.from({ length: 246 }, (_, k) => 5 + k), default: 15 }],
   columns: [{ key: "share", label: "TQQQ share", tip: "Share of the account in TQQQ at the close." },
              { key: "vol", label: "Volatility", tip: "TQQQ's annualised volatility over the lookback. Each month the share is reset to the target divided by it, at most 100%." },
              { key: "target", label: "Target", tip: "The target volatility setting." }],
@@ -806,10 +733,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[22] = `{
   name: "Connors RSI(2) dip-buy (200SMA trend)",
   params: [{ id: "buy", label: "Buy RSI(2) below", text: "Buy TQQQ when QQQ's RSI(2) drops under {} while QQQ is above its 200-day line.", options:
-      Array.from({ length: 100 }, (_, k) => +(0.5 + 0.5 * k).toFixed(1)), default: 10 },
+      Array.from({ length: 100 }, (_, k) => +(0.5 + 0.5 * k).toFixed(1)), default: 20 },
            { id: "sell", label: "Sell RSI(2) above", text: "Sell when RSI(2) rises over {}, or when QQQ closes under the line.", options:
-      Array.from({ length: 120 }, (_, k) => +(40 + 0.5 * k).toFixed(1)), default: 70 },
-           ${STAT_PARAM_SNIPPET}],
+      Array.from({ length: 120 }, (_, k) => +(40 + 0.5 * k).toFixed(1)), default: 95 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
              { key: "rsiBuyLine", label: "RSI buy", tip: "The QQQ close that would put RSI(2) at the buy level today. A close under it, with QQQ above its center, buys." },
@@ -857,10 +784,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[23] = `{
   name: "200-day SMA + RSI exit & re-entry",
   params: [{ id: "oh", label: "Overheat exit RSI(10) ≥", text: "Sell TQQQ when QQQ's RSI(10) reaches {}, even above the line.", options:
-      Array.from({ length: 100 }, (_, k) => +(50 + 0.5 * k).toFixed(1)).concat([{ value: 100, label: "Off" }]), default: 80 },
+      Array.from({ length: 100 }, (_, k) => +(50 + 0.5 * k).toFixed(1)).concat([{ value: 100, label: "Off" }]), default: 85 },
            { id: "cool", label: "Cool-gate re-entry RSI(10) <", text: "Then buy back only once RSI(10) is under {}.", options:
       Array.from({ length: 160 }, (_, k) => +(20 + 0.5 * k).toFixed(1)).concat([{ value: 100, label: "Off" }]), default: 60 },
-           ${STAT_PARAM_SNIPPET}],
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
              { key: "overheatLine", label: "Overheat line", tip: "The QQQ close that would put RSI(10) at the overheat level today. A close above it sells." },
@@ -909,12 +836,12 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[24] = `{
   name: "200SMA + Bodyguard (delever/GTFO)",
   params: [{ id: "delev", label: "Delever→QQQ at (% above line)", text: "Switch TQQQ to QQQ when QQQ closes {} above its line.", unit: "%", options:
-      [{ value: 0, label: "Off" }].concat(Array.from({ length: 151 }, (_, k) => +(5 + 0.5 * k).toFixed(1))), default: 30 },
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 151 }, (_, k) => +(5 + 0.5 * k).toFixed(1))), default: 8.5 },
            { id: "gtfo", label: "Sell→cash at (% above line)", text: "Sell everything to cash when it closes {} above it.", unit: "%", options:
-      [{ value: 0, label: "Off" }].concat(Array.from({ length: 181 }, (_, k) => +(10 + 0.5 * k).toFixed(1))), default: 40 },
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 181 }, (_, k) => +(10 + 0.5 * k).toFixed(1))), default: 15 },
            { id: "window", label: "Window", text: "Below the line, hold cash. The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 20 }, (_, k) => 260 + 10 * k), Array.from({ length: 30 }, (_, k) => 451 + k), [490, 500]), default: 200 },
-           ${STAT_PARAM_SNIPPET}],
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 20 }, (_, k) => 260 + 10 * k), Array.from({ length: 30 }, (_, k) => 451 + k), [490, 500]), default: 160 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
              { key: "delevLine", label: "Delever line", tip: "Where QQQ must close to switch from TQQQ to QQQ: the center plus the delever setting." },
@@ -971,8 +898,8 @@ CODE[25] = `{
   params: [{ id: "signal", label: "Signal / park", text: "Watch {} against its line, and hold it while it is below.", options: [{ value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }], default: "qqq" },
            { id: "lev", label: "Leveraged ETF", text: "Hold {} while it is above.", options: [{ value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "sso", label: "SSO" }, { value: "spxl", label: "SPXL" }], default: "tqqq" },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      Array.from({ length: 32 }, (_, k) => 5 + k).concat(Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 200 },
-           ${STAT_PARAM_SNIPPET}],
+      Array.from({ length: 32 }, (_, k) => 5 + k).concat(Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 160 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting). Above it the strategy holds the leveraged fund, under it the signal fund." }],
   run(data, p) {
@@ -1156,6 +1083,300 @@ ${END_ROW_ACTION}
         }
       }
     };
+  }
+}`;
+
+// Books for the library strategies that hold a mix of funds at once (#7,
+// #14): shares per fund plus cash, moved toward target weights at a close.
+// Shared SOURCE like the snippets above, interpolated into each run() so the
+// executed text stays self-contained. It carries WITHDRAWAL_RULE's text, so
+// upgradeWithdrawalHandling leaves these strategies alone.
+const MIX_BOOKS_SNIPPET = `    const cost = (p.tradeCost || 0) / 100;
+    const dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;
+    const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
+    const sh = {}, holdings = [];
+    let cash = p.initial, invested = p.initial, feesPaid = 0;
+    const worth = (i) => Object.keys(sh).reduce((s, f) => s + sh[f] * priceOf(f, i), cash);
+    const heldText = () => Object.keys(sh).filter(f => sh[f] > 0).map(f => f.toUpperCase()).join("+") || "CASH";
+    const names = (funds) => funds.map(f => f.toUpperCase()).join("+");
+    // The fund worth the most today, for the row's price.
+    const mainFund = (i) => Object.keys(sh).filter(f => sh[f] > 0).sort((a, b) => sh[b] * priceOf(b, i) - sh[a] * priceOf(a, i))[0] || null;
+    // A target is { fund: weight }, and what the weights leave over is cash.
+    // moveTo reaches it at today's close: it sells what sits above its weight,
+    // then buys what sits under. With one trade per day, a day that sold buys
+    // nothing, and the buys wait for the next close (waiting, queued). That
+    // next close only buys (buysOnly): prices have moved overnight, and
+    // selling again would push the buys back another day.
+    function moveTo(target, i, oneTradePerDay, buysOnly) {
+      const total = worth(i), sold = [], bought = [];
+      let fee = 0;
+      if (!buysOnly) for (const f of Object.keys(sh)) {
+        const px = priceOf(f, i), keep = (target[f] || 0) * total, over = sh[f] * px - keep;
+        if (px > 0 && sh[f] > 0 && over > total * 1e-9) {
+          const charge = over * cost;
+          sh[f] = keep > 0 ? sh[f] - over / px : 0; cash += over - charge; fee += charge; sold.push(f);
+        }
+      }
+      const total2 = worth(i);
+      const under = (f) => target[f] * total2 - (sh[f] || 0) * priceOf(f, i);
+      const queued = Object.keys(target).filter(f => target[f] > 0 && priceOf(f, i) > 0 && under(f) > total2 * 1e-9);
+      const waiting = !!oneTradePerDay && sold.length > 0 && queued.length > 0;
+      if (!waiting) for (const f of queued) {
+        const spend = Math.min(cash, under(f));
+        if (spend > 0) { const charge = spend * cost; sh[f] = (sh[f] || 0) + (spend - charge) / priceOf(f, i); cash -= spend; fee += charge; bought.push(f); }
+      }
+      feesPaid += fee;
+      return { sold: sold, bought: bought, fee: fee, waiting: waiting, queued: waiting ? queued : [] };
+    }
+    // New money on a day without a trade goes in by the target's weights.
+    function deploy(amt, target, i) {
+      let fee = 0;
+      for (const f of Object.keys(target)) {
+        const px = priceOf(f, i), spend = Math.min(cash, amt * target[f]);
+        if (px > 0 && spend > 0) { const charge = spend * cost; sh[f] = (sh[f] || 0) + (spend - charge) / px; cash -= spend; fee += charge; }
+      }
+      feesPaid += fee;
+      return fee;
+    }
+    // ${WITHDRAWAL_RULE}
+    // Every fund held is sold in the same proportion.
+    function cover(i) {
+      const held = Object.keys(sh).reduce((s, f) => s + sh[f] * priceOf(f, i), 0);
+      const frac = held > 0 ? Math.min(1, -cash / (held * (1 - cost))) : 0;
+      let fee = 0;
+      for (const f of Object.keys(sh)) {
+        const gross = sh[f] * frac * priceOf(f, i);
+        if (gross > 0) { fee += gross * cost; cash += gross * (1 - cost); sh[f] = frac >= 1 ? 0 : sh[f] * (1 - frac); }
+      }
+      if (cash < 0) cash = 0;
+      feesPaid += fee;
+      return fee;
+    }
+    // The verb for what moved today. A day that only sold while its buys wait
+    // is the first leg of a switch.
+    const verbOf = (mv) => mv.sold.length && mv.bought.length ? "switch" : mv.bought.length ? "buy" : "sell";`;
+
+// The three settings every mixed-fund strategy ends with. Their values are
+// costs and execution, not rules, so Fit leaves them alone (fit: false).
+const mixCostParams = (cashTip) => `{ id: "splitDays", fit: false, label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ],
+      tip: "Yes waits a day between the sale and the purchase. No does both at the same close." },
+    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+      0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8],
+      tip: "${cashTip}" },
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+      0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1],
+      tip: "Charged on every sale and purchase." }`;
+
+// #7 Antonacci dual momentum, leveraged: at each month end, the stronger of
+// SPY and QQQ over 12 months; if it beat cash over the same months, hold its
+// 3× fund (SPXL or TQQQ), else cash. Cash stands in for T-bills, at the cash
+// interest setting, which is also the return to beat.
+CODE[7] = `{
+  name: "Antonacci dual momentum — SPY vs QQQ → SPXL/TQQQ or cash",
+  params: [
+    { id: "lookback", label: "Lookback (days)", text: "At each month end, compare SPY's and QQQ's returns over the last {} trading days.", default: 430, options:
+      Array.from({ length: 21 }, (_, k) => 21 + 5 * k).concat(Array.from({ length: 253 }, (_, k) => 126 + k), Array.from({ length: 32 }, (_, k) => 380 + 4 * k)),
+      tip: "252 trading days is 12 months, the length Antonacci uses." },
+    { id: "spFund", label: "When SPY leads", text: "If SPY did better, hold {}.", default: "spy", options: [
+      { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" }, { value: "spy", label: "SPY" } ],
+      tip: "The fund held while SPY has the higher return." },
+    { id: "nqFund", label: "When QQQ leads", text: "If QQQ did better, hold {}.", default: "tqqq", options: [
+      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "qqq", label: "QQQ" } ],
+      tip: "The fund held while QQQ has the higher return." },
+    { id: "park", label: "Held when out", text: "When the better one earned less than cash, hold {} instead.", default: "gld", options: [
+      { value: "cash", label: "cash" }, { value: "gld", label: "GLD" } ],
+      tip: "Cash earns the cash interest, standing in for T-bills." },
+    ${mixCostParams("What cash earns, as T-bills would. It is also the return the better fund must beat.")}
+  ],
+  columns: [
+    { key: "spyRet", label: "SPY return", tip: "SPY's return over the lookback, in %." },
+    { key: "qqqRet", label: "QQQ return", tip: "QQQ's return over the lookback, in %." },
+    { key: "hurdleRet", label: "Cash return", tip: "What cash earned over the same days at the cash interest, in %: the return to beat." }
+  ],
+  run(data, p) {
+    const log = [], L = +p.lookback || 252;
+${MIX_BOOKS_SNIPPET}
+${NEXT_DATE_SNIPPET}
+    const hurdle = Math.pow(1 + (p.cashRate || 0) / 100, L / 252) - 1;
+    const span = L === 252 ? "12-month" : L + "-day";
+    const ret = (arr, i) => i - L >= 0 && arr[i - L] > 0 && arr[i] > 0 ? arr[i] / arr[i - L] - 1 : NaN;
+    const pct = (x) => (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(1) + "%";
+    const isMonthEnd = (i) => nextDate(i).slice(0, 7) !== data.dates[i].slice(0, 7);
+    // The month-end decision: the leader, and its fund or the park.
+    const decide = (i) => {
+      const s = ret(data.spy, i), q = ret(data.qqq, i);
+      if (!(s === s && q === q)) return null;
+      const lead = q > s ? "QQQ" : "SPY", r = Math.max(s, q);
+      const fund = r > hurdle ? (lead === "QQQ" ? p.nqFund : p.spFund) : p.park;
+      const reason = r > hurdle
+        ? lead + " led over " + span + ", " + pct(r) + " vs " + (lead === "QQQ" ? "SPY " + pct(s) : "QQQ " + pct(q)) + ", above cash's " + pct(hurdle)
+        : lead + " led over " + span + " with " + pct(r) + ", under cash's " + pct(hurdle);
+      return { fund: fund, why: reason, date: data.dates[i] };
+    };
+    // The last month end before the Entry decides what the Entry holds.
+    let pick = null;
+    for (let j = p.startIdx - 1; j >= 0; j--) if (isMonthEnd(j)) { pick = decide(j); break; }
+    let applied = null, waiting = false, pendingKey = null, why = pick ? "month end " + pick.date + " (before the Entry): " + pick.why : "";
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      const month = data.dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "", fee = 0;
+      cash *= 1 + dayRate;
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+        if (cash < 0) { const was = heldText(); fee += cover(i); note = "withdrawal — sold " + was; }
+      }
+      if (isMonthEnd(i)) {
+        const d = decide(i);
+        if (d && (!pick || d.fund !== pick.fund)) why = "month end: " + d.why;
+        if (d) pick = d;
+      }
+      const fund = pick ? pick.fund : p.park, target = fund === "cash" ? {} : { [fund]: 1 }, key = JSON.stringify(target);
+      if (key !== applied || waiting) {
+        const first = applied === null, mv = moveTo(target, i, p.splitDays, waiting && key === pendingKey);
+        fee += mv.fee; waiting = mv.waiting; pendingKey = waiting ? key : null;
+        if (!waiting) applied = key;
+        if (mv.sold.length || mv.bought.length) {
+          action = first ? "start" : verbOf(mv);
+          const moved = (mv.sold.length ? "Sold " + names(mv.sold) : "") + (mv.sold.length && mv.bought.length ? ", bought " : mv.bought.length ? "Bought " : "") + (mv.bought.length ? names(mv.bought) : "");
+          note = moved + ": " + why + (mv.waiting ? "; buys " + names(mv.queued) + " at the next close" : "");
+        }
+      } else if (contributed > 0) fee += deploy(contributed, target, i);
+      holdings.push({ date: data.dates[i], h: Object.assign({}, sh), cash: cash });
+${WEEKLY_MONTH_END_SNIPPET}
+${END_ROW_ACTION}
+      if (contributed !== 0 || logDay || action !== "hold") {
+        const value = worth(i), main = mainFund(i), s = ret(data.spy, i), q = ret(data.qqq, i);
+        log.push({ date: data.dates[i], value: value, action: action, note: note, held: heldText(),
+          price: main ? priceOf(main, i) : 0, holdingsValue: value - cash, cash: cash, contributed: contributed,
+          invested: invested, fee: fee, feesPaid: feesPaid,
+          ...(s === s ? { spyRet: s * 100 } : {}), ...(q === q ? { qqqRet: q * 100 } : {}), hurdleRet: hurdle * 100 });
+      }
+    }
+    return { log, holdings, lines: [
+      { key: "spyRet", label: "SPY " + span + " return", unit: "%" },
+      { key: "qqqRet", label: "QQQ " + span + " return", unit: "%" },
+      { key: "hurdleRet", label: "Cash over the same days", unit: "%" }] };
+  }
+}`;
+
+// #14 Three-phase (a TradingView script, 3PH): SPY's +4% and −3% bands around
+// its 200-day SMA. Phase one holds TQQQ; after 366 days held, phase two holds
+// 50% QLD + 50% gold; under the lower band, defensive holds 50% cash + 50%
+// gold until the upper band buys TQQQ again. GLD stands in for GLDM, cash at
+// the cash interest for SGOV.
+CODE[14] = `{
+  name: "Three-phase SPY 200SMA +4/-3 → TQQQ, QLD + gold, cash + gold",
+  params: [
+    { id: "entry", label: "Buy band (% above)", text: "Buy TQQQ once SPY closes {} above its line.", unit: "%", default: 4, options:
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)),
+      tip: "How far above its line SPY must close. Between the two bands nothing changes." },
+    { id: "exit", label: "Defensive band (% below)", text: "Go defensive once SPY closes {} under it.", unit: "%", default: 3, options:
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)),
+      tip: "How far under its line SPY must close." },
+    { id: "window", label: "Window", text: "The line covers the last {} days.", default: 200, options:
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)),
+      tip: "Trading days in SPY's line." },
+    ${STAT_PARAM_SNIPPET},
+    { id: "holdDays", label: "Phase two after (days)", text: "After holding TQQQ {} days, move to phase two.", default: 366, options:
+      Array.from({ length: 68 }, (_, k) => 30 + 5 * k).concat([366], Array.from({ length: 146 }, (_, k) => 370 + 5 * k)),
+      tip: "Calendar days since TQQQ was bought. 366 makes the gain long-term for US taxes." },
+    { id: "fund2", label: "Phase two fund", text: "Phase two holds {} as its stock part.", default: "qld", options: [
+      { value: "qld", label: "QLD" }, { value: "tqqq", label: "TQQQ" }, { value: "qqq", label: "QQQ" } ],
+      tip: "The stock part of phase two." },
+    { id: "gold2", label: "Phase two gold (%)", text: "Phase two keeps {} in gold.", unit: "%", default: 50, options:
+      Array.from({ length: 101 }, (_, k) => k),
+      tip: "The share of phase two in GLD." },
+    { id: "gold3", label: "Defensive gold (%)", text: "Defensive keeps {} in gold and the rest in cash.", unit: "%", default: 50, options:
+      Array.from({ length: 101 }, (_, k) => k),
+      tip: "The share of the defensive phase in GLD." },
+    ${mixCostParams("What the cash part earns, as SGOV would.")}
+  ],
+  columns: [
+    { key: "assetPrice", label: "SPY", tip: "SPY's close: the price the bands are read on." },
+    { key: "center", label: "Center", tip: "SPY's average or median close over the window (the Center line setting)." },
+    { key: "buyLine", label: "Buy line", tip: "Where SPY must close to buy TQQQ: the center plus the buy band." },
+    { key: "defenseLine", label: "Defensive line", tip: "Where SPY must close to go defensive: the center minus the defensive band." },
+    { key: "heldDays", label: "Days held", tip: "Calendar days since TQQQ was bought, in phase one." }
+  ],
+  run(data, p) {
+    const log = [], W = p.window, sig = data.spy, up = 1 + p.entry / 100, dn = 1 - p.exit / 100;
+${CENTER_LINE_SNIPPET}
+${MIX_BOOKS_SNIPPET}
+    const lineName = W + "-day " + (useMed ? "median" : "average");
+    const fund2 = p.fund2 || "qld", g2 = (+p.gold2 || 0) / 100, g3 = (+p.gold3 || 0) / 100;
+    const daysSince = (i, d0) => Math.round((Date.parse(data.dates[i]) - Date.parse(d0)) / 86400000);
+    const weights = (w) => Object.fromEntries(Object.entries(w).filter(([, x]) => x > 0));
+    const targetOf = (ph) => ph === "one" ? { tqqq: 1 } : ph === "two" ? weights({ [fund2]: 1 - g2, gld: g2 }) : weights({ gld: g3 });
+    const PHASE = { one: "phase one", two: "phase two", defense: "defensive" };
+    // The phase and TQQQ's clock: the bands' state carries from the first day
+    // SPY has a full window, replayed without trading up to the Entry.
+    let phase = "defense", since = null;
+    const step = (i, c) => {
+      const s = sig[i];
+      if (!(c > 0 && s > 0)) return "";
+      if (phase === "defense" && s >= c * up) { phase = "one"; since = data.dates[i]; return "SPY closed " + p.entry + "% above its " + lineName; }
+      if (phase !== "defense" && s <= c * dn) { phase = "defense"; since = null; return "SPY closed " + p.exit + "% under its " + lineName; }
+      if (phase === "one" && daysSince(i, since) >= p.holdDays) { phase = "two"; return "TQQQ held " + p.holdDays + " days"; }
+      return "";
+    };
+    // The median line as a sorted window that takes one close in and one out
+    // per day: centerLine's median without re-sorting the window every day,
+    // which the replay from the first full window made slow. Days arrive in
+    // order (the replay, then the run), so the window only moves forward.
+    const win = [];
+    let winTo = -1;
+    const lb = (v) => { let lo = 0, hi = win.length; while (lo < hi) { const m = (lo + hi) >> 1; if (win[m] < v) lo = m + 1; else hi = m; } return lo; };
+    const lineAt = (i) => {
+      if (!useMed) return centerLine(sig, W, i, false);
+      for (let k = winTo < 0 ? Math.max(0, i - W + 1) : winTo + 1; k <= i; k++) {
+        if (sig[k] > 0) win.splice(lb(sig[k]), 0, sig[k]);
+        const out = k - W;
+        if (winTo >= 0 && out >= 0 && sig[out] > 0) win.splice(lb(sig[out]), 1);
+      }
+      winTo = i;
+      const n = win.length;
+      return !n ? 0 : n % 2 ? win[(n - 1) >> 1] : (win[n / 2 - 1] + win[n / 2]) / 2;
+    };
+    for (let i = Math.max(0, W - 1); i < p.startIdx; i++) step(i, lineAt(i));
+    let applied = null, waiting = false, pendingKey = null;
+    let why = PHASE[phase] + (since ? " since " + since : "") + " (before the Entry)";
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      const month = data.dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "", fee = 0;
+      cash *= 1 + dayRate;
+      if (p.contributions && p.contributions[data.dates[i]]) {
+        const amt = p.contributions[data.dates[i]];
+        cash += amt; contributed = amt; invested += amt; action = "contribution";
+        if (cash < 0) { const was = heldText(); fee += cover(i); note = "withdrawal — sold " + was; }
+      }
+      const c = lineAt(i), changed = step(i, c);
+      if (changed) why = changed + ", " + PHASE[phase];
+      const target = targetOf(phase), key = JSON.stringify(target);
+      if (key !== applied || waiting) {
+        const first = applied === null, mv = moveTo(target, i, p.splitDays, waiting && key === pendingKey);
+        fee += mv.fee; waiting = mv.waiting; pendingKey = waiting ? key : null;
+        if (!waiting) applied = key;
+        if (mv.sold.length || mv.bought.length) {
+          action = first ? "start" : verbOf(mv);
+          const moved = (mv.sold.length ? "Sold " + names(mv.sold) : "") + (mv.sold.length && mv.bought.length ? ", bought " : mv.bought.length ? "Bought " : "") + (mv.bought.length ? names(mv.bought) : "");
+          note = moved + ": " + why + (mv.waiting ? "; buys " + names(mv.queued) + " at the next close" : "");
+        }
+      } else if (contributed > 0) fee += deploy(contributed, target, i);
+      holdings.push({ date: data.dates[i], h: Object.assign({}, sh), cash: cash });
+${WEEKLY_MONTH_END_SNIPPET}
+${END_ROW_ACTION}
+      if (contributed !== 0 || logDay || action !== "hold") {
+        const value = worth(i), main = mainFund(i);
+        log.push({ date: data.dates[i], value: value, action: action, note: note, held: heldText(),
+          price: main ? priceOf(main, i) : 0, holdingsValue: value - cash, cash: cash, contributed: contributed,
+          invested: invested, fee: fee, feesPaid: feesPaid, assetPrice: sig[i], center: c, buyLine: c * up, defenseLine: c * dn,
+          ...(phase === "one" && since ? { heldDays: daysSince(i, since) } : {}) });
+      }
+    }
+    return { log, holdings, lines: [{ key: "assetPrice", label: "SPY price" }, { key: "center", label: lineName },
+      { key: "buyLine", label: "Buy TQQQ (+" + p.entry + "%)" }, { key: "defenseLine", label: "Defensive (−" + p.exit + "%)" }] };
   }
 }`;
 

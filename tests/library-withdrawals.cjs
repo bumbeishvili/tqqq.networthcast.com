@@ -141,7 +141,11 @@ const strategyIds = Object.keys(CODE).map(Number).filter(n => !engineRun(n)).sor
   const WITHDRAWAL_BLOCK = /\n {8}\/\/ A withdrawal: cash pays first[\s\S]*?\n {8}\}(?=\n {6}\})/;
   // What the code editor does to a copy on blur, as far as matching goes: it re-wraps and re-indents.
   const rewrapped = code => code.replace(/; (?=[a-z]+ [+=])/g, ';\n            ').replace(/, (?=[a-zA-Z]+ = )/g, ',\n        ');
-  strategyIds.forEach(n => {
+  // Entries added on 2026-11-04, after the rule: no saved copy of them lacks
+  // it, and their books (MIX_BOOKS_SNIPPET) pay withdrawals in cover(), which
+  // sections 1-3 check like everyone else's.
+  const ADDED_AFTER_RULE = [7, 14];
+  strategyIds.filter(n => !ADDED_AFTER_RULE.includes(n)).forEach(n => {
     const preRule = CODE[n].replace(WITHDRAWAL_BLOCK, '');
     ck(`#${n} the library text contains the withdrawal block once`, preRule !== CODE[n] && !WITHDRAWAL_BLOCK.test(preRule));
     ck(`#${n} a pre-rule copy upgrades to exactly the library text`, upgradeWithdrawalHandling(preRule) === CODE[n]);
