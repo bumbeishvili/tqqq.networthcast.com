@@ -4005,6 +4005,11 @@
   .fit-menu-item span { font-size: 11px; line-height: 1.35; color: var(--text-muted); }
   .fit-note { margin: 6px 0 2px; font-size: 11.5px; line-height: 1.4; color: var(--text-muted); }
   .fit-changes { margin: 4px 0 0; padding: 0; list-style: none; }
+  /* A code strategy's explanation (js/saved-configs.js buildExplainHtml), as the 9sig panel's rules box. */
+  .strategy-rules .explain-heading { margin-top: 14px; font-weight: 600; color: var(--text); }
+  .strategy-rules .explain-heading:first-child { margin-top: 0; }
+  .strategy-rules .explain-text { margin-top: 6px; }
+  .strategy-rules .explain-list { margin: 4px 0 0 18px; padding: 0; }
   .fit-changes b { color: var(--text); font-weight: 600; }
   /* Collapsed state: drop the monthly-contribution rows from the table. */
   .strategy-panel-body .quarter-table-wrap.hide-contrib tr.log-row-contrib { display: none; }

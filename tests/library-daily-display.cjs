@@ -82,6 +82,13 @@ const checkDetailRun = (tag, code, flags) => {
 
 Object.keys(CODE).map(Number).sort((a, b) => a - b).forEach(n => {
   ck(`#${n} the current code needs no upgrade`, CODE.upgradeSavedCode(CODE[n]) === CODE[n]);
+  // The SMA and 9sig entries run the app's own engines (smaStrategyCode,
+  // nineSigStrategyCode): no hand-written cadence line and no old copies to
+  // upgrade, but the same detail run.
+  if (CODE.SMA_LIBRARY_NUMBERS.includes(n) || CODE.NINESIG_LIBRARY_NUMBERS.includes(n)) {
+    [{ weeklyDisplay: false }, { weeklyDisplay: true }].forEach(flags => checkDetailRun(`#${n}${flags.weeklyDisplay ? ' (weekly axis)' : ''}`, CODE[n], flags));
+    return;
+  }
   const old = oldCopyOf(CODE[n]);
   ck(`#${n} an old copy ignores the flag`, run(old, { dailyDisplay: true }).length === run(old, {}).length);
   const upgraded = CODE.upgradeDailyDisplay(old);

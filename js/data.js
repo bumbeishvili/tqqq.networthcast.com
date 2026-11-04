@@ -161,6 +161,14 @@ function getMonth(dateStr) {
   return dateStr.substring(0, 7);
 }
 
+// Each quarter's or month's last daily row as [date, tqqq, qqq, spy, qld, sso,
+// spxl, sqqq]: the page's quarterlyData and monthlyData (js/init.js), and the
+// same rows the code version of the SMA strategy rebuilds in its sandbox
+// (js/strategy-library-code.js smaStrategyCode).
+function periodRows(daily, periodFn) {
+  return lastOfPeriod(daily, periodFn).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
+}
+
 function getYear(dateStr) {
   return dateStr.substring(0, 4);
 }

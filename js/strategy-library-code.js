@@ -3194,6 +3194,458 @@ CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Mond
   ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
   ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
 
+// ===== The SMA strategy as code =============================================
+// The user (2026-11-04): "I want built in sma panel ... converted into code,
+// but still keeping all functionality as is, and the result should stay
+// exactly the same." run() below carries the app's own SMA engine
+// (js/simulate.js simulateSMA) and the tables it reads (js/data.js) as their
+// source text, copied in when this file loads, and calls the engine the way a
+// saved SMA strategy's line was computed (js/saved-configs.js, type "sma"):
+// both run the same instructions on the same prices. The library's SMA entries
+// (#43 and the overfit rows #33-#38) are this code with their own defaults.
+//
+// In node (the tests, the widget, the backtest harness) the page scripts the
+// engine comes from may not be loaded yet: load what is missing.
+if (typeof simulateSMA === 'undefined' && typeof require === 'function') {
+  const vm = require('vm'), fs = require('fs'), path = require('path');
+  if (typeof rollingSMA === 'undefined') vm.runInThisContext(fs.readFileSync(path.join(__dirname, 'data.js'), 'utf8'));
+  vm.runInThisContext(fs.readFileSync(path.join(__dirname, 'simulate.js'), 'utf8'));
+}
+const SMA_ENGINE_SOURCE = [wilderAverages, rollingSMA, rollingRSI, makeLazyIndicator, precomputeSMASeries, lastOfPeriod,
+  getQuarter, getMonth, periodRows, _mondayOf, isWeekEnd, buildFormulaSchedule, simulateSMA].map(String).join('\n')
+  + `\nconst SMA_ASSET_COL = ${JSON.stringify(SMA_ASSET_COL)}, SMA_UNLEVERAGED_OF = ${JSON.stringify(SMA_UNLEVERAGED_OF)};`;
+
+// The settings, from the built-in SMA panel (index.html): its values, labels
+// and tips, one dropdown per sentence piece. `select` is that panel's dropdown,
+// for moving saved SMA strategies and old links over (SMA_PARAM_OF_SELECT);
+// it stays out of the strategy's code.
+const SMA_SETTINGS = [
+  {section: "Signal"},
+  {id: "fund",select: "select-sma-underlying",label: "Fund bought",text: "Buy {}",options: [{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"}]},
+  {id: "signal",select: "select-sma-asset",label: "Signal from",text: "when {}",options: [{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"}]},
+  {id: "window",select: "select-sma-window",label: "Average window (days)",text: "closes above its {}-day average price.",options: [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 22 }, (_, k) => 230 + 10 * k), Array.from({ length: 52 }, (_, k) => 449 + k))},
+  {id: "entryBuf",select: "select-sma-entry-buf",label: "Buy buffer (%)",text: "Require at least {} above the average to buy,",unit: "%",options: Array.from({ length: 21 }, (_, k) => +(0.1 * k).toFixed(1)).concat([2.5, 3], Array.from({ length: 81 }, (_, k) => +(3.2 + 0.1 * k).toFixed(1)), Array.from({ length: 39 }, (_, k) => 12 + k))},
+  {id: "exitBuf",select: "select-sma-exit-buf",label: "Sell buffer (%)",text: "and {} below it to sell.",unit: "%",options: Array.from({ length: 21 }, (_, k) => +(0.1 * k).toFixed(1)).concat(Array.from({ length: 6 }, (_, k) => +(2.5 + 0.5 * k).toFixed(1)), Array.from({ length: 7 }, (_, k) => 6 + k), Array.from({ length: 81 }, (_, k) => +(12.4 + 0.1 * k).toFixed(1)), Array.from({ length: 30 }, (_, k) => 21 + k))},
+  {section: "Confirmation"},
+  {id: "confirmBuy",select: "select-sma-confirm-buy",label: "Buy confirmation (days)",text: "Only buy after the signal holds for {} days,",options: [{ value: 0, label: "0 (instant)" }].concat(Array.from({ length: 100 }, (_, k) => 1 + k))},
+  {id: "confirmSell",select: "select-sma-confirm-sell",label: "Sell confirmation (days)",text: "and sell after {} days.",options: [{ value: 0, label: "0 (instant)" }].concat(Array.from({ length: 100 }, (_, k) => 1 + k)),tip: "Stops jumpy in-and-out trading. The price must stay on the new side of the line this many days before you trade. Example: set to 3 — if QQQ dips below the line for a day then bounces, you don't sell. It must close below 3 days straight. 0 = trade the first day it crosses."},
+  {id: "settleDays",select: "select-sma-settle",label: "Settlement days",text: "After any trade, wait {} trading days before the next.",fit: false,options: [{value: 0,label: "0 (instant)"},1,2,3,4,5],tip: "Cash-account settlement (T+N). After you buy or sell, the money/shares haven't settled yet — so you can't make the next trade for this many trading days. Models the real broker rule where selling too soon after a buy (or buying right after a sell) isn't allowed. Example: set to 2 — sell on Monday, you can't buy back until Wednesday. 0 = settles instantly (no restriction)."},
+  {section: "RSI"},
+  {id: "rsiSellWindow",select: "select-sma-rsi-oh-window",label: "RSI sell window (days)",text: "Also sell when RSI({})",options: Array.from({ length: 100 }, (_, k) => 2 + k),tip: "RSI is a 0–100 speed gauge: • above ~70 = ran up fast, often pulls back • below ~30 = beaten down, often bounces The number inside RSI( ) = how many days it looks back (2–30). 2 = twitchy, reacts to every wiggle. 30 = smooth and slow. 10 is a common middle. This is the sell-side RSI only — the buy rule below has its own."},
+  {id: "rsiSell",select: "select-sma-rsi-oh",label: "RSI sell level",text: "is {}.",options: (Array.from({ length: 190 }, (_, k) => +(5 + 0.5 * k).toFixed(1))).map(v => ({ value: v, label: "above " + v })).concat([{ value: 0, label: "off — never force a sell" }])},
+  {id: "rsiBuyWindow",select: "select-sma-rsi-cool-window",label: "RSI buy window (days)",text: "Only buy once RSI({})",options: Array.from({ length: 100 }, (_, k) => 2 + k)},
+  {id: "rsiBuy",select: "select-sma-rsi-cool",label: "RSI buy level",text: "is {}.",options: (Array.from({ length: 190 }, (_, k) => +(5 + 0.5 * k).toFixed(1))).map(v => ({ value: v, label: "below " + v })).concat([{ value: 0, label: "at any level (off)" }]),tip: "After a buy signal, wait for the price to cool off instead of chasing. Example: set to 40 — you hold until RSI dips under 40 (a pullback), then buy. The number inside RSI( ) = look-back days (2–30). Off = buy as soon as the buy signal appears."},
+  {section: "What to hold when you sell"},
+  {id: "outAsset",select: "select-sma-out-asset",label: "Held when out",text: "When out of the market, hold {} instead.",options: ["cash",{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"}],tip: "What you hold after a sell. • cash — just waits, earning the interest rate below • QQQ / SPY — keeps your money in the plain, non-leveraged market: much safer than the 3× fund, but still grows if the market drifts up Example: sell TQQQ → sit in QQQ → jump back to TQQQ when the buy signal returns."},
+  {id: "cashRate",select: "select-sma-cashrate",label: "Cash interest (%/yr)",text: "That cash earns {} a year.",fit: false,when: {outAsset: "cash"},options: [{value: 0,label: "0.0%"},{value: 0.5,label: "0.5%"},{value: 1,label: "1.0%"},{value: 1.5,label: "1.5%"},{value: 2,label: "2.0%"},{value: 2.5,label: "2.5%"},{value: 3,label: "3.0%"},{value: 3.5,label: "3.5%"},{value: 4,label: "4.0%"},{value: 4.5,label: "4.5%"},{value: 5,label: "5.0%"},{value: 5.5,label: "5.5%"},{value: 6,label: "6.0%"},{value: 6.5,label: "6.5%"},{value: 7,label: "7.0%"},{value: 7.5,label: "7.5%"},{value: 8,label: "8.0%"},{value: 8.5,label: "8.5%"},{value: 9,label: "9.0%"},{value: 9.5,label: "9.5%"},{value: 10,label: "10.0%"},{value: 10.5,label: "10.5%"},{value: 11,label: "11.0%"},{value: 11.5,label: "11.5%"},{value: 12,label: "12.0%"},{value: 12.5,label: "12.5%"},{value: 13,label: "13.0%"},{value: 14,label: "14.0%"},{value: 15,label: "15.0%"},{value: 16,label: "16.0%"},{value: 18,label: "18.0%"},{value: 20,label: "20.0%"}],tip: "While you're out of the market and sitting in cash, this is the yearly interest that cash earns — like a savings account or T-bills. Example: 4% = idle cash grows about 4% a year while you wait to buy back in."},
+  {section: "Ease into your trades",tip: "By default every trade happens all at once. Here you can spread a buy across several months — a slice each month, so you're not betting everything on one day's price. Only buying is spread; every sell still happens the same day. Example: set the backup ease to 5 days — the day the strategy goes out it sells your primary fund to cash right away, then buys into the backup fund a slice each trading day for the next five days. Pick 2 months and it spreads that buy across roughly two months instead. If the buy signal comes back before it finishes, it stops and rotates into the primary fund."},
+  {id: "easeIn",select: "select-sma-dca-in",label: "Ease in",text: "When you buy, ease into the primary fund over {}.",options: [{ value: 0, label: "instant" }].concat((Array.from({ length: 130 }, (_, k) => 1 + k).concat(Array.from({ length: 6 }, (_, k) => 147 + 21 * k))).map(v => ({ value: v, label: v >= 42 && v % 21 === 0 ? v / 21 + " months" : v + (v === 1 ? " day" : " days") })))},
+  {id: "easeOut",select: "select-sma-dca-to-out",label: "Ease out",text: "When you sell, ease into your backup holding over {}.",options: [{ value: 0, label: "instant" }].concat((Array.from({ length: 130 }, (_, k) => 1 + k).concat(Array.from({ length: 6 }, (_, k) => 147 + 21 * k))).map(v => ({ value: v, label: v >= 42 && v % 21 === 0 ? v / 21 + " months" : v + (v === 1 ? " day" : " days") }))),tip: "Only matters if you park in QQQ/SPY instead of cash. On a sell it dumps the 3× fund right away, then eases into QQQ/SPY over this many months. Example: 6 = move a sixth of the money each month for six months. If the buy signal returns mid-way, it stops and switches back to the 3× fund."},
+  {section: "Trading cost"},
+  {id: "tradeCost",select: "select-sma-cost",label: "Trading cost (%)",text: "Each buy or sell costs {} in fees and slippage.",unit: "%",fit: false,options: [0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1],tip: "What each trade costs you — broker fees plus slippage (the gap between the price you expect and the price you actually get). Charged on every buy AND every sell, so switching funds pays it twice. Example: 0.1% turns a $10,000 buy into $9,990 of fund. A strategy that trades often pays it many times, so raising it shows how much real-world friction eats into the result."},
+  {section: "Bubble insurance",tip: "A safety brake for bubbles. When the market has run far above its average line (think 1999 or late 2021), holding a 3× fund is extra risky — so this rule sells everything to cash early, no matter what the main buy/sell signal says. It measures how far the ticker you pick sits above its own moving average, and it's separate from \"What to hold when you sell\" above (that only decides where normal trend exits go)."},
+  {id: "brakeAsset",select: "select-sma-bg-asset",label: "Bubble brake reads",text: "Sell everything to cash when {}",options: [{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"}]},
+  {id: "brakePct",select: "select-sma-bg-gtfo",label: "Bubble brake level",text: "is {}",options: (Array.from({ length: 200 }, (_, k) => 1 + k)).map(v => ({ value: v, label: "+" + v + "%" })).concat([{ value: 0, label: "off" }])},
+  {id: "brakeWindow",select: "select-sma-bg-window",label: "Bubble brake average (days)",text: "above its {}-day average.",options: [5].concat(Array.from({ length: 16 }, (_, k) => 10 + 10 * k), Array.from({ length: 81 }, (_, k) => 165 + k), Array.from({ length: 26 }, (_, k) => 250 + 10 * k))}
+];
+const SMA_PARAM_OF_SELECT = Object.fromEntries(SMA_SETTINGS.filter(s => s.id).map(s => [s.select, s.id]));
+
+// The code of an SMA strategy whose settings default to `defaults` ({ id: value }).
+function smaStrategyCode(name, defaults) {
+  const params = SMA_SETTINGS.map(s => {
+    if (!s.id) return s;
+    const { select, ...p } = s;
+    if (!(s.id in defaults)) throw new Error(`smaStrategyCode(${name}): no default for ${s.id}`);
+    return Object.assign(p, { default: defaults[s.id] });
+  });
+  return `{
+  name: ${JSON.stringify(name)},
+  params: ${JSON.stringify(params, null, 1).replace(/\n\s*/g, ' ')},
+  columns: [
+    { key: "signalClose", label: "Signal", tip: "The signal fund's close, the price the rules compare with its average." },
+    { key: "average", label: "Average", tip: "The signal fund's moving average over the window." },
+    { key: "rsiSell", label: "RSI sell", tip: "RSI over the sell window: a close at or above the sell level sells." },
+    { key: "rsiBuy", label: "RSI buy", tip: "RSI over the buy window: a buy waits until it is under the buy level." },
+    { key: "brakeGauge", label: "Bubble gauge", tip: "How far the bubble brake's fund sits above its own average, in percent." } ],
+  run(data, p) {
+    // ---- The app's SMA engine and the tables it reads (js/data.js, js/simulate.js) ----
+${SMA_ENGINE_SOURCE}
+    // ---- Its inputs, rebuilt from the prices the way the page builds them (js/init.js) ----
+    const daily = data.dates.map((date, i) => ({ date, tqqq: data.tqqq[i], qqq: data.qqq[i], spy: data.spy[i], qld: data.qld[i], sso: data.sso[i], spxl: data.spxl[i], sqqq: data.sqqq[i] }));
+    const dailyDateToIdx = new Map(data.dates.map((d, i) => [d, i]));
+    const quarterlyData = periodRows(daily, getQuarter), monthlyData = periodRows(daily, getMonth);
+    let smaAtDailyByKey, smaAtMonthlyByKey, rsiAtDailyByKey, rsiAtMonthlyByKey, dailyRows;
+    precomputeSMASeries();
+    const entryDate = p.entryDate || data.dates[p.startIdx], exitDate = p.exitDate || data.dates[p.endIdx];
+    // The call a saved SMA strategy's line made (js/saved-configs.js), its
+    // window pinned to this run's first and last day and its deposits from p.
+    // The quarter range only says where the line is sampled (every quarter end
+    // inside the window, as on the page); trades and values come from the dates.
+    const r = simulateSMA(p.initial, p.monthly, (+p.cashRate || 0) / 100, 0, quarterlyData.length - 1, p.annualRaise, {
+      schedule: { byDate: new Map(Object.entries(p.contributions || {})) },
+      entryDateOverride: entryDate, exitDateOverride: exitDate,
+      smaAsset: p.signal || "qqq", smaWindow: +p.window || 200, underlyingCol: SMA_ASSET_COL[p.fund] || 1,
+      entryBufferPct: +p.entryBuf || 0, exitBufferPct: +p.exitBuf || 0,
+      rsiOverheatThreshold: +p.rsiSell || 0, rsiCoolThreshold: +p.rsiBuy || 0,
+      outAsset: p.outAsset || "cash", dcaInMonths: +p.easeIn || 0, dcaToOutMonths: +p.easeOut || 0,
+      bgGtfoPct: +p.brakePct || 0, bgAsset: p.brakeAsset || "qqq", bgWindow: +p.brakeWindow || 0, tradeCostPct: +p.tradeCost || 0,
+      rsiOhWindow: +p.rsiSellWindow || 10, rsiCoolWindow: +p.rsiBuyWindow || 10, rebalanceCheck: "daily",
+      confirmBuySteps: +p.confirmBuy || 0, confirmSellSteps: +p.confirmSell || 0, settleDays: +p.settleDays || 0,
+      emitDD: true, sampleWeekly: !!p.weeklyDisplay,
+    });
+    return smaResult(r);
+
+    // ---- The engine's result as this strategy's log, holdings, dashboard and lines ----
+    function smaResult(r) {
+      const sig = p.signal || "qqq", SIG = sig.toUpperCase(), FUND = String(p.fund || "tqqq").toUpperCase();
+      const W = +p.window || 200, entryBuf = +p.entryBuf || 0, exitBuf = +p.exitBuf || 0;
+      const rsiSellLvl = +p.rsiSell || 0, rsiBuyLvl = +p.rsiBuy || 0, brakeLvl = +p.brakePct || 0;
+      const brakeAsset = p.brakeAsset || "qqq", brakeW = +p.brakeWindow || W;
+      const avgArr = smaAtDailyByKey[sig + "_" + W] || [], brakeArr = smaAtDailyByKey[brakeAsset + "_" + brakeW] || [];
+      const rsiS = rsiAtDailyByKey[sig + "_" + (+p.rsiSellWindow || 10)] || [], rsiB = rsiAtDailyByKey[sig + "_" + (+p.rsiBuyWindow || 10)] || [];
+      const num = (v) => (typeof v === "number" && isFinite(v)) ? v : undefined;
+      // The readings every log row carries, for the columns and the signal chart.
+      const reading = (i) => {
+        const a = num(avgArr[i]), b = num(brakeArr[i]), o = { signalClose: data[sig][i] };
+        if (a != null) { o.average = a; if (entryBuf > 0) o.buyLine = a * (1 + entryBuf / 100); if (exitBuf > 0) o.sellLine = a * (1 - exitBuf / 100); }
+        if (num(rsiS[i]) != null) { o.rsiSell = rsiS[i]; if (rsiSellLvl > 0) o.rsiSellLevel = rsiSellLvl; }
+        if (num(rsiB[i]) != null) { o.rsiBuy = rsiB[i]; if (rsiBuyLvl > 0) o.rsiBuyLevel = rsiBuyLvl; }
+        if (b != null && data[brakeAsset][i] > 0) { o.brakeGauge = (data[brakeAsset][i] / b - 1) * 100; if (brakeLvl > 0) o.brakeLevel = brakeLvl; }
+        return o;
+      };
+      const pct = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2) + "%";
+      // Why a trade fired, from the readings on its day, and the panel it marks.
+      const why = (e, i, rd) => {
+        const gap = rd.average ? (rd.signalClose / rd.average - 1) * 100 : null, vs = gap == null ? "" : SIG + " " + pct(gap) + " vs its " + W + "-day average";
+        if (e.action === "BG-GTFO") return ["Sold to cash: the bubble brake, " + brakeAsset.toUpperCase() + " " + pct(rd.brakeGauge || 0) + " vs its " + brakeW + "-day average", "Bubble brake"];
+        if (e.action === "BG-CLEAR") return ["Bought " + FUND + ": the bubble brake released, " + vs, "Bubble brake"];
+        if (e.action === "EXIT") {
+          if (rsiSellLvl > 0 && rd.rsiSell >= rsiSellLvl && !(gap != null && gap < -exitBuf)) return ["Sold " + FUND + ": RSI(" + (+p.rsiSellWindow || 10) + ") " + rd.rsiSell.toFixed(1) + " at or above " + rsiSellLvl, "RSI"];
+          return ["Sold " + FUND + " to " + (e.held === "cash" ? "cash" : String(e.held).toUpperCase()) + ": " + vs, SIG + " trend"];
+        }
+        if (e.action === "ENTER") return ["Bought " + FUND + ": " + vs + (rsiBuyLvl > 0 && rd.rsiBuy != null ? ", RSI(" + (+p.rsiBuyWindow || 10) + ") " + rd.rsiBuy.toFixed(1) : ""), SIG + " trend"];
+        if (e.action === "DCA-ADD") return ["Easing in: another slice of " + String(e.held).toUpperCase(), SIG + " trend"];
+        return ["", null];
+      };
+      const ACTION = { START: "start", ENTER: "buy", EXIT: "sell", "BG-GTFO": "sell", "BG-CLEAR": "buy", "DCA-ADD": "ease-in", CONTRIB: "contribution", END: "end" };
+      // Which of a day's events names its row: a sale or buy over easing in, over a deposit.
+      const RANK = { "BG-GTFO": 5, EXIT: 5, ENTER: 4, "BG-CLEAR": 4, "DCA-ADD": 3, CONTRIB: 2, START: 1, END: 1 };
+      const HELD = (h) => h === "cash" ? "CASH" : String(h).toUpperCase();
+      const events = new Map();
+      for (const e of r.smaLog || []) { if (!events.has(e.date)) events.set(e.date, []); events.get(e.date).push(e); }
+      const points = new Map((r.smaPoints || []).map(pt => [pt.date, pt]));
+      const holdAt = new Map((r.ddControls || []).map(c => [c.date, c]));
+      const days = new Set([...events.keys(), ...points.keys()]);
+      if (p.dailyDisplay) for (const c of r.ddControls || []) days.add(c.date);
+      const valueOf = (c, i) => { let v = c.cash || 0; for (const a in c.h) v += c.h[a] * (data[a][i] || 0); return v; };
+      const log = [];
+      // One row per logged day, at the day's closing value: the engine's sampled
+      // point, else its holdings after the day.
+      for (const date of [...days].sort()) {
+        const i = dailyDateToIdx.get(date), rd = reading(i), evs = events.get(date) || [];
+        const pt = points.get(date), c = holdAt.get(date);
+        const value = pt ? pt.value : c ? valueOf(c, i) : evs[evs.length - 1].total;
+        if (!evs.length) { log.push(Object.assign({ date, value, action: "hold", note: "" }, rd)); continue; }
+        // The day's events as one row: its main trade, the day's deposits and
+        // fees, the holdings after its last event.
+        const main = evs.reduce((a, b) => (RANK[b.action] || 0) > (RANK[a.action] || 0) ? b : a), last = evs[evs.length - 1];
+        const [note, firedBy] = why(main, i, rd);
+        const contributed = evs.reduce((s, e) => s + (e.action === "CONTRIB" ? e.contribAmt || 0 : 0), 0);
+        const row = Object.assign({ date, value, action: main.action === "EXIT" && main.held !== "cash" ? "switch" : (ACTION[main.action] || "hold"), note,
+          held: HELD(last.held), price: last.price, shares: last.shares, cash: last.cash, fee: evs.reduce((s, e) => s + (e.fee || 0), 0), invested: last.invested }, rd);
+        if (contributed) row.contributed = contributed;
+        if (firedBy) row.firedBy = firedBy;
+        log.push(row);
+      }
+      const lines = [
+        { key: "signalClose", label: SIG + " close", group: SIG + " trend" }, { key: "average", label: W + "-day average", group: SIG + " trend" } ];
+      if (entryBuf > 0) lines.push({ key: "buyLine", label: "Buy above (+" + entryBuf + "%)", group: SIG + " trend" });
+      if (exitBuf > 0) lines.push({ key: "sellLine", label: "Sell below (−" + exitBuf + "%)", group: SIG + " trend" });
+      if (rsiSellLvl > 0 || rsiBuyLvl > 0) {
+        if (rsiSellLvl > 0) lines.push({ key: "rsiSell", label: "RSI(" + (+p.rsiSellWindow || 10) + ")", unit: "num", group: "RSI" }, { key: "rsiSellLevel", label: "Sell at " + rsiSellLvl, unit: "num", group: "RSI" });
+        if (rsiBuyLvl > 0) lines.push({ key: "rsiBuy", label: "RSI(" + (+p.rsiBuyWindow || 10) + ")", unit: "num", group: "RSI" }, { key: "rsiBuyLevel", label: "Buy under " + rsiBuyLvl, unit: "num", group: "RSI" });
+      }
+      if (brakeLvl > 0) lines.push({ key: "brakeGauge", label: brakeAsset.toUpperCase() + " vs " + brakeW + "-day average", unit: "%", group: "Bubble brake" }, { key: "brakeLevel", label: "To cash at +" + brakeLvl + "%", unit: "%", group: "Bubble brake" });
+      return { log, holdings: r.ddControls || [], lines, signals: smaSignals() };
+    }
+
+    // ---- The dashboard: where each rule stands on the run's last day (as the built-in panel's) ----
+    function smaSignals() {
+      const di = p.endIdx, sig = p.signal || "qqq", AN = sig.toUpperCase(), W = +p.window || 200;
+      const avg = (smaAtDailyByKey[sig + "_" + W] || [])[di];
+      if (avg == null) return null;
+      const price = data[sig][di], gap = (price / avg - 1) * 100, above = price > avg;
+      const entryBuf = +p.entryBuf || 0, exitBuf = +p.exitBuf || 0, ohWin = +p.rsiSellWindow || 10, coolWin = +p.rsiBuyWindow || 10;
+      const rsiOh = +p.rsiSell || 0, rsiCool = +p.rsiBuy || 0, bgAsset = p.brakeAsset || "qqq", bgGtfo = +p.brakePct || 0, bgWin = +p.brakeWindow || W;
+      const arr = smaAtDailyByKey[sig + "_" + W];
+      let runDays = 0;
+      for (let j = di; j >= 0; j--) { const s = arr[j]; if (s == null) break; if ((data[sig][j] > s) === above) runDays++; else break; }
+      const money = (v) => "$" + (v >= 100 ? v.toFixed(2) : v.toPrecision(4));
+      const pctS = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2) + "%";
+      const rsiAt = (w) => { const a = rsiAtDailyByKey[sig + "_" + w]; return a && a[di] != null ? a[di] : null; };
+      const ohV = rsiAt(ohWin), clV = rsiAt(coolWin);
+      const bgArr = smaAtDailyByKey[bgAsset + "_" + bgWin], bgPct = bgArr && bgArr[di] != null ? (data[bgAsset][di] / bgArr[di] - 1) * 100 : null;
+      const rsiCard = (label, w, v, thr, cmp) => ({ label: "RSI(" + w + ") · " + label, icon: "activity", value: v == null ? "—" : v.toFixed(1),
+        sub: thr <= 0 ? "off" : v == null ? "" : cmp + " " + thr + ((cmp === "above" ? v >= thr : v <= thr) ? " · hit" : ""),
+        tone: thr > 0 && v != null && (cmp === "above" ? v >= thr : v <= thr) ? "bad" : undefined,
+        tip: "Relative Strength Index over " + w + " days on " + AN + ", a 0–100 momentum gauge. " + (cmp === "above" ? "Sell rule: exit when it climbs above the overheat level." : "Buy rule: wait until it cools below this level before re-entering.") });
+      const cards = [
+        { label: AN + " vs " + W + "-day avg", icon: above ? "trendUp" : "trendDown", value: (above ? "▲ " : "▼ ") + pctS(gap), tone: above ? "good" : "bad",
+          sub: money(price) + " vs " + money(avg) + " avg", tip: "The signal ticker's latest close vs its " + W + "-day moving average. Above the average the trend rule leans in; below, out." },
+        { label: "Days " + (above ? "above" : "below") + " avg", icon: "clock", value: String(runDays), sub: "since " + AN + " last crossed",
+          tip: "How many trading days in a row " + AN + " has stayed on its current side of the moving average." } ];
+      if (entryBuf > 0 || exitBuf > 0) cards.push({ label: "Buffer bands", icon: "sliders", value: "+" + entryBuf + "% / −" + exitBuf + "%",
+        sub: "buy > " + money(avg * (1 + entryBuf / 100)) + " · sell < " + money(avg * (1 - exitBuf / 100)),
+        tip: "You only buy once the price is " + entryBuf + "% above the average, and only sell once it is " + exitBuf + "% below." });
+      cards.push(rsiCard("sell", ohWin, ohV, rsiOh, "above"), rsiCard("buy", coolWin, clV, rsiCool, "below"));
+      if (bgPct != null) cards.push({ label: bgAsset.toUpperCase() + " vs " + bgWin + "-day avg", icon: "shield", value: pctS(bgPct),
+        tone: bgGtfo > 0 && bgPct >= bgGtfo ? "bad" : bgPct >= 0 ? "good" : "bad", sub: bgGtfo > 0 && bgPct >= bgGtfo ? "armed — would sell to cash" : bgGtfo > 0 ? "to cash at +" + bgGtfo + "%" : "off",
+        tip: "The bubble-insurance gauge: how far " + bgAsset.toUpperCase() + " sits above its own " + bgWin + "-day average." + (bgGtfo > 0 ? " At +" + bgGtfo + "% the brake sells everything to cash." : " The brake is off.") });
+      const P = String(p.fund || "tqqq").toUpperCase(), backup = p.outAsset || "cash", B = backup === "cash" ? "cash" : backup.toUpperCase();
+      const trendIn = gap > entryBuf, hot = rsiOh > 0 && ohV != null && ohV >= rsiOh, blocked = rsiCool > 0 && clV != null && clV >= rsiCool, armed = bgGtfo > 0 && bgPct != null && bgPct >= bgGtfo;
+      const reasons = [{ name: "Trend", val: AN + " " + pctS(gap) + " vs " + W + "d", tag: trendIn ? "in · " + P : "out · " + B, lean: trendIn ? "buy" : "out" }];
+      if (rsiOh > 0) reasons.push({ name: "Overheat", val: "RSI(" + ohWin + ") " + (ohV == null ? "—" : ohV.toFixed(1)), tag: hot ? "sell ≥" + rsiOh : "clear", lean: hot ? "out" : "buy" });
+      if (rsiCool > 0) reasons.push({ name: "Re-entry", val: "RSI(" + coolWin + ") " + (clV == null ? "—" : clV.toFixed(1)), tag: blocked ? "wait <" + rsiCool : "open", lean: blocked ? "out" : "buy" });
+      if (bgGtfo > 0) reasons.push({ name: "Bubble", val: bgAsset.toUpperCase() + " " + (bgPct == null ? "—" : pctS(bgPct)), tag: armed ? "cash +" + bgGtfo + "%" : "off", lean: armed ? "cash" : "buy" });
+      const easeIn = +p.easeIn || 0;
+      const decision = armed ? { action: "Move to cash", note: "the bubble brake overrides the trend", tone: "bad", reasons }
+        : trendIn && !hot && !blocked ? { action: "Buy " + P, note: easeIn > 1 ? "eased in over " + easeIn + " trading days" : "all at once", tone: "good", reasons }
+        : { action: B === "cash" ? "Stay in cash" : "Buy " + B, note: B === "cash" ? "buy signal is off" : "the backup fund — buy signal is off", tone: "bad", reasons };
+      return { cards, decision };
+    }
+  }
+}`;
+}
+
+// The library's SMA entries: the app's SMA 200 (#43) and the SMA overfit
+// explorer's rows (#33-#38), each at its own settings (its former preset).
+// SMA_LIBRARY_NUMBERS also tells js/saved-configs.js which entries a saved SMA
+// strategy of the old kind can be a copy of (smaAsCodeConfig).
+const SMA_LIBRARY = {
+  43: ["SMA 200", {"fund": "tqqq", "signal": "qqq", "window": 200, "entryBuf": 0, "exitBuf": 0, "confirmBuy": 0, "confirmSell": 0, "settleDays": 1, "rsiSellWindow": 9, "rsiSell": 90, "rsiBuyWindow": 7, "rsiBuy": 80, "outAsset": "cash", "cashRate": 4, "easeIn": 15, "easeOut": 15, "tradeCost": 0.02, "brakeAsset": "tqqq", "brakePct": 40, "brakeWindow": 200}],
+  33: ["SMA · max return 2010–2025", {"fund": "sso", "signal": "spy", "window": 280, "entryBuf": 5, "exitBuf": 1.9, "confirmBuy": 3, "confirmSell": 10, "settleDays": 5, "rsiSellWindow": 3, "rsiSell": 20, "rsiBuyWindow": 22, "rsiBuy": 55, "outAsset": "tqqq", "cashRate": 0, "easeIn": 10, "easeOut": 5, "tradeCost": 0.02, "brakeAsset": "tqqq", "brakePct": 55, "brakeWindow": 250}],
+  34: ["SMA · min drawdown 2010–2025", {"fund": "tqqq", "signal": "qqq", "window": 30, "entryBuf": 0.1, "exitBuf": 3.5, "confirmBuy": 3, "confirmSell": 10, "settleDays": 1, "rsiSellWindow": 4, "rsiSell": 65, "rsiBuyWindow": 17, "rsiBuy": 65, "outAsset": "sso", "cashRate": 0, "easeIn": 7, "easeOut": 42, "tradeCost": 0.02, "brakeAsset": "sso", "brakePct": 35, "brakeWindow": 270}],
+  35: ["SMA · max return 1990–2025", {"fund": "spy", "signal": "qqq", "window": 30, "entryBuf": 13, "exitBuf": 12, "confirmBuy": 0, "confirmSell": 10, "settleDays": 5, "rsiSellWindow": 6, "rsiSell": 80, "rsiBuyWindow": 16, "rsiBuy": 70, "outAsset": "tqqq", "cashRate": 0, "easeIn": 7, "easeOut": 25, "tradeCost": 0.02, "brakeAsset": "sso", "brakePct": 30, "brakeWindow": 270}],
+  36: ["SMA · min drawdown 1990–2025", {"fund": "tqqq", "signal": "spxl", "window": 220, "entryBuf": 0, "exitBuf": 5, "confirmBuy": 0, "confirmSell": 10, "settleDays": 0, "rsiSellWindow": 2, "rsiSell": 15, "rsiBuyWindow": 8, "rsiBuy": 45, "outAsset": "cash", "cashRate": 0, "easeIn": 4, "easeOut": 12, "tradeCost": 0.02, "brakeAsset": "sso", "brakePct": 30, "brakeWindow": 270}],
+  37: ["SMA · max return 1953–2025", {"fund": "tqqq", "signal": "spxl", "window": 20, "entryBuf": 0.4, "exitBuf": 0.4, "confirmBuy": 0, "confirmSell": 0, "settleDays": 0, "rsiSellWindow": 12, "rsiSell": 80, "rsiBuyWindow": 17, "rsiBuy": 0, "outAsset": "spy", "cashRate": 0, "easeIn": 1, "easeOut": 6, "tradeCost": 0.02, "brakeAsset": "qld", "brakePct": 35, "brakeWindow": 300}],
+  38: ["SMA · min drawdown 1953–2025", {"fund": "qld", "signal": "spxl", "window": 20, "entryBuf": 0.5, "exitBuf": 0.3, "confirmBuy": 0, "confirmSell": 0, "settleDays": 1, "rsiSellWindow": 8, "rsiSell": 85, "rsiBuyWindow": 25, "rsiBuy": 75, "outAsset": "cash", "cashRate": 0, "easeIn": 0, "easeOut": 5, "tradeCost": 0.02, "brakeAsset": "qqq", "brakePct": 20, "brakeWindow": 250}]
+};
+const SMA_LIBRARY_NUMBERS = Object.keys(SMA_LIBRARY).map(Number);
+for (const n of SMA_LIBRARY_NUMBERS) CODE[n] = smaStrategyCode(...SMA_LIBRARY[n]);
+
+// ===== The 9sig strategy as code ============================================
+// Same recipe as the SMA strategy above (the user, 2026-11-04: "when you
+// complete sma, let's get started with 9sig too"): run() carries the app's own
+// 9sig engine (js/simulate.js simulate) and the tables and calendars it reads
+// (js/data.js, js/utils.js fmt) as their source text, rebuilds them from the
+// prices as js/init.js does, and calls the engine the way a saved 9sig
+// strategy's line was computed (js/saved-configs.js, type "9sig"). The
+// library's 9sig entries (#42 and the overfit rows #27-#32) are this code with
+// their own defaults.
+if (typeof simulate === 'undefined' && typeof require === 'function') {
+  const vm = require('vm'), fs = require('fs'), path = require('path');
+  if (typeof rollingSMA === 'undefined') vm.runInThisContext(fs.readFileSync(path.join(__dirname, 'data.js'), 'utf8'));
+  vm.runInThisContext(fs.readFileSync(path.join(__dirname, 'simulate.js'), 'utf8'));
+}
+if (typeof fmt === 'undefined' && typeof require === 'function') {
+  // utils.js touches the window when it loads, so node takes only fmt from it.
+  const src = require('fs').readFileSync(require('path').join(__dirname, 'utils.js'), 'utf8'), start = src.indexOf('function fmt(');
+  let end = src.indexOf('{', start), depth = 0;
+  for (; end < src.length; end++) { if (src[end] === '{') depth++; else if (src[end] === '}' && --depth === 0) break; }
+  require('vm').runInThisContext(src.slice(start, end + 1));
+}
+const NINESIG_ENGINE_SOURCE = [simulate, buildFormulaSchedule, walkWeekEnds, isWeekEnd, _mondayOf, fmt, lastOfPeriod, getQuarter,
+  getMonth, getWeek, getYear, periodRows, buildPeriodData, buildMonthsInPeriod, precomputePeriodSeries, precomputeMonthlyByQuarter,
+  buildEnvelopeQData, buildExactRangeQData].map(String).join('\n')
+  + `\nconst PERIOD_DAYS = ${JSON.stringify(PERIOD_DAYS)}, COL_TO_DAILY_KEY = ${JSON.stringify(COL_TO_DAILY_KEY)}, SMA_ASSET_COL = ${JSON.stringify(SMA_ASSET_COL)};`;
+
+// The settings, from the built-in 9sig panel (index.html, its "what if" part
+// included): values, labels and tips; `select` as for SMA_SETTINGS.
+const NINESIG_SETTINGS = [
+  {section: "Start"},
+  {id: "cashPct",select: "select-9sig-cash",label: "Entry cash share (%)",text: "Divide the entry amount into {}",unit: "%",options: Array.from({ length: 101 }, (_, k) => k)},
+  {id: "parkAsset",select: "select-9sig-park-asset",label: "Safety slice held in",text: "held as {}",options: ["cash",{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "qld",label: "QLD"},{value: "tqqq",label: "TQQQ"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"}],tip: "By default the safety slice (your cash %) is held as cash, earning the rate below. Pick QQQ/SPY/etc. instead to hold that slice in that fund — new money and rebalances buy into it, and the cash interest stops applying. Picking a leveraged fund leverages both slices."},
+  {id: "fund",select: "select-9sig-underlying",label: "Fund",text: "and use the rest to buy {}.",options: [{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"}]},
+  {id: "cashRate",select: "select-9sig-cashrate",label: "Cash interest (%/yr)",text: "That parked cash earns {} a year.",fit: false,when: {parkAsset: "cash"},options: [{value: 0,label: "0.0%"},{value: 0.5,label: "0.5%"},{value: 1,label: "1.0%"},{value: 1.5,label: "1.5%"},{value: 2,label: "2.0%"},{value: 2.5,label: "2.5%"},{value: 3,label: "3.0%"},{value: 3.5,label: "3.5%"},{value: 4,label: "4.0%"},{value: 4.5,label: "4.5%"},{value: 5,label: "5.0%"},{value: 5.5,label: "5.5%"},{value: 6,label: "6.0%"},{value: 6.5,label: "6.5%"},{value: 7,label: "7.0%"},{value: 7.5,label: "7.5%"},{value: 8,label: "8.0%"},{value: 8.5,label: "8.5%"},{value: 9,label: "9.0%"},{value: 9.5,label: "9.5%"},{value: 10,label: "10.0%"},{value: 10.5,label: "10.5%"},{value: 11,label: "11.0%"},{value: 11.5,label: "11.5%"},{value: 12,label: "12.0%"},{value: 12.5,label: "12.5%"},{value: 13,label: "13.0%"},{value: 14,label: "14.0%"},{value: 15,label: "15.0%"},{value: 16,label: "16.0%"},{value: 18,label: "18.0%"},{value: 20,label: "20.0%"}],tip: "Annual interest the 9sig strategy's idle cash earns between rebalances. Independent of the SMA and Invested Compounded rates."},
+  {section: "Target"},
+  {id: "period",select: "select-9sig-period",label: "Rebalance every",text: "Rebalance {}",options: ["weekly","monthly","quarterly","yearly"],tip: "How often you rebalance. Classical 9sig is quarterly with a 9% per-quarter target, so the growth rate next to this is read as 'per chosen period' — quarterly + 9% means the target grows 9% every quarter."},
+  {id: "growth",select: "select-9sig-growth",label: "Target growth (%)",text: "and grow the target by {}.",unit: "%",options: Array.from({ length: 6 }, (_, k) => +(0.5 + 0.1 * k).toFixed(1)).concat(Array.from({ length: 12 }, (_, k) => +(1.5 + 0.5 * k).toFixed(1)), Array.from({ length: 85 }, (_, k) => +(7.1 + 0.1 * k).toFixed(1)), Array.from({ length: 29 }, (_, k) => +(16 + 0.5 * k).toFixed(1)), Array.from({ length: 120 }, (_, k) => 31 + k)),tip: "A 9% target growth per quarter is the standard setting for 3× ETFs (TQQQ, SPXL) — drop it for 2× (QLD, SSO)."},
+  {section: "Crash and rally"},
+  {id: "crashDrop",select: "select-9sig-crashdrop",label: "Crash hold after a fall of (%)",text: "In a crash, hold instead of selling once the stock has fallen {}",unit: "%",options: Array.from({ length: 100 }, (_, k) => 1 + k).concat(Array.from({ length: 5 }, (_, k) => 110 + 10 * k), [180])},
+  {id: "crashWindow",select: "select-9sig-crashwin",label: "Crash high over the past",text: "below its past {} high.",options: (Array.from({ length: 120 }, (_, k) => 1 + k)).map(v => ({ value: v, label: v % 12 === 0 && v >= 24 ? v / 12 + " years" : v % 3 === 0 ? v / 3 + (v === 3 ? " quarter" : " quarters") : v + (v === 1 ? " month" : " months") })),tip: "When the stock has fallen this far below its recent peak, skip the usual sell for up to two quarters in a row (standard 9sig is quarterly) so you don't dump at the bottom. The lookback window controls how far back 'recent peak' looks — standard 9sig uses 2 years."},
+  {id: "spikeTarget",select: "select-9sig-spike-target",label: "Stock share after profits",text: "After a big rally, take profits back down to {}",unit: "%",options: Array.from({ length: 101 }, (_, k) => k)},
+  {id: "spike",select: "select-9sig-spike",label: "Rally gain that takes profits (%)",text: "stock once gains hit {} in one period.",unit: "%",options: [{ value: 0, label: "off" }].concat([5, 10].concat(Array.from({ length: 106 }, (_, k) => 15 + k), Array.from({ length: 36 }, (_, k) => 125 + 5 * k), [350, 400, 500])),tip: "If the stock jumps this much in a single quarter (standard 9sig is quarterly), force a rebalance back to your starting stock weight so a runaway spike doesn't leave you too concentrated in the fund. Set to off to let a rally run."},
+  {section: "Buying and costs"},
+  {id: "buyPower",select: "select-9sig-buypower",label: "Largest buy, share of cash (%)",text: "A buy never spends more than {} of your cash.",unit: "%",options: Array.from({ length: 100 }, (_, k) => 1 + k),tip: "When the signal says buy, this caps how much of your cash goes in, so you always keep some spare cash. Standard 9sig spends 90% (keeps 10%). Set to 100% to spend all your cash on every buy."},
+  {id: "tradeCost",select: "select-9sig-cost",label: "Trading cost (%)",text: "Each rebalance trade costs {} in fees and slippage.",unit: "%",fit: false,options: [0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1],tip: "Trading cost charged on the dollars traded at each rebalance — sells, buys, spike resets, and any contribution deployed straight into stock. 0.02% is a realistic retail estimate; raise it to see how much a wider spread costs."},
+  {section: "What if"},
+  {id: "deploy",select: "select-9sig-deploy",label: "Contributions straight into stock (%)",text: "Put {} of each contribution straight into stock.",unit: "%",options: [0].concat(Array.from({ length: 99 }, (_, k) => 2 + k)),tip: "Only affects monthly contributions (not the initial amount). At 0%, 9sig holds each contribution as cash until the next rebalance; a higher % buys that share of the fund at that month's price."},
+  {id: "rebalancePoint",select: "select-9sig-rebalance-point",label: "Rebalance point (%)",text: "Rebalance {} of the way through each period.",unit: "%",fit: false,options: [0,5,10,15,20,25,30,35,40,45,50,55,60,65,70,75,80,85,90,95,100],tip: "Where within each rebalance period the check happens: 0% = near the start of the period, 100% = near the end. Test how sensitive the strategy is to the exact rebalance day."},
+  {id: "targetBase",select: "select-9sig-target-compound",label: "Target grows from",text: "Grow each period's target from the {}.",options: [{value: "holding",label: "prior holding"},{value: "target",label: "prior target"}],tip: "Example (9% growth): if last period's target was $10,000 but you only held $8,000, the next target is $8,720 (8,000 × 1.09) from the prior holding, or $10,900 (10,000 × 1.09) from the prior target."}
+];
+const NINESIG_PARAM_OF_SELECT = Object.fromEntries(NINESIG_SETTINGS.filter(s => s.id).map(s => [s.select, s.id]));
+
+function nineSigStrategyCode(name, defaults) {
+  const params = NINESIG_SETTINGS.map(s => {
+    if (!s.id) return s;
+    const { select, ...p } = s;
+    if (!(s.id in defaults)) throw new Error(`nineSigStrategyCode(${name}): no default for ${s.id}`);
+    return Object.assign(p, { default: defaults[s.id] });
+  });
+  return `{
+  name: ${JSON.stringify(name)},
+  params: ${JSON.stringify(params, null, 1).replace(/\n\s*/g, ' ')},
+  columns: [
+    { key: "holding", label: "Holding", tip: "What the fund side is worth after the day's trades." },
+    { key: "target", label: "Target", tip: "The value the fund side is steered to: last target grown by the target growth, plus half of new money." },
+    { key: "cashValue", label: "Cash side", tip: "The safety slice: cash, or the fund it is parked in." } ],
+  series: [
+    { key: "holding", label: "Holding", dash: "dot" }, { key: "target", label: "Target", dash: "dash" }, { key: "cashValue", label: "Cash", dash: "dashdot" } ],
+  run(data, p) {
+    // ---- The app's 9sig engine and what it reads (js/simulate.js, js/data.js, js/utils.js) ----
+${NINESIG_ENGINE_SOURCE}
+    // ---- Its inputs, rebuilt from the prices as the page builds them (js/init.js) ----
+    const daily = data.dates.map((date, i) => ({ date, tqqq: data.tqqq[i], qqq: data.qqq[i], spy: data.spy[i], qld: data.qld[i], sso: data.sso[i], spxl: data.spxl[i], sqqq: data.sqqq[i] }));
+    const dailyDateToIdx = new Map(data.dates.map((d, i) => [d, i]));
+    const quarterlyData = periodRows(daily, getQuarter), monthlyData = periodRows(daily, getMonth);
+    let weeklyData = null, yearlyData = null, periodDataByName = null, monthsInPeriodByName = null, monthlyByQuarter = null;
+    precomputePeriodSeries();
+    precomputeMonthlyByQuarter();
+    const entryDate = p.entryDate || data.dates[p.startIdx], exitDate = p.exitDate || data.dates[p.endIdx];
+    const period = p.period || "quarterly", cd = +p.crashDrop, sp = +p.spike;
+    // A quarter window runs on its quarter rows; exact days (the chart's date
+    // picker, p.exactWindow, or any window not on quarter ends) run on a calendar
+    // of those days, as the page does.
+    const qEntry = quarterlyData.findIndex(r => r[0] === entryDate), qExit = quarterlyData.findIndex(r => r[0] === exitDate);
+    const exact = !!p.exactWindow || qEntry < 0 || qExit < 0;
+    const qa = exact ? 0 : qEntry, qb = exact ? quarterlyData.length - 1 : qExit;
+    const opts = {
+      ...(exact ? { entryDateOverride: entryDate, exitDateOverride: exitDate } : {}),
+      // A real transaction history arrives as dated deposits; the engine also reads
+      // them by month. Formula deposits are rebuilt by the engine itself.
+      ...(p.depositsFromHistory ? { schedule: historySchedule(p.contributions || {}) } : {}),
+      qGrowth: (+p.growth) / 100 || 0.09, underlyingCol: SMA_ASSET_COL[p.fund] || 1,
+      crashDropPct: Number.isFinite(cd) ? cd : 30, crashLookbackMonths: +p.crashWindow || 24,
+      spikeTriggerPct: Number.isFinite(sp) ? sp : 100, rebalancePeriod: period,
+      cashPct: (+p.cashPct || 0) / 100, contribDeployPct: +p.deploy === 1 ? 0.5 : (+p.deploy || 0) / 100,
+      targetFromPrevTarget: ["target", "1"].includes(String(p.targetBase)),
+      parkAsset: p.parkAsset || "cash", buyThrottlePct: +p.buyPower || 90,
+      spikeResetPct: p.spikeTarget == null || p.spikeTarget === "" ? "auto" : String(p.spikeTarget), tradeCostPct: +p.tradeCost || 0,
+      sampleQuarterly: p.displayGrain ? (p.displayGrain === "quarterly" && period === "yearly") : (period === "yearly"),
+      sampleWeekly: p.displayGrain === "weekly" && period !== "weekly", skipBH: true,
+    };
+    const rp = +p.rebalancePoint || 0;
+    if (rp > 0) { const q = buildEnvelopeQData(period, Math.round(rp / 100 * ((PERIOD_DAYS[period] || 63) - 1)), entryDate, exitDate); if (q && q.length >= 2) opts.qData = q; }
+    if (!opts.qData && exact) { const q2 = buildExactRangeQData(period, entryDate, exitDate); if (q2 && q2.length >= 2) opts.qData = q2; }
+    const r = simulate(p.initial, p.monthly, (+p.cashRate || 0) / 100, qa, qb, p.annualRaise, opts);
+    return nineSigResult(r, opts);
+
+    // Dated deposits in the shape a transaction history has (js/transactions.js).
+    function historySchedule(byDateObj) {
+      const byDate = new Map(), byMonth = new Map(), list = [], priceDateByMonth = new Map();
+      for (const d of Object.keys(byDateObj).sort()) {
+        const amount = byDateObj[d], month = d.slice(0, 7);
+        byDate.set(d, amount); byMonth.set(month, (byMonth.get(month) || 0) + amount);
+        list.push({ date: d, amount }); priceDateByMonth.set(month, d);
+      }
+      return { byDate, byMonth, list, priceDateByMonth };
+    }
+
+    // ---- The engine's result as this strategy's log, holdings, lines and explanation ----
+    function nineSigResult(r, opts) {
+      const FUND = String(p.fund || "tqqq").toUpperCase(), fundKey = String(p.fund || "tqqq"), PARK = p.parkAsset && p.parkAsset !== "cash" ? String(p.parkAsset).toUpperCase() : "cash";
+      // The line: the engine's sample points when it samples, else its rebalance rows (as the page drew it).
+      const sampling = opts.sampleQuarterly || opts.sampleWeekly;
+      // On a rebalance day the row's values come from the line the page drew (the
+      // sample point when sampling, taken after the day's deposit), its trade from the rebalance.
+      const rows = new Map();
+      for (const l of r.log || []) rows.set(l.date, { l, ev: l });
+      for (const l of sampling ? (r.samplePoints || []) : []) { const at = rows.get(l.date); rows.set(l.date, { l, ev: at ? at.ev : null }); }
+      const money = (v) => "$" + Math.round(Math.abs(v)).toLocaleString("en-US");
+      const verb = (a) => /^BUY/.test(a) ? "buy" : /^SELL/.test(a) ? "sell" : /^RESET/.test(a) ? "reset" : /^START/.test(a) ? "start" : "hold";
+      const why = (l) => {
+        const a = String(l.action || "");
+        if (/^START/.test(a)) return "Started: " + (100 - (+p.cashPct || 0)) + "% in " + FUND + ", " + (+p.cashPct || 0) + "% held as " + PARK;
+        if (/^SELL/.test(a)) return "Sold " + a.replace(/^SELL\\s*/, "").replace(/ \\(30d expired\\)/, "") + " of " + FUND + ": above its target" + (/30d expired/.test(a) ? " (the crash hold ran out)" : "");
+        if (/^BUY/.test(a)) return "Bought " + a.replace(/^BUY\\s*/, "").replace(/ \\(part\\)/, "") + " of " + FUND + ": under its target" + (/\\(part\\)/.test(a) ? ", capped by the buying power" : "");
+        if (/^RESET/.test(a)) return "Took profits: " + FUND + " jumped past the rally level, sold " + a.replace(/^RESET\\s*/, "").replace(/ \\(spike\\)/, "");
+        if (/^HOLD \\(30d/.test(a)) return "Held instead of selling: " + FUND + " is in a crash (" + a.replace(/^HOLD /, "") + ")";
+        return a === "HOLD" ? "On target, nothing to trade" : "";
+      };
+      const ACTION = { buy: "rebalance", sell: "rebalance", reset: "rebalance", start: "start", hold: "hold" };
+      const holdings = [], log = [];
+      for (const date of [...rows.keys()].sort()) {
+        const { l, ev } = rows.get(date), i = dailyDateToIdx.get(date);
+        const row = { date, value: l.total, holding: l.tqqqVal, target: l.target, cashValue: l.cash, fundPrice: data[fundKey][i] };
+        if (ev) Object.assign(row, { action: ACTION[verb(ev.action)], note: why(ev), held: FUND, price: ev.price, shares: ev.price > 0 ? ev.tqqqVal / ev.price : 0,
+          cash: ev.cash, fee: ev.fee || 0, invested: ev.invested });
+        else row.action = "hold";
+        log.push(row);
+      }
+      // The drawdown the page measured: the fund's shares and the cash after each rebalance, revalued daily.
+      for (const l of r.log || []) holdings.push({ date: l.date, h: { [fundKey]: l.price > 0 ? l.tqqqVal / l.price : 0 }, cash: l.cash });
+      // The detail run behind the signal chart's zoom: every day, the holding at that day's close against the target.
+      if (p.dailyDisplay && holdings.length) {
+        const byDate = new Map(log.map(x => [x.date, x])), ctl = holdings;
+        let k = 0, lastTarget = log.length ? log[0].target : null;
+        for (let i = dailyDateToIdx.get(ctl[0].date); i <= p.endIdx; i++) {   // to the window's last day: after the last rebalance its holdings stand
+          const d = data.dates[i];
+          while (k + 1 < ctl.length && ctl[k + 1].date <= d) k++;
+          if (byDate.has(d)) { lastTarget = byDate.get(d).target; continue; }
+          const sh = ctl[k].h[fundKey], hv = sh * data[fundKey][i];
+          byDate.set(d, { date: d, value: hv + ctl[k].cash, action: "hold", holding: hv, target: lastTarget, cashValue: ctl[k].cash, fundPrice: data[fundKey][i] });
+        }
+        log.length = 0; log.push(...[...byDate.values()].sort((a, b) => a.date < b.date ? -1 : 1));
+      }
+      const lines = [{ key: "holding", label: FUND + " holding" }, { key: "target", label: "Target" }];
+      return { log, holdings, lines, explain: nineSigExplain() };
+    }
+
+    // ---- "9sig explained": the rules with the current settings (the built-in panel's block) ----
+    function nineSigExplain() {
+      const ul = String(p.fund || "tqqq").toUpperCase(), g = +p.growth || 9, cd = Number.isFinite(+p.crashDrop) ? +p.crashDrop : 30, spk = +p.spike;
+      const cashP = +p.cashPct || 0, stockP = 100 - cashP, bp = +p.buyPower || 90;
+      const crashRule = cd >= 100 ? "(30-down protection: off at " + cd + "%)"
+        : "When " + ul + " is more than **" + cd + "%** below its 2-year high, **skip selling for up to two quarters in a row** — don't dump in a crash. After two skips, sell anyway.";
+      const spikeRule = !(spk > 0) ? "(Spike-reset: off)"
+        : "If " + ul + " **gains more than " + spk + "% in a single quarter** and you still hold ≥" + stockP + "% in it, hard-rebalance back to " + stockP + "/" + cashP + " — lock in the windfall.";
+      return [
+        "## 9sig explained",
+        "**The idea:** each quarter, " + ul + " should grow by " + g + "%. If it grew faster, sell the excess to cash. If slower, buy more with cash. That's it.",
+        "## How it actually works",
+        "**1. Start.** Put " + stockP + "% of your money in " + ul + ", " + cashP + "% in cash. Write down the value of the " + ul + " side — that's your **target**.",
+        "**2. Every quarter, before deciding anything:**",
+        "- Grow the target by **" + g + "%**.",
+        "- If you added new cash this quarter (monthly contributions), raise the target by **half** of that new cash too.",
+        "**3. Now check " + ul + " against the target:**",
+        "- **" + ul + " worth more than target?** Sell the excess back to cash.",
+        "- **" + ul + " worth less than target?** Buy more from cash to close the gap.",
+        "- **Equal?** Hold.",
+        "## Safety rails",
+        "- **" + bp + "% buying power.** A buy never spends more than " + bp + "% of your cash" + (bp < 100 ? " — you keep some spare cash" : "") + ".",
+        "- **30-down no-sell.** " + crashRule,
+        "- **Spike reset.** " + spikeRule,
+        "Monthly contributions always go straight to cash (never directly into " + ul + ") — the quarterly rebalance is what moves money into stock. The target rising by half of new cash keeps it honest: half of every dollar you add is \\"expected\\" to flow into " + ul + " eventually.",
+      ].join("\\n\\n");
+    }
+  }
+}`;
+}
+
+// The library's 9sig entries: the app's 9sig (#42) and the 9sig overfit
+// explorer's rows (#27-#32), each at its own settings (its former preset).
+const NINESIG_LIBRARY = {
+  42: ["9sig", {"cashPct": 40, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "quarterly", "growth": 9, "crashDrop": 30, "crashWindow": 24, "spikeTarget": 60, "spike": 100, "buyPower": 90, "tradeCost": 0.02, "deploy": 0, "rebalancePoint": 0, "targetBase": "holding"}],
+  27: ["9sig · max return 2010–2025", {"cashPct": 90, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "monthly", "growth": 130, "crashDrop": 5, "crashWindow": 24, "spikeTarget": 0, "spike": 25, "buyPower": 100, "tradeCost": 0.02, "deploy": 75, "rebalancePoint": 10, "targetBase": "holding"}],
+  28: ["9sig · min drawdown 2010–2025", {"cashPct": 70, "parkAsset": "qld", "fund": "tqqq", "cashRate": 4, "period": "yearly", "growth": 12, "crashDrop": 25, "crashWindow": 21, "spikeTarget": 0, "spike": 100, "buyPower": 70, "tradeCost": 0.02, "deploy": 0, "rebalancePoint": 10, "targetBase": "holding"}],
+  29: ["9sig · max return 1990–2025", {"cashPct": 0, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "yearly", "growth": 150, "crashDrop": 5, "crashWindow": 36, "spikeTarget": 0, "spike": 200, "buyPower": 100, "tradeCost": 0.02, "deploy": 100, "rebalancePoint": 0, "targetBase": "holding"}],
+  30: ["9sig · min drawdown 1990–2025", {"cashPct": 70, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "quarterly", "growth": 0.5, "crashDrop": 5, "crashWindow": 60, "spikeTarget": 0, "spike": 250, "buyPower": 70, "tradeCost": 0.02, "deploy": 50, "rebalancePoint": 30, "targetBase": "holding"}],
+  31: ["9sig · max return 1953–2025", {"cashPct": 40, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "quarterly", "growth": 40, "crashDrop": 25, "crashWindow": 24, "spikeTarget": 0, "spike": 160, "buyPower": 85, "tradeCost": 0.02, "deploy": 100, "rebalancePoint": 30, "targetBase": "target"}],
+  32: ["9sig · min drawdown 1953–2025", {"cashPct": 60, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "yearly", "growth": 15, "crashDrop": 20, "crashWindow": 48, "spikeTarget": 25, "spike": 50, "buyPower": 50, "tradeCost": 0.02, "deploy": 0, "rebalancePoint": 15, "targetBase": "holding"}]
+};
+const NINESIG_LIBRARY_NUMBERS = Object.keys(NINESIG_LIBRARY).map(Number);
+for (const n of NINESIG_LIBRARY_NUMBERS) CODE[n] = nineSigStrategyCode(...NINESIG_LIBRARY[n]);
+
 // Browser global + Node export.
 if (typeof window !== 'undefined') window.STRATEGY_CODE = CODE;
 if (typeof module !== 'undefined' && module.exports) {
@@ -3204,4 +3656,6 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });
   Object.defineProperty(module.exports, 'codeFingerprint', { value: codeFingerprint });
+  Object.defineProperty(module.exports, 'SMA_LIBRARY_NUMBERS', { value: SMA_LIBRARY_NUMBERS });
+  Object.defineProperty(module.exports, 'NINESIG_LIBRARY_NUMBERS', { value: NINESIG_LIBRARY_NUMBERS });
 }

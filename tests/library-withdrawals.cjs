@@ -67,7 +67,12 @@ function run(code, contributions) {
   return { log: Array.isArray(result) ? result : result.log, tradeCost: (params.tradeCost || 0) / 100 };
 }
 const holdings = row => row.value - row.__cash;
-const strategyIds = Object.keys(CODE).map(Number).sort((a, b) => a - b);
+// The SMA and 9sig entries run the app's own engines (smaStrategyCode,
+// nineSigStrategyCode), withdrawals included, and tests/sma-code-parity.cjs and
+// tests/ninesig-code-parity.cjs hold them to those engines exactly; the checks
+// here patch the hand-written strategies' bookkeeping lines, which they lack.
+const engineRun = n => CODE.SMA_LIBRARY_NUMBERS.includes(n) || CODE.NINESIG_LIBRARY_NUMBERS.includes(n);
+const strategyIds = Object.keys(CODE).map(Number).filter(n => !engineRun(n)).sort((a, b) => a - b);
 
 // ---- 1. Several withdrawals: no borrowing, ever ----
 {

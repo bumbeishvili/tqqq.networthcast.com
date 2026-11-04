@@ -85,8 +85,8 @@
     daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq);
     nfciDaily = buildNfciDaily(daily, nfci);
     highLowDaily = buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]])));
-    quarterlyData = lastOfPeriod(daily, getQuarter).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
-    monthlyData = lastOfPeriod(daily, getMonth).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq]);
+    quarterlyData = periodRows(daily, getQuarter);
+    monthlyData = periodRows(daily, getMonth);
     dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
     // A refresh brings new rows: the worker gets the rebuilt data on its next job.
     _customDataCache = null;

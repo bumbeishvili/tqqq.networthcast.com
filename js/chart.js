@@ -1615,6 +1615,12 @@ function applyPanelEmphasis(doUpdate) {
   const ds = chart.data.datasets;
   const activeIdx = activePanelDatasetIdx();
   const active = activeIdx >= 0;
+  // The open strategy's own extra lines (a saved or code strategy's Holding /
+  // Target / Cash and other series, the base 9sig's datasets 1/5/6) belong to
+  // it, so they keep full strength while everyone else's lines dim (the user,
+  // 2026-11-04: "these lines are visible, but they are faded").
+  const activeCfgId = active && ds[activeIdx] ? ds[activeIdx]._configId : null;
+  const ownLines = new Set(active && typeof SUB_LEGEND !== 'undefined' && SUB_LEGEND[activeIdx] ? SUB_LEGEND[activeIdx] : []);
   ds.forEach((d, i) => {
     if (!d) return;
     // Refresh the canonical colour whenever the line isn't currently dimmed, so
@@ -1623,7 +1629,8 @@ function applyPanelEmphasis(doUpdate) {
     if (!d._emphDimmed && typeof d.borderColor === 'string') d._emphBaseC = d.borderColor;
     if (d._emphBaseW == null) d._emphBaseW = (d.borderWidth != null ? d.borderWidth : 1);
     const isActive = active && i === activeIdx;
-    const isDim = active && !isActive;
+    const isOwn = (activeCfgId != null && d._configSub && d._configId === activeCfgId) || ownLines.has(i);
+    const isDim = active && !isActive && !isOwn;
     // The active SMA line, while the SMA panel is open, is fully replaced by the
     // detailed quarter+transaction overlay drawn in the marker plugin — so hide
     // its coarse smooth Chart.js line (0 width). The overlay draws at 2× itself.

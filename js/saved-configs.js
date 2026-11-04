@@ -109,10 +109,13 @@ function applyNineSigFamily(chart) {
 // strategy owns its breakdown lines, drawn from ITS params and tied to it — so
 // they persist correctly (no flipping to the canonical base on close). Toggled
 // via cfg.subShown[key]; the main 9sig keeps its own datasets 1/5/6.
+// The dash of a strategy's extra lines on the main chart, a saved 9sig's
+// breakdown and a code strategy's `series` alike.
+const SERIES_DASH = { dot: [2, 2], dash: [9, 4], dashdot: [2, 4, 9, 4] };
 const CONFIG_SUB_DEFS = [
-  { key: 'holding', label: 'Holding', src: 'tqqqVal', dash: [2, 2] },
-  { key: 'target',  label: 'Target',  src: 'target',  dash: [9, 4] },
-  { key: 'cash',    label: 'Cash',    src: 'cash',    dash: [2, 4, 9, 4] },
+  { key: 'holding', label: 'Holding', src: 'tqqqVal', dash: SERIES_DASH.dot },
+  { key: 'target',  label: 'Target',  src: 'target',  dash: SERIES_DASH.dash },
+  { key: 'cash',    label: 'Cash',    src: 'cash',    dash: SERIES_DASH.dashdot },
 ];
 // Label a sub-series from the config's own chosen assets: "TQQQ holding",
 // "TQQQ target", and the park fund (e.g. "QQQ") — or "Cash" when the park is cash.
@@ -231,7 +234,7 @@ function runCustomRangeSim(cfgId, from, to) {
     const years = (Date.parse(to) - Date.parse(from)) / (365.25 * 86400000);
     // A strategy with its own money is measured on its own deposits in the range.
     const runCtx = msg.money === 'own' ? ownMoneyCtx(ctx, msg.log, from) : ctx;
-    const stats = customSeriesResult(msg.log, { ...runCtx, labels: [from, to], years, totalContributed: invested }, null);
+    const stats = customSeriesResult(msg.log, { ...runCtx, labels: [from, to], years, totalContributed: invested }, null, undefined, false, msg.holdingsDD);
     resolve({ value: stats.end, invested, cagr: stats.cagr, maxDD: stats.maxDD });
   }));
 }
@@ -560,6 +563,8 @@ Shape:  { id, label, text, options: [...], default: <one of the options> }
 - Add fit: false to a setting that describes the market or the account rather than the rule
   (trading cost, cash interest, how a switch is executed). The sidebar's Fit button searches every
   other setting for the best result and leaves these alone.
+- Add when: { otherId: value } (or [values]) to a setting that only matters while another setting
+  holds that value: it shows only then. Example: when: { outAsset: "cash" } on the cash interest.
 
 *** THE TEST EVERY PARAM MUST PASS ***
 Point at the words in my description that this knob comes from. If you cannot, DO NOT ADD IT.
@@ -820,6 +825,21 @@ decision: what a lump sum would do TODAY — { action, note, tone, reasons: [...
   The decision must AGREE with the rules you coded — derive it from the same variables, don't restate
   the description.
 
+=== SERIES and EXPLAIN: extra lines on the main chart, and your rules in words ===
+- series: [{ key, label, dash }] declares dollar lines that belong on the main portfolio chart beside
+  your strategy's line (what the fund side holds, a target it steers to, the cash side). Log the value
+  under its key on every row; dash is "dot", "dash" or "dashdot". Each gets an eye chip in the side
+  panel and starts hidden. Prices, percents and indexes go in lines (the signal chart), never here.
+- explain: a string you return from run() that walks through your rules with the current settings,
+  shown under the log. Blank lines split blocks; "## " starts a heading, "- " a list item; **bold**
+  marks the numbers that matter. Plain text only.
+
+=== HOLDINGS: a strategy that can hold several funds at once ===
+If your strategy can hold more than one fund on the same day (easing from one fund into another,
+a slice in a second fund), also return holdings: one entry per trading day of the run, after that
+day's trades: { date, h: { tqqq: shares, qqq: shares }, cash }. The max drawdown is then revalued
+from them at every daily close. Leave it out when each log row holds one fund (held + shares + cash).
+
 === HOW THE CHART USES THE LOG ===
 - Every "buy" / "sell" / "switch" / "rebalance" row is drawn as a symbol on your strategy's line at
   that date, and hovering it shows that row's detail. Rows tagged "contribution", "ease-in", "hold",
@@ -1044,7 +1064,7 @@ function customWorkerMain() {
    'Notification', 'SharedWorker', 'Worker', 'BroadcastChannel'].forEach(function (k) {
     try { self[k] = undefined; } catch (e) {}
   });
-  var DATA = null;
+  var DATA = null, DATA_ROWS = null;   // DATA_ROWS: DATA as daily row objects, built on first need
   function sanitize(raw) {
     var s = String(raw || '').trim();
     var f = s.match(/```[a-zA-Z0-9]*\s*([\s\S]*?)```/);
@@ -1055,7 +1075,7 @@ function customWorkerMain() {
   }
   function asMod(m) {
     if (typeof m === 'function') return { name: null, run: m, params: undefined };
-    if (m && typeof m.run === 'function') return { name: m.name || null, run: m.run, params: m.params, columns: m.columns, lines: m.lines, money: m.money };
+    if (m && typeof m.run === 'function') return { name: m.name || null, run: m.run, params: m.params, columns: m.columns, lines: m.lines, series: m.series, money: m.money };
     return null;
   }
   // Column metadata ({ key, label, tip }) the strategy declares for its log —
@@ -1083,6 +1103,24 @@ function customWorkerMain() {
   // panel like 9sig's Holding/Target/Cash. Same sanitize-to-primitives rule
   // as readColumns; capped so a runaway declaration can't flood the chart:
   // 6 lines a group, 4 groups (a group is a panel of its own, see LINES).
+  // Dollar lines for the main chart, beside the strategy's own line (series in the
+  // prompt): { key, label, dash: "dot" | "dash" | "dashdot" }, at most 6.
+  function readSeries(raw) {
+    if (!Array.isArray(raw)) return null;
+    var out = [];
+    for (var i = 0; i < raw.length && out.length < 6; i++) {
+      var s = raw[i];
+      if (!s || s.key == null) continue;
+      out.push({ key: String(s.key), label: s.label != null ? String(s.label).slice(0, 60) : String(s.key),
+        dash: ['dot', 'dash', 'dashdot'].indexOf(s.dash) >= 0 ? s.dash : 'dash' });
+    }
+    return out.length ? out : null;
+  }
+  // The strategy's own explanation with its current settings (explain in the
+  // prompt): plain text, kept as text; the page renders its light markup.
+  function readExplain(raw) {
+    return typeof raw === 'string' && raw.trim() ? raw.slice(0, 8000) : null;
+  }
   function readLines(raw) {
     if (!Array.isArray(raw)) return null;
     var out = [], perGroup = {}, groups = 0;
@@ -1172,7 +1210,7 @@ function customWorkerMain() {
   }
   self.onmessage = function (e) {
     var msg = e.data || {};
-    if (msg.type === 'data') { DATA = msg.data; return; }
+    if (msg.type === 'data') { DATA = msg.data; DATA_ROWS = null; return; }
     if (msg.type !== 'run') return;
     var out;
     try {
@@ -1196,10 +1234,23 @@ function customWorkerMain() {
         for (rk in row) { var rv = row[rk]; if (typeof rv === 'number' || typeof rv === 'string' || typeof rv === 'boolean') o[rk] = rv; }
         log.push(o);
       }
-      out = { reqId: msg.reqId, schema: schema, name: mod.name || null, log: log,
+      // A strategy that can hold several funds at once returns its holdings
+      // after each day (holdings: [{ date, h: { fund: shares }, cash }]); its
+      // drawdown is revalued from them at every daily close, as the chart's
+      // built-in lines are, and only that result goes back.
+      var holdingsDD = null;
+      if (res && Array.isArray(res.holdings) && res.holdings.length && typeof computeDailyMaxDrawdownMulti === 'function') {
+        if (!DATA_ROWS) DATA_ROWS = DATA.dates.map(function (d, i) {
+          return { date: d, tqqq: DATA.tqqq[i], qqq: DATA.qqq[i], spy: DATA.spy[i], qld: DATA.qld[i], sso: DATA.sso[i], spxl: DATA.spxl[i], sqqq: DATA.sqqq[i] };
+        });
+        holdingsDD = computeDailyMaxDrawdownMulti(res.holdings, DATA_ROWS);
+      }
+      out = { reqId: msg.reqId, schema: schema, name: mod.name || null, log: log, holdingsDD: holdingsDD,
               columns: readColumns(res && res.columns) || readColumns(mod.columns),
               signals: readSignals(res && res.signals),
               lines: readLines(res && res.lines) || readLines(mod.lines),
+              series: readSeries(res && res.series) || readSeries(mod.series),
+              explain: readExplain(res && res.explain),
               // "own": the strategy brings its own money (see ownMoneyCtx).
               money: mod.money === 'own' ? 'own' : null,
               totalContributed: (res && typeof res.totalContributed === 'number') ? res.totalContributed : null };
@@ -1216,6 +1267,8 @@ window._customErrors = window._customErrors || {};
 window._customSchemas = window._customSchemas || {};
 window._customColumns = window._customColumns || {}; // cfgId -> [{ key, label, tip }] the strategy declared
 window._customLines = window._customLines || {};     // cfgId -> [{ key, label }] auxiliary chart lines the strategy declared
+window._customSeries = window._customSeries || {};   // cfgId -> [{ key, label, dash }] its dollar lines for the main chart (readSeries)
+window._customExplain = window._customExplain || {}; // cfgId -> its explanation text (readExplain)
 window._customSignals = window._customSignals || {}; // cfgId -> { cards, decision } live signal dashboard
 window._customResults = window._customResults || {}; // cfgId -> { sig, log, schema, name, error, totalContributed }
 window._customYesterdayResults = window._customYesterdayResults || {}; // cfgId -> { sig, value, error } — day-over-day change badge, see scheduleCustomYesterdayRun
@@ -1227,7 +1280,11 @@ const _customRunTimers = {}; // cfgId -> { sig, t }
 // A fresh sandbox worker running customWorkerMain: the live line's worker and
 // each of the Fit search's pool (fitPool).
 function newCustomWorker() {
-  const src = '(' + customWorkerMain.toString() + ')()';
+  // computeDailyMaxDrawdownMulti (js/metrics.js) goes in as its source, so a
+  // strategy's returned holdings are measured as the chart's own lines are.
+  // The widget page loads no metrics.js and shows no drawdown.
+  const dd = typeof computeDailyMaxDrawdownMulti === 'function' ? computeDailyMaxDrawdownMulti.toString() + '\n' : '';
+  const src = dd + '(' + customWorkerMain.toString() + ')()';
   return new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
 }
 function ensureCustomWorker() {
@@ -1336,7 +1393,15 @@ function computeCustomGlobals(cfg, ctx) {
   // smooth weekly sampling once ctx.displayGrain (js/chart.js) floors at
   // weekly for a <10y window.
   const weeklyDisplay = ctx.displayGrain === 'weekly';
-  return { initial: ctx.initial, monthly: ctx.monthly, annualRaise: ctx.annualRaise, startIdx, endIdx, entryDate, exitDate, contributions, weeklyDisplay };
+  // What the app's own engines needed to know beyond the dates and deposits,
+  // so the code versions of the SMA and 9sig strategies run them exactly as
+  // the built-in panels did: whether the window is exact days (else quarter
+  // ends), whether the deposits come from a real transaction history (else
+  // the monthly formula), and the chart's display grain.
+  const exactWindow = !!(ctx.entryDateOverride || ctx.exitDateOverride);
+  const depositsFromHistory = !!ctx.contribSchedule;
+  return { initial: ctx.initial, monthly: ctx.monthly, annualRaise: ctx.annualRaise, startIdx, endIdx, entryDate, exitDate, contributions, weeklyDisplay,
+    exactWindow, depositsFromHistory, displayGrain: ctx.displayGrain || null };
 }
 // Day-over-day change badge for a custom/library-derived config (see
 // js/chart.js's isLatestDaySelected/prevTradingDayDate on ctx, and
@@ -1485,8 +1550,8 @@ function onCustomWorkerMessage(e) {
     return;
   }
   window._customResults[pend.cfgId] = {
-    sig: pend.sig, log: msg.log || [], schema: msg.schema || [],
-    columns: msg.columns || null, signals: msg.signals || null, lines: msg.lines || null,
+    sig: pend.sig, log: msg.log || [], schema: msg.schema || [], holdingsDD: msg.holdingsDD || null,
+    columns: msg.columns || null, signals: msg.signals || null, lines: msg.lines || null, series: msg.series || null, explain: msg.explain || null,
     name: msg.name || null, error: msg.error || null, money: msg.money || null,
     totalContributed: (typeof msg.totalContributed === 'number') ? msg.totalContributed : null,
   };
@@ -1494,6 +1559,8 @@ function onCustomWorkerMessage(e) {
   window._customColumns[pend.cfgId] = msg.columns || null;
   window._customSignals[pend.cfgId] = msg.signals || null;
   window._customLines[pend.cfgId] = msg.lines || null;
+  window._customSeries[pend.cfgId] = msg.series || null;
+  window._customExplain[pend.cfgId] = msg.explain || null;
   // Adopt the name the strategy's own code declares (`name: "…"`) — but only
   // while the config still wears its auto-generated "Custom strategy" placeholder,
   // so a name the user typed themselves is never overwritten.
@@ -1559,7 +1626,7 @@ function customDailyDrawdown(log) {
     ? computeDailyMaxDrawdownMulti(ddCtrl, dailyRows) : null;
 }
 // Turn a (worker-computed) log into a label-aligned series + stats. No code eval.
-function customSeriesResult(log, ctx, error, tcOverride, stale) {
+function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
   const labels = ctx.labels;
   if (error) return { data: labels.map(() => null), cagr: 0, maxDD: 0, start: 0, end: 0, ddPeak: null, ddTrough: null };
   const points = (log || [])
@@ -1580,7 +1647,7 @@ function customSeriesResult(log, ctx, error, tcOverride, stale) {
   // strategy doesn't emit held/shares/cash. CAGR is money-weighted, unaffected.
   const cagr = cfgMoneyWeightedCAGR(ctx, finalV);
   const ddVals = points.map(p => p.value), ddDates = points.map(p => p.date);
-  let dd = customDailyDrawdown(log);
+  let dd = holdingsDD || customDailyDrawdown(log);
   if (!dd && typeof computeMaxDrawdown === 'function') {
     dd = computeMaxDrawdown(ddVals.length ? ddVals : series, ddVals.length ? ddDates : labels);
   }
@@ -1609,16 +1676,18 @@ function computeCustomSeries(cfg, ctx) {
     window._customColumns[cfg.id] = cached.columns || null;
     window._customSignals[cfg.id] = cached.signals || null;
     window._customLines[cfg.id] = cached.lines || null;
+    window._customSeries[cfg.id] = cached.series || null;
+    window._customExplain[cfg.id] = cached.explain || null;
     // Today's line is settled — safe to also fetch yesterday's for the
     // day-over-day change badge (endLabelPlugin), sequenced behind it.
     scheduleCustomYesterdayRun(cfg, ctx);
-    return customSeriesResult(cached.log, cached.money === 'own' ? ownMoneyCtx(ctx, cached.log, ctx.entryDateForSim) : ctx, cached.error, cached.totalContributed);
+    return customSeriesResult(cached.log, cached.money === 'own' ? ownMoneyCtx(ctx, cached.log, ctx.entryDateForSim) : ctx, cached.error, cached.totalContributed, false, cached.holdingsDD);
   }
   scheduleCustomRun(cfg, sig, computeCustomGlobals(cfg, ctx));
   window._customErrors[cfg.id] = null; // computing…
   window._customLogs[cfg.id] = (cached && cached.log) || [];
   const staleCtx = cached && cached.money === 'own' ? ownMoneyCtx(ctx, cached.log, ctx.entryDateForSim) : ctx;
-  return customSeriesResult(cached ? cached.log : [], staleCtx, null, cached ? cached.totalContributed : null, true);
+  return customSeriesResult(cached ? cached.log : [], staleCtx, null, cached ? cached.totalContributed : null, true, cached ? cached.holdingsDD : null);
 }
 
 // Run the right engine for a config and return its label-aligned series + stats.
@@ -1931,6 +2000,29 @@ function appendConfigDatasets(chart, ctx) {
           backgroundColor: 'transparent', fill: false, tension: def.key === 'target' ? 0 : 0.3,
           pointRadius: 0, pointHitRadius: 10, hidden: !!cfg.hidden,
           _configLine: true, _configId: cfg.id, _configSub: def.key,
+        });
+        chart.setDatasetVisibility(chart.data.datasets.length - 1, !cfg.hidden);
+      }
+    }
+
+    // A code strategy's dollar lines for the main chart (its `series`), shown
+    // per cfg.subShown["main:" + key] like a saved 9sig's breakdown above: the
+    // user, 2026-11-04, "widen features in the main chart ... for custom
+    // strategies". The key is prefixed so a series and a signal-chart line of
+    // the same name toggle apart.
+    const series = cfg.type === 'custom' ? (window._customSeries || {})[cfg.id] : null;
+    if (series && cfg.subShown) {
+      const logRows = (window._customLogs || {})[cfg.id] || [];
+      for (const sd of series) {
+        if (!cfg.subShown['main:' + sd.key]) continue;
+        const pts = logRows.filter(r => typeof r[sd.key] === 'number' && isFinite(r[sd.key])).map(r => ({ date: r.date, value: r[sd.key] }));
+        chart.data.datasets.push({
+          label: cfg.name + ' · ' + sd.label,
+          data: resampleByDate(pts, ctx.labels),
+          borderColor: cfg.color, borderDash: SERIES_DASH[sd.dash], borderWidth: 1.5,
+          backgroundColor: 'transparent', fill: false, tension: 0.3,
+          pointRadius: 0, pointHitRadius: 10, hidden: !!cfg.hidden,
+          _configLine: true, _configId: cfg.id, _configSub: 'main:' + sd.key,
         });
         chart.setDatasetVisibility(chart.data.datasets.length - 1, !cfg.hidden);
       }
@@ -2483,12 +2575,39 @@ function sharedConfigOf(c) {
   }
   return { ...o, code: c.code || '', desc: c.desc || '', ...libraryStampOf(c) };
 }
+// The SMA and 9sig strategies are code strategies since 2026-11-04
+// (js/strategy-library-code.js smaStrategyCode / nineSigStrategyCode, the user:
+// "converted into code ... the result should stay exactly the same"). A saved or
+// shared one of the old built-in kind (type "sma" / "9sig", its settings keyed by
+// the panel's dropdown ids) becomes that code with the same settings: a copy of a
+// library entry, found by its library number or, for copies older than the stamp,
+// its name, keeps that entry; any other takes the app's own entry's code (SMA 200,
+// 9sig), every setting given explicitly. A 9sig's shown breakdown lines stay shown
+// as the code's main-chart series.
+const BUILT_IN_AS_CODE = {
+  sma: { numbers: () => SMA_LIBRARY_NUMBERS, paramOf: () => SMA_PARAM_OF_SELECT, fallback: 43, sub: {} },
+  '9sig': { numbers: () => NINESIG_LIBRARY_NUMBERS, paramOf: () => NINESIG_PARAM_OF_SELECT, fallback: 42,
+    sub: { holding: 'main:holding', target: 'main:target', cash: 'main:cashValue' } },
+};
+function builtInAsCodeConfig(c) {
+  const kind = c && BUILT_IN_AS_CODE[c.type];
+  if (!kind) return c;
+  const numbers = kind.numbers(), paramOf = kind.paramOf();
+  const baseName = String(c.name || '').replace(/ \(\d+\)$/, '');
+  const entry = STRATEGY_LIBRARY.find(e => numbers.includes(e.n) && (c.libraryN != null ? e.n === +c.libraryN : e.name === baseName))
+    || STRATEGY_LIBRARY.find(e => e.n === kind.fallback);
+  const code = STRATEGY_CODE[entry.n], params = {}, subShown = {};
+  for (const [select, value] of Object.entries(c.params || {})) if (paramOf[select]) params[paramOf[select]] = value;
+  for (const [key, on] of Object.entries(c.subShown || {})) if (kind.sub[key]) subShown[kind.sub[key]] = on;
+  return { ...c, type: 'custom', code, desc: entry.rules || '', params, subShown, libraryN: entry.n,
+    libraryFingerprint: codeFingerprint(code), libraryDescFingerprint: codeFingerprint(entry.rules || '') };
+}
 // The reverse, on arrival: a `lib` entry takes this page's library code and,
 // unless the link brought its own, the library description, stamped as an
 // unedited copy. A number this library lacks is skipped with a console
 // warning, and stays as a null so the link's indices (spc, cfg:<n>) still line up.
 function expandLibraryShares(arr) {
-  return arr.map(c => {
+  return arr.map(builtInAsCodeConfig).map(c => {
     if (!c || c.type !== 'custom' || c.lib == null) return c;
     const n = +c.lib, code = STRATEGY_CODE[n], entry = STRATEGY_LIBRARY.find(e => e.n === n);
     if (!code || !entry) { console.warn(`Share link: library strategy ${n} is not in this library, skipped.`); return null; }
@@ -2506,6 +2625,11 @@ function applyLibraryRefresh(cfg, up) {
 }
 function upgradeSavedCustomCode() {
   let changed = false;
+  savedConfigs = savedConfigs.map(c => {
+    if (!BUILT_IN_AS_CODE[c.type]) return c;
+    if (!c._transient) changed = true;
+    return builtInAsCodeConfig(c);
+  });
   for (const c of savedConfigs) {
     const up = refreshedLibraryCopy(c);
     if (up && up.changed) { applyLibraryRefresh(c, up); if (!c._transient) changed = true; }
@@ -2955,6 +3079,37 @@ function customParamSentence(sp) {
   if (m && /^(%|(trading )?(days|weeks|months|years)\b)/.test(m[2])) return m[1] + ' {}' + (m[2][0] === '%' ? '' : ' ') + m[2];
   return label + ' {}';
 }
+// A code strategy's explanation (`explain`), rendered from its light markup:
+// blocks split by blank lines; "## " starts a heading (the first one titles the
+// section), "- " lines make a list, anything else a paragraph; **bold** inline.
+// Everything is escaped first, so the text can carry no HTML of its own.
+function buildExplainHtml(text) {
+  const inline = (s) => _escHtml(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+  const blocks = String(text).split(/\n\s*\n/).map(b => b.trim()).filter(Boolean);
+  let title = 'How it works';
+  if (blocks.length && blocks[0].startsWith('## ')) title = blocks.shift().slice(3).trim();
+  const out = [];
+  let items = [];
+  const flush = () => { if (items.length) { out.push(`<ul class="explain-list">${items.map(i => `<li>${inline(i)}</li>`).join('')}</ul>`); items = []; } };
+  for (const b of blocks) {
+    const lines = b.split('\n');
+    if (lines.every(l => l.trim().startsWith('- '))) { items.push(...lines.map(l => l.trim().slice(2))); continue; }
+    flush();
+    out.push(b.startsWith('## ') ? `<div class="explain-heading">${inline(b.slice(3).trim())}</div>` : `<div class="explain-text">${inline(b)}</div>`);
+  }
+  flush();
+  return `<div class="strategy-rules-wrap" style="margin-top:24px"><div class="strategy-panel-section-label">${inline(title)}</div><div class="strategy-rules">${out.join('')}</div></div>`;
+}
+// A setting with when: { otherId: value or [values] } shows only while those
+// settings hold one of the values (the user, 2026-11-04: the SMA panel's cash
+// interest shows only when the money sits in cash).
+function customParamShown(cfg, schema, sp) {
+  if (!sp.when) return true;
+  return Object.entries(sp.when).every(([id, want]) => {
+    const other = schema.find(s => s && s.id === id);
+    return !!other && [].concat(want).map(String).includes(String(customParamValue(cfg, other)));
+  });
+}
 // Each param reads as a sentence with its bar-preview dropdown inline, like
 // the 9sig panel, and a section's sentences run on as one paragraph; the popup runs the strategy once per option (in the
 // sandbox) and shows each option's final value as a proportional bar.
@@ -2967,6 +3122,7 @@ function buildCustomControlsHtml(cfg, schema) {
     // An optional `tip` becomes the shared ⓘ hover tooltip at the end of the line.
     const tip = sp.tip != null && String(sp.tip).trim() ? `<span class="info-icon" tabindex="0" data-tip="${_escHtml(String(sp.tip))}">ⓘ</span>` : '';
     if (sp.id == null) return sp.section ? `<div class="custom-param-group">${_escHtml(sp.section)}${tip ? ' ' + tip : ''}</div>` : '';
+    if (!customParamShown(cfg, schema, sp)) return '';
     const sentence = customParamSentence(sp), at = sentence.indexOf('{}');
     const before = sentence.slice(0, at), after = sentence.slice(at + 2);
     const curLabel = _escHtml(customOptionLabel(sp, customParamValue(cfg, sp)));
@@ -3073,7 +3229,7 @@ function computeCustomParamBars(cfg, sp, opts, popup) {
     // startIdx/endIdx/initial/monthly/annualRaise left old bars on screen.
     const contribKey = globals.contributions ? JSON.stringify(globals.contributions) : '';
     const key = [cfg.code, JSON.stringify(merged), globals.startIdx, globals.endIdx, globals.initial, globals.monthly, globals.annualRaise,
-      globals.entryDate || '', globals.exitDate || '', contribKey, globals.weeklyDisplay ? 1 : 0].join('|');
+      globals.entryDate || '', globals.exitDate || '', contribKey, globals.displayGrain || '', globals.exactWindow ? 1 : 0, globals.depositsFromHistory ? 1 : 0].join('|');
     const cached = window._customPreviewCache[key];
     if (cached != null) { finals[i] = cached; draw(); return; }
     runCustomPreview(cfg, overrides, globals, (msg) => {
@@ -3174,7 +3330,7 @@ function fitScore(msg) {
   let final = null;
   for (let k = log.length - 1; k >= 0 && final == null; k--) { const v = log[k].value; if (typeof v === 'number' && isFinite(v)) final = v; }
   if (final == null) return null;
-  const dd = customDailyDrawdown(log) || computeMaxDrawdown(log.map(r => r.value), log.map(r => r.date));
+  const dd = msg.holdingsDD || customDailyDrawdown(log) || computeMaxDrawdown(log.map(r => r.value), log.map(r => r.date));
   return { final, dd: dd.pct };
 }
 
@@ -3741,6 +3897,13 @@ function renderCustomPanelBody(cfgId) {
       </div>`;
   }
 
+  // Its dollar lines for the main chart (`series`), each behind an eye chip.
+  const mainSeries = (window._customSeries || {})[cfgId];
+  if (!err && mainSeries && mainSeries.length) {
+    html += `<div class="strategy-panel-section-label" style="margin-top:14px">Lines on the main chart</div>
+      <div class="legend-chip-group">${mainSeries.map(sd => _configSubChipHtml(cfg, 'main:' + sd.key, sd.label, null, false)).join('')}</div>`;
+  }
+
   // Generated controls from the strategy's `params` (what it declared configurable).
   // Each change is passed back into run() as p.<id>.
   const schema = getCustomSchema(cfg), controls = buildCustomControlsHtml(cfg, schema);
@@ -3768,6 +3931,9 @@ function renderCustomPanelBody(cfgId) {
   html += buildCustomSignalMetricsHtml((window._customSignals || {})[cfgId] || null,
                                        _cLog.length ? _cLog[_cLog.length - 1].date : null);
   html += buildCustomLogTableHtml(_cLog, (window._customColumns || {})[cfgId] || null);
+  // Its explanation with the current settings (`explain`), after the log as the 9sig panel had it.
+  const explain = (window._customExplain || {})[cfgId];
+  if (!err && explain) html += buildExplainHtml(explain);
 
   body.innerHTML = html;
   body.scrollTop = _scrollTop;
