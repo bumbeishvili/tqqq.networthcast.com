@@ -9,6 +9,9 @@ refresh: replace the post-IPO tail of the seven price TSVs with fresh
 yfinance bars, copy the committed pre-IPO synthesized prefix through
 untouched, never touch FRED. --rebuild runs the full synthesis below.
 --refresh-rates re-pulls the FRED TSVs (three rate files + nfci.tsv); nothing else does.
+--high-low-history rewrites the high/low files' pre-launch rows (QQQ from
+^NDX bars, TQQQ derived from QQQ's) from the committed price files; the
+default refresh then copies those rows through like the price files' prefix.
 
 Pre-IPO history is fabricated by walking actual daily index values backward
 from each ETF's first real trading day, applying the leveraged-return-minus-
@@ -186,12 +189,22 @@ tickers = [
 ]
 # Daily highs and lows of the funds the Turnaround Monday rule can read (its
 # signal: a Monday close under the prior day's low buys, a close over the
-# prior day's high sells). Real bars only, from the same download as the
-# closes; js/data.js places them against the price file's close.
+# prior day's high sells). Real bars from each fund's launch, from the same
+# download as the closes; js/data.js places them against the price file's
+# close. Before a launch, a synthesized prefix (high_low_history below), which
+# the daily refresh copies through like the price files' prefix.
 high_low = {
     'TQQQ': 'tqqq-hl.tsv',
     'QQQ':  'qqq-hl.tsv',
     'SPY':  'spy-hl.tsv',
+}
+# Where each fund's pre-launch highs and lows come from: an index's own bars,
+# or another fund's bars at a leverage (build_high_low_files). ^NDX bars on
+# Yahoo start 1985-10-01; ^IXIC's before late 1984 repeat the close, so no
+# range reaches further back. SPY has none yet: real bars only, from 1993.
+high_low_history = {
+    'QQQ':  {'index': '^NDX'},
+    'TQQQ': {'from': 'QQQ', 'leverage': 3},
 }
 
 
@@ -532,17 +545,111 @@ def write_price_tsv(path, prefix_pairs, real_df):
             f.write(f'{date_str}\t{render(date_str, cell(row["Close"]))}\n')
 
 
-def write_high_low_tsv(path, real_df):
-    """Write Date\\tHigh\\tLow\\tClose for every real yfinance bar (high_low
-    above). The bar's own close rides along so js/data.js places the high and
-    low against the price file's close as ratios, and a difference in dividend
-    adjustment between the two files cannot shift them (the first copies, from
-    Yahoo's chart API, sat up to 0.7% off the price files)."""
+def parse_tsv_date(date_str):
+    """'3/10/1999 16:00:00' -> Timestamp('1999-03-10'), the TSVs' date format."""
+    import pandas as pd
+    m, d, y = date_str.split(' ')[0].split('/')
+    return pd.Timestamp(int(y), int(m), int(d))
+
+
+def read_high_low_tsv(path):
+    """Rows of a *-hl.tsv as [(Timestamp, high, low, close)], file order."""
+    rows = []
+    if not os.path.exists(path):
+        return rows
+    with open(path) as f:
+        next(f, None)  # header
+        for line in f:
+            date_str, high, low, close = line.rstrip('\n').split('\t')
+            rows.append((parse_tsv_date(date_str), float(high), float(low), float(close)))
+    return rows
+
+
+def real_high_low_rows(real_df):
+    """A yfinance download as [(Timestamp, high, low, close)]."""
+    return [(normalize_ts(date), cell(row['High']), cell(row['Low']), cell(row['Close']))
+            for date, row in real_df.iterrows()]
+
+
+def write_high_low_tsv(path, prefix_rows, real_df):
+    """Write Date\\tHigh\\tLow\\tClose: the synthesized pre-launch rows
+    (build_high_low_files), then every real yfinance bar (high_low above). The
+    bar's own close rides along so js/data.js places the high and low against
+    the price file's close as ratios, and a difference in dividend adjustment
+    between the two files cannot shift them (the first copies, from Yahoo's
+    chart API, sat up to 0.7% off the price files)."""
     with open(path, 'w') as f:
         f.write('Date\tHigh\tLow\tClose\n')
-        for date, row in real_df.iterrows():
-            date_str = date.strftime('%-m/%-d/%Y 16:00:00')
-            f.write(f'{date_str}\t{fmt_close(cell(row["High"]))}\t{fmt_close(cell(row["Low"]))}\t{fmt_close(cell(row["Close"]))}\n')
+        for d, high, low, close in prefix_rows + real_high_low_rows(real_df):
+            f.write(f'{d.month}/{d.day}/{d.year} 16:00:00\t{fmt_close(high)}\t{fmt_close(low)}\t{fmt_close(close)}\n')
+
+
+def index_high_low_prefix(index_df, first_real):
+    """A fund's rows before its launch from its index's own bars. js/data.js
+    reads a row's high and low as ratios to the row's close, so the index's
+    levels serve as they are. Days Yahoo serves without a full bar are left
+    out; the app then falls back to the prior close for that day."""
+    return [r for r in real_high_low_rows(index_df) if r[0] < first_real and r[1] > 0 and r[2] > 0 and r[3] > 0]
+
+
+def leveraged_high_low_prefix(base_rows, base_close, fund_close, leverage, first_real):
+    """A daily-reset leveraged fund's high and low before its launch, from its
+    base fund's bars. At any moment of a day the fund is worth its prior close
+    times (1 + leverage x the base's move since the prior close), less the
+    day's costs, so at the base's high it is at its own high (for a leverage
+    above 0). The costs are read off the two price files' closes:
+    (1 + leverage x the base's daily return) - the fund's daily return.
+
+    Checked where both have real bars (TQQQ from QQQ, 2010-02-12 to
+    2026-11-03, 4,207 days): within 0.04% of TQQQ's real high and low on the
+    median day, 0.23% on 95% of days, and "a close under the prior day's low"
+    agrees on 99.6% of days."""
+    base_ratio = {d: (high / close, low / close) for d, high, low, close in base_rows}
+    days = sorted(d for d in fund_close if d < first_real)
+    rows = []
+    for prev, d in zip(days, days[1:]):
+        if d not in base_ratio or prev not in base_close or d not in base_close:
+            continue
+        b0, b1, f0, f1 = base_close[prev], base_close[d], fund_close[prev], fund_close[d]
+        costs = 1 + leverage * (b1 / b0 - 1) - f1 / f0
+        high_ratio, low_ratio = base_ratio[d]
+        at = lambda ratio: f0 * (1 + leverage * (b1 * ratio / b0 - 1) - costs)
+        rows.append((d, at(high_ratio), at(low_ratio), f1))
+    return rows
+
+
+def fetch_high_low_indexes():
+    """The index downloads high_low_history reads, by symbol."""
+    return {how['index']: fetch(how['index']) for how in high_low_history.values() if 'index' in how}
+
+
+def build_high_low_files(real_by_ticker, index_dfs):
+    """Write every *-hl.tsv: the pre-launch rows high_low_history describes,
+    then the real bars. Leveraged funds read their base fund's rows (its
+    prefix included) and the two committed price files, so the price TSVs
+    must be written first."""
+    data_dir = os.path.join(basedir, DATA_DIR)
+    price_file = dict(tickers)
+    rows_by_ticker = {}
+    # Funds built from another fund's bars go after the ones they read.
+    for ticker in sorted(high_low, key=lambda t: 'from' in high_low_history.get(t, {})):
+        filename = high_low[ticker]
+        real_df = real_by_ticker[ticker]
+        first_real = normalize_ts(real_df.index[0])
+        how = high_low_history.get(ticker)
+        if how is None:
+            prefix = []
+        elif 'index' in how:
+            prefix = index_high_low_prefix(index_dfs[how['index']], first_real)
+        else:
+            base = how['from']
+            base_close = dict(read_price_tsv(os.path.join(data_dir, price_file[base])))
+            fund_close = dict(read_price_tsv(os.path.join(data_dir, price_file[ticker])))
+            prefix = leveraged_high_low_prefix(rows_by_ticker[base], base_close, fund_close, how['leverage'], first_real)
+        write_high_low_tsv(os.path.join(data_dir, filename), prefix, real_df)
+        rows_by_ticker[ticker] = prefix + real_high_low_rows(real_df)
+        start = prefix[0][0] if prefix else first_real
+        print(f"  {filename}: {len(prefix)} synthesized + {len(real_df)} real bars, from {start.strftime('%Y-%m-%d')}")
 
 
 def incremental_refresh():
@@ -571,8 +678,10 @@ def incremental_refresh():
         last = real_df.index[-1].strftime('%Y-%m-%d')
         print(f"  {filename}: {len(prefix_pairs)} preserved + {len(real_df)} real, through {last}")
         if ticker in high_low:
-            write_high_low_tsv(os.path.join(data_dir, high_low[ticker]), real_df)
-            print(f"  {high_low[ticker]}: {len(real_df)} real bars, through {last}")
+            hl_path = os.path.join(data_dir, high_low[ticker])
+            hl_prefix = [r for r in read_high_low_tsv(hl_path) if r[0] < first_real]
+            write_high_low_tsv(hl_path, hl_prefix, real_df)
+            print(f"  {high_low[ticker]}: {len(hl_prefix)} preserved + {len(real_df)} real bars, through {last}")
 
     # NFCI (weekly) is a LIVE decision input for the credit-veto strategy, so
     # the cron keeps it current — unlike the historical rate files, which only
@@ -605,7 +714,17 @@ _argp.add_argument('--refresh-rates', action='store_true',
                         'data/short-rates.tsv + data/nfci.tsv. Use to refresh the '
                         'committed rate/signal data; not needed for synthesis '
                         '(historical rates do not change).')
+_argp.add_argument('--high-low-history', action='store_true',
+                   help='Rewrite the high/low files with their pre-launch rows '
+                        '(QQQ from ^NDX bars, TQQQ from QQQ at 3x; see '
+                        'high_low_history) built from the committed price files. '
+                        'Nothing else is touched.')
 _args = _argp.parse_args()
+
+if _args.high_low_history:
+    build_high_low_files({t: fetch(t) for t in high_low}, fetch_high_low_indexes())
+    print("Done.")
+    sys.exit(0)
 
 if not _args.rebuild:
     incremental_refresh()
@@ -863,9 +982,7 @@ for ticker, filename in tickers:
         end = data.index[-1].strftime('%Y-%m-%d')
         print(f"  {filename}: {len(data)} rows, {start} to {end}")
 
-for ticker, filename in high_low.items():
-    write_high_low_tsv(os.path.join(data_dir, filename), real_by_ticker[ticker])
-    print(f"  {filename}: {len(real_by_ticker[ticker])} real bars")
+build_high_low_files(real_by_ticker, fetch_high_low_indexes())
 
 # === Write rate files =====================================================
 # Same TSV format as the price files so they're trivial to load with the same

@@ -2663,7 +2663,8 @@ CODE[47] = `{
     // settings left out of the score at the user's call), then set by the
     // user in the middle of the flat stretch each dropdown shows ("have these
     // defaults", 2026-11-03): #50 makes 140.7% a year 2010-2025 with a 41%
-    // drawdown; 135-141% at the lookbacks 532-553 (556: 118), 135-141% at
+    // drawdown (139.6% since the SQQQ limit went from 100 to 40 days and the
+    // TQQQ highs and lows reached back to 1985, both 2026-11-04); 135-141% at the lookbacks 532-553 (556: 118), 135-141% at
     // start windows 56-65 (70: 122), 138-141% with the floor 3-8, 141% with
     // re-entry 24-37, 139-141% with the deep buy -33..-24. The one-day start
     // at 567 made 141% at 567 alone and 88-97% a week either side; the
@@ -2700,8 +2701,12 @@ CODE[47] = `{
       [{ value: 0, label: "Off" }].concat(Array.from({ length: 51 }, (_, k) => 30 + k)) },
     { id: "overWindow", label: "Median window (days)", tip: "How many days of TQQQ closes the median covers.", text: "The median covers the last {} days.", default: 250, options: [150,175,200,225,250,275,300,350] },
     { section: "Defence" },
-    { id: "sqqqMaxDays", label: "SQQQ at most (days in a row)", tip: "After this many days in a row in SQQQ, hold cash until the rules want something else.", text: "Hold SQQQ at most {} days in a row, then cash.", default: 100, options: [
-      { value: 0, label: "No limit" }, 5, 10, 15, 20, 30, 42, 63, 84, 100, 126, 150, 189, 252] },
+    // Every day up to 50 and every 5 days from 50 to 120 (the user, 2026-11-04),
+    // then the old long steps. 40 by default since 2026-11-04 (the user): the
+    // long holds since 2010 ended by day 35, and 100 let 1999 run its full
+    // course (two 100-day holds, -71% and -89%, scratchpad sqqq-runs/).
+    { id: "sqqqMaxDays", label: "SQQQ at most (days in a row)", tip: "After this many days in a row in SQQQ, hold cash until the rules want something else.", text: "Hold SQQQ at most {} days in a row, then cash.", default: 40, options:
+      [{ value: 0, label: "No limit" }].concat(Array.from({ length: 50 }, (_, k) => 1 + k), Array.from({ length: 14 }, (_, k) => 55 + 5 * k), [126, 150, 189, 252]) },
     { id: "deepGuard", label: "Deep buy guard (% under its price)", tip: "A deep buy that closes this far under its buy price goes to cash, and buys back once TQQQ closes above its median.", text: "Sell a deep buy that falls {} under its price.", unit: "%", default: 25, options:
       [{ value: 0, label: "Off" }].concat(Array.from({ length: 36 }, (_, k) => 15 + k)) },
     { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "Cash instead of TQQQ while the Chicago Fed's credit stress index is above this. Each weekly reading is used a week later.", text: "Hold cash instead of TQQQ while credit stress (NFCI) is above {}.", default: 0.5, options: [
@@ -3033,7 +3038,8 @@ ${END_ROW_ACTION}
 // 2010 - Q4 2025 (spec.levels): #50 the post's rule, 151.1% against 144.0%;
 // #48 and #49 the prior close, 88.0 against 87.1% and 116.8 against 116.2%
 // with a 49% drawdown instead of 53% (scratchpad ohlc/three-monday.cjs). The
-// prior close stands in where the fund has no real high or low yet. The rule
+// prior close stands in where the data has no high or low: before October
+// 1985 (data/README.md, "Daily highs and lows"). The rule
 // has no settings since 2026-11-01 (the user: "it's assumed already"): each
 // entry runs its own signal fund and levels, buys TQQQ, and never pauses (the
 // NFCI pause had been Off; NFCI has not been above 0.4 since 2010).
@@ -3071,7 +3077,7 @@ function withTurnaroundMonday(base, spec) {
     // opens at a Monday close while the rules want cash buys TQQQ; it ends at
     // the rule's exit or as soon as the rules want anything else.
     const tmFund = "tqqq", tmSig = "${spec.signal}", tmSigName = "${sigName}";
-    // ${hl ? "A Monday close under the prior day's low buys, the first close over the prior day's high sells. Before the fund's first real high and low (TQQQ before 2010-02-11), the prior close stands in." : "A Monday close under the prior close buys, the first close over it sells."}
+    // ${hl ? "A Monday close under the prior day's low buys, the first close over the prior day's high sells. Before the data's first high and low (October 1985), the prior close stands in." : "A Monday close under the prior close buys, the first close over it sells."}
     const tmHL = ${hl}, tmHigh = data[tmSig + "High"], tmLow = data[tmSig + "Low"];
     if (tmHL && !(tmHigh && tmLow)) throw new Error("Turnaround Monday needs " + tmSigName + "'s daily highs and lows (data." + tmSig + "High, data." + tmSig + "Low)");
     const tmLevel = (arr, i) => (tmHL && arr[i] > 0 ? arr[i] : data[tmSig][i]);

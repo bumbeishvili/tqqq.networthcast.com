@@ -53,6 +53,18 @@ Yahoo's `^NDX` history starts in 1985, which is also when the Nasdaq-100 index i
 
 The pre-1985 prefix splits into two very different stretches. **1971–1985 is real data in disguise**: checked against the actual Nasdaq Composite (FRED series `NASDAQCOM`, daily from the index's first day in February 1971), the Stooq reconstruction tracks it to within 0.01 pp/yr CAGR over the full 14 years and never diverges more than 0.3% over any rolling year — it is effectively the measured Composite wearing an NDX label. **Before 1971 no Nasdaq index of any kind existed** (the market traded OTC), so the 1953–1971 stretch is Stooq's own undocumented construction with nothing real to check it against. Read that stretch, and only that stretch, as a rough hypothetical.
 
+## Daily highs and lows
+
+`qqq-hl.tsv`, `tqqq-hl.tsv` and `spy-hl.tsv` hold each day's high, low and close (`Date	High	Low	Close`). The app reads a row's high and low as ratios to the row's close and applies them to the price file's close, so a difference in dividend adjustment between the files can't shift them.
+
+| File | Real bars start | Before that |
+| --- | --- | --- |
+| **qqq-hl.tsv** | March 10, 1999 | From October 1, 1985: the Nasdaq-100's own daily bars (Yahoo `^NDX`). |
+| **tqqq-hl.tsv** | February 11, 2010 | From October 1, 1985: derived from QQQ's bars. A daily 3× fund is worth its prior close × (1 + 3 × QQQ's move since QQQ's prior close), less the day's costs, so it reaches its high when QQQ reaches its high. The day's costs come from the two price files' closes. Checked over February 12, 2010 to November 3, 2026, where both funds have real bars: within 0.04% of TQQQ's real high and low on the median day, and within 0.23% on 95% of days. |
+| **spy-hl.tsv** | January 29, 1993 | Nothing yet. |
+
+No file has a high or low before October 1985. Yahoo's Nasdaq Composite (`^IXIC`) bars before late 1984 repeat the close, so there is no intraday range to use. On a day with no high or low, the app's Turnaround Monday rule compares with the prior close instead.
+
 ## The financing-cost correction
 
 A 3× ETF holding $1 of investor NAV produces $3 of index exposure. It borrows the other $2 from a bank through a total-return swap and pays interest on that $2 every day. Its own $1 of collateral earns roughly the same short rate, so the two partly cancel:
@@ -169,11 +181,12 @@ Date	Rate               ← rate files (Rate column, value in % per year)
 
 `.github/workflows/update-data.yml` fires hourly on weekdays (`30 13-22 * * 1-5`) and gates each fire to 09:00–17:30 ET, so nine runs land per trading day: one at the open, seven through the session, one after the close. Each run executes `update_data.py` in its default incremental mode and commits `data/*.tsv` only when the bytes changed, which makes holidays a no-op.
 
-Incremental mode touches the **seven price files only**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED. The three rate files refresh by hand:
+Incremental mode touches the **seven price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
 
 ```bash
-python3 update_data.py --refresh-rates    # re-pull DFF + TB3MS from FRED
-python3 update_data.py --rebuild          # full re-synthesis; needs ^ndx_d.csv for pre-1985
+python3 update_data.py --refresh-rates      # re-pull DFF + TB3MS from FRED
+python3 update_data.py --high-low-history   # rebuild the high/low files' pre-launch rows from the committed price files
+python3 update_data.py --rebuild            # full re-synthesis; needs ^ndx_d.csv for pre-1985
 ```
 
 So the rate files lag the price files. Check the last row of `short-rates.tsv` before you rely on a recent rate; as of this writing it trails the price files by about three months.
