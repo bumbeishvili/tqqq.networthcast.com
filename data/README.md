@@ -1,6 +1,6 @@
-# Long-history price data for TQQQ, QLD, QQQ, SPY, SSO, SPXL, and SQQQ
+# Long-history price data for TQQQ, QLD, QQQ, SPY, SSO, SPXL, SQQQ, and GLD
 
-Daily closing prices for seven ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://tqqq.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
+Daily closing prices for eight ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://tqqq.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
 
 ## ETF launch dates
 
@@ -11,6 +11,7 @@ Daily closing prices for seven ETFs, going back decades before any of them exist
 - **SPXL** (3× S&P 500, Direxion Daily S&P500 Bull 3x) — November 2008
 - **TQQQ** (3× Nasdaq-100) — February 2010
 - **SQQQ** (−3× Nasdaq-100, ProShares UltraPro Short QQQ) — February 2010
+- **GLD** (SPDR Gold Shares, gold bullion) — November 2004
 
 Everything before a fund's launch date is reconstructed. The script walks the longer-lived index backward from launch day, applying the same daily arithmetic the fund itself runs on: leverage, expense ratio, financing cost on the borrowed leg, swap-counterparty spread. What comes out is a continuous "what it would have looked like" series. None of it happened, because the funds didn't exist. It is what the math says their daily prices would have done given the underlying index and the short-term rates of each era.
 
@@ -44,6 +45,7 @@ The most-asked question about this dataset. The copy-paste answer:
 | **synthetic-sso.tsv** | June 21, 2006, when SSO (ProShares Ultra S&P500, 2×) launched. | Pre-2006: `(1 + 2 × SP500_daily − 1 × (short_rate + 0.50%)/yr − 0.87%/yr expense)`. 1988–2006 uses real `^SP500TR`, earlier years price-only `^GSPC`. |
 | **synthetic-spxl.tsv** | November 5, 2008, when SPXL (Direxion Daily S&P500 Bull 3x) launched. | Pre-2008: `(1 + 3 × SP500_daily − 2 × (short_rate + 0.50%)/yr − 0.95%/yr expense)`. 1988–2008 uses real `^SP500TR`, earlier years price-only `^GSPC`. |
 | **synthetic-sqqq.tsv** | February 11, 2010, when SQQQ launched. | Pre-2010 uses the inverse model `(1 − 3 × NDX_daily + 4.028 × short_rate/yr − 1.537 %/yr)`. An inverse fund borrows nothing. It is short 3 units and sits on (1+L)=4 units of cash *earning* the short rate. Both coefficients are fitted against real SQQQ 2010–2026: the rate slope came out 4.028 against a theoretical 4.0, and the −1.537 %/yr intercept covers the 0.95 % fee plus swap spread and slippage. Replayed forward from launch, the model tracks the real fund to within −6.4 % / +1.9 % cumulative over 16.5 years. |
+| **synthetic-gld.tsv** | November 18, 2004, when GLD launched. | Before 2004: gold's own daily price minus GLD's 0.40 %/yr expense ratio, on the same trading days as the other files. Gold prices by stretch: Yahoo gold futures (`GC=F`) from August 30, 2000; the Bundesbank's daily Frankfurt Stock Exchange fixing (DM per kg, converted at that day's Frankfurt DM/USD rate) from June 18, 1968 to December 30, 1998; monthly London prices (World Bank Pink Sheet from 1960, Timothy Green's yearly averages before, via datahub's public-domain `gold-prices` file) for 1953 to June 1968 and 1999 to August 2000. Each month's price sits on the 15th, with a straight line in log price between, so those two stretches have no daily swings. Gold was pegged near $35 an ounce until 1968. Checks: the Frankfurt fixing in dollars lands within 0.2% of the World Bank monthly London price on the median month (1968–1998, 367 months), and gold futures ran 0.48 pp/yr above real GLD over 2004–2026, close to GLD's fee. The LBMA's daily London fix would be the better source for 1968–2000, but its site blocks scripted downloads and FRED dropped its copy in 2022. |
 | **fed-funds-effective.tsv** | Daily, July 1, 1954 onward. | None. FRED series `DFF`. Supplies the financing cost on the leveraged leg from 1954. |
 | **t-bill-3mo.tsv** | Monthly, January 1934 onward. | None. FRED series `TB3MS`. The pre-Fed-Funds-market short-rate proxy for 1934–1953. |
 | **short-rates.tsv** | Daily, January 2, 1934 onward. | Derived: `DFF` where it exists, `TB3MS` forward-filled where it doesn't. The only rate file the synthesis reads. |
@@ -150,6 +152,7 @@ Fetch any file straight from GitHub:
 | SSO  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sso.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sso.tsv) |
 | SPXL | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv) |
 | SQQQ | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv) |
+| GLD  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-gld.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-gld.tsv) |
 | Fed Funds Effective Rate (daily, 1954+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv) |
 | 3-month T-bill (monthly, 1934+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv) |
 | Combined daily short rates (1934+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/short-rates.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/short-rates.tsv) |
@@ -181,11 +184,12 @@ Date	Rate               ← rate files (Rate column, value in % per year)
 
 `.github/workflows/update-data.yml` fires hourly on weekdays (`30 13-22 * * 1-5`) and gates each fire to 09:00–17:30 ET, so nine runs land per trading day: one at the open, seven through the session, one after the close. Each run executes `update_data.py` in its default incremental mode and commits `data/*.tsv` only when the bytes changed, which makes holidays a no-op.
 
-Incremental mode touches the **seven price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
+Incremental mode touches the **eight price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
 
 ```bash
 python3 update_data.py --refresh-rates      # re-pull DFF + TB3MS from FRED
 python3 update_data.py --high-low-history   # rebuild the high/low files' pre-launch rows from the committed price files
+python3 update_data.py --gold-history       # rebuild synthetic-gld.tsv (real GLD plus its gold-price prefix)
 python3 update_data.py --rebuild            # full re-synthesis; needs ^ndx_d.csv for pre-1985
 ```
 

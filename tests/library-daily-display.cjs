@@ -26,10 +26,11 @@ const ck = (name, ok, detail) => {
   console.log('  FAIL  ' + name + (detail ? '   ' + detail : ''));
 };
 
-const TICKERS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq'];
+const TICKERS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld'];
 const series = file => parseDataFile(fs.readFileSync(path.join(ROOT, 'data', file), 'utf8'));
 const daily = buildDaily(series('synthetic-qqq.tsv'), series('synthetic-tqqq.tsv'), series('spy.tsv'),
-  series('synthetic-qld.tsv'), series('synthetic-sso.tsv'), series('synthetic-spxl.tsv'), series('synthetic-sqqq.tsv'));
+  series('synthetic-qld.tsv'), series('synthetic-sso.tsv'), series('synthetic-spxl.tsv'), series('synthetic-sqqq.tsv'),
+  series('synthetic-gld.tsv'));
 const data = {
   dates: daily.map(d => d.date),
   nfci: buildNfciDaily(daily, series('nfci.tsv')),

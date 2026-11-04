@@ -11,11 +11,11 @@ const CODE = require(path.join(ROOT, 'js/strategy-library-code.js'));
 const read = f => JSON.stringify(fs.readFileSync(path.join(ROOT, 'data', f), 'utf8'));
 // The page's globals, as js/init.js and js/data.js build them.
 vm.runInThisContext(`
-  daily = buildDaily(${['synthetic-qqq', 'synthetic-tqqq', 'spy', 'synthetic-qld', 'synthetic-sso', 'synthetic-spxl', 'synthetic-sqqq'].map(f => `parseDataFile(${read(f + '.tsv')})`).join(', ')});
+  daily = buildDaily(${['synthetic-qqq', 'synthetic-tqqq', 'spy', 'synthetic-qld', 'synthetic-sso', 'synthetic-spxl', 'synthetic-sqqq', 'synthetic-gld'].map(f => `parseDataFile(${read(f + '.tsv')})`).join(', ')});
   quarterlyData = periodRows(daily, getQuarter); monthlyData = periodRows(daily, getMonth);
   dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
   precomputeSMASeries();`);
-const data = { dates: daily.map(d => d.date), ...Object.fromEntries(['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq'].map(t => [t, daily.map(d => t === 'sqqq' ? d.sqqq || 0 : d[t])])) };
+const data = { dates: daily.map(d => d.date), ...Object.fromEntries(['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld'].map(t => [t, daily.map(d => t === 'sqqq' || t === 'gld' ? d[t] || 0 : d[t])])) };
 const qIdx = date => quarterlyData.findIndex(r => r[0] >= date);
 const valueOf = v => (v && typeof v === 'object') ? v.value : v;
 const strategyOf = code => new Function('"use strict"; return (' + code + '\n)')();

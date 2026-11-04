@@ -120,7 +120,7 @@ function buildCustomContributions(monthly, annualRaise, entryDate, exitDate, exp
 // index (ulCol, parkCol) look up an exact daily price instead of a monthly
 // one — used by 9sig's contribDeployPct pricing when a real transaction
 // schedule supplies an exact day (see buildScheduleFromTransactions).
-const COL_TO_DAILY_KEY = ['date', 'tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq'];
+const COL_TO_DAILY_KEY = ['date', 'tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld'];
 
 // SMA timing strategy: hold TQQQ while the signal asset (QQQ or SPY) closes
 // above its N-day simple moving average; flip to cash (earning the user's
@@ -135,13 +135,13 @@ const COL_TO_DAILY_KEY = ['date', 'tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 's
 // `state` per quarter is 'in' (holding TQQQ) or 'out' (cash) at the end of
 // that quarter — the SMA strategy panel renders transition dots off this.
 // Column index into monthlyData rows for each tradeable asset name.
-// monthlyData layout: [date, tqqq, qqq, spy, qld, sso, spxl]
-const SMA_ASSET_COL = { tqqq: 1, qqq: 2, spy: 3, qld: 4, sso: 5, spxl: 6, sqqq: 7 };
+// monthlyData layout: [date, tqqq, qqq, spy, qld, sso, spxl, sqqq, gld]
+const SMA_ASSET_COL = { tqqq: 1, qqq: 2, spy: 3, qld: 4, sso: 5, spxl: 6, sqqq: 7, gld: 8 };
 // Unleveraged equivalent — used for the bodyguard SMA-distance check.
 // (The bodyguard tracks the unleveraged underlying because the leveraged
 // version's "% above its own SMA" is structurally larger and useless as a
 // gauge of how stretched the underlying market is.)
-const SMA_UNLEVERAGED_OF = { tqqq: 'qqq', qld: 'qqq', sso: 'spy', spxl: 'spy', qqq: 'qqq', spy: 'spy', sqqq: 'qqq' };
+const SMA_UNLEVERAGED_OF = { tqqq: 'qqq', qld: 'qqq', sso: 'spy', spxl: 'spy', qqq: 'qqq', spy: 'spy', sqqq: 'qqq', gld: 'gld' };
 
 function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, opts) {
   opts = opts || {};
@@ -312,7 +312,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
   // Holdings: shares per tradeable asset (tqqq, qqq, spy, qld, sso, spxl) +
   // cash. Multiple buckets coexist mid-DCA; non-target buckets are sold instantly
   // each month, target bucket is bought via the active DCA ladder.
-  const shares = { tqqq: 0, qqq: 0, spy: 0, qld: 0, sso: 0, spxl: 0, sqqq: 0 };
+  const shares = { tqqq: 0, qqq: 0, spy: 0, qld: 0, sso: 0, spxl: 0, sqqq: 0, gld: 0 };
   let cash = initial;
   let totalInvested = initial;
   // Last contribution amount that actually landed (schedule lookup, below) —
@@ -370,7 +370,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     date: sm0[0],
     state, held: prevHeldAsset, action: 'START',
     fee: prevHeldAsset !== 'cash' ? initial * cost : 0, // initial deploy pays the fee too
-    price: ul0, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq,  // leveraged-side share count
+    price: ul0, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq + shares.gld,  // leveraged-side share count
     stockVal: totalAt(sm0) - cash, cash, total: totalAt(sm0),
     invested: initial,
   }];
@@ -516,7 +516,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     const pushLog = (action, heldAsset, fee) => {
       smaLog.push({
         date: mDate, state, held: heldAsset, action, fee: fee || 0,
-        price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq,
+        price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq + shares.gld,
         stockVal: totalAt(row) - cash,
         cash, total: totalAt(row),
         invested: totalInvested,
@@ -562,7 +562,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
           // as a contribution, but it still pays the trading fee.
           smaLog.push({
             date: mDate, state, held: target, action: 'CONTRIB', contribAmt: currentMonthly, fee: buyAmt * cost,
-            price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq,
+            price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq + shares.gld,
             stockVal: totalAt(row) - cash, cash, total: totalAt(row), invested: totalInvested,
           });
         } else {
@@ -581,7 +581,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
       // money-in events show up in the transaction list too.
       smaLog.push({
         date: mDate, state, held: prevHeldAsset, action: 'CONTRIB', contribAmt: currentMonthly, fee: 0,
-        price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq,
+        price: ulP, shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq + shares.gld,
         stockVal: totalAt(row) - cash,
         cash, total: totalAt(row),
         invested: totalInvested,
@@ -610,7 +610,7 @@ function simulateSMA(initial, monthly, annualRate, entryIdx, exitIdx, annualRais
     smaLog.push({
       date: lastRow[0], state, held: dominantHeld(lastRow), action: 'END', fee: 0,
       price: lastRow[ulCol] || 0,
-      shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq,
+      shares: shares.tqqq + shares.qqq + shares.spy + shares.qld + shares.sso + shares.spxl + shares.sqqq + shares.gld,
       stockVal: totalAt(lastRow) - cash,
       cash, total: totalAt(lastRow),
       invested: totalInvested,
@@ -1261,11 +1261,12 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   const sso  = buyHold(5, true);
   const spxl = buyHold(6, true);
   const sqqq = buyHold(7, true);
+  const gld  = buyHold(8, true);
 
   return {
     log, samplePoints,
-    bhPoints: bh.points, qqqPoints: qqq.points, spyPoints: spy.points, qldPoints: qld.points, ssoPoints: sso.points, spxlPoints: spxl.points, sqqqPoints: sqqq.points,
-    bhSample: bh.sample, qqqSample: qqq.sample, spySample: spy.sample, qldSample: qld.sample, ssoSample: sso.sample, spxlSample: spxl.sample, sqqqSample: sqqq.sample,
+    bhPoints: bh.points, qqqPoints: qqq.points, spyPoints: spy.points, qldPoints: qld.points, ssoPoints: sso.points, spxlPoints: spxl.points, sqqqPoints: sqqq.points, gldPoints: gld.points,
+    bhSample: bh.sample, qqqSample: qqq.sample, spySample: spy.sample, qldSample: qld.sample, ssoSample: sso.sample, spxlSample: spxl.sample, sqqqSample: sqqq.sample, gldSample: gld.sample,
     totalContributed: totalInvested,
   };
 }

@@ -434,7 +434,7 @@ function applyParams(type, params) {
   }
 }
 function pget(p, id, dflt) { return (p && id in p) ? p[id] : dflt; }
-function ulColFromVal(v) { return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : v === 'sqqq' ? 7 : 1; }
+function ulColFromVal(v) { return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : v === 'sqqq' ? 7 : v === 'gld' ? 8 : 1; }
 
 // Canonical (HTML-default) value of every strategy knob, snapshotted ONCE at
 // load. This must NOT be re-read live: picking a value from a bar-preview
@@ -592,7 +592,7 @@ Concretely, DO NOT add unless I mentioned it:
 WHAT DOES BECOME A PARAM:
 1. The traded fund. If I named one, it is the DEFAULT and the options are just the sensible
    alternatives (tqqq, qld, spxl, sso, qqq, spy — plus sqqq when hedging/inverse exposure fits
-   the described strategy). In run() index by the chosen id:
+   the described strategy, and gld when gold fits it). In run() index by the chosen id:
      const px = data[p.asset];   (NOT data.tqqq)
 2. What is held when OUT — only if the strategy has an out-state. Options must include "cash":
      options: ["cash", "qqq", "spy", "sso", "qld"], default: "cash".
@@ -627,6 +627,9 @@ data.qld   : daily closing price of QLD   (2x Nasdaq-100, ProShares Ultra QQQ)
 data.sso   : daily closing price of SSO   (2x S&P 500, ProShares Ultra S&P500)
 data.spxl  : daily closing price of SPXL  (3x S&P 500, Direxion Daily S&P500 Bull 3x)
 data.sqqq  : daily closing price of SQQQ  (-3x Nasdaq-100 INVERSE — rises when QQQ falls), synthesized back to 1953
+data.gld   : daily closing price of GLD   (SPDR Gold Shares, gold bullion). Real from 2004-11-18; before that gold's
+             own price less GLD's 0.40% fee, back to 1953. Gold was pegged near $35 until 1968, and monthly prices
+             fill 1953 to June 1968 and 1999 to August 2000, so those stretches have no daily swings.
 data.nfci  : Chicago Fed National Financial Conditions Index, weekly since 1971, forward-filled onto
              trading days with a 7-day publication lag (no look-ahead). NOT a price: a z-score-like
              level where above 0 = tighter-than-average financial conditions, above +0.5 = credit
@@ -1025,7 +1028,7 @@ function buildCustomPrompt(desc) {
 let _customDataCache = null;
 function buildCustomData() {
   if (_customDataCache) return _customDataCache;
-  if (typeof daily === 'undefined' || !daily) return { dates: [], tqqq: [], qqq: [], spy: [], qld: [], sso: [], spxl: [], sqqq: [] };
+  if (typeof daily === 'undefined' || !daily) return { dates: [], tqqq: [], qqq: [], spy: [], qld: [], sso: [], spxl: [], sqqq: [], gld: [] };
   _customDataCache = {
     dates: daily.map(d => d.date),
     tqqq:  daily.map(d => d.tqqq),
@@ -1035,6 +1038,7 @@ function buildCustomData() {
     sso:   daily.map(d => d.sso),
     spxl:  daily.map(d => d.spxl),
     sqqq:  daily.map(d => d.sqqq || 0),
+    gld:   daily.map(d => d.gld || 0),
     // Chicago Fed NFCI (weekly, aligned to daily with a 7-day publication
     // lag in js/data.js). NaN before 1971 or if the fetch failed — strategy
     // code must treat non-finite as "no signal".
@@ -1241,7 +1245,7 @@ function customWorkerMain() {
       var holdingsDD = null;
       if (res && Array.isArray(res.holdings) && res.holdings.length && typeof computeDailyMaxDrawdownMulti === 'function') {
         if (!DATA_ROWS) DATA_ROWS = DATA.dates.map(function (d, i) {
-          return { date: d, tqqq: DATA.tqqq[i], qqq: DATA.qqq[i], spy: DATA.spy[i], qld: DATA.qld[i], sso: DATA.sso[i], spxl: DATA.spxl[i], sqqq: DATA.sqqq[i] };
+          return { date: d, tqqq: DATA.tqqq[i], qqq: DATA.qqq[i], spy: DATA.spy[i], qld: DATA.qld[i], sso: DATA.sso[i], spxl: DATA.spxl[i], sqqq: DATA.sqqq[i], gld: DATA.gld[i] };
         });
         holdingsDD = computeDailyMaxDrawdownMulti(res.holdings, DATA_ROWS);
       }
@@ -1751,7 +1755,7 @@ function computeConfigSeries(cfg, ctx) {
   // Multi-asset drawdown control points (SMA can hold leveraged + out-asset +
   // cash at once). When set, takes precedence over the single-asset path.
   let ddMulti = null;
-  const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl', 7: 'sqqq' };
+  const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl', 7: 'sqqq', 8: 'gld' };
 
   if (cfg.type === '9sig') {
     const cd = +pget(p, 'select-9sig-crashdrop', 30);
@@ -1818,7 +1822,7 @@ function computeConfigSeries(cfg, ctx) {
     };
     ddControls = (r.log || []).map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: l.cash }));
     ddKey = UL_KEY[opts.underlyingCol] || 'tqqq';
-    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: '9sig', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints, sqqqPoints: r.sqqqPoints };
+    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: '9sig', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints, sqqqPoints: r.sqqqPoints, gldPoints: r.gldPoints };
     const _sigLast = (r.log && r.log.length) ? r.log[r.log.length - 1] : null;
     if (_sigLast && typeof daily !== 'undefined' && daily && daily.length) {
       const _sigShares = _sigLast.price > 0 ? _sigLast.tqqqVal / _sigLast.price : 0;
@@ -1885,6 +1889,7 @@ function computeConfigSeries(cfg, ctx) {
     contributed = r.totalContributed;
     const key = pget(p, 'select-bh-underlying', 'tqqq');
     const rawArr = key === 'sqqq' ? (r.sqqqPoints || [])
+              : key === 'gld' ? (r.gldPoints || [])
               : key === 'qqq' ? r.qqqPoints
               : key === 'spy' ? r.spyPoints
               : key === 'qld' ? (r.qldPoints || [])
@@ -1892,6 +1897,7 @@ function computeConfigSeries(cfg, ctx) {
               : key === 'spxl' ? (r.spxlPoints || [])
               : r.bhPoints;
     const sampleArr = key === 'sqqq' ? r.sqqqSample
+              : key === 'gld' ? r.gldSample
               : key === 'qqq' ? r.qqqSample
               : key === 'spy' ? r.spySample
               : key === 'qld' ? r.qldSample
@@ -1910,8 +1916,8 @@ function computeConfigSeries(cfg, ctx) {
     // Drawdown control needs real per-step share counts, which only the raw
     // (quarterly) points carry — the dense sample rows are value-only.
     ddControls = (rawArr || []).map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 }));
-    ddKey = key === 'qqq' ? 'qqq' : key === 'spy' ? 'spy' : key === 'qld' ? 'qld' : key === 'sso' ? 'sso' : key === 'spxl' ? 'spxl' : key === 'sqqq' ? 'sqqq' : 'tqqq';
-    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'bh', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints, sqqqPoints: r.sqqqPoints };
+    ddKey = key === 'qqq' ? 'qqq' : key === 'spy' ? 'spy' : key === 'qld' ? 'qld' : key === 'sso' ? 'sso' : key === 'spxl' ? 'spxl' : key === 'sqqq' ? 'sqqq' : key === 'gld' ? 'gld' : 'tqqq';
+    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'bh', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints, sqqqPoints: r.sqqqPoints, gldPoints: r.gldPoints };
     const _bhLast = (rawArr && rawArr.length) ? rawArr[rawArr.length - 1] : null;
     if (_bhLast && _bhLast.shares > 0) ydayVal = ydayFromHoldings({ [ddKey]: _bhLast.shares }, 0);
   } else if (cfg.type === 'invested') {
@@ -2396,7 +2402,7 @@ function renderCustomBuilder() {
       <div class="builder-modal">
         <div class="sc-modal-title">Describe your strategy</div>
         <div class="wip-note">⚠ Custom strategies are a work in progress — their results may still change.</div>
-        <div class="builder-help">In plain English, describe your strategy in as much detail as you can. You can base it on any of these tickers — <b>TQQQ</b>, <b>QLD</b>, <b>QQQ</b>, <b>SPY</b>, <b>SSO</b>, <b>SPXL</b>, <b>SQQQ</b> (inverse −3×) — plus entry/exit rules, thresholds, and how monthly contributions are handled.</div>
+        <div class="builder-help">In plain English, describe your strategy in as much detail as you can. You can base it on any of these tickers — <b>TQQQ</b>, <b>QLD</b>, <b>QQQ</b>, <b>SPY</b>, <b>SSO</b>, <b>SPXL</b>, <b>SQQQ</b> (inverse −3×), <b>GLD</b> (gold) — plus entry/exit rules, thresholds, and how monthly contributions are handled.</div>
         <textarea id="builder-desc" class="builder-textarea" placeholder="e.g. Hold TQQQ. At each month-end, if QQQ closed below its 200-day moving average, move everything to cash; when it closes back above, buy TQQQ again. Add the monthly contribution to whatever I'm holding.">${_escHtml(cfg.desc || '')}</textarea>
         <div class="builder-actions">
           <button type="button" class="sc-modal-btn" data-builder-cancel>Cancel</button>
@@ -3876,7 +3882,7 @@ function renderCustomPanelBody(cfgId) {
   // needs nothing beyond rendering the control here, and its choice persists to
   // cfg.color like any saved strategy's.
   if (typeof buildColorPickerHtml === 'function') html += buildColorPickerHtml(cfg.type);
-  html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qld</code>, <code>qqq</code>, <code>spy</code>, <code>sso</code>, <code>spxl</code>, <code>sqqq</code> (daily closes). Base your rules on any of them.</div>`;
+  html += `<div class="custom-tickers-note">Your strategy can read these tickers: <code>tqqq</code>, <code>qld</code>, <code>qqq</code>, <code>spy</code>, <code>sso</code>, <code>spxl</code>, <code>sqqq</code>, <code>gld</code> (daily closes). Base your rules on any of them.</div>`;
   html += `<button type="button" id="custom-edit-builder" class="custom-edit-btn">Edit strategy</button>`;
   // The description stays in the Edit strategy dialog only: the settings read
   // as sentences and library entries show their rules (the user, 2026-11-04).

@@ -81,7 +81,7 @@ const MINI_EVENT = { halfW: 1.2, mergeX: 4, maxSpanX: 10, hoverPad: 1.5, maxList
 // one inverse fund, gets a dashed ring. Sizes in px, divided by k when drawn;
 // hitPad is how far outside a mark the hover still counts as on it.
 const MINI_MARK = { r: 2.6, ring: 1.2, hitPad: 4 };
-const MINI_ASSET_RING = { tqqq: '#9cc0ff', qqq: '#ffcf8a', spy: '#dcb3ff', qld: '#8fe1ef', sso: '#ffb0d9', spxl: '#dcc0a0', sqqq: '#c4c4d4', cash: '#e3e3ec' };
+const MINI_ASSET_RING = { tqqq: '#9cc0ff', qqq: '#ffcf8a', spy: '#dcb3ff', qld: '#8fe1ef', sso: '#ffb0d9', spxl: '#dcc0a0', sqqq: '#c4c4d4', gld: '#e6dc8c', cash: '#e3e3ec' };
 const MINI_ASSET_DASHED = { sqqq: true };
 // 'TQQQ' / 'tqqq+cash' → the first known ticker, as assetStrokeFor does.
 function _miniAssetKey(held) {

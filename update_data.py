@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Fetches daily closing prices for QQQ, QLD, TQQQ, SPY, SSO, SPXL, and SQQQ
-from Yahoo Finance and short-term interest rates from FRED, then writes them
+Fetches daily closing prices for QQQ, QLD, TQQQ, SPY, SSO, SPXL, SQQQ, and
+GLD from Yahoo Finance and short-term interest rates from FRED, then writes them
 as TSV files consumed by index.html.
 
 Two modes. The default (no flags, what the cron runs) is an incremental
-refresh: replace the post-IPO tail of the seven price TSVs with fresh
+refresh: replace the post-IPO tail of the eight price TSVs with fresh
 yfinance bars, copy the committed pre-IPO synthesized prefix through
 untouched, never touch FRED. --rebuild runs the full synthesis below.
 --refresh-rates re-pulls the FRED TSVs (three rate files + nfci.tsv); nothing else does.
@@ -53,6 +53,8 @@ Synthesis formulas:
   SPXL 1988 → 2008    ← ^SP500TR                     (3× − 2×rate − SPXL exp)
   SQQQ pre-1999       ← extended ^NDX                (inverse model, below)
   SQQQ 1999 → 2010    ← derived NDX-TR               (inverse model, below)
+  GLD  pre-2004       ← daily gold prices            (1× − GLD expense;
+                        see gold_history for the sources)
 
 The three ^GSPC fallbacks are clipped to the extended-^NDX start date, not to
 1985. With ^ndx_d.csv present that is 1938, and the committed TSVs carry it
@@ -104,10 +106,13 @@ Usage:
     python3 update_data.py                    # incremental price refresh
     python3 update_data.py --refresh-rates    # re-pull FRED rate TSVs
     python3 update_data.py --rebuild          # full synthesis from scratch
+    python3 update_data.py --gold-history     # rewrite synthetic-gld.tsv only
 """
+import bisect
 import csv
 import io
 import os
+import re
 import sys
 import time
 import urllib.request
@@ -127,6 +132,7 @@ TQQQ_EXPENSE_DAILY = 0.0088   / 252  # 0.88%   annual
 SPY_EXPENSE_DAILY  = 0.000945 / 252  # 0.0945% annual
 SSO_EXPENSE_DAILY  = 0.0087   / 252  # 0.87%   annual (ProShares Ultra S&P500, 2×)
 SPXL_EXPENSE_DAILY = 0.0095   / 252  # 0.95%   annual (Direxion Daily S&P500 Bull 3×)
+GLD_EXPENSE_DAILY  = 0.0040   / 252  # 0.40%   annual (SPDR Gold Shares)
 # === Swap-spread calibration ==============================================
 # Real leveraged ETFs pay their swap counterparty something HIGHER than the
 # bare Fed Funds rate. The spread reflects counterparty risk premium, swap
@@ -186,6 +192,7 @@ tickers = [
     ('SSO',    'synthetic-sso.tsv'),
     ('SPXL',   'synthetic-spxl.tsv'),
     ('SQQQ',   'synthetic-sqqq.tsv'),
+    ('GLD',    'synthetic-gld.tsv'),
 ]
 # Daily highs and lows of the funds the Turnaround Monday rule can read (its
 # signal: a Monday close under the prior day's low buys, a close over the
@@ -205,6 +212,28 @@ high_low = {
 high_low_history = {
     'QQQ':  {'index': '^NDX'},
     'TQQQ': {'from': 'QQQ', 'leverage': 3},
+}
+# GLD before its 2004-11-18 launch is gold's own price less GLD's fee
+# (build_gld_prefix), on a daily gold price stitched from these sources:
+#   2000-08-30 → 2004-11-17  Yahoo GC=F, front-month gold futures
+#   1968-06-18 → 1998-12-30  Bundesbank: the Frankfurt Stock Exchange fixing,
+#                            DM per kg, turned into dollars per ounce at the
+#                            same day's Frankfurt DM/USD rate
+#   the rest, from 1953      monthly London prices from datahub's public-domain
+#                            gold-prices file (World Bank Pink Sheet from 1960,
+#                            Timothy Green's yearly averages before). Each
+#                            month's price sits on the 15th, the days between
+#                            follow a straight line in log price, so these
+#                            stretches (1953 to June 1968, 1999 to August 2000)
+#                            have no daily swings.
+# The LBMA's daily London fix (1968+) would be the better source, but its site
+# blocks scripted downloads, and FRED dropped its copy in 2022.
+TROY_OUNCES_PER_KG = 32.1507466
+gold_history = {
+    'futures':              'GC=F',
+    'frankfurt_dem_per_kg': 'https://api.statistiken.bundesbank.de/rest/data/BBEX3/D.XAU.DEM.EA.AC.C01?format=csv&lang=en',
+    'dem_per_usd':          'https://api.statistiken.bundesbank.de/rest/data/BBEX3/D.USD.DEM.AA.AC.000?format=csv&lang=en',
+    'monthly_usd':          'https://raw.githubusercontent.com/datasets/gold-prices/main/data/monthly.csv',
 }
 
 
@@ -652,6 +681,92 @@ def build_high_low_files(real_by_ticker, index_dfs):
         print(f"  {filename}: {len(prefix)} synthesized + {len(real_df)} real bars, from {start.strftime('%Y-%m-%d')}")
 
 
+def fetch_text(url):
+    """A URL's body as text, requested under the updater's own name."""
+    print(f"Fetching {url}...")
+    req = urllib.request.Request(url, headers={'User-Agent': FRED_USER_AGENT})
+    return urllib.request.urlopen(req, timeout=120).read().decode('utf-8-sig')
+
+
+def read_bundesbank_csv(text):
+    """A Bundesbank time-series CSV as {Timestamp: value}. Its data rows start
+    with an ISO date, and '.' marks a day without a value; the rest is notes."""
+    import pandas as pd
+    return {pd.Timestamp(row[0]): float(row[1]) for row in csv.reader(io.StringIO(text))
+            if len(row) >= 2 and re.fullmatch(r'\d{4}-\d{2}-\d{2}', row[0]) and row[1] != '.'}
+
+
+def read_monthly_gold_csv(text):
+    """datahub's monthly gold file (Date as YYYY-MM, Price) as
+    [(15th of the month, dollars per ounce)]."""
+    import pandas as pd
+    reader = csv.reader(io.StringIO(text))
+    next(reader)  # header row: Date,Price
+    return [(pd.Timestamp(f'{row[0]}-15'), float(row[1])) for row in reader]
+
+
+def frankfurt_gold_usd(dem_per_kg, dem_per_usd):
+    """The Frankfurt fixing in dollars per troy ounce, on days with both quotes."""
+    return sorted((d, dem / dem_per_usd[d] / TROY_OUNCES_PER_KG)
+                  for d, dem in dem_per_kg.items() if d in dem_per_usd)
+
+
+def gold_prices_on(days, daily_sources, monthly):
+    """Gold's price on each of `days`, as [(Timestamp, price)].
+
+    Inside a daily source's span, its latest price on or before the day (a
+    market holiday repeats the prior fix). Elsewhere, the monthly prices joined
+    by straight lines in log price, with each span's first and last price among
+    them, so a stretch meets the daily data on both sides without a jump.
+    Before the first monthly price, that price."""
+    spans = [(source[0][0], source[-1][0], [d for d, _ in source], source) for source in daily_sources]
+    knots = sorted([(d, p) for d, p in monthly if not any(first <= d <= last for first, last, _, _ in spans)]
+                   + [point for source in daily_sources for point in (source[0], source[-1])])
+    knot_days = [d for d, _ in knots]
+    out = []
+    for day in days:
+        span = next((s for s in spans if s[0] <= day <= s[1]), None)
+        if span is not None:
+            out.append((day, span[3][bisect.bisect_right(span[2], day) - 1][1]))
+            continue
+        k = bisect.bisect_right(knot_days, day)
+        if k == 0:
+            out.append((day, knots[0][1]))
+            continue
+        (d0, p0), (d1, p1) = knots[k - 1], knots[k]
+        out.append((day, p0 * (p1 / p0) ** ((day - d0) / (d1 - d0))))
+    return out
+
+
+def build_gld_prefix(gld_df, days):
+    """GLD's rows before its launch, as [(Timestamp, close)]: gold_prices_on
+    the given trading days (the QQQ file's, so every price file shares one
+    calendar), walked back from GLD's first close at leverage 1 less GLD's
+    fee."""
+    dem_per_kg = read_bundesbank_csv(fetch_text(gold_history['frankfurt_dem_per_kg']))
+    dem_per_usd = read_bundesbank_csv(fetch_text(gold_history['dem_per_usd']))
+    monthly = read_monthly_gold_csv(fetch_text(gold_history['monthly_usd']))
+    futures = df_to_pairs(fetch(gold_history['futures']))
+    first_real = normalize_ts(gld_df.index[0])
+    gold = gold_prices_on([d for d in days if d <= first_real],
+                          [frankfurt_gold_usd(dem_per_kg, dem_per_usd), futures], monthly)
+    _, pairs = walk_backward(gold, first_real, cell(gld_df['Close'].iloc[0]),
+                             leverage=1, expense_daily=GLD_EXPENSE_DAILY)
+    return pairs
+
+
+def write_gld_file(gld_df):
+    """synthetic-gld.tsv from scratch: build_gld_prefix on the committed QQQ
+    file's trading days, then GLD's real closes."""
+    data_dir = os.path.join(basedir, DATA_DIR)
+    price_file = dict(tickers)
+    days = [d for d, _ in read_price_tsv(os.path.join(data_dir, price_file['QQQ']))]
+    prefix = build_gld_prefix(gld_df, days)
+    write_price_tsv(os.path.join(data_dir, price_file['GLD']), prefix, gld_df)
+    print(f"  {price_file['GLD']}: {len(prefix)} synthesized + {len(gld_df)} real, "
+          f"{prefix[0][0].strftime('%Y-%m-%d')} to {gld_df.index[-1].strftime('%Y-%m-%d')}")
+
+
 def incremental_refresh():
     """Default daily-cron path. The synthesized pre-IPO prefix of each TSV
     is permanent and lives in the committed file; we only need to refresh
@@ -719,10 +834,20 @@ _argp.add_argument('--high-low-history', action='store_true',
                         '(QQQ from ^NDX bars, TQQQ from QQQ at 3x; see '
                         'high_low_history) built from the committed price files. '
                         'Nothing else is touched.')
+_argp.add_argument('--gold-history', action='store_true',
+                   help='Rewrite synthetic-gld.tsv: GLD\'s real closes plus its '
+                        'pre-launch rows from gold prices (see gold_history), on '
+                        'the committed QQQ file\'s trading days. Nothing else is '
+                        'touched.')
 _args = _argp.parse_args()
 
 if _args.high_low_history:
     build_high_low_files({t: fetch(t) for t in high_low}, fetch_high_low_indexes())
+    print("Done.")
+    sys.exit(0)
+
+if _args.gold_history:
+    write_gld_file(fetch('GLD'))
     print("Done.")
     sys.exit(0)
 
@@ -743,6 +868,7 @@ tqqq_df         = fetch('TQQQ')
 spy_df          = fetch('SPY')
 sso_df          = fetch('SSO')                              # ProShares 2× S&P500, 2006-06-21+
 spxl_df         = fetch('SPXL')                             # Direxion 3× S&P500, 2008-11-05+
+gld_df          = fetch('GLD')                              # SPDR Gold Shares, 2004-11-18+
 ndx_df          = fetch('^NDX')
 gspc_df         = fetch('^GSPC')
 sp500tr_df      = fetch('^SP500TR')
@@ -950,12 +1076,18 @@ else:
     sqqq_prefix_rows = sqqq_p1_rows
 
 
+# ---- GLD: real SPDR Gold Shares from 2004-11-18, gold-price prefix ----
+# On QQQ's trading days, so the files share one calendar (build_gld_prefix).
+qqq_days = [parse_tsv_date(s) for s, _ in qqq_prefix_rows] + [normalize_ts(d) for d in qqq_df.index]
+gld_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_gld_prefix(gld_df, qqq_days)]
+
+
 prefix_by_ticker = {'QQQ': qqq_prefix_rows, 'QLD': qld_prefix_rows,
                     'TQQQ': tqqq_prefix_rows, 'SPY': spy_prefix_rows,
                     'SSO': sso_prefix_rows, 'SPXL': spxl_prefix_rows,
-                    'SQQQ': sqqq_prefix_rows}
+                    'SQQQ': sqqq_prefix_rows, 'GLD': gld_prefix_rows}
 real_by_ticker   = {'QQQ': qqq_df, 'QLD': qld_df, 'TQQQ': tqqq_df, 'SPY': spy_df,
-                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df}
+                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df, 'GLD': gld_df}
 
 data_dir = os.path.join(basedir, DATA_DIR)
 os.makedirs(data_dir, exist_ok=True)
