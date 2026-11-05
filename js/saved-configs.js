@@ -1057,6 +1057,9 @@ function buildCustomData() {
   };
   return _customDataCache;
 }
+// After the daily rows change (a live price from the quotes proxy): the next
+// custom run rebuilds the data and the worker receives it again.
+function invalidateCustomData() { _customDataCache = null; _customDataSent = false; }
 
 // === Sandboxed execution ================================================
 // Custom strategy code is NEVER evaluated on the main thread. It runs inside a

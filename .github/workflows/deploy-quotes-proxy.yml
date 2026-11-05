@@ -37,4 +37,5 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: cloudflare/quotes
+          wranglerVersion: '4'   # the action's own default is 3.90, which wrangler flags as out of date
           command: deploy

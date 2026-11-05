@@ -1,8 +1,8 @@
 // Initialize: load CSV, derive data, set slider max, restore state, render
 (async function init() {
-  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, NFCI_WEEKLY, HIGH_LOW;
+  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, NFCI_WEEKLY, HIGH_LOW, LIVE;
   try {
-    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, NFCI_WEEKLY, HIGH_LOW] = await Promise.all([
+    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, NFCI_WEEKLY, HIGH_LOW, LIVE] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
       // SQQQ, GLD, SOXL and SOXX are first-class columns (0-filled on failure):
       // every engine guards zero prices, so a fetch failure degrades their
@@ -17,6 +17,9 @@
       // Highs and lows decide Turnaround Monday's trades, so like the prices
       // a failed load stops the page instead of trading on something else.
       Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
+      // The live prices (js/data.js applyLiveQuotes). Without them the page
+      // runs on the files' last refresh and says so in the header's time.
+      loadLiveQuotes().catch(err => { console.error('Live prices unavailable:', err); return null; }),
     ]);
   } catch(e) {
     console.error('Failed to load data:', e);
@@ -32,41 +35,72 @@
     return;
   }
   daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY);
-  nfciDaily = buildNfciDaily(daily, NFCI_WEEKLY);
-  highLowDaily = buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, HIGH_LOW[k]])));
-  // "Last updated" freshness note in the header subtitle — the actual
-  // wall-clock time the data was last fetched (written by
-  // .github/workflows/update-data.yml into this file in the SAME commit as
-  // the data it describes), not just the most recent trading day the data
-  // covers. `cache: 'no-store'` because this specific file needs to always
-  // reflect the live repo state, unlike the ?v=-busted JS/CSS assets which
-  // only change on a real code deploy.
-  loadDataFetchedAt().then(d => {
-    // Exposed so other "as of" stamps (e.g. a custom strategy's signal-metrics
-    // panel) can show the same fetch time without re-fetching or reformatting,
-    // and so the signal chart can tell a day still trading from a close
-    // (minutesBeforeClose); a chart drawn before the stamp arrived is redrawn.
+  // Today's live prices over the files' last row (or as a new row before the
+  // first refresh of the day); the Monday rule's highs and lows follow.
+  const highLowRows = Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, HIGH_LOW[k]]));
+  let live = applyLiveQuotes(daily, highLowRows, LIVE);
+  if (live && live.skipped.length) console.warn('Live prices not applied to ' + live.skipped.map(s => s.fund.toUpperCase() + ' (' + s.why + ')').join(', '));
+  // The time the prices stand at, for the header's note, other "as of" stamps
+  // (a custom strategy's signal-metrics panel) and the signal chart's reading
+  // of a day still trading against a close (minutesBeforeClose): the latest
+  // live trade when the proxy's prices applied, else the files' refresh time
+  // (data/last-updated.txt, written by .github/workflows/update-data.yml in the
+  // same commit as the data it describes). The file is UTC ISO-8601; `new
+  // Date()` parses it and reads back in the viewer's local time zone.
+  const showDataTime = (d, isLive) => {
     window._dataFetchedAt = d;
-    redrawPanelSignalChart();
     const wrap = document.getElementById('data-through');
     const el = document.getElementById('data-fetched-at');
     if (!wrap || !el) return;
-    // The file is UTC ISO-8601; `new Date()` parses that reliably and its
-    // getDate()/getHours()/etc. read back in the VIEWER'S local time zone —
-    // that conversion is the whole point of fetching a UTC stamp.
     const pad2 = (n) => n < 10 ? '0' + n : '' + n;
-    el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes());
+    el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + (isLive ? ' (live)' : '');
     wrap.removeAttribute('hidden');
+  };
+  if (live) showDataTime(live.asOf, true);
+  loadDataFetchedAt().then(d => {
+    if (live) return;   // the live trade time stands
+    showDataTime(d, false);
+    redrawPanelSignalChart();   // a chart drawn before the stamp arrived is redrawn
   }).catch(err => console.error(err));
-  quarterlyData = periodRows(daily, getQuarter);
-  monthlyData = periodRows(daily, getMonth);
-  dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
-  // Pre-index monthly entries per quarter so simulate()'s hot inner loops
-  // become O(2-3) lookups instead of O(monthlyData.length) scans.
-  precomputePeriodSeries();
-  precomputeMonthlyByQuarter();
-  precomputeSMASeries();
-  recomputeEarliestQIdx();
+  // Everything the engines read off the daily rows, rebuilt whenever they change.
+  const deriveFromDaily = () => {
+    nfciDaily = buildNfciDaily(daily, NFCI_WEEKLY);
+    highLowDaily = buildHighLowDaily(daily, highLowRows);
+    quarterlyData = periodRows(daily, getQuarter);
+    monthlyData = periodRows(daily, getMonth);
+    dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
+    // Pre-index monthly entries per quarter so simulate()'s hot inner loops
+    // become O(2-3) lookups instead of O(monthlyData.length) scans.
+    precomputePeriodSeries();
+    precomputeMonthlyByQuarter();
+    precomputeSMASeries();
+    recomputeEarliestQIdx();
+  };
+  deriveFromDaily();
+  // Every minute while the tab is visible: the live prices again, and when one
+  // moved, the derived data, the strategy worker's copy and the chart with it.
+  const startLivePrices = () => setInterval(async () => {
+    if (document.hidden) return;
+    let quotes;
+    try { quotes = await loadLiveQuotes(); } catch (err) { console.error('Live prices unavailable:', err); return; }
+    const before = { ...daily[daily.length - 1] };
+    const next = applyLiveQuotes(daily, highLowRows, quotes);
+    if (!next) return;
+    const last = daily[daily.length - 1];
+    if (!next.appended && LIVE_FUNDS.every(f => last[f] === before[f])) return;
+    live = next;
+    const quarters = quarterlyData.length;
+    deriveFromDaily();
+    if (quarterlyData.length !== quarters) {   // a new quarter opened with today's row
+      const exit = document.getElementById('slider-exit'), atEnd = +exit.value === quarters - 1;
+      window._dualRange.setMax(quarterlyData.length - 1);
+      if (atEnd) exit.value = quarterlyData.length - 1;
+    }
+    if (typeof invalidateCustomData === 'function') invalidateCustomData();
+    showDataTime(next.asOf, true);
+    render();
+    redrawPanelSignalChart();
+  }, 60 * 1000);
   const maxQIdx = quarterlyData.length - 1;
   document.getElementById('slider-exit').value = maxQIdx;
   // Default the entry to Q1 2010 (the TQQQ era — real 3× funds launched then).
@@ -409,4 +443,5 @@
     const base = params.get('sp');
     if (base && typeof openPanelByKey === 'function') openPanelByKey(base);
   }
+  startLivePrices();
 })();

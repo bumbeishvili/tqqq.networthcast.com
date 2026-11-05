@@ -197,7 +197,7 @@ const DATA_URL = DATA_ROOT + 'data/intraday/tqqq-5m.tsv';
 // With the quotes proxy's URL set (cloudflare/quotes, deployed to Cloudflare:
 // 'https://tqqq-quotes.<account>.workers.dev'), today comes from the proxy
 // instead, in the same layout, at most a minute old, polled every minute.
-const QUOTES_PROXY = '';
+const QUOTES_PROXY = 'https://tqqq-quotes.dato-developer.workers.dev';
 const DATA_URL_TODAY = QUOTES_PROXY ? QUOTES_PROXY + '/bars/TQQQ?range=1d&interval=1m&format=tsv' : DATA_ROOT + 'data/intraday/tqqq-today-1m.tsv';
 const TODAY_BAR_MINUTES = 1;
 const SESSION_OPEN_MIN = 9 * 60 + 30;

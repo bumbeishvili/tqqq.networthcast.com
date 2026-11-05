@@ -74,17 +74,22 @@
 
   // ---- market data: the same files and derived globals js/init.js sets up ----
   async function loadMarketData() {
-    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, nfci, highLow, fetchedAt] = await Promise.all([
+    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, nfci, highLow, fetchedAt, live] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
       loadSQQQDaily().catch(() => []), loadGLDDaily().catch(() => []), loadSOXLDaily().catch(() => []), loadSOXXDaily().catch(() => []), loadNFCIWeekly().catch(() => []), Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
       loadDataFetchedAt(),
+      // The live prices; without them the widget runs on the files' last refresh.
+      loadLiveQuotes().catch(err => { console.error('Live prices unavailable:', err); return null; }),
     ]);
-    // The refresh time, as the site keeps it: the signal chart reads it to
-    // tell a day still trading from a close (minutesBeforeClose).
-    window._dataFetchedAt = fetchedAt;
     daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx);
+    const highLowRows = Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]]));
+    const applied = applyLiveQuotes(daily, highLowRows, live);
+    // The time the prices stand at, as the site keeps it: the latest trade when
+    // live prices applied, else the files' refresh. The signal chart reads it to
+    // tell a day still trading from a close (minutesBeforeClose).
+    window._dataFetchedAt = applied ? applied.asOf : fetchedAt;
     nfciDaily = buildNfciDaily(daily, nfci);
-    highLowDaily = buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]])));
+    highLowDaily = buildHighLowDaily(daily, highLowRows);
     quarterlyData = periodRows(daily, getQuarter);
     monthlyData = periodRows(daily, getMonth);
     dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));

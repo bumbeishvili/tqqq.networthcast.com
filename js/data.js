@@ -50,6 +50,65 @@ function minutesBeforeClose(lastDate, fetchedAt) {
   return nyDate === lastDate && nyMin < MARKET_CLOSE_NY_MIN ? MARKET_CLOSE_NY_MIN - nyMin : null;
 }
 
+// Live prices from the quotes proxy (cloudflare/quotes, a Cloudflare Worker that
+// answers this site and localhost only). The committed files carry each fund up to
+// the last hourly refresh; the proxy carries the price now, 1-2 seconds behind the
+// tape and cached a minute. applyLiveQuotes lays them over the last daily row, or
+// appends today's row when the files have none yet, and keeps the day's highs and
+// lows in step for the Monday rule. One guard per fund: Yahoo's prior close must
+// agree with the file's close before that day, or the two are on different
+// adjustment bases (a split, as SOXX on 2026-11-05) and the fund keeps the file's
+// price. The intraday page keeps its own copy of the URL (experiments/tqqq-intraday.html).
+const QUOTES_PROXY = 'https://tqqq-quotes.dato-developer.workers.dev';
+const LIVE_FUNDS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'];
+const LIVE_PREV_CLOSE_TOLERANCE = 0.03;
+async function loadLiveQuotes() {
+  const resp = await fetch(QUOTES_PROXY + '/quotes', { cache: 'no-store' });
+  if (!resp.ok) throw new Error('The quotes proxy answered HTTP ' + resp.status);
+  return resp.json();
+}
+function nyDateOf(d) {
+  const part = Object.fromEntries(NY_CLOCK.formatToParts(d).map(p => [p.type, p.value]));
+  return `${part.year}-${part.month}-${part.day}`;
+}
+// Returns null when no fund took a live price; else { date, asOf, applied, skipped, appended }.
+// highLowRows: the raw [date, high, low, close] rows per Monday-rule fund, updated in place.
+function applyLiveQuotes(dailyArr, highLowRows, live) {
+  const quotes = (live && live.quotes) || {};
+  let asOf = null;
+  for (const fund of LIVE_FUNDS) {
+    const q = quotes[fund.toUpperCase()];
+    if (q && q.price > 0 && q.time) { const t = new Date(q.time); if (!Number.isNaN(t.getTime()) && (!asOf || t > asOf)) asOf = t; }
+  }
+  if (!asOf || !dailyArr.length) return null;
+  const date = nyDateOf(asOf), last = dailyArr[dailyArr.length - 1];
+  if (date < last.date) return null;   // the files are newer than the quotes
+  const appended = date > last.date;
+  const row = appended ? { ...last, date } : last;
+  if (appended) dailyArr.push(row);
+  const prev = dailyArr[dailyArr.length - 2];
+  const applied = [], skipped = [];
+  for (const fund of LIVE_FUNDS) {
+    const q = quotes[fund.toUpperCase()];
+    if (!q || !(q.price > 0)) { skipped.push({ fund, why: 'no quote' }); continue; }
+    if (nyDateOf(new Date(q.time)) !== date) { skipped.push({ fund, why: 'its latest trade is from ' + nyDateOf(new Date(q.time)) }); continue; }
+    const fileClose = prev ? prev[fund] : 0;
+    if (!(fileClose > 0) || !(q.prevClose > 0) || Math.abs(q.prevClose / fileClose - 1) > LIVE_PREV_CLOSE_TOLERANCE) {
+      skipped.push({ fund, why: "Yahoo's prior close " + q.prevClose + " against the file's " + fileClose + ', another adjustment basis' });
+      continue;
+    }
+    row[fund] = q.price;
+    applied.push(fund);
+    const rows = highLowRows && highLowRows[fund];
+    if (rows) {
+      const hl = [date, q.high > 0 ? q.high : q.price, q.low > 0 ? q.low : q.price, q.price], k = rows.length - 1;
+      if (k >= 0 && rows[k][0] === date) rows[k] = hl; else if (k < 0 || rows[k][0] < date) rows.push(hl);
+    }
+  }
+  if (!applied.length) { if (appended) dailyArr.pop(); return null; }
+  return { date, asOf, applied, skipped, appended };
+}
+
 // Daily highs and lows (data/<fund>-hl.tsv, written by scripts/update_data.py) of the
 // funds the Turnaround Monday rule can read. A row also carries its bar's own
 // close, and a high or low goes onto the price file's close of that day as a
