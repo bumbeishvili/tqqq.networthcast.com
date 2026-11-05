@@ -146,7 +146,7 @@
   /* Orion uses Poppins for display type; Open Sans carries the UI text. */
   .header h1 {
     font-family: 'Poppins', sans-serif;
-    font-size: 20px;
+    font-size: calc(20px * var(--ui-scale));
     font-weight: 600;
     letter-spacing: -0.3px;
     margin: 0;
@@ -163,7 +163,7 @@
   .header p {
     color: var(--text-muted);
     margin: 0;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
   }
 
   /* Orion's dashboard split: a narrow left rail of small cards against the page
@@ -192,7 +192,12 @@
      share button overlapped the title and 3-column chips squeezed names
      to nothing. Most tablet-mode fixes belong here. */
   @media (max-width: 900px) {
-    .layout { grid-template-columns: 1fr; }
+    /* minmax(0, 1fr) and min-width: 0, as .right-col has: a grid track and a grid
+       item are at least their content's minimum, and the strategy pill's one-line
+       name floored the sidebar card at 401px on a 390px phone. The page then
+       overflowed and Chrome on Android shrank it to fit (2026-11-05). */
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    .layout > .panel { min-width: 0; }
     /* Reorder the chart panel so the chart canvas comes first and the
        legend chips sit below it — desktop has them above the chart, but on
        narrow screens it reads better with the visualization first and the
@@ -239,7 +244,7 @@
   /* Phone-width: tighter padding, smaller fonts. */
   @media (max-width: 600px) {
     body { padding: 12px; }
-    .header h1 { font-size: 17px; }
+    .header h1 { font-size: calc(17px * var(--ui-scale)); }
     /* Dropped rather than shrunk: the GitHub + Share icons (github-link 34px
        + gap 8px + icon-only share-btn 34px = 76px) need more room at this
        width than "Backtesting TQQQ · 1953–2026" can share the row with
@@ -247,10 +252,10 @@
     .header p  { display: none; }
     .header { padding-right: 90px; column-gap: 10px; }
     .panel { padding: 16px; }
-    .panel h2 { font-size: 12px; margin-bottom: 12px; }
+    .panel h2 { font-size: calc(12px * var(--ui-scale)); margin-bottom: 12px; }
   }
   @media (max-width: 400px) {
-    .header h1 { font-size: 15px; }
+    .header h1 { font-size: calc(15px * var(--ui-scale)); }
   }
 
   /* The "Data last fetched" link now lives in the header subtitle (was a
@@ -290,7 +295,7 @@
   }
 
   .panel h2 {
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -304,7 +309,7 @@
 
   .control-group label {
     display: block;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     font-weight: 500;
     color: var(--text-muted);
     margin-bottom: 4px;
@@ -326,7 +331,7 @@
 
   .control-group .value-display {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 18px;
+    font-size: calc(18px * var(--ui-scale));
     font-weight: 500;
     color: var(--text);
     margin-bottom: 6px;
@@ -351,14 +356,14 @@
   #contrib-controls .control-group:has(> label):has(> .value-display) > .value-display {
     margin-bottom: 0;
     text-align: right;
-    font-size: 14px;
+    font-size: calc(14px * var(--ui-scale));
   }
   #contrib-controls .control-group:has(> label):has(> .value-display) > input[type="range"] {
     grid-column: 1 / -1;
   }
 
   .control-group .value-display.period {
-    font-size: 15px;
+    font-size: calc(15px * var(--ui-scale));
     line-height: 1;
     /* Entry/Exit Quarter now sits in a flex row next to the date-pick-btn
        icon (index.html). align-items:center centers each item's MARGIN box,
@@ -409,7 +414,7 @@
   .mc-head > label { margin-bottom: 0; }
   .mc-head .value-display {
     margin-bottom: 0;
-    font-size: 14px;
+    font-size: calc(14px * var(--ui-scale));
     text-align: right;
   }
   /* Line 2: small "annual increase" dropdown on its own line. Selectors are
@@ -419,7 +424,7 @@
     display: flex;
     align-items: baseline;
     gap: 3px;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     font-weight: 500;
     text-transform: none;
     letter-spacing: 0;
@@ -427,7 +432,7 @@
     margin: 0 0 12px;
   }
   .control-group .mc-raise .raise-select {
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     padding: 0 1px 0 3px;
     margin: 0;
     border-radius: 3px;
@@ -435,7 +440,7 @@
   }
 
   .adaptive-line {
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     line-height: 1.8;
     color: var(--text-muted);
     margin: 1px 0;
@@ -474,7 +479,7 @@
     border-radius: 4px;
     padding: 2px 4px 2px 6px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     font-weight: 500;
     cursor: pointer;
     margin: 0 2px;
@@ -483,7 +488,7 @@
   /* The two RSI-period pickers sit inline in a sentence; 3px smaller than the
      other inline dropdowns keeps the line from feeling crowded. */
   select.sma-rsi-win,
-  .pdrop:has(select.sma-rsi-win) .pdrop-trigger { font-size: 9px; }
+  .pdrop:has(select.sma-rsi-win) .pdrop-trigger { font-size: calc(9px * var(--ui-scale)); }
   .inline-select:hover { border-color: var(--accent); }
   .inline-select:focus { outline: none; border-color: var(--accent); }
 
@@ -499,7 +504,7 @@
     display: inline-flex; align-items: center; gap: 6px;
     /* inherits .inline-select look; just add a caret + min-width */
   }
-  .pdrop-trigger .pdrop-caret { font-size: 9px; opacity: 0.7; }
+  .pdrop-trigger .pdrop-caret { font-size: calc(9px * var(--ui-scale)); opacity: 0.7; }
   .pdrop-trigger.pdrop-open { border-color: var(--accent); }
 
   .pdrop-popup {
@@ -528,7 +533,7 @@
   .pdrop-popup::-webkit-scrollbar-thumb:hover { background: rgba(134, 118, 255,0.65); background-clip: padding-box; }
   .pdrop-head {
     font-family: 'Open Sans', sans-serif;
-    font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px;
+    font-size: calc(9px * var(--ui-scale)); text-transform: uppercase; letter-spacing: 0.5px;
     color: var(--text-muted); padding: 4px 8px 6px; white-space: nowrap;
   }
   /* Label column width (--pdrop-label-w) is measured per-popup from the
@@ -547,7 +552,7 @@
   }
   .pdrop-row:hover { background: rgba(134, 118, 255,0.10); }
   .pdrop-row.selected { background: rgba(134, 118, 255,0.16); }
-  .pdrop-rlabel { color: var(--text); font-size: 12px; font-weight: 500; white-space: nowrap; }
+  .pdrop-rlabel { color: var(--text); font-size: calc(12px * var(--ui-scale)); font-weight: 500; white-space: nowrap; }
   .pdrop-track {
     height: 8px; border-radius: 4px; background: rgba(122, 122, 166,0.14);
     overflow: hidden;
@@ -571,7 +576,7 @@
   .pdrop-repeat .pdrop-rval { opacity: 0.65; }
   .pdrop-repeat .pdrop-rval::before { content: '= '; opacity: 0.6; }
   .pdrop-rval {
-    font-size: 11px; color: var(--text); white-space: nowrap; text-align: right;
+    font-size: calc(11px * var(--ui-scale)); color: var(--text); white-space: nowrap; text-align: right;
   }
   .pdrop-row.best .pdrop-rval { color: var(--green, #00b929); font-weight: 600; }
 
@@ -581,7 +586,7 @@
     border: 1px dashed var(--border);
     color: var(--text-muted);
     font-family: 'Open Sans', sans-serif;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-weight: 500;
     padding: 6px 10px;
     border-radius: 6px;
@@ -608,7 +613,7 @@
     border: 1px dashed var(--border);
     color: var(--text-muted);
     font-family: 'Open Sans', sans-serif;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-weight: 500;
     padding: 6px 12px;
     border-radius: 6px;
@@ -654,7 +659,7 @@
     border: 1px solid rgba(134, 118, 255, 0.3);
     border-radius: 6px;
     color: var(--accent-text);
-    font: 600 10px 'Open Sans', sans-serif;
+    font: 600 calc(10px * var(--ui-scale)) 'Open Sans', sans-serif;
     letter-spacing: 0.3px;
     text-transform: uppercase;
     cursor: pointer;
@@ -743,7 +748,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text);
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     letter-spacing: 0.3px;
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s, transform 0.05s;
@@ -763,7 +768,7 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     color: var(--text);
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     letter-spacing: 0.2px;
     text-decoration: none;
     transition: border-color 0.15s, background 0.15s;
@@ -790,7 +795,7 @@
   }
   .strategy-library-header h3 {
     margin: 0;
-    font-size: 15px;
+    font-size: calc(15px * var(--ui-scale));
     font-weight: 700;
     color: var(--text);
     flex: 0 0 auto;
@@ -820,7 +825,7 @@
     flex-wrap: wrap;
     gap: 8px;
     margin: 0 0 12px;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
   }
   /* Legend / note row */
   .sl-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
@@ -839,13 +844,13 @@
     gap: 8px;
     flex-wrap: wrap;
   }
-  .sl-page-info { font-size: 11px; color: var(--text-muted); }
+  .sl-page-info { font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
   .sl-page-btns { display: flex; gap: 4px; flex-wrap: wrap; }
   .sl-page {
     min-width: 26px;
     padding: 4px 7px;
     font-family: inherit;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -867,7 +872,7 @@
     margin: 0 0 10px;
     padding: 7px 10px;
     font-family: inherit;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     color: var(--text);
     background: var(--surface);
     border: 1px solid var(--border);
@@ -881,7 +886,7 @@
   .sl-noresults {
     padding: 18px 4px;
     text-align: center;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     color: var(--text-muted);
   }
   /* Two cards per row — wide enough to fit all four era blocks on one line. */
@@ -921,7 +926,7 @@
     flex: 1 1 auto;
     color: var(--text);
     font-weight: 600;
-    font-size: 12.5px;
+    font-size: calc(12.5px * var(--ui-scale));
     line-height: 1.3;
     text-decoration: none;
     min-width: 0;
@@ -947,7 +952,7 @@
   .sl-lbl {
     position: absolute;
     transform: translateY(-50%);
-    font-size: 9.5px;
+    font-size: calc(9.5px * var(--ui-scale));
     font-weight: 700;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -956,13 +961,13 @@
   }
   .sl-lbl-start { left: 4px; color: var(--text-muted); font-weight: 600; }
   .sl-lbl-strat { right: 4px; color: var(--text); }
-  .sl-lbl-spy { right: 4px; color: var(--text-muted); font-weight: 600; font-size: 9px; }
+  .sl-lbl-spy { right: 4px; color: var(--text-muted); font-weight: 600; font-size: calc(9px * var(--ui-scale)); }
   .sl-grid { stroke: var(--border); stroke-width: 0.6; opacity: 0.55; }
   .sl-logtag {
     position: absolute;
     top: 2px;
     left: 5px;
-    font-size: 8px;
+    font-size: calc(8px * var(--ui-scale));
     letter-spacing: 0.4px;
     color: var(--text-muted);
     opacity: 0.65;
@@ -976,7 +981,7 @@
     bottom: 0;
     display: flex;
     justify-content: space-between;
-    font-size: 8px;
+    font-size: calc(8px * var(--ui-scale));
     color: var(--text-muted);
     opacity: 0.7;
     pointer-events: none;
@@ -994,7 +999,7 @@
     background: var(--bg);
     border: 1px solid var(--border);
     border-radius: 7px;
-    font-size: 10.5px;
+    font-size: calc(10.5px * var(--ui-scale));
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     pointer-events: none;
@@ -1056,7 +1061,7 @@
     border: 1px solid rgba(232, 137, 11, 0.35);
     border-radius: 7px;
     color: var(--orange-text);
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     line-height: 1.4;
     white-space: nowrap;
     overflow: hidden;
@@ -1068,7 +1073,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-muted);
     opacity: 0.6;
     background: var(--surface);
@@ -1089,7 +1094,7 @@
   }
   .sl-era-table {
     width: 100%;
-    min-width: 480px;
+    min-width: calc(480px * var(--ui-scale));
     border-collapse: collapse;
     table-layout: fixed;
     background: var(--surface);
@@ -1103,9 +1108,9 @@
     font-variant-numeric: tabular-nums;
   }
   .sl-era-table th[scope="row"] {
-    width: 84px;
+    width: calc(84px * var(--ui-scale));   /* the row label grows with the type scale, or it runs into the first value */
     text-align: left;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     font-weight: 500;
     color: var(--text-muted);
     white-space: nowrap;
@@ -1113,7 +1118,7 @@
        a shade darker than the white table beside it. */
     background: transparent;
   }
-  .sl-era-table .sl-row-date td { font-size: 9px; color: var(--text-muted); }
+  .sl-era-table .sl-row-date td { font-size: calc(9px * var(--ui-scale)); color: var(--text-muted); }
   /* The global `table td` rule adds a border-bottom that the row-label <th>
      never gets, leaving separators short. Drop it and draw our own across both. */
   .sl-era-table td { border-bottom: 0; }
@@ -1122,13 +1127,13 @@
   .sl-era-table tr:last-child th,
   .sl-era-table tr:last-child td { border-bottom: 1px solid var(--border, rgba(127, 127, 127, 0.18)); }
   .sl-era-empty { opacity: 0.45; }
-  .sl-era-hd { font-size: 9px; color: var(--text-muted); }
-  .sl-era-cagr { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .sl-era-hd { font-size: calc(9px * var(--ui-scale)); color: var(--text-muted); }
+  .sl-era-cagr { font-size: calc(14px * var(--ui-scale)); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
   .sl-era-cagr.pos { color: var(--green-text); }
   .sl-era-cagr.neg { color: var(--red-text); }
-  .sl-era-dd { font-size: 9.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
-  .sl-era-na { font-size: 14px; color: var(--text-muted); }
-  .sl-add-ico { font-size: 11px; line-height: 1; }
+  .sl-era-dd { font-size: calc(9.5px * var(--ui-scale)); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .sl-era-na { font-size: calc(14px * var(--ui-scale)); color: var(--text-muted); }
+  .sl-add-ico { font-size: calc(11px * var(--ui-scale)); line-height: 1; }
   .sl-add {
     flex: 0 0 auto;
     padding: 5px 11px;
@@ -1136,14 +1141,14 @@
     border: 1px solid rgba(0, 185, 41, 0.35);
     border-radius: 6px;
     color: var(--green-text);
-    font: 600 11px 'Open Sans', sans-serif;
+    font: 600 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     cursor: pointer;
     white-space: nowrap;
     transition: background 0.15s, border-color 0.15s;
   }
   .sl-add:hover { background: rgba(0, 185, 41, 0.22); border-color: var(--green-text); }
   .sl-add:active { transform: translateY(1px); }
-  .sl-add-na { flex: 0 0 auto; font-size: 10px; color: var(--text-muted); opacity: 0.7; white-space: nowrap; }
+  .sl-add-na { flex: 0 0 auto; font-size: calc(10px * var(--ui-scale)); color: var(--text-muted); opacity: 0.7; white-space: nowrap; }
   body.modal-open { overflow: hidden; }
   .modal-icon-btn:active {
     transform: scale(0.96);
@@ -1155,7 +1160,7 @@
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: calc(16px * var(--ui-scale));
     line-height: 1;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s, background 0.15s;
@@ -1191,7 +1196,7 @@
     gap: 8px;
   }
   .analytics-modal-tag {
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -1205,7 +1210,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 5px 6px;
-    font: 600 11px 'Open Sans', sans-serif;
+    font: 600 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     color: var(--text-muted);
     line-height: 1.5;
   }
@@ -1218,7 +1223,7 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);
-    font: 700 11px 'Open Sans', sans-serif;
+    font: 700 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     letter-spacing: 0.2px;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
@@ -1233,7 +1238,7 @@
     border: 1px solid var(--border);
     border-radius: 4px;
     color: var(--text);
-    font: 700 11px 'Open Sans', sans-serif;
+    font: 700 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
   }
@@ -1247,7 +1252,7 @@
     display: inline-flex;
     flex-direction: column;
     line-height: 1.1;
-    font: 600 8px 'Open Sans', sans-serif;
+    font: 600 calc(8px * var(--ui-scale)) 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted);
@@ -1259,7 +1264,7 @@
     border: 1px solid var(--border);
     border-radius: 6px;
     color: var(--text-muted);
-    font: 600 10px 'Open Sans', sans-serif;
+    font: 600 calc(10px * var(--ui-scale)) 'Open Sans', sans-serif;
     letter-spacing: 0.3px;
     cursor: pointer;
     transition: color 0.15s, border-color 0.15s;
@@ -1277,7 +1282,7 @@
     color: var(--text);
   }
   .analytics-chart-header h3 {
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -1285,7 +1290,7 @@
     margin: 0;
   }
   .analytics-chart-sub {
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     color: var(--text-muted);
     line-height: 1.4;
     margin-top: 2px;
@@ -1304,7 +1309,7 @@
     gap: 4px;
   }
   .analytics-metrics .ap-label {
-    font: 700 9px 'Open Sans', sans-serif;
+    font: 700 calc(9px * var(--ui-scale)) 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--text-muted);
@@ -1315,10 +1320,10 @@
     font-weight: 700;
     text-transform: none;
     letter-spacing: 0;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
   }
   .analytics-metrics .ap-none {
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-muted);
     opacity: 0.6;
     font-style: italic;
@@ -1331,7 +1336,7 @@
     background: rgba(134, 118, 255, 0.06);
     border: 1px solid rgba(134, 118, 255, 0.2);
     border-radius: 4px;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-muted);
     font-family: 'Open Sans', sans-serif;
     cursor: pointer; /* whole pill opens its dropdown */
@@ -1356,7 +1361,7 @@
     color: var(--text);
     font-weight: 600;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     cursor: pointer;
     padding: 0 4px 0 0;
     margin: 0;
@@ -1383,7 +1388,7 @@
     border: 1px solid rgba(134, 118, 255, 0.4);
     border-radius: 6px;
     color: var(--text);
-    font: 600 10px 'JetBrains Mono', monospace;
+    font: 600 calc(10px * var(--ui-scale)) 'JetBrains Mono', monospace;
     outline: none;
   }
   .analytics-baseline-custom:focus {
@@ -1437,7 +1442,7 @@
     box-shadow: 0 0 6px rgba(134, 118, 255, 0.6);
   }
   .analytics-baseline-pct-display {
-    font: 700 11px 'JetBrains Mono', monospace;
+    font: 700 calc(11px * var(--ui-scale)) 'JetBrains Mono', monospace;
     color: var(--text);
     min-width: 42px;
     text-align: center;
@@ -1517,7 +1522,7 @@
     align-items: center;
     gap: 8px;
     margin-top: 4px;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     color: var(--text-muted);
     font-family: 'JetBrains Mono', monospace;
   }
@@ -1561,12 +1566,12 @@
   }
   .heatmap-wrap::-webkit-scrollbar-thumb:hover { background: rgba(134, 118, 255,0.6); }
   .heatmap-wrap::-webkit-scrollbar-corner { background: transparent; }
-  .heatmap-wrap.loading { padding: 14px; color: var(--text-muted); font-size: 11px; }
+  .heatmap-wrap.loading { padding: 14px; color: var(--text-muted); font-size: calc(11px * var(--ui-scale)); }
   .heatmap-table {
     border-collapse: separate;
     border-spacing: 0;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 8px;
+    font-size: calc(8px * var(--ui-scale));
     color: var(--text);
     table-layout: fixed;
   }
@@ -1605,7 +1610,7 @@
     background: var(--surface2);
     color: var(--text-muted);
     font-weight: 600;
-    font-size: 8px;
+    font-size: calc(8px * var(--ui-scale));
     z-index: 5;
   }
   .heatmap-table tbody th {
@@ -1614,7 +1619,7 @@
     background: var(--surface2);
     color: var(--text-muted);
     font-weight: 600;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     width: 44px;
     min-width: 44px;
     max-width: 44px;
@@ -1664,7 +1669,7 @@
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
   }
   .heatmap-table .cell-val {
     display: block;
@@ -1674,7 +1679,7 @@
     position: absolute;
     bottom: 1px;
     right: 2px;
-    font-size: 8px;
+    font-size: calc(8px * var(--ui-scale));
     line-height: 1;
     /* inherits the per-cell colour JS picks from the cell luminance; 0.55 was
        too faint to read once cells became saturated on a light page */
@@ -1718,7 +1723,7 @@
     padding: 12px 14px;
     box-shadow: var(--shadow-lg);
     font-family: 'Open Sans', sans-serif;
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-scale));
     color: var(--text);
     line-height: 1.5;
     max-width: 420px;
@@ -1736,7 +1741,7 @@
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
-    font-size: 16px;
+    font-size: calc(16px * var(--ui-scale));
     line-height: 1;
     cursor: pointer;
     display: none;
@@ -1760,14 +1765,14 @@
     justify-content: space-between;
     align-items: baseline;
     gap: 12px;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     text-transform: uppercase;
     letter-spacing: 0.6px;
     color: var(--text-muted);
     margin-bottom: 4px;
   }
   .heatmap-tooltip .tt-scenario {
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     color: var(--text-muted);
     margin-bottom: 6px;
     line-height: 1.4;
@@ -1775,13 +1780,13 @@
   .heatmap-tooltip .tt-strat {
     font-weight: 600;
     color: var(--text);
-    font-size: 16px;
+    font-size: calc(16px * var(--ui-scale));
     margin-bottom: 6px;
   }
   .heatmap-tooltip .tt-balance-row {
     display: flex;
     justify-content: space-between;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     color: var(--text-muted);
     margin: 2px 0 4px;
   }
@@ -1804,7 +1809,7 @@
     align-items: center;
   }
   .heatmap-tooltip .tt-bar-label {
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -1831,7 +1836,7 @@
   }
   .heatmap-tooltip .tt-bar-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     font-weight: 500;
     color: var(--text);
     white-space: nowrap;
@@ -1849,7 +1854,7 @@
   .heatmap-tooltip .tt-dd-range {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 500;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-muted);
     margin-left: 4px;
   }
@@ -1857,7 +1862,7 @@
     display: block;
     font-family: 'JetBrains Mono', monospace;
     font-weight: 500;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     color: var(--text-muted);
     margin-top: 1px;
     white-space: nowrap;
@@ -1878,7 +1883,7 @@
     grid-template-columns: 60px repeat(4, 1fr);
     gap: 6px;
     align-items: center;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
   }
   .heatmap-tooltip .tt-hdr-stat-label {
     font-family: 'JetBrains Mono', monospace;
@@ -1886,7 +1891,7 @@
     color: var(--text);
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
   }
   .heatmap-tooltip .tt-hdr-stat-cell {
     display: flex;
@@ -1899,7 +1904,7 @@
     min-width: 0;
   }
   .heatmap-tooltip .tt-hdr-stat-cell > span {
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -1911,12 +1916,12 @@
   .heatmap-tooltip .tt-hdr-stat-cell > b {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     color: var(--text);
     max-width: 100%;
   }
   .heatmap-tooltip .tt-decile-title {
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.04em;
@@ -2010,7 +2015,7 @@
     border-radius: 4px;
     background: rgba(198, 78, 255, 0.12);
     color: var(--text);
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     line-height: 1;
     cursor: pointer;
     user-select: none;
@@ -2052,7 +2057,7 @@
   }
 
   .stat-card .stat-label {
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -2062,7 +2067,7 @@
 
   .stat-card .stat-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 15px;
+    font-size: calc(15px * var(--ui-scale));
     font-weight: 500;
   }
 
@@ -2086,7 +2091,9 @@
     margin-bottom: 12px;
   }
   @media (max-width: 600px) {
-    .chart-legend { grid-template-columns: 1fr; }
+    /* minmax(0, 1fr), not 1fr: a bare 1fr is at least its content, and a chip
+       that outgrows a phone's width would widen the page instead of overflowing. */
+    .chart-legend { grid-template-columns: minmax(0, 1fr); }
   }
   .legend-chip {
     display: flex;
@@ -2096,7 +2103,7 @@
     background: rgba(219, 223, 241, 0.45);
     border: 1px solid var(--border);
     border-radius: 6px;
-    font: 500 11px 'Open Sans', sans-serif;
+    font: 500 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     color: var(--text);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s, opacity 0.15s;
@@ -2160,7 +2167,7 @@
     line-height: 1.1;
   }
   .legend-chip .legend-metric-label {
-    font-size: 8px;
+    font-size: calc(8px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -2169,13 +2176,13 @@
   .legend-chip .legend-metric-value {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
   }
   .legend-chip .legend-metric-value.positive { color: var(--green-text); }
   .legend-chip .legend-metric-value.negative { color: var(--red-text); }
   .legend-chip .legend-metric-range {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     color: var(--text-muted);
     margin-left: 2px;
     white-space: nowrap;
@@ -2238,7 +2245,7 @@
   /* ===== Saved configurations (Parameters panel) ===== */
   #saved-configs { margin-top: 18px; }
   .saved-configs-label {
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.6px;
@@ -2261,7 +2268,7 @@
     background: rgba(134, 118, 255, 0.08);
     border: 1px solid rgba(134, 118, 255, 0.3);
     border-radius: 6px;
-    font: 500 11px 'Open Sans', sans-serif;
+    font: 500 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     color: var(--text);
     line-height: 1.4;
   }
@@ -2273,7 +2280,7 @@
     color: #ffffff;
     border: none;
     border-radius: 4px;
-    font: 700 11px 'Open Sans', sans-serif;
+    font: 700 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     letter-spacing: 0.3px;
     cursor: pointer;
     transition: filter 0.15s;
@@ -2336,7 +2343,7 @@
   .saved-config-pill .sc-name {
     flex: 1 1 auto;
     min-width: 0;
-    font: 500 11px 'Open Sans', sans-serif;
+    font: 500 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     color: var(--text);
     overflow: hidden;
     text-overflow: ellipsis;
@@ -2382,7 +2389,7 @@
     max-width: 100%;
   }
   .saved-config-pill .sc-metric-label {
-    font-size: 8px;
+    font-size: calc(8px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -2391,13 +2398,13 @@
   .saved-config-pill .sc-metric-value {
     font-family: 'JetBrains Mono', monospace;
     font-weight: 600;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
   }
   .saved-config-pill .sc-metric-value.positive { color: var(--green-text); }
   .saved-config-pill .sc-metric-value.negative { color: var(--red-text); }
   .saved-config-pill .sc-metric-range {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     color: var(--text-muted);
     white-space: nowrap;
     flex-basis: 100%;
@@ -2419,7 +2426,7 @@
     margin: 4px 0 12px;
   }
   .config-colorbar-label {
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     font-weight: 600;
     color: var(--text-muted);
   }
@@ -2469,12 +2476,12 @@
   .lc-hash {
     color: var(--text-muted);
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
   }
   .lc-hex {
     width: 80px;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     padding: 5px 8px;
     background: var(--surface);
     border: 1px solid var(--border);
@@ -2487,7 +2494,7 @@
   .lc-ok {
     margin-left: auto;
     padding: 5px 14px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 5px;
     border: 1px solid rgba(134, 118, 255, 0.5);
     background: rgba(134, 118, 255, 0.14);
@@ -2529,7 +2536,7 @@
     justify-content: center;
   }
   .datecal-title-group .inline-select {
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     padding: 2px 3px 2px 5px;
   }
   .datecal-month-select { width: 52px; }
@@ -2543,7 +2550,7 @@
     background: rgba(134, 118, 255, 0.08);
     color: var(--accent-text);
     cursor: pointer;
-    font-size: 14px;
+    font-size: calc(14px * var(--ui-scale));
     line-height: 1;
   }
   .datecal-nav:hover:not(:disabled) { background: rgba(134, 118, 255, 0.18); border-color: var(--accent); }
@@ -2555,14 +2562,14 @@
     gap: 2px;
   }
   .datecal-weekdays span {
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     text-align: center;
     color: var(--text-muted);
     text-transform: uppercase;
   }
   .datecal-day {
     aspect-ratio: 1;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-family: 'JetBrains Mono', monospace;
     border-radius: 4px;
     cursor: pointer;
@@ -2587,7 +2594,7 @@
     text-align: center;
   }
   .datecal-clear {
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-muted);
     background: none;
     border: none;
@@ -2616,13 +2623,13 @@
     box-shadow: var(--shadow-lg);
   }
   .sc-modal-title {
-    font-size: 15px;
+    font-size: calc(15px * var(--ui-scale));
     font-weight: 700;
     color: var(--text);
     margin-bottom: 8px;
   }
   .sc-modal-body {
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-scale));
     color: var(--text-muted);
     line-height: 1.5;
     margin-bottom: 18px;
@@ -2635,7 +2642,7 @@
   }
   .sc-modal-btn {
     padding: 8px 16px;
-    font: 600 13px 'Open Sans', sans-serif;
+    font: 600 calc(13px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: var(--surface2);
@@ -2663,18 +2670,18 @@
     padding: 22px;
     box-shadow: var(--shadow-lg);
   }
-  .builder-modal .sc-modal-title { font-size: 16px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
-  .builder-help { font-size: 13px; color: var(--text-muted); line-height: 1.55; margin-bottom: 14px; }
+  .builder-modal .sc-modal-title { font-size: calc(16px * var(--ui-scale)); font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  .builder-help { font-size: calc(13px * var(--ui-scale)); color: var(--text-muted); line-height: 1.55; margin-bottom: 14px; }
   .builder-help b { color: var(--text); }
   .builder-step-label {
-    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    font-size: calc(11px * var(--ui-scale)); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
     color: var(--text-muted); margin: 16px 0 6px;
   }
   .builder-textarea {
     width: 100%;
     min-height: 140px;
     resize: vertical;
-    font: 400 14px 'Open Sans', sans-serif;
+    font: 400 calc(14px * var(--ui-scale)) 'Open Sans', sans-serif;
     line-height: 1.55;
     background: var(--surface2);
     color: var(--text);
@@ -2694,7 +2701,7 @@
   .tx-tab-btn {
     flex: 1;
     padding: 7px 10px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: var(--surface2);
@@ -2704,7 +2711,7 @@
   }
   .tx-tab-btn:hover { border-color: var(--accent); color: var(--text); }
   .tx-tab-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.12); }
-  .tx-preview-stats { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 6px; }
+  .tx-preview-stats { font-size: calc(13px * var(--ui-scale)); color: var(--text-muted); line-height: 1.5; margin-bottom: 6px; }
   .tx-preview-stats b { color: var(--text); }
   /* Lets the user override which parsed column is the date vs. the value —
      js/transactions.js's #tx-date-col/#tx-amount-col selects. */
@@ -2714,7 +2721,7 @@
     flex-direction: column;
     gap: 3px;
     flex: 1;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -2726,7 +2733,7 @@
   .tx-sheet-url-input {
     flex: 1;
     min-width: 0;
-    font: 400 13px 'Open Sans', sans-serif;
+    font: 400 calc(13px * var(--ui-scale)) 'Open Sans', sans-serif;
     background: var(--surface2);
     color: var(--text);
     border: 1px solid var(--border);
@@ -2738,7 +2745,7 @@
   .tx-sheet-url-input::placeholder { color: var(--text-muted); }
   .builder-textarea.code {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     line-height: 1.5;
     background: #f8f9fc;
     color: #383874;
@@ -2770,7 +2777,7 @@
     margin: 0;
     padding: 12px 8px 12px 0;
     box-sizing: border-box;
-    font: 400 12px/1.5 'JetBrains Mono', ui-monospace, monospace;
+    font: 400 calc(12px * var(--ui-scale))/1.5 'JetBrains Mono', ui-monospace, monospace;
     text-align: right;
     white-space: pre;
     color: #a8a8c4;               /* faint — dimmer than comments, blends into the editor */
@@ -2792,7 +2799,7 @@
     box-sizing: border-box;
     padding: 12px 14px;
     border: 0;
-    font: 400 12px/1.5 'JetBrains Mono', ui-monospace, monospace;
+    font: 400 calc(12px * var(--ui-scale))/1.5 'JetBrains Mono', ui-monospace, monospace;
     tab-size: 2;
     white-space: pre;
     word-wrap: normal;
@@ -2849,7 +2856,7 @@
   .custom-edit-btn {
     width: 100%;
     padding: 9px 12px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid rgba(134, 118, 255, 0.5);
     background: rgba(134, 118, 255, 0.14);
@@ -2870,14 +2877,14 @@
     border-radius: 6px;
     background: rgba(232, 137, 11, 0.1);
     border: 1px solid rgba(232, 137, 11, 0.3);
-    font: 600 11px 'Open Sans', sans-serif;
+    font: 600 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
     color: var(--orange-text);
     line-height: 1.45;
   }
   /* Which tickers a custom strategy can read (TQQQ / QQQ / SPY / QQQ5). */
   .custom-tickers-note {
     margin: 0 0 12px;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     color: var(--text-muted);
     line-height: 1.55;
   }
@@ -2887,7 +2894,7 @@
     background: var(--surface2);
     padding: 1px 5px;
     border-radius: 4px;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
   }
 
   /* + Custom strategy button (Parameters panel) */
@@ -2895,7 +2902,7 @@
     margin-top: 12px;
     width: 100%;
     padding: 9px 10px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px dashed var(--border);
     background: transparent;
@@ -2922,7 +2929,7 @@
   .tx-line-toggle {
     display: inline-flex; align-items: center; gap: 4px;
     background: none; border: none; padding: 0; cursor: pointer;
-    font: 600 12px 'Open Sans', sans-serif; color: var(--text); white-space: nowrap;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif; color: var(--text); white-space: nowrap;
   }
   .tx-line-toggle svg { width: 13px; height: 13px; color: var(--text-muted); flex: 0 0 auto; }
   .tx-line-toggle:hover svg { color: var(--accent-text); }
@@ -2934,13 +2941,13 @@
      truncates a long strategy name rather than widening the sidebar. */
   .tx-follow:not([hidden]) {
     display: flex; align-items: center; gap: 4px;
-    margin-top: 8px; font-size: 12px; color: var(--text-muted); white-space: nowrap;
+    margin-top: 8px; font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); white-space: nowrap;
   }
   .tx-follow select { flex: 1 1 auto; min-width: 0; text-overflow: ellipsis; }
   .tx-clear-btn {
     width: 100%;
     padding: 9px 10px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px dashed var(--border);
     background: transparent;
@@ -2953,7 +2960,7 @@
   /* A custom strategy bringing its own money turns the money controls off
      (js/transactions.js's renderOwnMoneyState): they dim, the note stays. */
   .contrib-own-note {
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     line-height: 1.45;
     color: var(--text);
     margin-bottom: 12px;
@@ -2977,7 +2984,7 @@
     width: 100%;
     border-collapse: collapse;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
   }
   .tx-preview-table th {
     position: sticky;
@@ -2999,7 +3006,7 @@
   /* Custom strategy pill badge */
   .saved-config-pill .sc-badge {
     flex-shrink: 0;
-    font: 600 9px 'JetBrains Mono', monospace;
+    font: 600 calc(9px * var(--ui-scale)) 'JetBrains Mono', monospace;
     padding: 1px 5px;
     border-radius: 4px;
     background: rgba(134, 118, 255, 0.16);
@@ -3016,14 +3023,14 @@
     border: 1px solid rgba(232, 137, 11, 0.45);
     background: rgba(232, 137, 11, 0.10);
     color: var(--text);
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     line-height: 1.5;
   }
   .custom-run-btn {
     display: block;
     margin-top: 8px;
     padding: 7px 12px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid rgba(232, 137, 11, 0.6);
     background: rgba(232, 137, 11, 0.16);
@@ -3056,12 +3063,12 @@
     padding: 8px 10px;
     box-shadow: var(--shadow-lg);
     font-family: 'Open Sans', sans-serif;
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--ui-scale));
     color: var(--text);
   }
   #mini-chart-tip .mct-date {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-muted);
     margin-bottom: 4px;
   }
@@ -3105,7 +3112,7 @@
   .custom-lines-chart .mini-latest text { fill: #383874; }
   body.mini-panning, body.mini-panning * { user-select: none; }
   #mini-chart-tip .mct-ev-head {
-    font-size: 10px; color: var(--text-muted);
+    font-size: calc(10px * var(--ui-scale)); color: var(--text-muted);
     text-transform: uppercase; letter-spacing: .04em; margin: 2px 0;
   }
   /* A trade: what moved and its day on one line, the note wrapping under it
@@ -3118,11 +3125,11 @@
     margin-bottom: 3px;
   }
   #mini-chart-tip .mct-ev-when {
-    font-family: 'JetBrains Mono', monospace; font-size: 10px;
+    font-family: 'JetBrains Mono', monospace; font-size: calc(10px * var(--ui-scale));
     color: var(--text-muted); margin-left: auto; padding-left: 12px;
   }
   #mini-chart-tip .mct-ev-note {
-    flex-basis: 100%; font-size: 10.5px; color: var(--text-muted); padding-left: 14px;
+    flex-basis: 100%; font-size: calc(10.5px * var(--ui-scale)); color: var(--text-muted); padding-left: 14px;
   }
   /* A latest-day trade on a price so far: the trade stands only if the close agrees. */
   #mini-chart-tip .mct-ev-open { color: var(--text); font-weight: 600; }
@@ -3133,14 +3140,14 @@
   #mini-chart-tip .mct-sim { margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(134, 118, 255, 0.3); }
   #mini-chart-tip .mct-sim-row { display: flex; gap: 6px; line-height: 1.6; }
   #mini-chart-tip .mct-sim-row b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: auto; padding-left: 12px; }
-  #mini-chart-tip .mct-sim-wait { font-size: 10.5px; color: var(--text-muted); }
-  .custom-stat span { font-size: 9px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
-  .custom-stat b { font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--text); }
+  #mini-chart-tip .mct-sim-wait { font-size: calc(10.5px * var(--ui-scale)); color: var(--text-muted); }
+  .custom-stat span { font-size: calc(9px * var(--ui-scale)); text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
+  .custom-stat b { font-family: 'JetBrains Mono', monospace; font-size: calc(13px * var(--ui-scale)); color: var(--text); }
   .custom-stat b.positive { color: var(--green-text); }
   .custom-stat b.negative { color: var(--red-text); }
   .custom-stat-range {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-subtle);
     margin-top: 1px;
     white-space: nowrap;
@@ -3149,12 +3156,12 @@
      type; a section's sentences run on as one paragraph. The line height
      leaves room for the dropdowns when the paragraph wraps. */
   .custom-params { margin-top: 8px; }
-  .custom-param-line { font-size: 12px; line-height: 2.3; color: var(--text-muted); }
+  .custom-param-line { font-size: calc(12px * var(--ui-scale)); line-height: 2.3; color: var(--text-muted); }
   .custom-param-line .cp-tail { white-space: nowrap; }
   /* { section: "Label" } schema entries — sub-headers dividing a long
      settings list into logical blocks. */
   .custom-param-group {
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.6px;
@@ -3175,18 +3182,18 @@
     border: 1px solid rgba(255, 45, 46, 0.5);
     background: rgba(255, 45, 46, 0.10);
     color: #d92626;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     line-height: 1.5;
     word-break: break-word;
   }
   .custom-error b { color: var(--red-text); }
   .custom-steps { margin: 2px 0 10px; display: flex; flex-direction: column; gap: 6px; }
-  .custom-step { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+  .custom-step { font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); line-height: 1.5; }
   .custom-step b { color: var(--text); margin-right: 3px; }
   .custom-copy-btn {
     width: 100%;
     padding: 9px 12px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid rgba(134, 118, 255, 0.5);
     background: rgba(134, 118, 255, 0.14);
@@ -3199,7 +3206,7 @@
     width: 100%;
     min-height: 90px;
     resize: vertical;
-    font: 400 13px 'Open Sans', sans-serif;
+    font: 400 calc(13px * var(--ui-scale)) 'Open Sans', sans-serif;
     line-height: 1.5;
     background: var(--surface2);
     color: var(--text);
@@ -3211,10 +3218,10 @@
   }
   .custom-desc:focus { border-color: var(--accent); }
   .custom-desc::placeholder { color: var(--text-muted); }
-  .custom-code-hint { font-size: 11px; color: var(--text-muted); line-height: 1.5; margin: 4px 0 6px; }
+  .custom-code-hint { font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); line-height: 1.5; margin: 4px 0 6px; }
   .custom-code-hint code {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     background: var(--surface2);
     padding: 1px 4px;
     border-radius: 3px;
@@ -3225,7 +3232,7 @@
     min-height: 220px;
     resize: vertical;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     line-height: 1.5;
     background: #f8f9fc;
     color: #383874;
@@ -3241,7 +3248,7 @@
   .custom-apply-btn {
     margin-top: 8px;
     padding: 8px 16px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid rgba(134, 118, 255, 0.5);
     background: rgba(134, 118, 255, 0.14);
@@ -3250,7 +3257,7 @@
   }
   .custom-apply-btn:hover { background: rgba(134, 118, 255, 0.26); }
   .custom-log-wrap { max-height: 420px; overflow: auto; margin-top: 6px; border: 1px solid var(--border); border-radius: 8px; }
-  table.custom-log { width: 100%; border-collapse: collapse; font-size: 11px; }
+  table.custom-log { width: 100%; border-collapse: collapse; font-size: calc(11px * var(--ui-scale)); }
   table.custom-log th, table.custom-log td {
     padding: 5px 8px;
     text-align: right;
@@ -3264,7 +3271,7 @@
     color: var(--text-muted);
     font-weight: 600;
     text-transform: uppercase;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     letter-spacing: 0.4px;
   }
   table.custom-log td { color: var(--text); font-family: 'JetBrains Mono', monospace; }
@@ -3296,7 +3303,7 @@
   .config-savebar-btn {
     flex: 1 1 auto;
     padding: 8px 10px;
-    font: 600 12px 'Open Sans', sans-serif;
+    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     border-radius: 6px;
     border: 1px solid var(--border);
     background: var(--surface2);
@@ -3570,7 +3577,7 @@
     flex: 1 1 auto;
   }
   .strategy-panel-header h3 {
-    font-size: 14px;
+    font-size: calc(14px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 1px;
@@ -3628,7 +3635,7 @@
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
-    font-size: 18px;
+    font-size: calc(18px * var(--ui-scale));
     line-height: 1;
     cursor: pointer;
     display: inline-flex;
@@ -3647,7 +3654,7 @@
     overflow-x: hidden;
     padding: 16px;
     color: var(--text-muted);
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-scale));
     /* Without min-width:0 a wide table would stretch this flex item past
        the panel and force a horizontal scroll on the whole panel. */
     min-width: 0;
@@ -3664,7 +3671,7 @@
   .strategy-panel-body::-webkit-scrollbar-thumb:hover { background: rgba(134, 118, 255,0.6); }
   .strategy-panel-body::-webkit-scrollbar-corner { background: transparent; }
   .strategy-panel-section-label {
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.6px;
@@ -3704,9 +3711,9 @@
     padding: 12px 15px; border-radius: 10px; margin-bottom: 10px;
     border: 1px solid var(--border); background: var(--surface2);
   }
-  .sd-hero-lead { font-size: 12px; color: var(--text-muted); }
-  .sd-hero-action { font-size: 17px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
-  .sd-hero-note { flex-basis: 100%; font-size: 11px; color: var(--text-muted); }
+  .sd-hero-lead { font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); }
+  .sd-hero-action { font-size: calc(17px * var(--ui-scale)); font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+  .sd-hero-note { flex-basis: 100%; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
   .sd-hero.sd-buy  { border-color: rgba(0, 185, 41, 0.5);  background: rgba(0, 185, 41, 0.10); }
   .sd-hero.sd-buy  .sd-hero-action { color: var(--green-text); }
   .sd-hero.sd-hold { border-color: rgba(232, 137, 11, 0.45); background: rgba(232, 137, 11, 0.09); }
@@ -3717,13 +3724,13 @@
   .sd-signals { display: flex; flex-direction: column; }
   .sd-sig {
     display: grid; grid-template-columns: 8px auto 1fr auto; align-items: center; gap: 9px;
-    padding: 7px 5px; font-size: 11.5px; border-top: 1px solid var(--border);
+    padding: 7px 5px; font-size: calc(11.5px * var(--ui-scale)); border-top: 1px solid var(--border);
   }
   .sd-sig:first-child { border-top: 0; }
   .sd-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--text-muted); }
   .sd-sig-name { color: var(--text); font-weight: 600; }
   .sd-sig-val { color: var(--text-muted); font-variant-numeric: tabular-nums; }
-  .sd-sig-tag { font-size: 10px; font-weight: 700; letter-spacing: 0.2px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
+  .sd-sig-tag { font-size: calc(10px * var(--ui-scale)); font-weight: 700; letter-spacing: 0.2px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; }
   .sd-lean-buy  .sd-dot { background: var(--green); }
   .sd-lean-buy  .sd-sig-tag { color: var(--green-text); background: rgba(0, 185, 41, 0.14); }
   .sd-lean-out  .sd-dot { background: #e8890b; }
@@ -3737,7 +3744,7 @@
     padding: 8px 10px;
   }
   .strategy-stat-label {
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
@@ -3746,13 +3753,13 @@
   }
   .strategy-stat-value {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 14px;
+    font-size: calc(14px * var(--ui-scale));
     font-weight: 600;
     color: var(--text);
   }
   .strategy-stat-range {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     color: var(--text-subtle);
     margin-top: 2px;
     white-space: nowrap;
@@ -3765,7 +3772,7 @@
      toned neutrally, so the two can't just share one class). */
   .strategy-stat-delta {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     font-weight: 600;
     color: var(--text-subtle);
   }
@@ -3786,7 +3793,7 @@
     padding: 12px 14px;
     border-radius: 4px;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     line-height: 1.7;
   }
   /* Quarterly rebalance log table inside the panel. */
@@ -3811,7 +3818,7 @@
     border-collapse: separate !important;
     border-spacing: 0;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
   }
   /* Belt + suspenders: make BOTH thead and each th sticky, and override the
      global `table thead { position: sticky }` z-index so a row's cells can't
@@ -3839,7 +3846,7 @@
     border-radius: 50%;
     background: rgba(134, 118, 255,0.12);
     color: var(--accent-text);
-    font-size: 8px;
+    font-size: calc(8px * var(--ui-scale));
     line-height: 1;
     font-style: normal;
     font-weight: 600;
@@ -3872,7 +3879,7 @@
     padding: 6px 10px;
     border-radius: 4px;
     border: 1px solid var(--border);
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-weight: 400;
     font-style: normal;
     line-height: 1.4;
@@ -3894,7 +3901,7 @@
   .info-icon[data-tip-wide][data-tip]:hover::after,
   .info-icon[data-tip-wide][data-tip]:focus::after {
     max-width: 380px;
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--ui-scale));
     padding: 8px 11px;
   }
   .sl-info { flex: 0 0 auto; margin-left: 6px; }
@@ -3907,7 +3914,7 @@
     background: var(--surface2);
     color: var(--text-muted);
     font-weight: 600;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     text-transform: uppercase;
     letter-spacing: 0.4px;
     text-align: right;
@@ -3960,7 +3967,7 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     color: var(--text-muted);
     cursor: pointer;
     margin-bottom: 8px;
@@ -3975,7 +3982,7 @@
     align-items: center;
     gap: 4px;
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: calc(10px * var(--ui-scale));
     font-weight: 600;
     letter-spacing: 0.4px;
     text-transform: uppercase;
@@ -4005,9 +4012,9 @@
   .fit-menu { padding: 4px; }
   .fit-menu-item { display: flex; flex-direction: column; gap: 2px; max-width: 280px; padding: 7px 9px; border-radius: 6px; cursor: pointer; }
   .fit-menu-item:hover { background: rgba(134, 118, 255, 0.08); }
-  .fit-menu-item b { font-size: 12px; color: var(--text); }
-  .fit-menu-item span { font-size: 11px; line-height: 1.35; color: var(--text-muted); }
-  .fit-note { margin: 6px 0 2px; font-size: 11.5px; line-height: 1.4; color: var(--text-muted); }
+  .fit-menu-item b { font-size: calc(12px * var(--ui-scale)); color: var(--text); }
+  .fit-menu-item span { font-size: calc(11px * var(--ui-scale)); line-height: 1.35; color: var(--text-muted); }
+  .fit-note { margin: 6px 0 2px; font-size: calc(11.5px * var(--ui-scale)); line-height: 1.4; color: var(--text-muted); }
   .fit-changes { margin: 4px 0 0; padding: 0; list-style: none; }
   /* A code strategy's explanation (js/saved-configs.js buildExplainHtml), as the 9sig panel's rules box. */
   .strategy-rules .explain-heading { margin-top: 14px; font-weight: 600; color: var(--text); }
@@ -4020,7 +4027,7 @@
   /* Collapsed state: drop the ease-in "Buy more" slice rows. */
   .strategy-panel-body .quarter-table-wrap.hide-dca tr.log-row-dca { display: none; }
   /* Allocation-mix cell: compact, muted, never wraps. */
-  .strategy-panel-body .quarter-table-wrap td.log-mix { white-space: nowrap; color: var(--text-muted); font-size: 11px; }
+  .strategy-panel-body .quarter-table-wrap td.log-mix { white-space: nowrap; color: var(--text-muted); font-size: calc(11px * var(--ui-scale)); }
   /* Trade rows (those with a chart action-point) highlight on hover, cueing that
      hovering also lights up the matching marker on the chart. */
   .strategy-panel-body .quarter-table-wrap tr.log-row-mk { cursor: pointer; }
@@ -4036,7 +4043,7 @@
      "(spike)" still fit on one line thanks to the smaller cap. */
   .strategy-panel-body .quarter-table-wrap th.log-action,
   .strategy-panel-body .quarter-table-wrap td.log-action {
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     padding-left: 4px;
     padding-right: 4px;
     letter-spacing: 0.2px;
@@ -4087,7 +4094,7 @@
     to { transform: rotate(360deg); }
   }
   .chart-loading-text {
-    font: 500 12px 'Open Sans', sans-serif;
+    font: 500 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
     color: var(--text-muted);
   }
   .chart-loading-text.is-error { color: var(--red-text, #d64545); }
@@ -4100,7 +4107,7 @@
     left: -4px;
     bottom: 3px;
     padding: 3px 7px;
-    font: 600 10px 'Open Sans', sans-serif;
+    font: 600 calc(10px * var(--ui-scale)) 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--state-off-text);
@@ -4149,13 +4156,13 @@
     white-space: nowrap;
   }
   .chart-zoom-hint {
-    font: 500 10px 'Open Sans', sans-serif;
+    font: 500 calc(10px * var(--ui-scale)) 'Open Sans', sans-serif;
     color: var(--text-muted);
     opacity: .75;
   }
   .chart-zoom-btn {
     padding: 3px 7px;
-    font: 600 10px 'Open Sans', sans-serif;
+    font: 600 calc(10px * var(--ui-scale)) 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--state-off-text);
@@ -4181,7 +4188,7 @@
     left: 58px;
     top: 6px;
     padding: 3px 7px;
-    font: 600 10px 'Open Sans', sans-serif;
+    font: 600 calc(10px * var(--ui-scale)) 'Open Sans', sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--state-off-text);
@@ -4214,7 +4221,7 @@
     overflow: hidden;
     z-index: 10050;
     box-shadow: var(--shadow-lg);
-    font-size: 11.5px;
+    font-size: calc(11.5px * var(--ui-scale));
     line-height: 1.4;
     white-space: nowrap;
     min-width: 212px;
@@ -4229,11 +4236,11 @@
   }
   #marker-tooltip .mt-shape { flex-shrink: 0; margin-top: 1px; display: inline-flex; }
   #marker-tooltip .mt-htext { flex: 1; min-width: 0; }
-  #marker-tooltip .mt-title { font-weight: 700; font-size: 12.5px; }
-  #marker-tooltip .mt-sub { color: var(--text-muted); font-size: 10px; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+  #marker-tooltip .mt-title { font-weight: 700; font-size: calc(12.5px * var(--ui-scale)); }
+  #marker-tooltip .mt-sub { color: var(--text-muted); font-size: calc(10px * var(--ui-scale)); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
   #marker-tooltip .mt-gain {
     flex-shrink: 0; align-self: center;
-    font-size: 11px; font-weight: 700;
+    font-size: calc(11px * var(--ui-scale)); font-weight: 700;
     padding: 2px 8px; border-radius: 999px;
   }
   /* Metric rows: muted iconed label on the left, mono value on the right. */
@@ -4242,13 +4249,13 @@
   #marker-tooltip .mt-k { display: inline-flex; align-items: center; gap: 6px; color: var(--text-muted); }
   #marker-tooltip .mt-ico { opacity: 0.7; flex-shrink: 0; }
   #marker-tooltip .mt-row b { font-family: 'JetBrains Mono', monospace; font-weight: 500; color: var(--text); }
-  #marker-tooltip .mt-strong b { font-size: 13px; font-weight: 700; }
+  #marker-tooltip .mt-strong b { font-size: calc(13px * var(--ui-scale)); font-weight: 700; }
   /* Strategy note line under the rows ("dd 10.8% → tier 5% · …") — without
      this it renders flush against the tooltip's bottom edge. */
   #marker-tooltip .mt-note { padding: 0 12px 10px; }
 
   /* Live signal-metrics dashboard inside the SMA strategy panel. */
-  .signal-metrics { font-size: 12px; margin-top: 2px; }
+  .signal-metrics { font-size: calc(12px * var(--ui-scale)); margin-top: 2px; }
   .signal-metrics .sm-row {
     display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px;
     padding: 6px 0; border-bottom: 1px solid rgba(122, 122, 166,0.09);
@@ -4256,7 +4263,7 @@
   .signal-metrics .sm-row:last-child { border-bottom: 0; }
   .signal-metrics .sm-k { color: var(--text-muted); flex: 1 1 auto; }
   .signal-metrics .sm-v { font-family: 'JetBrains Mono', monospace; font-weight: 600; white-space: nowrap; }
-  .signal-metrics .sm-n { flex: 1 1 100%; text-align: right; font-size: 10.5px; }
+  .signal-metrics .sm-n { flex: 1 1 100%; text-align: right; font-size: calc(10.5px * var(--ui-scale)); }
   .signal-metrics .sm-muted { color: var(--text-muted); }
   .signal-metrics .positive { color: var(--green, #00b929); }
   .signal-metrics .negative { color: var(--red-text); }
@@ -4335,7 +4342,7 @@
     border-radius: 6px;
     box-shadow: var(--shadow-lg);
     font-family: 'Open Sans', sans-serif;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-weight: 600;
     color: var(--text-muted);
     white-space: nowrap;
@@ -4350,7 +4357,7 @@
     background: transparent;
     border: 1px solid var(--border);
     color: var(--text-muted);
-    font-size: 15px;
+    font-size: calc(15px * var(--ui-scale));
     line-height: 1;
     cursor: pointer;
     /* Re-enable pointer events (parent is none) so touch users can dismiss. */
@@ -4369,7 +4376,7 @@
 
   .tt-date {
     font-family: 'Open Sans', sans-serif;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     font-weight: 600;
     color: var(--text-muted);
     margin-bottom: 10px;
@@ -4399,13 +4406,13 @@
 
   .tt-name {
     font-family: 'Open Sans', sans-serif;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     color: var(--text-muted);
   }
 
   .tt-val {
     font-family: 'JetBrains Mono', monospace;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     font-weight: 500;
     color: var(--text);
     margin-left: 16px;
@@ -4438,7 +4445,7 @@
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     color: var(--text-muted);
   }
 
@@ -4462,7 +4469,7 @@
   table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
   }
 
   table thead {
@@ -4479,7 +4486,7 @@
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.4px;
-    font-size: 9px;
+    font-size: calc(9px * var(--ui-scale));
     white-space: nowrap;
   }
 
@@ -4489,7 +4496,7 @@
     padding: 6px 8px;
     text-align: right;
     font-family: 'JetBrains Mono', monospace;
-    font-size: 10.5px;
+    font-size: calc(10.5px * var(--ui-scale));
     border-bottom: 1px solid var(--border);
     white-space: nowrap;
   }
@@ -4511,7 +4518,7 @@
   }
 
   .info-note {
-    font-size: 11px;
+    font-size: calc(11px * var(--ui-scale));
     color: var(--text-muted);
     line-height: 1.5;
     margin-top: 12px;
@@ -4569,7 +4576,7 @@
     color: var(--text-muted);
     background: rgba(122, 122, 166, 0.08);
     border: 1px solid rgba(122, 122, 166, 0.25);
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-scale));
     font-weight: 500;
     cursor: pointer;
     user-select: none;
@@ -4600,7 +4607,7 @@
     padding: 8px 10px;
     border-radius: 6px;
     color: var(--text);
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-scale));
     text-decoration: none;
     white-space: nowrap;
   }
@@ -4623,7 +4630,7 @@
     border-radius: 8px;
     color: var(--accent-text);
     cursor: pointer;
-    font-size: 13px;
+    font-size: calc(13px * var(--ui-scale));
     font-weight: 500;
     transition: all 0.2s;
   }
@@ -4675,7 +4682,7 @@
     border-radius: 8px;
     color: var(--orange-text);
     cursor: pointer;
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     font-weight: 500;
     white-space: nowrap;
     transition: all 0.2s;
@@ -4686,7 +4693,7 @@
   }
   @media (max-width: 900px) {
     #reset-version-btn {
-      font-size: 11px;
+      font-size: calc(11px * var(--ui-scale));
       padding: 0 8px;
     }
   }
@@ -4699,7 +4706,7 @@
     padding: 8px 16px;
     background: var(--green);
     color: var(--bg);
-    font-size: 12px;
+    font-size: calc(12px * var(--ui-scale));
     font-weight: 600;
     border-radius: 6px;
     opacity: 0;
@@ -4712,3 +4719,28 @@
   #share-toast.show {
     opacity: 1;
   }
+
+/* The type scale. Every font size above is calc(Npx * var(--ui-scale)): 1 on a
+   desktop, so nothing there changes; 1.25 on a coarse-pointer screen (phones,
+   tablets, a folding phone's inner panel), where the page is held close and
+   its CSS pixels are a third smaller, so 12 px desktop type read tiny (the
+   user's Z Fold 6, 2026-11-05). Text drawn on canvas and in the signal chart
+   follows through js/utils.js uiScale(). */
+:root { --ui-scale: 1; }
+@media (hover: none) and (pointer: coarse) {
+  :root { --ui-scale: 1.25; }
+  /* At the larger size a signal-metrics card's one-line reason ("$2.5K put in;
+     sold for the strategy at ...") outgrew half a phone's width and, since a
+     1fr column is at least its content, pushed the page past the screen, which
+     Chrome on Android answers by shrinking the whole page. The columns cap at
+     their share and the reason wraps; the desktop keeps its one line. */
+  .strategy-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .strategy-stat { min-width: 0; }
+  .strategy-stat-range { white-space: normal; overflow-wrap: anywhere; }
+  /* The same for a legend chip once every chip carries a "more" button: its
+     metrics column may shrink, and the drawdown's date range drops to a line
+     of its own under the value instead of holding the chip at one line. */
+  .legend-chip .legend-metrics { min-width: 0; }
+  .legend-chip .legend-metric-row { flex-wrap: wrap; justify-content: flex-end; }
+  .legend-chip .legend-metric-range { white-space: normal; }
+}

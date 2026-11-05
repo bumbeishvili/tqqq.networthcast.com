@@ -73,6 +73,7 @@
   }
 
   // ---- market data: the same files and derived globals js/init.js sets up ----
+  readUiScale();   // the touch type scale (styles.css --ui-scale), before anything draws
   async function loadMarketData() {
     const [qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, nfci, highLow, fetchedAt, live] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),

@@ -318,7 +318,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // render scale up to MINI_TEXT_REF_W, eased past it so they grow with the
   // square root of the extra width (see the module comment above).
   const textW = opts && opts.textWidth ? opts.textWidth : (cw || W);
-  const k = kPx / Math.sqrt(Math.max(1, textW / MINI_TEXT_REF_W));
+  const k = kPx / Math.sqrt(Math.max(1, textW / MINI_TEXT_REF_W)) / uiScale();   // the touch type scale (js/utils.js)
   // The trades, once: the strip above the plot holds their caps. The compact
   // layout drops the strip when the log has none (the whole log, so zooming
   // never moves the plot), unless the first of several panels needs its name there.

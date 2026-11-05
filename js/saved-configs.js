@@ -3808,7 +3808,7 @@ function buildCustomLogTableHtml(log, columns) {
       const yrs = ms / 31557600000; // 365.25 d
       return `<span style="margin-right:16px;white-space:nowrap"><b style="color:var(--text)">${_escHtml(a)}</b> ${(ms / holdTot * 100).toFixed(1)}% <span style="opacity:.55">(${yrs >= 1 ? yrs.toFixed(1) + 'y' : Math.round(yrs * 12) + 'mo'})</span></span>`;
     }).join('') : '';
-    if (chips) holdSummary = `<div style="font-size:12px;color:var(--text-muted);margin-top:10px"><span style="font-weight:600;color:var(--text);margin-right:8px">Time in each holding:</span>${chips}</div>`;
+    if (chips) holdSummary = `<div style="font-size:calc(12px * var(--ui-scale));color:var(--text-muted);margin-top:10px"><span style="font-weight:600;color:var(--text);margin-right:8px">Time in each holding:</span>${chips}</div>`;
   }
 
   const contribToggle = contribCount > 0 ? `

@@ -1,5 +1,6 @@
 // Initialize: load CSV, derive data, set slider max, restore state, render
 (async function init() {
+  readUiScale();   // the touch type scale (styles.css --ui-scale), before anything draws
   let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, NFCI_WEEKLY, HIGH_LOW, LIVE;
   try {
     [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, NFCI_WEEKLY, HIGH_LOW, LIVE] = await Promise.all([

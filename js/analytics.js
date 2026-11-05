@@ -607,7 +607,7 @@ async function downloadAnalytics() {
     const opt = sel.options[sel.selectedIndex];
     const repl = document.createElement('strong');
     repl.textContent = opt ? opt.text : sel.value;
-    repl.style.cssText = 'color: var(--text); font-weight: 600; font-family: "JetBrains Mono", monospace; font-size: 10px; padding: 0 4px;';
+    repl.style.cssText = 'color: var(--text); font-weight: 600; font-family: "JetBrains Mono", monospace; font-size:calc(10px * var(--ui-scale)); padding: 0 4px;';
     sel.style.display = 'none';
     sel.parentNode.insertBefore(repl, sel);
     selectSwaps.push({ sel, repl });
@@ -1108,7 +1108,7 @@ document.addEventListener('change', (e) => {
         <span>${escA(stratLabel)} &middot; INVESTED ${startYear} &middot; ${period}Y</span>
         <span class="tt-dd">DD ${ddStr}${ddRangeHtml}</span>
       </div>
-      <div class="tt-strat">${fmtFull(Math.round(value))} <span style="color:var(--text-muted);font-size:11px;font-weight:500">(ended ${endYear})</span></div>
+      <div class="tt-strat">${fmtFull(Math.round(value))} <span style="color:var(--text-muted);font-size:calc(11px * var(--ui-scale));font-weight:500">(ended ${endYear})</span></div>
       ${lineChart}
     `;
   }
@@ -1491,7 +1491,7 @@ function showSpiralTooltip(tooltip, e, d, threshold) {
 
   tooltip.innerHTML = `
     <div class="tt-period">${escA(stratLabel)} &middot; STARTED ${d.year}</div>
-    <div class="tt-strat">${fmtFull(Math.round(todayValue))}${yearsLater > 0 ? ` <span style="color:var(--text-muted);font-size:11px;font-weight:500">(${yearsLater}y later, ${endYearLabel})</span>` : ''}</div>
+    <div class="tt-strat">${fmtFull(Math.round(todayValue))}${yearsLater > 0 ? ` <span style="color:var(--text-muted);font-size:calc(11px * var(--ui-scale));font-weight:500">(${yearsLater}y later, ${endYearLabel})</span>` : ''}</div>
     ${lineChart}
     <div class="tt-foot">
       <span>${d.year}${tag} alone: <strong style="color:var(--text)">${sign}${d.pct.toFixed(2)}%</strong></span>

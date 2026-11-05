@@ -1,4 +1,20 @@
 
+// The type scale for touch screens: styles.css sets --ui-scale to 1 on a
+// desktop and 1.25 on a coarse-pointer screen (phones, tablets, a folding
+// phone's inner panel), and every CSS font size is calc(Npx * var(--ui-scale)).
+// Text drawn by hand follows it through these: readUiScale() once the
+// stylesheet is in (both pages call it first thing), uiScale() wherever a
+// pixel size is written, canvasFont() for a canvas context's font string.
+let _uiScale = 1;
+function readUiScale() {
+  const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ui-scale'));
+  _uiScale = v > 0 ? v : 1;
+  if (typeof Chart !== 'undefined' && Chart.defaults && Chart.defaults.font) Chart.defaults.font.size = 12 * _uiScale;
+  return _uiScale;
+}
+function uiScale() { return _uiScale; }
+function canvasFont(weight, px, family) { return weight + ' ' + (px * _uiScale).toFixed(2) + 'px ' + family; }
+
 // A JS Date → "HH:MM", local time. Same zero-padding as the header's "Data
 // last fetched" stamp (js/init.js) — pulled out so any other "as of" label
 // (e.g. a custom strategy's signal-metrics panel) can show the identical

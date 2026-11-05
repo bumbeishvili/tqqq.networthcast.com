@@ -682,7 +682,7 @@ function buildNineSigRulesHtml() {
         &bull; <b>Spike reset.</b> ${spikeRule}
       </div>
 
-      <div style="margin-top:14px;font-size:11px;color:var(--text-muted);line-height:1.5">
+      <div style="margin-top:14px;font-size:calc(11px * var(--ui-scale));color:var(--text-muted);line-height:1.5">
         Monthly contributions always go straight to cash (never directly into ${ul}) — the quarterly rebalance is what moves money into stock. The target rising by half of new cash keeps it honest: half of every dollar you add is "expected" to flow into ${ul} eventually.
       </div>
     </div>
@@ -966,7 +966,7 @@ function buildSmaLogTableHtml(smaLog) {
     const yrs = ms / 31557600000; // 365.25 d
     return `<span style="margin-right:16px;white-space:nowrap"><b style="color:var(--text)">${a}</b> ${(ms / holdTot * 100).toFixed(1)}% <span style="opacity:.55">(${yrs >= 1 ? yrs.toFixed(1) + 'y' : Math.round(yrs * 12) + 'mo'})</span></span>`;
   }).join('') : '';
-  const holdSummary = holdChips ? `<div style="font-size:12px;color:var(--text-muted);margin-top:10px"><span style="font-weight:600;color:var(--text);margin-right:8px">Time in each holding:</span>${holdChips}</div>` : '';
+  const holdSummary = holdChips ? `<div style="font-size:calc(12px * var(--ui-scale));color:var(--text-muted);margin-top:10px"><span style="font-weight:600;color:var(--text);margin-right:8px">Time in each holding:</span>${holdChips}</div>` : '';
   const contribToggle = contribCount > 0 ? `
     <label class="log-contrib-toggle">
       <input type="checkbox" onchange="toggleSmaLogContrib(this.checked)" ${_smaLogHideContrib ? 'checked' : ''}>
@@ -2836,8 +2836,8 @@ function render() {
   // Range-select midpoint label (rangeSelectPlugin below) — the % draws
   // bigger than the "(from → to)" part, since it's the number that actually
   // answers "how much did this move."
-  const RANGE_PCT_FONT = '700 10px "JetBrains Mono", monospace';
-  const RANGE_REST_FONT = '600 8px "JetBrains Mono", monospace';
+  const RANGE_PCT_FONT = canvasFont(700, 10, '"JetBrains Mono", monospace');
+  const RANGE_REST_FONT = canvasFont(600, 8, '"JetBrains Mono", monospace');
   const _sub = nineSigSubLabels();
   const lineNames  = [LBL_9SIG, _sub.holding, LBL_BH, 'B&H QQQ', 'B&H SPY', _sub.target, _sub.cash, LBL_INV, LBL_SMA, 'B&H QLD', 'B&H SSO', 'B&H SPXL'];
   // Match the borderDash on the corresponding chart dataset; null = solid.
@@ -3144,17 +3144,17 @@ function render() {
         if (ds._isShift || !c.isDatasetVisible(i)) return;
         const val = ds.data[lastIdx];
         if (typeof val !== 'number' || !isFinite(val)) return;
-        cx.font = compact ? '600 8px "Open Sans", sans-serif' : '600 9px "Open Sans", sans-serif';
+        cx.font = compact ? canvasFont(600, 8, '"Open Sans", sans-serif') : canvasFont(600, 9, '"Open Sans", sans-serif');
         maxW = Math.max(maxW, cx.measureText((ds.label || lineNames[i] || '').toUpperCase()).width);
         if (!compact) {
-          cx.font = '500 11px "JetBrains Mono", monospace';
+          cx.font = canvasFont(500, 11, '"JetBrains Mono", monospace');
           let rowW = cx.measureText(fmtFull(Math.round(val))).width;
           // Delta badge draws inline right after the value on the same row —
           // its width adds to that row's total instead of getting its own line.
           if (c._isLatestDaySelected) {
             const delta = dayChangeFor(i, ds, val);
             if (delta) {
-              cx.font = '600 9px "JetBrains Mono", monospace';
+              cx.font = canvasFont(600, 9, '"JetBrains Mono", monospace');
               rowW += 5 + cx.measureText(deltaLabelText(delta)).width;
             }
           }
@@ -3275,7 +3275,7 @@ function render() {
         if (compact) {
           // Name only, vertically centered on the line — there's no value
           // line underneath to share the row with.
-          cx.font = '600 8px "Open Sans", sans-serif';
+          cx.font = canvasFont(600, 8, '"Open Sans", sans-serif');
           cx.fillStyle = it.color;
           cx.globalAlpha = 0.88;
           cx.textBaseline = 'middle';
@@ -3285,7 +3285,7 @@ function render() {
         }
 
         // Label name
-        cx.font = '600 9px "Open Sans", sans-serif';
+        cx.font = canvasFont(600, 9, '"Open Sans", sans-serif');
         cx.fillStyle = it.color;
         cx.globalAlpha = 0.88;   // light theme: 0.7 washed labels out on white
         cx.textBaseline = 'bottom';
@@ -3293,7 +3293,7 @@ function render() {
         cx.globalAlpha = 1;
 
         // Value
-        cx.font = '500 11px "JetBrains Mono", monospace';
+        cx.font = canvasFont(500, 11, '"JetBrains Mono", monospace');
         cx.fillStyle = it.color;
         cx.textBaseline = 'top';
         const valStr = fmtFull(Math.round(it.val));
@@ -3306,7 +3306,7 @@ function render() {
           const delta = dayChangeFor(it.i, c.data.datasets[it.i], it.val);
           if (delta) {
             const valW = cx.measureText(valStr).width;
-            cx.font = '600 9px "JetBrains Mono", monospace';
+            cx.font = canvasFont(600, 9, '"JetBrains Mono", monospace');
             cx.fillStyle = delta.pct >= 0 ? DELTA_POS_COLOR : DELTA_NEG_COLOR;
             cx.globalAlpha = 0.95;
             cx.fillText(deltaLabelText(delta), x + valW + 5, it.y + 2);
@@ -3526,7 +3526,7 @@ function render() {
       // detected and, if so, spread symmetrically around the range's
       // midpoint with a fixed gap instead of letting them overlap.
       cx.save();
-      cx.font = '600 9px "JetBrains Mono", monospace';
+      cx.font = canvasFont(600, 9, '"JetBrains Mono", monospace');
       const rH = 15, rY = area.top + 8, rPadX = 5, rGap = 4;
       const startLabel = fmtDayMonthYear(c.data.labels[lo]);
       const endLabel = fmtDayMonthYear(c.data.labels[hi]);
@@ -3558,7 +3558,7 @@ function render() {
       // centered under the two date pills, its own row so it never has to
       // compete with them for horizontal room on a narrow selection.
       const durLabel = formatRangeDuration(c.data.labels[lo], c.data.labels[hi]);
-      cx.font = '600 9px "JetBrains Mono", monospace';
+      cx.font = canvasFont(600, 9, '"JetBrains Mono", monospace');
       const durMidX = (x1 + x2) / 2;
       const durTw = cx.measureText(durLabel).width;
       const durY = rY + rH + 8;
@@ -3899,7 +3899,7 @@ function render() {
         x: {
           ticks: {
             color: '#383874',
-            font: { size: 10 },
+            font: { size: 10 * uiScale() },
             // Fewer ticks on narrow viewports: 10 labels across a ~350px-wide
             // mobile plot forces a steep rotation, and the resulting label
             // height ate into the LOG toggle's fixed bottom-left position
@@ -3923,7 +3923,7 @@ function render() {
           min: logScale ? undefined : 0, // linear anchored at 0; log auto-scales
           ticks: {
             color: '#383874',
-            font: { family: 'JetBrains Mono', size: 10 },
+            font: { family: 'JetBrains Mono', size: 10 * uiScale() },
             // Four gridlines is enough to read a level off; eleven turned the
             // axis into a ruler competing with the lines it's measuring.
             maxTicksLimit: Y_TICKS,
