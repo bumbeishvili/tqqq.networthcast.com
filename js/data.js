@@ -50,7 +50,7 @@ function minutesBeforeClose(lastDate, fetchedAt) {
   return nyDate === lastDate && nyMin < MARKET_CLOSE_NY_MIN ? MARKET_CLOSE_NY_MIN - nyMin : null;
 }
 
-// Daily highs and lows (data/<fund>-hl.tsv, written by update_data.py) of the
+// Daily highs and lows (data/<fund>-hl.tsv, written by scripts/update_data.py) of the
 // funds the Turnaround Monday rule can read. A row also carries its bar's own
 // close, and a high or low goes onto the price file's close of that day as a
 // ratio to it, so a difference in dividend adjustment between the two files
@@ -89,7 +89,7 @@ async function loadSQQQDaily() { return loadSeries('synthetic-sqqq.tsv'); }
 async function loadGLDDaily()  { return loadSeries('synthetic-gld.tsv'); }
 
 // Merge daily TSVs by date. The synthetic TSVs already contain synthesized
-// pre-inception rows (baked by update_data.py), so this is a straight join —
+// pre-inception rows (baked by scripts/update_data.py), so this is a straight join —
 // no synthesis here. monthlyData column layout:
 //   [date, tqqq, qqq, spy, qld, sso, spxl, sqqq, gld]   (cols 0..8, the
 //   order of js/simulate.js COL_TO_DAILY_KEY).

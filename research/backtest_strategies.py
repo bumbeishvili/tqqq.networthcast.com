@@ -4,7 +4,7 @@ from this repo's own daily TSVs. Lump-sum $10k, no contributions, no-lookahead
 (position from yesterday's signal applied to today's return), cash = 0%.
 """
 import os, math
-BASE = "/Users/datobumbeishvili/Desktop/git/tqqq.networthcast.com/data"
+BASE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")   # the repo's data folder
 START = "2010-02-11"  # TQQQ inception
 
 def load(fn):

@@ -2,7 +2,7 @@
 """
 Fetches 5-minute TQQQ bars from Alpaca Market Data and writes them to
 data/intraday/tqqq-5m.tsv. This is the intraday page's only source; the
-daily price files the main chart uses come from Yahoo via update_data.py,
+daily price files the main chart uses come from Yahoo via scripts/update_data.py,
 and the two are kept separate on purpose.
 
 Alpaca is free with an account and serves bars back to 2016 from the
@@ -32,7 +32,7 @@ BAR_MINUTES = 5
 MARKET_TZ = ZoneInfo('America/New_York')
 SESSION_OPEN = (9, 30)
 SESSION_LAST_BAR = (15, 55)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # the repo root; this script lives in scripts/
 OUT_PATH = os.path.join(BASE_DIR, 'data', 'intraday', 'tqqq-5m.tsv')
 COLUMNS = ['Open', 'High', 'Low', 'Close', 'Volume']
 DATE_FORMAT = '%-m/%-d/%Y %H:%M:%S'

@@ -2184,7 +2184,7 @@ window.addEventListener('resize', fitChartHeight);
 // (those three differ by caller — see below). Both the main chart's live SMA
 // line (render(), this file) and the analytics heatmap's SMA runs
 // (js/analytics.js's _smaParamsForAnalytics) read this same set with the same
-// defaults — shared here so a newly-added select-sma-* control (see CLAUDE.md's
+// defaults — shared here so a newly-added select-sma-* control (see .claude/CLAUDE.md's
 // "Adding a new configurable control" checklist) only needs updating in one
 // place, not two independently-typed copies that can quietly drift apart —
 // the same failure shape this session already found and fixed three times

@@ -2,7 +2,7 @@
 """
 Fetches today's 1-minute TQQQ bars from Yahoo Finance and writes them to
 data/intraday/tqqq-today-1m.tsv, the intraday page's source for the live
-session. The long-term 5-minute history stays on Alpaca (update_intraday.py);
+session. The long-term 5-minute history stays on Alpaca (scripts/update_intraday.py);
 Alpaca's free plan withholds the most recent 15 minutes of SIP data, while
 Yahoo serves the current minute, so the two are combined: history from
 Alpaca, today from here.
@@ -29,7 +29,7 @@ INTERVAL = '1m'
 MARKET_TZ = 'America/New_York'
 SESSION_OPEN = (9, 30)
 SESSION_LAST_BAR = (15, 59)
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # the repo root; this script lives in scripts/
 OUT_PATH = os.path.join(BASE_DIR, 'data', 'intraday', 'tqqq-today-1m.tsv')
 COLUMNS = ['Open', 'High', 'Low', 'Close', 'Volume']
 DATE_FORMAT = '%-m/%-d/%Y %H:%M:%S'

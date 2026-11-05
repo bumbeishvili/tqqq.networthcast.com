@@ -4,7 +4,7 @@
 // them onto the chart as a real custom strategy (see addStrategyFromLibrary).
 //
 // `here` = CAGR / maxDD computed from THIS app's own daily TSVs over the TQQQ
-// era (2010-02-11 → 2026-07-10), apples-to-apples — see backtest_strategies.py.
+// era (2010-02-11 → 2026-07-10), apples-to-apples — see research/backtest_strategies.py.
 // `reported` = the source's self-reported figure over ITS OWN period (shown in
 // parentheses); not comparable across rows.
 // `formerNames` = what an entry was called before it was renamed. A saved copy

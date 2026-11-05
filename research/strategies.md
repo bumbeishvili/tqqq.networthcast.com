@@ -88,7 +88,7 @@ source-reported figures instead.
 *(Cash at 0% is conservative to the timing rows; crediting a ~1.5–2%/yr T-bill
 yield on parked cash would lift the cash-parked rows ~+0.5–1.0 pp CAGR each and
 leave the always-invested rows and benchmarks unchanged. Reproduce/adjust with
-`python3 backtest_strategies.py` in the repo root.)*
+`python3 research/backtest_strategies.py`.)*
 
 ---
 

@@ -15,7 +15,7 @@ Daily closing prices for eight ETFs, going back decades before any of them exist
 
 Everything before a fund's launch date is reconstructed. The script walks the longer-lived index backward from launch day, applying the same daily arithmetic the fund itself runs on: leverage, expense ratio, financing cost on the borrowed leg, swap-counterparty spread. What comes out is a continuous "what it would have looked like" series. None of it happened, because the funds didn't exist. It is what the math says their daily prices would have done given the underlying index and the short-term rates of each era.
 
-> **The price files start January 2, 1953.** The rate files go back further; `short-rates.tsv` starts in 1934. 1953 is where daily data gets clean, since the NYSE ran Saturday sessions before then. That start date lives in the committed TSVs themselves. `update_data.py` has no trimming step, and its daily refresh copies whatever pre-IPO prefix is already on disk.
+> **The price files start January 2, 1953.** The rate files go back further; `short-rates.tsv` starts in 1934. 1953 is where daily data gets clean, since the NYSE ran Saturday sessions before then. That start date lives in the committed TSVs themselves. `scripts/update_data.py` has no trimming step, and its daily refresh copies whatever pre-IPO prefix is already on disk.
 
 ## "How do you approximate TQQQ before it existed?"
 
@@ -51,7 +51,7 @@ The most-asked question about this dataset. The copy-paste answer:
 | **short-rates.tsv** | Daily, January 2, 1934 onward. | Derived: `DFF` where it exists, `TB3MS` forward-filled where it doesn't. The only rate file the synthesis reads. |
 | **nfci.tsv** | Weekly, January 8, 1971 onward. | None. FRED series `NFCI` — the Chicago Fed National Financial Conditions Index, a 105-input composite where above 0 means tighter-than-average conditions.  It feeds the NFCI-credit-veto strategy in the app, which aligns it to trading days with a 7-day publication lag. Refreshed by the daily cron (failure-tolerant) and by `--refresh-rates`. |
 
-Yahoo's `^NDX` history starts in 1985, which is also when the Nasdaq-100 index itself began. `update_data.py` reaches further back by merging a local `^ndx_d.csv` from Stooq, and **that file is not committed to this repo**. Without it, `read_ndx_csv()` returns nothing and a from-scratch `--rebuild` stops where Yahoo stops. The 1953-onward history in the committed TSVs was generated while the CSV was present.
+Yahoo's `^NDX` history starts in 1985, which is also when the Nasdaq-100 index itself began. `scripts/update_data.py` reaches further back by merging a local `^ndx_d.csv` from Stooq, and **that file is not committed to this repo**. Without it, `read_ndx_csv()` returns nothing and a from-scratch `--rebuild` stops where Yahoo stops. The 1953-onward history in the committed TSVs was generated while the CSV was present.
 
 The pre-1985 prefix splits into two very different stretches. **1971–1985 is real data in disguise**: checked against the actual Nasdaq Composite (FRED series `NASDAQCOM`, daily from the index's first day in February 1971), the Stooq reconstruction tracks it to within 0.01 pp/yr CAGR over the full 14 years and never diverges more than 0.3% over any rolling year — it is effectively the measured Composite wearing an NDX label. **Before 1971 no Nasdaq index of any kind existed** (the market traded OTC), so the 1953–1971 stretch is Stooq's own undocumented construction with nothing real to check it against. Read that stretch, and only that stretch, as a rough hypothetical.
 
@@ -182,20 +182,20 @@ Date	Rate               ← rate files (Rate column, value in % per year)
 
 ## Auto-refresh
 
-`.github/workflows/update-data.yml` fires hourly on weekdays (`30 13-22 * * 1-5`) and gates each fire to 09:00–17:30 ET, so nine runs land per trading day: one at the open, seven through the session, one after the close. Each run executes `update_data.py` in its default incremental mode and commits `data/*.tsv` only when the bytes changed, which makes holidays a no-op.
+`.github/workflows/update-data.yml` fires hourly on weekdays (`30 13-22 * * 1-5`) and gates each fire to 09:00–17:30 ET, so nine runs land per trading day: one at the open, seven through the session, one after the close. Each run executes `scripts/update_data.py` in its default incremental mode and commits `data/*.tsv` only when the bytes changed, which makes holidays a no-op.
 
 Incremental mode touches the **eight price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
 
 ```bash
-python3 update_data.py --refresh-rates      # re-pull DFF + TB3MS from FRED
-python3 update_data.py --high-low-history   # rebuild the high/low files' pre-launch rows from the committed price files
-python3 update_data.py --gold-history       # rebuild synthetic-gld.tsv (real GLD plus its gold-price prefix)
-python3 update_data.py --rebuild            # full re-synthesis; needs ^ndx_d.csv for pre-1985
+python3 scripts/update_data.py --refresh-rates      # re-pull DFF + TB3MS from FRED
+python3 scripts/update_data.py --high-low-history   # rebuild the high/low files' pre-launch rows from the committed price files
+python3 scripts/update_data.py --gold-history       # rebuild synthetic-gld.tsv (real GLD plus its gold-price prefix)
+python3 scripts/update_data.py --rebuild            # full re-synthesis; needs ^ndx_d.csv for pre-1985
 ```
 
 So the rate files lag the price files. Check the last row of `short-rates.tsv` before you rely on a recent rate; as of this writing it trails the price files by about three months.
 
-Found a bug in the synthesis? Open an issue, or send a PR against `update_data.py` at the repo root.
+Found a bug in the synthesis? Open an issue, or send a PR against `scripts/update_data.py`.
 
 ## A note on synthetic backtesting
 

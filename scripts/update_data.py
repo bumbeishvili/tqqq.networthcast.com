@@ -103,10 +103,10 @@ Known biases (after the financing-cost correction and swap spreads):
     and daily rebalancing slippage on QLD, SSO, and SPXL.
 
 Usage:
-    python3 update_data.py                    # incremental price refresh
-    python3 update_data.py --refresh-rates    # re-pull FRED rate TSVs
-    python3 update_data.py --rebuild          # full synthesis from scratch
-    python3 update_data.py --gold-history     # rewrite synthetic-gld.tsv only
+    python3 scripts/update_data.py                    # incremental price refresh
+    python3 scripts/update_data.py --refresh-rates    # re-pull FRED rate TSVs
+    python3 scripts/update_data.py --rebuild          # full synthesis from scratch
+    python3 scripts/update_data.py --gold-history     # rewrite synthetic-gld.tsv only
 """
 import bisect
 import csv
@@ -124,7 +124,7 @@ except ImportError:
     print("yfinance not installed. Run: pip install yfinance")
     sys.exit(1)
 
-basedir = os.path.dirname(os.path.abspath(__file__))
+basedir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))   # the repo root; this script lives in scripts/
 
 QQQ_EXPENSE_DAILY  = 0.0020   / 252  # 0.20%   annual
 QLD_EXPENSE_DAILY  = 0.0095   / 252  # 0.95%   annual (ProShares Ultra QQQ, 2×)

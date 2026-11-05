@@ -189,7 +189,7 @@ const EMBED_LOG = EMBED ? EMBED_QUERY.get('log') === '1' : null;
 // (?data=<site root>); everywhere else the data sits one folder up.
 const DATA_ROOT = EMBED && EMBED_QUERY.get('data') ? EMBED_QUERY.get('data') : '../';
 const DATA_URL = DATA_ROOT + 'data/intraday/tqqq-5m.tsv';
-// Today's session at 1-minute resolution from Yahoo (update_intraday_today.py).
+// Today's session at 1-minute resolution from Yahoo (scripts/update_intraday_today.py).
 // The 5-minute history comes from Alpaca, whose free plan holds back the
 // latest 15 minutes; Yahoo serves the current minute, so today is drawn from
 // this file and the history from the other. Absent until the first run of

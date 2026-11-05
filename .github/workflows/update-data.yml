@@ -56,7 +56,7 @@ jobs:
       # a transient 429 into a slightly later refresh instead of a failed run.
       - name: Refresh QQQ / TQQQ / SPY
         if: steps.gate.outputs.run == 'true'
-        run: python3 update_data.py || (sleep 120 && python3 update_data.py)
+        run: python3 scripts/update_data.py || (sleep 120 && python3 scripts/update_data.py)
 
       # Two Alpaca requests per run (calendar + bars since the last day on
       # disk), well inside the free plan's 200/minute. Kept independent of the
@@ -68,7 +68,7 @@ jobs:
         env:
           ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
           ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
-        run: python3 update_intraday.py --incremental
+        run: python3 scripts/update_intraday.py --incremental
 
       # One yfinance request for today's 1-minute bars. Alpaca's free plan
       # holds back the latest 15 minutes, Yahoo serves the current minute, so
@@ -76,7 +76,7 @@ jobs:
       - name: Refresh today's TQQQ 1-minute bars (Yahoo)
         if: steps.gate.outputs.run == 'true'
         continue-on-error: true
-        run: python3 update_intraday_today.py
+        run: python3 scripts/update_intraday_today.py
 
       - name: Commit and push if data changed
         if: steps.gate.outputs.run == 'true'
