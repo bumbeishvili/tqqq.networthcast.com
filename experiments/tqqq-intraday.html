@@ -682,14 +682,27 @@ class IntradayOverlayChart {
       ._add('circle.today-ring', [0, 1]).attr('r', 5).classed('second', k => k === 1);
     g._add('circle.today-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
     const nearRightEdge = cx > chartWidth - 180;
-    // Today's change vs the previous close and the price itself, beside the dot
-    // and below it so sell labels above the line stay clear.
+    // Today's change vs the previous close and the price itself, beside the dot.
+    // Below it by default; when the lines run through that band over the label's
+    // width (near the right edge the label sits over the line's last stretch),
+    // above the dot instead, and past the lines when both bands are taken.
     const tone = last.pct > 0 ? 'up' : last.pct < 0 ? 'down' : '';
     const price = last.close > 0 ? ` ($${last.close.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : '';
-    g._add('text.today-label')
-      .attr('x', cx + (nearRightEdge ? -10 : 10)).attr('y', cy + 18)
-      .attr('text-anchor', nearRightEdge ? 'end' : 'start')
+    const label = g._add('text.today-label').attr('text-anchor', nearRightEdge ? 'end' : 'start')
       .html(`today <tspan class="${tone}">${fmtPct(last.pct)}</tspan>${price}`);
+    const labelW = label.node().getComputedTextLength(), lx = cx + (nearRightEdge ? -10 : 10);
+    const x0 = nearRightEdge ? lx - labelW : lx, x1 = x0 + labelW;
+    const { aggregates } = this.getState();
+    const ys = [];
+    for (const p of today.points) { const px = x(p.minute); if (px >= x0 - 8 && px <= x1 + 8) ys.push(y(p.pct)); }
+    for (const a of aggregates || []) { const px = x(a.minute); if (px >= x0 - 8 && px <= x1 + 8) { ys.push(y(a.mean)); ys.push(y(a.median)); } }
+    const clear = (top, bottom) => !ys.some(v => v >= top - 7 && v <= bottom + 7);   // 7px: the glow's half width and a margin
+    let ly = cy + 18;                                   // the band cy+8 .. cy+24
+    if (!clear(cy + 8, cy + 24)) {
+      if (clear(cy - 24, cy - 8)) ly = cy - 10;
+      else { const lo = Math.max(...ys), hi = Math.min(...ys); ly = lo - cy <= cy - hi ? lo + 22 : hi - 14; }
+    }
+    label.attr('x', lx).attr('y', ly);
   }
 
   drawAggregates() {
