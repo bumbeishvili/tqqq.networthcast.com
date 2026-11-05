@@ -5,7 +5,8 @@
 // today's intraday bars, read from Yahoo's chart endpoint, which sends no CORS
 // header and so cannot be called from the page itself.
 //
-//   GET /quotes                      every fund in SYMBOLS
+//   GET /quotes                      every fund in SYMBOLS; outside the regular session a quote
+//                                    also carries `extended`, the latest pre-market or after-hours print
 //   GET /quotes?symbols=TQQQ,SOXL    a subset
 //   GET /bars/TQQQ?range=1d&interval=1m             intraday bars as JSON (ranges and intervals in BAR_RANGES)
 //   GET /bars/TQQQ?range=1d&interval=1m&format=tsv  the same bars in the layout of data/intraday/tqqq-today-1m.tsv
@@ -98,8 +99,10 @@ function quotesRoute(url) {
       await Promise.all(list.map(async symbol => {
         try {
           const q = quoteOf(await chart(symbol, '1d', '1d'));
-          quotes[symbol] = trades[symbol] ? withTrade(q, trades[symbol], 'alpaca')
+          const quote = trades[symbol] ? withTrade(q, trades[symbol], 'alpaca')
             : inSession && q.time && Date.now() - Date.parse(q.time) > STALE_MS ? await freshen(symbol, q) : q;
+          const extended = inSession ? null : await extendedOf(symbol, q);
+          quotes[symbol] = extended ? { ...quote, extended } : quote;
         }
         catch (e) { errors[symbol] = String(e.message || e); }
       }));
@@ -161,8 +164,9 @@ function newYork(epochSeconds) {
 }
 
 // One chart call to Yahoo. The chart endpoint needs no cookie or crumb (the quote endpoint does).
-async function chart(symbol, range, interval) {
-  const res = await fetch(UPSTREAM + encodeURIComponent(symbol) + '?range=' + range + '&interval=' + interval + '&includePrePost=false&events=splits',
+// prePost: the pre-market and after-hours bars too (the regular session only otherwise).
+async function chart(symbol, range, interval, prePost = false) {
+  const res = await fetch(UPSTREAM + encodeURIComponent(symbol) + '?range=' + range + '&interval=' + interval + '&includePrePost=' + prePost + '&events=splits',
     { headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json' } });
   if (!res.ok) throw new Error('upstream HTTP ' + res.status);
   const data = await res.json();
@@ -193,6 +197,29 @@ function quoteOf(result) {
   };
 }
 
+// Outside the regular session the latest print is an extended-hours one. Yahoo's
+// chart with the pre-market and after-hours bars (04:00-09:30 and 16:00-20:00
+// New York) stamps its last bar with the latest trade, whatever the interval;
+// the session it falls in comes from the meta's currentTradingPeriod. The quote
+// keeps the regular session's price, time and prior close (the files' basis);
+// `extended` adds the session, the print, its time and its change against the
+// regular price. Null when there is no such print (a weekend morning before the
+// Friday evening's last print has aged out, a fund nobody traded) or when the
+// call fails: the regular quote stands on its own.
+const EXTENDED_INTERVAL = '5m';
+async function extendedOf(symbol, q) {
+  if (!(q.price > 0)) return null;
+  let result;
+  try { result = await chart(symbol, '1d', EXTENDED_INTERVAL, true); } catch (e) { return null; }
+  const periods = result.meta.currentTradingPeriod || {}, ts = result.timestamp || [], close = (result.indicators.quote[0] || {}).close || [];
+  let last = ts.length - 1;
+  while (last >= 0 && !(close[last] > 0)) last--;
+  if (last < 0) return null;
+  const t = ts[last], within = p => p && t >= p.start && t < p.end;
+  const session = within(periods.post) ? 'post' : within(periods.pre) ? 'pre' : null;
+  if (!session) return null;
+  return { session, price: close[last], time: new Date(t * 1000).toISOString(), changePct: (close[last] / q.price - 1) * 100 };
+}
 // New York session hours by the clock: a weekday, 09:30 to 16:00 (holidays included; Nasdaq's market status settles those).
 function sessionNow(now = new Date()) {
   const p = {}; for (const { type, value } of NY_PARTS.formatToParts(now)) p[type] = value;

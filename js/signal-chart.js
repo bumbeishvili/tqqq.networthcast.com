@@ -47,6 +47,7 @@ const MINI_CHART = { W: 320, H: 148, padL: 6 };
 // The day-change badge's colours on a price line's label: styles.css's
 // --green-text and --red-text, as js/chart.js's end labels draw them.
 const MINI_DAY_CHANGE = { up: '#067d21', down: '#c81e1f' };
+const MINI_MUTED_TEXT = 'rgba(122,122,166,0.95)';   // secondary text on the chart (the latest-date label, an extended-hours row)
 // Lines measured on different things (two funds' prices, a lead in percent, a
 // stress index) can name a group: each group draws as its own panel, with its
 // own scale, unit and gutter labels, stacked on the one time axis in the order
@@ -399,15 +400,30 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const delta = computeDayChange(s.endPt.v, prev.v);
     if (delta) s.badge = { text: fmtDayChangePct(delta), color: delta.pct >= 0 ? MINI_DAY_CHANGE.up : MINI_DAY_CHANGE.down };
   }
+  // Outside the regular session the proxy carries each fund's latest pre-market
+  // or after-hours print (js/data.js's applyLiveQuotes, window._liveExtended):
+  // a price line standing at a fund's close names the print on a second row,
+  // "after hours $50.10 -0.7%", its change against that close (the user,
+  // 2026-11-06). The line itself keeps the close: the rules read closes.
+  const prints = (window._liveExtended && window._liveExtended.prints) || null;
+  for (const s of series) {
+    if (!prints || s.unit !== '$' || s.endPt.d !== latestDate) continue;
+    const fund = LIVE_FUNDS.find(f => prints[f] && daily[daily.length - 1][f] === s.endPt.v);
+    if (!fund) continue;
+    const x = prints[fund];
+    s.extended = { text: EXTENDED_SESSION_NAMES[x.session] + ' ' + _pxTxt(x.price), tail: { text: fmtDayChangePct({ pct: x.changePct }), color: x.changePct >= 0 ? MINI_DAY_CHANGE.up : MINI_DAY_CHANGE.down } };
+  }
   const gutterSeries = series.filter(s => s.hidden || (s.shown && !s.partial));
   // A label's name rows: the compact layout stacks a row per word under any
   // badge; the full layout has one row with the badge after the name (tail).
-  const nameRowsOf = (name, badge, color) => compact
+  // An extended-hours print is a row of its own under the name in both.
+  const nameRowsOf = (name, badge, color, extended) => (compact
     ? (badge ? [{ text: badge.text, color: badge.color }] : []).concat(_miniNameRows(name).map(text => ({ text, color })))
-    : [{ text: name, color, tail: badge || null }];
+    : [{ text: name, color, tail: badge || null }])
+    .concat(extended ? [{ text: extended.text, color: MINI_MUTED_TEXT, tail: extended.tail }] : []);
   const rowChars = row => row.text.length + (row.tail ? 1 + row.tail.text.length : 0);
   const valColW = Math.max(0, ...gutterSeries.map(s => _valTxt(s.unit, s.endPt.v).length)) * (9 / k) * 0.6;
-  const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.tagLabel, s.badge, s.color)).map(rowChars)) * (7 / k) * 0.62;
+  const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.tagLabel, s.badge, s.color, s.extended)).map(rowChars)) * (7 / k) * 0.62;
   const eyeW = compact ? 0 : 11 / k;   // the eye before each label's value (the compact layout has none)
   const padR = Math.min(4 / k + eyeW + valColW + 4 / k + nameColW + 5 / k, 0.45 * W);
   // The panels split the plot's height by their shares, a gap apart, each
@@ -603,29 +619,32 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // own heights and stay inside the plot's height. Each panel lays out its
   // own labels and keeps them beside it.
   const rowLh = 8.5 / k;
-  const reach = e => (e.rows.length - 1) / 2 * rowLh + 5 / k;   // a compact label's half height
-  const room = (a, b) => (compact ? reach(a) + reach(b) + 1 / k : 10 / k);
+  const reach = e => (e.rows.length - 1) / 2 * rowLh + 5 / k;   // a stacked label's half height
+  // A label's rows are centred on its value when stacked: every compact label,
+  // and in the full layout one with an extended-hours row under its name.
+  const stacked = e => compact || e.rows.length > 1;
+  const room = (a, b) => (stacked(a) || stacked(b) ? reach(a) + reach(b) + 1 / k : 10 / k);
   let endLabels = '';
   panels.forEach((P, p) => {
     // A hidden line's label sits where its value would be, kept inside the
     // panel (its value set no scale); in a panel with nothing drawn, at the top.
     const ends = panelLabels[p].map(s => {
       const y = P.empty ? NaN : yAt(p, s.endPt.v);
-      return { y: y === y ? Math.max(P.top, Math.min(P.bottom, y)) : P.top, v: s.endPt.v, unit: s.unit, rows: nameRowsOf(s.tagLabel, s.badge, s.color), color: s.color, key: s.key, hidden: s.hidden };
+      return { y: y === y ? Math.max(P.top, Math.min(P.bottom, y)) : P.top, v: s.endPt.v, unit: s.unit, rows: nameRowsOf(s.tagLabel, s.badge, s.color, s.extended), color: s.color, key: s.key, hidden: s.hidden };
     });
     ends.sort((a, b) => a.y - b.y);
     const minY = p === 0 ? 0 : ruleY(p) + 2 / k, maxY = p === nPanels - 1 ? plotBottom : ruleY(p + 1) - 2 / k;
-    if (compact && ends.length) ends[0].y = Math.max(ends[0].y, minY + reach(ends[0]));
+    if (ends.length && stacked(ends[0])) ends[0].y = Math.max(ends[0].y, minY + reach(ends[0]));
     for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < room(ends[i - 1], ends[i])) ends[i].y = ends[i - 1].y + room(ends[i - 1], ends[i]);
     if (compact || titled) {
       for (let i = ends.length - 1; i >= 0; i--) {
-        const max = i === ends.length - 1 ? maxY - (compact ? reach(ends[i]) : 3 / k) : ends[i + 1].y - room(ends[i], ends[i + 1]);
+        const max = i === ends.length - 1 ? maxY - (stacked(ends[i]) ? reach(ends[i]) : 3 / k) : ends[i + 1].y - room(ends[i], ends[i + 1]);
         if (ends[i].y > max) ends[i].y = max;
       }
     }
     for (const e of ends) {
       const base = e.y + 3 / k;
-      const firstRow = compact ? e.y + 2.5 / k - (e.rows.length - 1) / 2 * rowLh : base;
+      const firstRow = stacked(e) ? e.y + 2.5 / k - (e.rows.length - 1) / 2 * rowLh : base;
       const texts = `<text x="${(W - padR + 4 / k + eyeW + valColW).toFixed(1)}" y="${base.toFixed(1)}" text-anchor="end" font-family="JetBrains Mono" font-size="${(9 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2.5 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_valTxt(e.unit, e.v)}</text>`
         + e.rows.map((row, j) => `<text x="${(W - padR + 8 / k + eyeW + valColW).toFixed(1)}" y="${(firstRow + j * rowLh).toFixed(1)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${row.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke"${e.hidden ? ' text-decoration="line-through"' : ''}>${_escHtml(row.text)}${row.tail ? `<tspan fill="${row.tail.color}"> ${_escHtml(row.tail.text)}</tspan>` : ''}</text>`).join('');
       if (compact) { endLabels += texts; continue; }
@@ -633,9 +652,9 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
       // the chart's labels): the eye before the value hides the line or shows
       // it again. It carries the chips' class and data, so saved-configs.js's
       // .cfg-sub-chip click handler flips cfg.subShown[key] and re-renders.
-      const eyeX = W - padR + 2 / k, eyeS = 8 / k / 24, name = e.rows.map(r => r.text).join(' ');
+      const eyeX = W - padR + 2 / k, eyeS = 8 / k / 24, name = e.rows[0].text;
       endLabels += `<g class="cfg-sub-chip mini-line-toggle${e.hidden ? ' legend-hidden' : ''}" data-config-id="${_escHtml(String(cfg.id))}" data-config-sub="${_escHtml(String(e.key))}" role="button" tabindex="0"><title>${e.hidden ? 'Show' : 'Hide'} ${_escHtml(name)}</title>`
-        + `<rect x="${eyeX.toFixed(1)}" y="${(e.y - 5 / k).toFixed(1)}" width="${(W - eyeX).toFixed(1)}" height="${(10 / k).toFixed(2)}" fill="transparent"/>`
+        + `<rect x="${eyeX.toFixed(1)}" y="${(e.y - reach(e)).toFixed(1)}" width="${(W - eyeX).toFixed(1)}" height="${(2 * reach(e)).toFixed(2)}" fill="transparent"/>`
         + `<g transform="translate(${eyeX.toFixed(2)},${(e.y - 4 / k).toFixed(2)}) scale(${eyeS.toFixed(4)})" fill="none" stroke="${e.hidden ? 'rgba(122,122,166,0.9)' : e.color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${e.hidden ? MINI_EYE.off : MINI_EYE.open}</g>`
         + texts + '</g>';
     }

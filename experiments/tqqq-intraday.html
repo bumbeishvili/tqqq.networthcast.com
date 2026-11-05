@@ -68,6 +68,12 @@
   .switch input:checked+.track::after{transform:translateX(14px)}
   .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
+  /* The latest pre-market or after-hours print, above the chart while there is one
+     (renderLiveNote); the embedded widget chart stays bare. */
+  .live-note{margin:8px 0 0;font:600 11.5px var(--mono);color:var(--muted)}
+  .live-note b{color:var(--text)}
+  .live-note .up{color:var(--green)} .live-note .down{color:var(--red)}
+  .embed .live-note{display:none}
   #chart{position:relative;min-height:520px}
   /* ?embed=widget (the desktop widget page, widget.html): the chart alone,
      filling its frame. The filters and the period slider stay wired but
@@ -168,6 +174,7 @@
         </div>
       </div>
     </div>
+    <div class="live-note" id="live-note" hidden></div>
     <div id="chart">
       <button type="button" class="scale-toggle" id="scale-toggle" aria-pressed="true" title="Switch the vertical axis between a symmetric log scale and a linear one">log</button>
     </div>
@@ -1190,12 +1197,35 @@ function mergeTodayRows(history, today) {
     .concat(today.map(r => ({ ...r, barMinutes: TODAY_BAR_MINUTES })));
 }
 
+// Outside the regular session the proxy's TQQQ quote carries `extended`, the latest
+// pre-market or after-hours print (cloudflare/quotes/README.md): it goes above the
+// chart with its time in New York and its change against the close, which the
+// chart's today label keeps (the user, 2026-11-06). Nothing while the session
+// runs, when the chart itself is live, or when the proxy is not configured.
+const EXTENDED_SESSION_NAMES = { pre: 'Pre-market', post: 'After hours' };
+const marketClock = new Intl.DateTimeFormat('en-US', { timeZone: MARKET_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+function loadLiveQuote() {
+  if (!QUOTES_PROXY) return Promise.resolve(null);
+  return fetch(QUOTES_PROXY + '/quotes?symbols=TQQQ', { cache: 'no-store' })
+    .then(r => { if (!r.ok) throw new Error('The quotes proxy answered HTTP ' + r.status); return r.json(); })
+    .catch(err => { console.warn('Live quote unavailable:', err); return null; });
+}
+function renderLiveNote(quotes) {
+  const el = document.getElementById('live-note');
+  const q = quotes && quotes.quotes && quotes.quotes.TQQQ, x = q && q.extended;
+  if (!x || !(x.price > 0) || !(x.session in EXTENDED_SESSION_NAMES)) { el.hidden = true; el.textContent = ''; return; }
+  el.innerHTML = `${EXTENDED_SESSION_NAMES[x.session]} ${marketClock.format(new Date(x.time))} ET · <b>$${x.price.toFixed(2)}</b> · <span class="${x.changePct >= 0 ? 'up' : 'down'}">${fmtPct(x.changePct)}</span> vs the close $${q.price.toFixed(2)}`;
+  el.hidden = false;
+}
+
 function loadData() {
   return Promise.all([
     d3.tsv(DATA_URL, { cache: 'no-cache' }),
     // 404 until the day's first pipeline run has written it.
     d3.tsv(DATA_URL_TODAY, { cache: 'no-cache' }).catch(() => []),
-  ]).then(([history, today]) => {
+    loadLiveQuote(),
+  ]).then(([history, today, quotes]) => {
+    renderLiveNote(quotes);
     const allDays = buildDays(mergeTodayRows(history, today));
     const allPct = allDays.flatMap(d => d.points.map(p => p.pct));
     // The y extent only ever grows, so a refresh never rescales the plot.

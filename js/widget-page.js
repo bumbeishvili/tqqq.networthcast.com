@@ -89,6 +89,7 @@
     // live prices applied, else the files' refresh. The signal chart reads it to
     // tell a day still trading from a close (minutesBeforeClose).
     window._dataFetchedAt = applied ? applied.asOf : fetchedAt;
+    window._liveExtended = applied ? applied.extended : null;   // the funds' extended-hours prints, for the signal chart's price lines
     nfciDaily = buildNfciDaily(daily, nfci);
     highLowDaily = buildHighLowDaily(daily, highLowRows);
     quarterlyData = periodRows(daily, getQuarter);

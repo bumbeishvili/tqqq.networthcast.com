@@ -62,6 +62,10 @@ function minutesBeforeClose(lastDate, fetchedAt) {
 const QUOTES_PROXY = 'https://tqqq-quotes.dato-developer.workers.dev';
 const LIVE_FUNDS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'];
 const LIVE_PREV_CLOSE_TOLERANCE = 0.03;
+// Outside the regular session a quote carries `extended`: the fund's latest
+// pre-market or after-hours print, its time and its change against the close
+// (the proxy's README). The names the pages give the two sessions.
+const EXTENDED_SESSION_NAMES = { pre: 'pre-market', post: 'after hours' };
 async function loadLiveQuotes() {
   const resp = await fetch(QUOTES_PROXY + '/quotes', { cache: 'no-store' });
   if (!resp.ok) throw new Error('The quotes proxy answered HTTP ' + resp.status);
@@ -82,8 +86,12 @@ function nyDateOf(d) {
   const part = Object.fromEntries(NY_CLOCK.formatToParts(d).map(p => [p.type, p.value]));
   return `${part.year}-${part.month}-${part.day}`;
 }
-// Returns null when no fund took a live price; else { date, asOf, applied, skipped, appended }.
+// Returns null when no fund took a live price; else { date, asOf, applied, skipped, appended, extended }.
 // highLowRows: the raw [date, high, low, close] rows per Monday-rule fund, updated in place.
+// extended: the funds' latest extended-hours prints, { session, time, prints: { tqqq: { session,
+// price, time, changePct }, ... } } with the latest print's session and time, for the funds whose
+// regular price applied (a fund on another basis is off in both); null when none printed. The
+// rows never take these prints: a strategy reads closes, and the print is named beside them.
 function applyLiveQuotes(dailyArr, highLowRows, live) {
   const quotes = (live && live.quotes) || {};
   let asOf = null;
@@ -117,7 +125,15 @@ function applyLiveQuotes(dailyArr, highLowRows, live) {
     }
   }
   if (!applied.length) { if (appended) dailyArr.pop(); return null; }
-  return { date, asOf, applied, skipped, appended };
+  let extended = null;
+  for (const fund of applied) {
+    const x = quotes[fund.toUpperCase()].extended;
+    if (!x || !(x.price > 0) || !x.time || !(x.session in EXTENDED_SESSION_NAMES)) continue;
+    if (!extended) extended = { session: x.session, time: x.time, prints: {} };
+    else if (Date.parse(x.time) > Date.parse(extended.time)) { extended.session = x.session; extended.time = x.time; }
+    extended.prints[fund] = { session: x.session, price: x.price, time: x.time, changePct: x.changePct };
+  }
+  return { date, asOf, applied, skipped, appended, extended };
 }
 
 // Daily highs and lows (data/<fund>-hl.tsv, written by scripts/update_data.py) of the

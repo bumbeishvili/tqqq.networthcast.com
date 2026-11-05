@@ -48,16 +48,24 @@
   // (data/last-updated.txt, written by .github/workflows/update-data.yml in the
   // same commit as the data it describes). The file is UTC ISO-8601; `new
   // Date()` parses it and reads back in the viewer's local time zone.
-  const showDataTime = (d, isLive) => {
+  const showDataTime = (d, isLive, extended) => {
     window._dataFetchedAt = d;
     const wrap = document.getElementById('data-through');
     const el = document.getElementById('data-fetched-at');
     if (!wrap || !el) return;
     const pad2 = (n) => n < 10 ? '0' + n : '' + n;
-    el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + (isLive ? (liveStalled(d) ? ' (live, feed stalled)' : ' (live)') : '');
+    const note = !isLive ? '' : extended ? ' (' + EXTENDED_SESSION_NAMES[extended.session] + ')' : liveStalled(d) ? ' (live, feed stalled)' : ' (live)';
+    el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + note;
     wrap.removeAttribute('hidden');
   };
-  if (live) showDataTime(live.asOf, true);
+  // The live state the header and the signal chart's price lines read: the
+  // latest print's time, an extended-hours one (pre-market, after hours) when
+  // the proxy carries it, and the funds' extended prints (window._liveExtended).
+  const showLive = (state) => {
+    window._liveExtended = state.extended;
+    showDataTime(state.extended ? new Date(state.extended.time) : state.asOf, true, state.extended);
+  };
+  if (live) showLive(live);
   loadDataFetchedAt().then(d => {
     if (live) return;   // the live trade time stands
     showDataTime(d, false);
@@ -88,7 +96,12 @@
     const next = applyLiveQuotes(daily, highLowRows, quotes);
     if (!next) return;
     const last = daily[daily.length - 1];
-    if (!next.appended && LIVE_FUNDS.every(f => last[f] === before[f])) return;
+    if (!next.appended && LIVE_FUNDS.every(f => last[f] === before[f])) {
+      // No close moved. A newer extended-hours print changes only the header and
+      // the price lines' rows: no run reads it.
+      if (JSON.stringify(next.extended) !== JSON.stringify(live.extended)) { live = next; showLive(live); redrawPanelSignalChart(); }
+      return;
+    }
     live = next;
     const quarters = quarterlyData.length;
     deriveFromDaily();
@@ -98,7 +111,7 @@
       if (atEnd) exit.value = quarterlyData.length - 1;
     }
     if (typeof invalidateCustomData === 'function') invalidateCustomData();
-    showDataTime(next.asOf, true);
+    showLive(live);
     render();
     redrawPanelSignalChart();
   }, 60 * 1000);

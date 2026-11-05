@@ -4,8 +4,10 @@
 //   node cloudflare/quotes/test.mjs
 // With --offline, Yahoo is replaced by a canned chart answer (three 1-minute bars
 // from the 09:30 open on 2026-11-05 New York time, a trailing bar 27 seconds into
-// the third minute as Yahoo stamps its latest trade, and one bar after the close),
-// so the checks are the same but need no network (the deploy workflow runs it this way).
+// the third minute as Yahoo stamps its latest trade, one bar after the close, and
+// with the extended-hours bars an after-hours print at 16:10), and the clock is
+// pinned to that Thursday afternoon, so the checks are the same at any real hour
+// and need no network (the deploy workflow runs it this way).
 import worker from './src/worker.mjs';
 
 const OFFLINE = process.argv.includes('--offline');
@@ -13,10 +15,17 @@ const OFFLINE = process.argv.includes('--offline');
 // Nasdaq answering (SOXL), stale with Nasdaq failing (SPY); the session clock is pinned
 // to a weekday afternoon so the staleness rule is live in the test.
 const STALE = { SOXL: 'nasdaq', SPY: 'nasdaq-down' };
+const SESSION_CLOCK = Date.UTC(2026, 10, 5, 18, 30);   // 13:30 EST, a Thursday
+let nowFixed = SESSION_CLOCK;
 if (OFFLINE) {
   const open = Date.UTC(2026, 10, 5, 14, 30) / 1000;   // 2026-11-05 09:30 EST
-  const nowFixed = Date.UTC(2026, 10, 5, 18, 30);       // 13:30 EST, a Thursday
-  Date.now = () => nowFixed;
+  // Both clocks the worker reads stand at nowFixed: Date.now() and new Date() with
+  // no argument (sessionNow), so the checks read the same at any hour of the real day.
+  const RealDate = Date;
+  globalThis.Date = class extends RealDate {
+    constructor(...args) { super(...(args.length ? args : [nowFixed])); }
+    static now() { return nowFixed; }
+  };
   globalThis.fetch = async (url) => {
     const u = new URL(url);
     if (u.hostname === 'data.alpaca.markets') {
@@ -36,12 +45,17 @@ if (OFFLINE) {
       if (STALE[symbol] === 'nasdaq-down') return new Response('blocked', { status: 403 });
       return Response.json({ data: { marketStatus: 'Open', primaryData: { lastSalePrice: '$44.50', lastTradeTimestamp: 'Nov 5, 2026 1:29 PM ET', isRealTime: true } } });
     }
-    const symbol = decodeURIComponent(u.pathname.split('/').pop());
-    const tradeAt = STALE[symbol] ? nowFixed / 1000 - 70 * 60 : nowFixed / 1000 - 30;   // a stale Yahoo print is 70 minutes old, a fresh one 30 seconds
-    const px = 40 + symbol.length, ts = [open, open + 60, open + 120, open + 147, open + 6.5 * 3600], TRAIL = 3;
-    const col = (v, trail) => ts.map((_, k) => k === TRAIL ? trail : v);
-    return Response.json({ chart: { result: [{ meta: { regularMarketPrice: px + 0.25, chartPreviousClose: px - 1, regularMarketTime: tradeAt, exchangeTimezoneName: 'America/New_York' },
-      timestamp: ts, indicators: { quote: [{ open: col(px - 0.5, px + 0.25), high: col(px + 0.5, px + 0.25), low: col(px - 1, px + 0.25), close: col(px, px + 0.25), volume: col(1000, 0) }] } }], error: null } });
+    const symbol = decodeURIComponent(u.pathname.split('/').pop()), prePost = u.searchParams.get('includePrePost') === 'true';
+    const tradeAt = STALE[symbol] ? SESSION_CLOCK / 1000 - 70 * 60 : SESSION_CLOCK / 1000 - 30;   // a stale Yahoo print is 70 minutes old, a fresh one 30 seconds
+    const px = 40 + symbol.length, TRAIL = 3, POST = 5, close = open + 6.5 * 3600;
+    // Three session minutes, the trailing print and the 16:00 bar. With the extended-hours
+    // bars: an after-hours print at 16:10 as well, except for GLD, whose answer stops before the close.
+    const session = [open, open + 60, open + 120, open + 147, close];
+    const ts = !prePost ? session : symbol === 'GLD' ? session.slice(0, 4) : session.concat([close + 600]);
+    const col = (v, trail, post) => ts.map((_, k) => k === TRAIL ? trail : k === POST ? post : v);
+    return Response.json({ chart: { result: [{ meta: { regularMarketPrice: px + 0.25, chartPreviousClose: px - 1, regularMarketTime: tradeAt, exchangeTimezoneName: 'America/New_York',
+      currentTradingPeriod: { pre: { start: open - 5.5 * 3600, end: open }, regular: { start: open, end: close }, post: { start: close, end: close + 4 * 3600 } } },
+      timestamp: ts, indicators: { quote: [{ open: col(px - 0.5, px + 0.25, px - 0.5), high: col(px + 0.5, px + 0.25, px - 0.5), low: col(px - 1, px + 0.25, px - 1), close: col(px, px + 0.25, px - 0.75), volume: col(1000, 0, 10) }] } }], error: null } });
   };
   console.log('offline: Yahoo replaced by a canned chart answer');
 }
@@ -65,6 +79,14 @@ if (OFFLINE) {
   check('stale Yahoo + Nasdaq open: Nasdaq price and time, Yahoo prior close kept, source nasdaq', soxl.source === 'nasdaq' && soxl.price === 44.5 && soxl.time === '2026-11-05T18:29:00.000Z' && soxl.prevClose === 43 && soxl.yahooTime && !soxl.stale, JSON.stringify(soxl));
   check('stale Yahoo + Nasdaq failing: Yahoo quote marked stale', spy.source === 'yahoo' && spy.stale === true && spy.price === 43.25, JSON.stringify(spy));
   check('fresh Yahoo: untouched, no source field', tqqq.source === undefined && tqqq.stale === undefined, JSON.stringify(tqqq));
+  check('in session: no extended-hours field', tqqq.extended === undefined);
+  // After the close: the latest after-hours print, its time and its change against the close; the regular quote as it was.
+  nowFixed = Date.UTC(2026, 10, 5, 21, 10);   // 16:10 EST; the session's cache entries have aged out
+  let rp = await call('/quotes?symbols=TQQQ,GLD', { origin: site }); let bp = await rp.json();
+  const pt = bp.quotes.TQQQ, pg = bp.quotes.GLD;
+  check('after the close: extended names the post-session print, its time and its change against the close; the regular price kept', pt.price === 44.25 && pt.source === undefined && pt.extended && pt.extended.session === 'post' && pt.extended.price === 43.25 && pt.extended.time === '2026-11-05T21:10:00.000Z' && Math.abs(pt.extended.changePct - (43.25 / 44.25 - 1) * 100) < 1e-9, JSON.stringify(pt));
+  check('after the close, a fund with no print after it: no extended field', pg.extended === undefined && pg.price === 43.25, JSON.stringify(pg));
+  nowFixed = SESSION_CLOCK;
   // with Alpaca keys: its trade is the in-session price for every symbol, Yahoo's prior close kept; a down Alpaca falls back to the path above
   const KEYS = { ALPACA_API_KEY: 'k', ALPACA_API_SECRET: 's' };
   let ra = await call('/quotes?symbols=TQQQ,SOXL,SPY&x=alpaca', { origin: site, env: KEYS }); let ba = await ra.json();

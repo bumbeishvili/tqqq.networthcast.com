@@ -19,6 +19,8 @@ During New York session hours the price and time come from Alpaca's IEX feed (on
 
 When Alpaca is unavailable and Yahoo's trade time is more than three minutes old during New York session hours (its whole US feed froze for over an hour on 2026-11-05), the quote is refetched from Nasdaq's public quote feed and carries `source: "nasdaq"` with `yahooTime`; if Nasdaq cannot answer, the Yahoo quote comes back with `stale: true`. A fresh quote has no `source` field.
 
+Outside the regular session (a weekday 09:30-16:00 New York) a quote also carries `extended: { session, price, time, changePct }` when the fund has printed in the pre-market (`session: "pre"`, 04:00-09:30) or after hours (`"post"`, 16:00-20:00): the latest such print from Yahoo's chart, its time, and its change against the regular `price`, which stays the session's close. A fund without such a print has no `extended` field. The site's header says "(after hours)" or "(pre-market)" with that time, and the signal chart's price lines name the print under their label.
+
 `prevClose` is Yahoo's prior close on Yahoo's current adjustment basis. A page overlaying `price` on the committed files should compare `prevClose` with its own last close first: a gap of more than a few percent means the files are on another basis (a split, as SOXX on 2026-11-05) and the overlay has to wait for the refreshed files. When Yahoo reports a split in the requested range the quote carries `splitToday`.
 
 ## Who may call it
