@@ -3314,9 +3314,10 @@ function withTurnaroundMonday(base, spec) {
     return text.slice(0, at) + repl + text.slice(at + find.length);
   };
   const setup = `    // Turnaround Monday on ${sigName}, run every day on its own. A trade it
-    // opens at a Monday close while the rules want cash buys TQQQ; it ends at
+    // opens at a Monday close while the rules want cash buys the fund (TQQQ, or
+    // spec.fund); it ends at
     // the rule's exit or as soon as the rules want anything else.
-    const tmFund = "tqqq", tmSig = "${spec.signal}", tmSigName = "${sigName}";
+    const tmFund = "${spec.fund || 'tqqq'}", tmSig = "${spec.signal}", tmSigName = "${sigName}";
     // ${hl ? "A Monday close under the prior day's low buys, the first close over the prior day's high sells. Before the data's first high and low (October 1985), the prior close stands in." : "A Monday close under the prior close buys, the first close over it sells."}
     const tmHL = ${hl}, tmHigh = data[tmSig + "High"], tmLow = data[tmSig + "Low"];
     if (tmHL && !(tmHigh && tmLow)) throw new Error("Turnaround Monday needs " + tmSigName + "'s daily highs and lows (data." + tmSig + "High, data." + tmSig + "Low)");
@@ -3352,7 +3353,7 @@ function withTurnaroundMonday(base, spec) {
 `;
   const dashboard = `    // Turnaround Monday on the dashboard: its card, and today's call while a trade is open.
     const last = res.log[res.log.length - 1] || {};
-    const tmF = "TQQQ", tmS = "${sigName}";
+    const tmF = "${(spec.fund || 'tqqq').toUpperCase()}", tmS = "${sigName}";
     const tmOpen = !!last.tmTrade, tmIdle = last.held === "CASH";
     const tmUp = "${hl ? "the prior day's high" : "the prior close"}", tmDown = "${hl ? "the prior day's low" : "the prior close"}";
     // Its chart panel. The base's lines name their panel now that there are several.
@@ -3415,6 +3416,291 @@ CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Mond
   ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
   ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
 
+// #52 — TQQQ VS QQQ, Mon Turn, Soxl Acc: #50 with the monthly contributions
+// piling up in SOXL while the stretch rules hold TQQQ, handed to the strategy
+// as one contribution when the rules switch to SQQQ (the user's idea,
+// 2026-11-05, scratchpad soxl/recheck.cjs). Built from #50's text at load,
+// as #50 is built from #47, so a change to either reaches it.
+//   - A contribution buys SOXL at the close it arrives while the rules
+//     themselves hold TQQQ. A Monday trade is not that, and before the SOXL
+//     data starts (May 1994) contributions go to the strategy.
+//   - When the rules sell TQQQ for SQQQ, the pile is sold once SQQQ is
+//     actually bought, at the next close, and its money reaches the strategy
+//     the close after, bought like any deposit: 15 of the +55% line's signals
+//     since 2010 reversed the next day, and the pile sits them out. As a
+//     setting, the pile is sold at the signal close instead, and the strategy
+//     buys SQQQ with both the next day.
+//   - When the rules sell TQQQ to cash (the floor, the credit veto, the deep
+//     buy guard, a Monday trade holding the sale off), the pile waits in cash
+//     and buys SOXL again when the rules hold TQQQ again; as a setting it
+//     joins the strategy instead.
+//   - A withdrawal draws on the pile before the strategy's own holdings.
+//   - SOXL instead of TQQQ (the user, 2026-11-05: "find the edge with soxl"):
+//     while the rules hold TQQQ, the account holds SOXL under a condition. The
+//     default is the lead rule, the user's own call against the price rules
+//     ("I find that hard to believe"; scratchpad edge/stretch-signal*.cjs):
+//     SOXL's growth over 400 trading days against SOXX's, held from a close
+//     with the lead under 0% until the first close over 20%. 2010-25 lump sum
+//     183.2% a year at a 42.3% drawdown against 170.3% / 42.9% for "below its
+//     225-day average" and 139.6% / 40.8% for #50; halves 114 / 275 against
+//     96 / 272; 22 SOXL stretches against 41; out of SOXL since 2026-04-09, so it
+//     held TQQQ through the October 2026 semiconductor crash. The price rules
+//     stay as settings. Every SOXL rule loses to plain TQQQ before 2010.
+// $100K + $4K a month from each of 199 month-end starts since March 2010:
+// $1M reached sooner than with every contribution in the strategy in 102
+// starts, later in 11, the same day in 67; the contributions are worth 6%
+// more at the goal. SOXL beat the strategy only while it held plain TQQQ
+// (×1.8 over 2010-17, ×6.5 over 2018-26 against it) and lost 63% to 99%
+// against it in every SQQQ and cash phase, hence the handover.
+function withSoxlPile(base, spec) {
+  const once = (text, find, repl, what) => {
+    const at = text.indexOf(find);
+    if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withSoxlPile(${spec.name}): ${what} must appear exactly once in the base`);
+    return text.slice(0, at) + repl + text.slice(at + find.length);
+  };
+  const params = `    { section: "SOXL instead of TQQQ" },
+    { id: "soxlWhen", label: "Hold SOXL instead of TQQQ", tip: "While the rules hold TQQQ, the account holds SOXL instead under this condition. The lead rule (SOXL's growth against SOXX's over the lookback, held from a close under the entry level until one over the exit level) made the most on 2010-2025 and was out of SOXL before the 2026 crash; the two price rules and Always made less, and every rule lost to plain TQQQ in 2003-2007.", text: "Hold SOXL instead of TQQQ {}.", default: "lead", options: [
+      { value: "never", label: "never" }, { value: "lead", label: "while SOXL's lead over SOXX is low" }, { value: "drawdown", label: "while SOXL is far under its high" }, { value: "belowAvg", label: "while SOXL is below its average" }, { value: "always", label: "always" } ] },
+    { id: "soxlLeadDays", label: "Lead lookback (trading days)", tip: "How many trading days of growth are compared: SOXL's against SOXX's. 400 is about 19 months; 350 to 450 all beat the price rules since 2010.", text: "The lead is SOXL's growth against SOXX's over the last {} trading days.", default: 400, options:
+      [60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 310, 320, 330, 340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460, 470, 480, 490, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750] },
+    { id: "soxlLeadEnter", label: "Hold SOXL at lead under (%)", tip: "The first close with the lead under this holds SOXL. 0 means SOXL has grown no more than SOXX over the lookback; negative means it is behind.", text: "Hold SOXL from the first close with the lead under {}.", unit: "%", default: 0, options:
+      Array.from({ length: 25 }, (_, k) => -80 + 5 * k) },
+    { id: "soxlLeadExit", label: "Back to TQQQ at lead over (%)", tip: "The first close with the lead over this goes back to TQQQ. The gap to the entry level keeps a lead hovering around one line from switching every few days.", text: "Back to TQQQ at the first close with the lead over {}.", unit: "%", default: 20, options:
+      Array.from({ length: 33 }, (_, k) => -60 + 5 * k) },
+    { id: "soxlDrop", label: "Far under the high (%)", tip: "How far under its highest close of the window SOXL has to be for the rule to hold it. 40 to 70 all beat TQQQ alone since 2010; 50 is the plateau's middle.", text: "Far under means {} under the highest close of the window.", unit: "%", default: 50, options:
+      Array.from({ length: 11 }, (_, k) => 20 + 5 * k) },
+    { id: "soxlWindow", label: "Window (trading days)", tip: "The window of closes the high and the average are taken over. 250 is about a year.", text: "The high and the average cover the last {} trading days.", default: 225, options:
+      [60, 90, 120, 150, 175, 200, 225, 250, 275, 300, 350, 400, 500] },
+    { id: "soxlConfirm", label: "Switch in", tip: "At once: the day SOXL closes that far under its high, even while it is still falling; that is where the 2010-2025 edge was. Waiting for SOXL to climb back above its average keeps only a few points of it and no longer beats random dates, but sits out a crash that keeps going, like July to November 2026.", text: "Switch in {}.", default: 0, options: [
+      { value: 0, label: "at once" }, { value: 10, label: "only once SOXL is back above its 10-day average" }, { value: 20, label: "only once SOXL is back above its 20-day average" }, { value: 50, label: "only once SOXL is back above its 50-day average" }, { value: 100, label: "only once SOXL is back above its 100-day average" }, { value: 200, label: "only once SOXL is back above its 200-day average" } ] },
+    { section: "Contributions in SOXL" },
+    { id: "soxlPile", label: "Contributions buy SOXL", tip: "Yes: a contribution buys SOXL while the rules hold TQQQ, and the pile goes into the strategy when they switch to SQQQ. No: every contribution goes into the strategy at once, as in TQQQ vs QQQ + Turnaround Monday.", text: "Contributions buy SOXL while the rules hold TQQQ: {}.", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "pileHandover", label: "Hand the pile over", tip: "Once SQQQ is bought: the pile is sold at the close the strategy buys SQQQ, and its money is bought at the close after; a signal that reverses the next day costs the pile nothing. At the signal: the pile is sold with TQQQ, and the strategy buys SQQQ with both the next day.", text: "Hand the pile to the strategy {}.", default: "confirmed", options: [
+      { value: "confirmed", label: "once SQQQ is bought" }, { value: "signal", label: "at the signal" } ] },
+    { id: "pileFloor", label: "When the rules sell to cash", tip: "The floor, the credit veto, the deep buy guard and a Monday trade holding a sale off all leave the rules in cash. Waits in cash: the pile is sold to cash and buys SOXL again at the rules' next TQQQ buy. Joins the strategy: the pile's money becomes the strategy's cash.", text: "When the rules sell TQQQ to cash, the pile {}.", default: "wait", options: [
+      { value: "wait", label: "waits in cash" }, { value: "join", label: "joins the strategy" } ] },
+`;
+  const setup = `    // The SOXL pile (the Contributions in SOXL settings): shares, cash it waits
+    // in, what was put in, and the handover in flight. "rally" below is the
+    // rules' own choice of TQQQ, a Monday trade aside.
+    const pileOn = p.soxlPile !== false, pileConfirm = (p.pileHandover || "confirmed") === "confirmed", pileWait = (p.pileFloor || "wait") === "wait";
+    const SOXL_FROM = "1994-05-04";   // the semiconductor index starts here; js/data.js holds SOXL's first price flat before it
+    const soxlAt = (i) => data.soxl && dates[i] >= SOXL_FROM ? (data.soxl[i] || 0) : 0;
+    let pileSh = 0, pileCash = 0, pilePut = 0, pileDeposits = 0, pileAwait = false, rallyPrev = false, pileTransfer = 0;
+    const holdings = [];   // daily control points, the pile included, for the app's revaluation (drawdown, cards)
+    const money = (x) => "$" + (x >= 1e6 ? (x / 1e6).toFixed(2) + "M" : x >= 1e3 ? (x / 1e3).toFixed(1) + "K" : x.toFixed(0));
+    const pileCount = () => pileDeposits + (pileDeposits === 1 ? " contribution" : " contributions");
+    // SOXL instead of TQQQ: the condition at each close over the run and its warm-up,
+    // from SOXL's highest close and average over the window.
+    const soxlWhen = p.soxlWhen || "lead", soxlDrop = (p.soxlDrop == null ? 50 : +p.soxlDrop) / 100, SW = Math.max(2, Math.round(+p.soxlWindow || 225));
+    const soxlHi = new Float64Array(n).fill(NaN), soxlAvg = new Float64Array(n).fill(NaN), soxlOnAt = new Uint8Array(n);
+    const SC = Math.round(+p.soxlConfirm || 0), soxlConf = new Float64Array(n).fill(NaN);   // the "switch in" average
+    if (data.soxl && SC > 0) { let sc = 0; for (let i = 0; i < n; i++) { sc += data.soxl[i] > 0 ? data.soxl[i] : 0; if (i >= SC) sc -= data.soxl[i - SC] > 0 ? data.soxl[i - SC] : 0; if (i >= SC - 1) soxlConf[i] = sc / SC; } }
+    if (data.soxl) {
+      const from = Math.max(SW, p.startIdx - L - SW), win = [];   // a deque of indexes with falling closes, for the running high
+      let sum = 0, head = 0;
+      for (let i = from - SW + 1; i <= p.endIdx; i++) {
+        const c = data.soxl[i] > 0 && dates[i] >= SOXL_FROM ? data.soxl[i] : NaN;
+        sum += c === c ? c : 0;
+        while (win.length > head && data.soxl[win[win.length - 1]] <= c) win.pop();
+        win.push(i);
+        if (i - SW >= from - SW + 1) { const o = data.soxl[i - SW]; sum -= o > 0 && dates[i - SW] >= SOXL_FROM ? o : 0; }
+        while (win[head] <= i - SW) head++;
+        if (i >= from && c === c && dates[i - SW + 1] >= SOXL_FROM) {
+          soxlHi[i] = data.soxl[win[head]]; soxlAvg[i] = sum / SW;
+          const okC = !SC || c > soxlConf[i];
+          soxlOnAt[i] = soxlWhen === "always" ? 1 : soxlWhen === "drawdown" ? (c < soxlHi[i] * (1 - soxlDrop) && okC ? 1 : 0) : soxlWhen === "belowAvg" ? (c < soxlAvg[i] && okC ? 1 : 0) : 0;
+        }
+      }
+    }
+    // The lead rule: SOXL's growth over the lead lookback against SOXX's, in %, at every
+    // close with both ends in the data; SOXL is held from a close with the lead under the
+    // entry level until the first close with it over the exit level. The state runs over
+    // the whole history, so a moved Entry never starts it blank.
+    const LD = Math.max(1, Math.round(+p.soxlLeadDays || 400)), leadIn = p.soxlLeadEnter == null ? 0 : +p.soxlLeadEnter, leadOut = p.soxlLeadExit == null ? 20 : +p.soxlLeadExit;
+    const soxlLead = new Float64Array(n).fill(NaN), soxlBase = new Float64Array(n).fill(NaN);   // soxlBase: the SOXL price at a lead of 0% today
+    if (data.soxl && data.soxx) {
+      let on = false;
+      for (let i = LD; i <= p.endIdx; i++) {
+        const s0 = data.soxl[i - LD], x0 = data.soxx[i - LD];
+        if (!(s0 > 0 && x0 > 0 && data.soxl[i] > 0 && data.soxx[i] > 0) || dates[i - LD] < SOXL_FROM) continue;
+        soxlBase[i] = s0 * (data.soxx[i] / x0);
+        soxlLead[i] = (data.soxl[i] / soxlBase[i] - 1) * 100;
+        if (!on && soxlLead[i] < leadIn) on = true; else if (on && soxlLead[i] > leadOut) on = false;
+        if (soxlWhen === "lead") soxlOnAt[i] = on && (!SC || data.soxl[i] > soxlConf[i]) ? 1 : 0;
+      }
+    }
+    const SOXL_PRICE = "SOXL price", SOXL_PANEL = soxlWhen === "lead" ? "SOXL vs SOXX" : SOXL_PRICE;   // SOXL_PANEL: where the SOXL rule's trades are marked
+    let soxlPrev = false, soxlSwitch = false, soxlLeft = false;
+    const soxlUnder = (i) => soxlHi[i] > 0 ? ((1 - data.soxl[i] / soxlHi[i]) * 100).toFixed(0) + "% under its " + SW + "-day high" : "";
+    const soxlLeadTxt = (i) => soxlLead[i] === soxlLead[i] ? (soxlLead[i] >= 0 ? "+" : "−") + Math.abs(soxlLead[i]).toFixed(0) + "%" : "n/a";
+    const soxlWhy = (i, w) => w === "soxl" ? (soxlWhen === "lead" ? "SOXL's lead over SOXX is " + soxlLeadTxt(i) + ", under " + leadIn + "%" : "SOXL is " + (soxlWhen === "always" ? "held for TQQQ" : soxlWhen === "belowAvg" ? "below its " + SW + "-day average" : soxlUnder(i))) + "; the rules hold TQQQ"
+      : w === "tqqq" && soxlLeft ? (soxlWhen === "lead" ? "SOXL's lead over SOXX is back over " + leadOut + "% (" + soxlLeadTxt(i) + ")" : "SOXL is back " + (soxlWhen === "belowAvg" ? "above its " + SW + "-day average" : "within " + Math.round(soxlDrop * 100) + "% of its " + SW + "-day high")) : "";
+`;
+  const atClose = `      // The SOXL pile at this close, settled before the strategy's own trade
+      // below, so money handed over at this close is in its cash for that trade.
+      const rally = pileOn && baseWant === "tqqq" && soxlPx > 0;
+      const pileWas = money(pileSh * soxlPx + pileCash) + " from " + pileCount();
+      const sellPile = () => { const gross = pileSh * soxlPx, f = gross * cost; fee += f; pileSh = 0; const got = gross - f + pileCash; pileCash = 0; return got; };
+      const pileEmptied = () => { pilePut = 0; pileDeposits = 0; };
+      if (pileAwait) {   // yesterday's SQQQ signal: what did the strategy buy?
+        pileAwait = false;
+        if (baseWant === "tqqq") pileNote = "SOXL pile kept: the strategy bought TQQQ back, not SQQQ";
+        else if (baseWant !== "cash") { pileTransfer = sellPile(); pileNote = "Sold the SOXL pile (" + pileWas + "): " + lbl(baseWant) + " bought; its money joins the strategy tomorrow"; pileEmptied(); }
+        else if (pileWait) { pileCash = sellPile(); pileNote = "SOXL pile to cash (" + pileWas + "): the rules want cash"; }
+        else { cash += sellPile(); pileNote = "SOXL pile handed over (" + pileWas + "): the rules want cash"; pileEmptied(); }
+      } else if (rallyPrev && !rally && (pileSh > 0 || pileCash > 0)) {
+        if (baseWant !== "cash") {   // the stretch: TQQQ sold for SQQQ
+          if (pileConfirm && p.splitDays !== false) { pileAwait = true; pileNote = "SOXL pile (" + pileWas + ") waits for tomorrow's " + lbl(baseWant) + " buy"; }
+          else if (pileConfirm) { pileTransfer = sellPile(); pileNote = "Sold the SOXL pile (" + pileWas + "); its money joins the strategy tomorrow"; pileEmptied(); }
+          else { cash += sellPile(); pileNote = "Sold the SOXL pile (" + pileWas + "): it joins the switch to " + lbl(baseWant); pileEmptied(); }
+        } else if (pileWait) { if (pileSh > 0) { pileCash = sellPile(); pileNote = "SOXL pile to cash (" + pileWas + "): the rules sold TQQQ to cash"; } }
+        else { cash += sellPile(); pileNote = "SOXL pile handed over (" + pileWas + "): the rules sold TQQQ to cash"; pileEmptied(); }
+      }
+      if (rally) {
+        if (pileCash > 0) { const f = pileCash * cost; pileSh += (pileCash - f) / soxlPx; fee += f; pileCash = 0; pileNote = "SOXL pile bought back (" + money(pileSh * soxlPx) + "): the rules hold TQQQ again"; }
+        if (contributed > 0) { const f = contributed * cost; cash -= contributed; pileSh += (contributed - f) / soxlPx; fee += f; pilePut += contributed; pileDeposits++; pileNote = "contribution bought SOXL (pile " + money(pileSh * soxlPx) + " from " + pileCount() + ")"; }
+      }
+      rallyPrev = rally;
+`;
+  const joined = `      if (pileJoined > 0) {   // yesterday's pile sale, bought with the strategy's own trade or added to what it holds
+        if (held !== "cash" && action === "hold") action = "buy";
+        pileNote = (pileNote ? pileNote + "; " : "") + "the SOXL pile's " + money(pileJoined) + (held === "cash" ? " joined the strategy's cash" : " bought " + lbl(held));
+      }
+      if (pileNote) note = note ? note + "; " + pileNote : pileNote;
+      const pileValue = pileSh * soxlPx + pileCash + pileTransfer;
+      const h = {}; if (held !== "cash" && shares > 0) h[held] = shares; if (pileSh > 0) h.soxl = (h.soxl || 0) + pileSh;   // the strategy and the pile can both hold SOXL
+      holdings.push({ date: dates[i], cash: cash + pileCash + pileTransfer, h });
+`;
+  const card = `    // This entry's panel order (the user, 2026-11-05: "move this chart up so it
+    // is just down of price chart"): each fund's price over its relative
+    // pricing, TQQQ's pair then SOXL's, Turnaround Monday after them (the
+    // Monday generator put it second, by trade count), credit stress last.
+    if (res.lines) {
+      const tm = res.lines.filter(l => l.group === "Turnaround Monday"), rest = res.lines.filter(l => l.group !== "Turnaround Monday"), at = rest.findIndex(l => l.group === "Credit stress (NFCI)");
+      res.lines = at < 0 ? rest.concat(tm) : rest.slice(0, at).concat(tm, rest.slice(at));
+    }
+    // The SOXL pile on the dashboard.
+    if (res.signals) {
+      const lastRow = res.log[res.log.length - 1] || {}, pileNow = lastRow.soxlPile || 0, putNow = lastRow.soxlPut || 0;
+      const fmtMoney = (x) => "$" + (x >= 1e6 ? (x / 1e6).toFixed(2) + "M" : x >= 1e3 ? (x / 1e3).toFixed(1) + "K" : x.toFixed(0));
+      // SOXL instead of TQQQ: one voice. The base's cards and verdict say what its
+      // rules chose (TQQQ); while SOXL stands in for it, say so everywhere.
+      const sWhen = p.soxlWhen || "lead", sWin = Math.round(+p.soxlWindow || 225), sDrop = p.soxlDrop == null ? 50 : +p.soxlDrop;
+      const sLead = lastRow.soxlLead, sLeadTxt = sLead != null ? (sLead >= 0 ? "+" : "−") + Math.abs(sLead).toFixed(0) + "%" : "n/a";
+      const sIn = p.soxlLeadEnter == null ? 0 : +p.soxlLeadEnter, sOut = p.soxlLeadExit == null ? 20 : +p.soxlLeadExit;
+      const inSoxl = lastRow.held === "SOXL";
+      const sRule = sWhen === "always" ? "SOXL is always held for TQQQ"
+        : sWhen === "lead" ? "SOXL's lead over SOXX " + sLeadTxt + " over " + Math.round(+p.soxlLeadDays || 400) + " days; held for TQQQ from under " + sIn + "% until over " + sOut + "%"
+        : sWhen === "belowAvg" ? "SOXL " + (lastRow.soxlAvgLine > 0 ? Math.abs((1 - lastRow.soxlPrice / lastRow.soxlAvgLine) * 100).toFixed(0) + "% " + (lastRow.soxlPrice < lastRow.soxlAvgLine ? "below" : "above") + " its " + sWin + "-day average" : "against its " + sWin + "-day average") + "; held for TQQQ while below"
+        : "SOXL " + (lastRow.soxlLine > 0 ? ((1 - lastRow.soxlPrice / (lastRow.soxlLine / (1 - sDrop / 100))) * 100).toFixed(0) + "% under its " + sWin + "-day high" : "against its " + sWin + "-day high") + "; held for TQQQ past " + sDrop + "%";
+      if (sWhen !== "never" && (lastRow.soxlPrice > 0 || sLead != null)) {
+        res.signals.cards = (res.signals.cards || []).map(c => c.label === "Holding" && inSoxl ? Object.assign({}, c, { value: "SOXL", sub: "for TQQQ; " + c.sub }) : c.label === "Turnaround Monday" ? Object.assign({}, c, { sub: String(c.sub).replace("the rules hold SOXL", "the rules hold TQQQ, held as SOXL") }) : c);
+        res.signals.cards = res.signals.cards.concat([{ label: "SOXL instead of TQQQ", icon: "activity", tone: inSoxl ? "good" : "",
+          value: inSoxl ? "Holding SOXL" : "TQQQ", sub: sRule,
+          tip: "While the rules hold TQQQ, SOXL is held instead under the Hold SOXL instead of TQQQ setting." }]);
+        if (inSoxl && res.signals.decision && /^Hold TQQQ/.test(res.signals.decision.action || "")) {
+          const d = res.signals.decision;
+          res.signals.decision = Object.assign({}, d, { action: "Hold SOXL", note: sRule + "; " + (d.note || ""),
+            reasons: (d.reasons || []).concat([{ name: "SOXL instead of TQQQ", val: sWhen === "lead" ? "lead over SOXX " + sLeadTxt : sWhen === "belowAvg" ? "below its " + sWin + "-day average" : sWhen === "always" ? "always" : "far under its high", tag: "in · SOXL", lean: "buy" }]) });
+        }
+      }
+      res.signals.cards = (res.signals.cards || []).concat([{ label: "SOXL pile", icon: "dollar", tone: pileNow > 0 ? "good" : "",
+        value: pileNow > 0 ? fmtMoney(pileNow) : "Empty",
+        sub: pileNow > 0 ? fmtMoney(putNow) + " put in; sold for the strategy at the next SQQQ buy" : "contributions buy SOXL while the rules hold TQQQ",
+        tip: "Contributions pile up in SOXL while the rules hold TQQQ. The pile goes into the strategy when they switch to SQQQ." }]);
+    }
+`;
+  let t = base.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
+  t = once(t, '    { section: "Execution & costs" },\n', params + '    { section: "Execution & costs" },\n', 'the costs section');
+  t = once(t, '  columns: [\n', '  columns: [\n    { key: "soxlPile", label: "SOXL pile", tip: "Contributions piled up in SOXL, or waiting in cash, before they join the strategy." },\n    { key: "soxlPut", label: "Put in the pile", tip: "The contributions in the current pile." },\n    { key: "soxlLead", label: "SOXL ahead of SOXX", tip: "SOXL\'s growth over the lead lookback against SOXX\'s: SOXL growth ÷ SOXX growth − 1, in %. Negative means behind." },\n', 'the columns list');
+  t = once(t, '    const cost = (p.tradeCost || 0) / 100;\n', '    const cost = (p.tradeCost || 0) / 100;\n' + setup, 'the cost line');
+  t = once(t, '      let contributed = 0, action = "hold", note = "", fee = 0;\n', '      let contributed = 0, action = "hold", note = "", fee = 0;\n      const soxlPx = soxlAt(i); let pileNote = "";\n', 'the day\'s row variables');
+  t = once(t, '      if (i > p.startIdx) cash *= 1 + dayRate;\n', '      if (i > p.startIdx) cash *= 1 + dayRate;\n      if (i > p.startIdx) pileCash *= 1 + dayRate;\n      const pileJoined = pileTransfer; cash += pileTransfer; pileTransfer = 0;\n', 'the interest line');
+  t = once(t, '        cash += amt; contributed = amt; invested += amt; action = "contribution";\n',
+    '        cash += amt; contributed = amt; invested += amt; action = "contribution";\n'
+    + '        // A withdrawal draws on the SOXL pile before the strategy\'s own holdings.\n'
+    + '        if (cash < 0 && pileCash > 0) { const take = Math.min(pileCash, -cash); pileCash -= take; cash += take; pileNote = "withdrawal — took " + money(take) + " from the pile\'s cash"; }\n'
+    + '        if (cash < 0 && pileSh > 0 && soxlPx > 0) {\n'
+    + '          const gross = Math.min(pileSh * soxlPx, -cash / (1 - cost));\n'
+    + '          pileSh = Math.max(0, pileSh - gross / soxlPx); fee += gross * cost; cash += gross * (1 - cost);\n'
+    + '          pileNote = "withdrawal — sold " + money(gross) + " of the SOXL pile"; if (!(pileSh > 0)) { pileSh = 0; pilePut = 0; pileDeposits = 0; }\n'
+    + '        }\n', 'the contribution line');
+  t = once(t, '      const want = tmHold(i, capSq(i, wantNow(i)));\n', '      const baseWant = capSq(i, wantNow(i));\n      let want = tmHold(i, baseWant);\n      const soxlOn = baseWant === "tqqq" && soxlOnAt[i] === 1 && soxlPx > 0;\n      if (soxlOn) want = "soxl";\n      soxlSwitch = soxlOn !== soxlPrev && baseWant === "tqqq";\n      soxlLeft = soxlPrev && !soxlOn;   // for the trade reason: the pile block below moves soxlPrev on before the note is built\n', 'the holding decision');
+  t = once(t, '      const trigger = tmPanel(triggerAt(i));\n', '      const trigger = soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i));\n' + atClose, 'the trade panel line');
+  t = once(t, 'const reason = (i, w) => tmWhy ? tmWhy : ', 'const reason = (i, w) => soxlWhy(i, w) ? soxlWhy(i, w) + (tmWhy ? "; " + tmWhy : "") : tmWhy ? tmWhy : ', 'the trade reason');
+  t = once(t, '      rallyPrev = rally;\n', '      rallyPrev = rally; soxlPrev = soxlOn;\n', 'the end of the pile block');
+  // SOXL's panels go after TQQQ's lead panel: each fund's price over its
+  // relative pricing (the user, 2026-11-05: "show soxl pricing chart at the
+  // relative soxl pricing too"), both at full height. In the lead mode the
+  // price panel carries the lead's levels as SOXL prices (the price at which
+  // the lead would sit on the level today), so the crossings read there too.
+  t = once(t, '    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD });\n',
+    '    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD });\n'
+    + '    if (data.soxl && soxlWhen === "lead") lines.push({ key: "soxlPrice", label: "SOXL price", group: SOXL_PRICE, tall: true }, { key: "soxlLeadInPx", label: "Hold SOXL under", group: SOXL_PRICE }, { key: "soxlLeadOutPx", label: "Back to TQQQ over", group: SOXL_PRICE },\n'
+    + '      { key: "soxlLead", label: "SOXL ahead of SOXX", unit: "%", group: SOXL_PANEL, tall: true }, { key: "soxlLeadIn", label: "Hold SOXL under", unit: "%", group: SOXL_PANEL }, { key: "soxlLeadOut", label: "Back to TQQQ over", unit: "%", group: SOXL_PANEL });\n'
+    + '    else if (data.soxl && soxlWhen !== "never" && soxlWhen !== "always") lines.push({ key: "soxlPrice", label: "SOXL price", group: SOXL_PANEL, tall: true }, soxlWhen === "belowAvg" ? { key: "soxlAvgLine", label: SW + "-day average", group: SOXL_PANEL } : { key: "soxlLine", label: Math.round(soxlDrop * 100) + "% under the " + SW + "-day high", group: SOXL_PANEL });\n', 'the chart lines');
+  t = once(t, '      const hp = priceOf(held, i), holdingsValue = shares * hp;\n', '      const hp = priceOf(held, i), holdingsValue = shares * hp;\n' + joined, 'the holdings value line');
+  t = once(t, '      log: log, lines: lines,\n', '      log: log, holdings: holdings, lines: lines,\n', 'the result object');
+  t = once(t, '          date: dates[i], value: holdingsValue + cash, action: action, note: note,\n',
+    '          date: dates[i], value: holdingsValue + cash + pileValue, action: action, note: note,\n          soxlPile: pileValue > 0 ? pileValue : null, soxlPut: pilePut > 0 ? pilePut : null,\n          soxlPrice: soxlPx > 0 && soxlHi[i] > 0 ? soxlPx : null, soxlLine: soxlHi[i] > 0 ? soxlHi[i] * (1 - soxlDrop) : null, soxlAvgLine: soxlAvg[i] > 0 ? soxlAvg[i] : null,\n          soxlLead: soxlLead[i] === soxlLead[i] ? soxlLead[i] : null, soxlLeadIn: soxlLead[i] === soxlLead[i] ? leadIn : null, soxlLeadOut: soxlLead[i] === soxlLead[i] ? leadOut : null,\n          soxlLeadInPx: soxlBase[i] > 0 ? soxlBase[i] * (1 + leadIn / 100) : null, soxlLeadOutPx: soxlBase[i] > 0 ? soxlBase[i] * (1 + leadOut / 100) : null,\n', 'the log row');
+  if (!t.endsWith('    return res;\n  }\n}')) throw new Error(`withSoxlPile(${spec.name}): the base must end with its dashboard`);
+  return t.slice(0, -'    return res;\n  }\n}'.length) + card + '    return res;\n  }\n}';
+}
+CODE[52] = withSoxlPile(CODE[50], { name: "TQQQ VS QQQ, Mon Turn, Soxl Acc" });
+
+// ===== The stretch strategy on another pair =================================
+// #53 — SOXL vs SOXX stretch (the user, 2026-11-05: "do soxx, soxl relation like
+// you did with tqqq qqq relation"): #47's rules on the semiconductor pair, SOXL's
+// buy & hold growth against SOXX's over the lookback. Built from #47's text at
+// load, so a change to the rules reaches it; the funds, the names and the
+// defaults are swapped (the defaults from this pair's own fit, scratchpad
+// edge/fitPair.cjs). SQQQ stays the inverse fund: there is no SOXS on the site.
+// #54 is #53 with Turnaround Monday in its idle cash, buying SOXL.
+function withPair(base, spec) {
+  let t = base;
+  const once = (find, repl, what) => {
+    const at = t.indexOf(find);
+    if (at < 0 || t.indexOf(find, at + 1) >= 0) throw new Error(`withPair(${spec.name}): ${what} must appear exactly once in the base`);
+    t = t.slice(0, at) + repl + t.slice(at + find.length);
+  };
+  t = t.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
+  once('T = data.tqqq, Q = data.qqq', `T = data.${spec.lev}, Q = data.${spec.one}`, 'the price arrays');
+  once('{ value: "qqq", label: "QQQ" }', `{ value: "${spec.one}", label: "${spec.oneName}" }`, 'the 1x hold option');
+  t = t.split('"tqqq"').join(`"${spec.lev}"`);
+  t = t.replace(/\bTQQQ\b/g, spec.levName).replace(/\bQQQ\b/g, spec.oneName);   // whole words; SQQQ keeps its name
+  // the pair's own defaults: each param's `default:` inside its own block, and run()'s fallbacks
+  const lit = v => typeof v === 'string' ? JSON.stringify(v) : String(v);
+  for (const [id, v] of Object.entries(spec.defaults)) {
+    const at = t.indexOf(`id: "${id}"`);
+    if (at < 0 || t.indexOf(`id: "${id}"`, at + 1) >= 0) throw new Error(`withPair(${spec.name}): param ${id} must appear exactly once`);
+    const rest = t.slice(at), stop = Math.min(...[rest.indexOf('{ id: "', 1), rest.indexOf('{ section:', 1), rest.indexOf('\n  ],')].filter(k => k > 0));
+    const seg = rest.slice(0, stop), m = /default:\s*("[^"]*"|true|false|-?\d+(?:\.\d+)?)/.exec(seg);
+    if (!m) throw new Error(`withPair(${spec.name}): no default for ${id}`);
+    t = t.slice(0, at) + seg.replace(m[0], `default: ${lit(v)}`) + t.slice(at + stop);
+  }
+  for (const [find, repl] of spec.fallbacks || []) once(find, repl, 'the fallback ' + find);
+  return t;
+}
+CODE[53] = withPair(CODE[47], { name: "SOXL vs SOXX stretch", lev: "soxl", one: "soxx", levName: "SOXL", oneName: "SOXX",
+  // the pair's own fit on Q1 2010 - Q4 2025, round values from the plateau climb (scratchpad edge/fitPair.cjs, roundPair.cjs)
+  defaults: {"lookbackDays": 570, "startAvgDays": 2, "topLead": 155, "topHold": "sqqq", "topDays": 35, "backLead": 90, "floorLead": -10, "floorHold": "sqqq", "reentryLead": 20, "reentryCloses": 1, "deepLead": -40, "overPct": 70, "overWindow": 200},
+  fallbacks: [
+    ['const L = Math.round(+p.lookbackDays || 550), years', 'const L = Math.round(+p.lookbackDays || 570), years'],
+    ['const W = p.startAvgDays == null ? 65 :', 'const W = p.startAvgDays == null ? 2 :'],
+    ['const top = p.topLead == null ? 125 : +p.topLead, back = p.backLead == null ? 25 : +p.backLead', 'const top = p.topLead == null ? 155 : +p.topLead, back = p.backLead == null ? 90 : +p.backLead'],
+    ['const floor = p.floorLead == null ? 5 : +p.floorLead', 'const floor = p.floorLead == null ? -10 : +p.floorLead'],
+    ['const reentry = p.reentryLead == null ? 25 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 5);', 'const reentry = p.reentryLead == null ? 20 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 1);'],
+    ['const deep = p.deepLead == null ? -30 : +p.deepLead', 'const deep = p.deepLead == null ? -40 : +p.deepLead'],
+    ['OW = +p.overWindow || 250;', 'OW = +p.overWindow || 200;'] ] });
+// #54: #53 with Turnaround Monday in its idle cash, buying SOXL on TQQQ's prior-day low and high: the
+// best of buying SOXL or TQQQ on TQQQ's or SOXL's signal (scratchpad edge/monday-pair.cjs).
+CODE[54] = withTurnaroundMonday(CODE[53], { name: "SOXL vs SOXX + Turnaround Monday", signal: "tqqq", levels: "hl", fund: "soxl", hooks: [
+  ['      const want = capSq(i, wantNow(i));', '      const want = tmHold(i, capSq(i, wantNow(i)));', 'the holding decision'],
+  ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
+  ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
+
 // ===== The SMA strategy as code =============================================
 // The user (2026-11-04): "I want built in sma panel ... converted into code,
 // but still keeping all functionality as is, and the result should stay
@@ -3442,8 +3728,8 @@ const SMA_ENGINE_SOURCE = [wilderAverages, rollingSMA, rollingRSI, makeLazyIndic
 // it stays out of the strategy's code.
 const SMA_SETTINGS = [
   {section: "Signal"},
-  {id: "fund",select: "select-sma-underlying",label: "Fund bought",text: "Buy {}",options: [{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"},{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"}]},
-  {id: "signal",select: "select-sma-asset",label: "Signal from",text: "when {}",options: [{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"}]},
+  {id: "fund",select: "select-sma-underlying",label: "Fund bought",text: "Buy {}",options: [{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"},{value: "soxl",label: "SOXL"},{value: "soxx",label: "SOXX"},{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"}]},
+  {id: "signal",select: "select-sma-asset",label: "Signal from",text: "when {}",options: [{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"},{value: "soxl",label: "SOXL"},{value: "soxx",label: "SOXX"}]},
   {id: "window",select: "select-sma-window",label: "Average window (days)",text: "closes above its {}-day average price.",options: [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 22 }, (_, k) => 230 + 10 * k), Array.from({ length: 52 }, (_, k) => 449 + k))},
   {id: "entryBuf",select: "select-sma-entry-buf",label: "Buy buffer (%)",text: "Require at least {} above the average to buy,",unit: "%",options: Array.from({ length: 21 }, (_, k) => +(0.1 * k).toFixed(1)).concat([2.5, 3], Array.from({ length: 81 }, (_, k) => +(3.2 + 0.1 * k).toFixed(1)), Array.from({ length: 39 }, (_, k) => 12 + k))},
   {id: "exitBuf",select: "select-sma-exit-buf",label: "Sell buffer (%)",text: "and {} below it to sell.",unit: "%",options: Array.from({ length: 21 }, (_, k) => +(0.1 * k).toFixed(1)).concat(Array.from({ length: 6 }, (_, k) => +(2.5 + 0.5 * k).toFixed(1)), Array.from({ length: 7 }, (_, k) => 6 + k), Array.from({ length: 81 }, (_, k) => +(12.4 + 0.1 * k).toFixed(1)), Array.from({ length: 30 }, (_, k) => 21 + k))},
@@ -3457,7 +3743,7 @@ const SMA_SETTINGS = [
   {id: "rsiBuyWindow",select: "select-sma-rsi-cool-window",label: "RSI buy window (days)",text: "Only buy once RSI({})",options: Array.from({ length: 100 }, (_, k) => 2 + k)},
   {id: "rsiBuy",select: "select-sma-rsi-cool",label: "RSI buy level",text: "is {}.",options: (Array.from({ length: 190 }, (_, k) => +(5 + 0.5 * k).toFixed(1))).map(v => ({ value: v, label: "below " + v })).concat([{ value: 0, label: "at any level (off)" }]),tip: "After a buy signal, wait for the price to cool off instead of chasing. Example: set to 40 — you hold until RSI dips under 40 (a pullback), then buy. The number inside RSI( ) = look-back days (2–30). Off = buy as soon as the buy signal appears."},
   {section: "What to hold when you sell"},
-  {id: "outAsset",select: "select-sma-out-asset",label: "Held when out",text: "When out of the market, hold {} instead.",options: ["cash",{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"}],tip: "What you hold after a sell. • cash — just waits, earning the interest rate below • QQQ / SPY — keeps your money in the plain, non-leveraged market: much safer than the 3× fund, but still grows if the market drifts up Example: sell TQQQ → sit in QQQ → jump back to TQQQ when the buy signal returns."},
+  {id: "outAsset",select: "select-sma-out-asset",label: "Held when out",text: "When out of the market, hold {} instead.",options: ["cash",{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"},{value: "soxl",label: "SOXL"},{value: "soxx",label: "SOXX"}],tip: "What you hold after a sell. • cash — just waits, earning the interest rate below • QQQ / SPY — keeps your money in the plain, non-leveraged market: much safer than the 3× fund, but still grows if the market drifts up Example: sell TQQQ → sit in QQQ → jump back to TQQQ when the buy signal returns."},
   {id: "cashRate",select: "select-sma-cashrate",label: "Cash interest (%/yr)",text: "That cash earns {} a year.",fit: false,when: {outAsset: "cash"},options: [{value: 0,label: "0.0%"},{value: 0.5,label: "0.5%"},{value: 1,label: "1.0%"},{value: 1.5,label: "1.5%"},{value: 2,label: "2.0%"},{value: 2.5,label: "2.5%"},{value: 3,label: "3.0%"},{value: 3.5,label: "3.5%"},{value: 4,label: "4.0%"},{value: 4.5,label: "4.5%"},{value: 5,label: "5.0%"},{value: 5.5,label: "5.5%"},{value: 6,label: "6.0%"},{value: 6.5,label: "6.5%"},{value: 7,label: "7.0%"},{value: 7.5,label: "7.5%"},{value: 8,label: "8.0%"},{value: 8.5,label: "8.5%"},{value: 9,label: "9.0%"},{value: 9.5,label: "9.5%"},{value: 10,label: "10.0%"},{value: 10.5,label: "10.5%"},{value: 11,label: "11.0%"},{value: 11.5,label: "11.5%"},{value: 12,label: "12.0%"},{value: 12.5,label: "12.5%"},{value: 13,label: "13.0%"},{value: 14,label: "14.0%"},{value: 15,label: "15.0%"},{value: 16,label: "16.0%"},{value: 18,label: "18.0%"},{value: 20,label: "20.0%"}],tip: "While you're out of the market and sitting in cash, this is the yearly interest that cash earns — like a savings account or T-bills. Example: 4% = idle cash grows about 4% a year while you wait to buy back in."},
   {section: "Ease into your trades",tip: "By default every trade happens all at once. Here you can spread a buy across several months — a slice each month, so you're not betting everything on one day's price. Only buying is spread; every sell still happens the same day. Example: set the backup ease to 5 days — the day the strategy goes out it sells your primary fund to cash right away, then buys into the backup fund a slice each trading day for the next five days. Pick 2 months and it spreads that buy across roughly two months instead. If the buy signal comes back before it finishes, it stops and rotates into the primary fund."},
   {id: "easeIn",select: "select-sma-dca-in",label: "Ease in",text: "When you buy, ease into the primary fund over {}.",options: [{ value: 0, label: "instant" }].concat((Array.from({ length: 130 }, (_, k) => 1 + k).concat(Array.from({ length: 6 }, (_, k) => 147 + 21 * k))).map(v => ({ value: v, label: v >= 42 && v % 21 === 0 ? v / 21 + " months" : v + (v === 1 ? " day" : " days") })))},
@@ -3465,7 +3751,7 @@ const SMA_SETTINGS = [
   {section: "Trading cost"},
   {id: "tradeCost",select: "select-sma-cost",label: "Trading cost (%)",text: "Each buy or sell costs {} in fees and slippage.",unit: "%",fit: false,options: [0,0.01,0.02,0.03,0.05,0.1,0.15,0.2,0.25,0.3,0.5,0.75,1],tip: "What each trade costs you — broker fees plus slippage (the gap between the price you expect and the price you actually get). Charged on every buy AND every sell, so switching funds pays it twice. Example: 0.1% turns a $10,000 buy into $9,990 of fund. A strategy that trades often pays it many times, so raising it shows how much real-world friction eats into the result."},
   {section: "Bubble insurance",tip: "A safety brake for bubbles. When the market has run far above its average line (think 1999 or late 2021), holding a 3× fund is extra risky — so this rule sells everything to cash early, no matter what the main buy/sell signal says. It measures how far the ticker you pick sits above its own moving average, and it's separate from \"What to hold when you sell\" above (that only decides where normal trend exits go)."},
-  {id: "brakeAsset",select: "select-sma-bg-asset",label: "Bubble brake reads",text: "Sell everything to cash when {}",options: [{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"}]},
+  {id: "brakeAsset",select: "select-sma-bg-asset",label: "Bubble brake reads",text: "Sell everything to cash when {}",options: [{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"},{value: "soxl",label: "SOXL"},{value: "soxx",label: "SOXX"}]},
   {id: "brakePct",select: "select-sma-bg-gtfo",label: "Bubble brake level",text: "is {}",options: (Array.from({ length: 200 }, (_, k) => 1 + k)).map(v => ({ value: v, label: "+" + v + "%" })).concat([{ value: 0, label: "off" }])},
   {id: "brakeWindow",select: "select-sma-bg-window",label: "Bubble brake average (days)",text: "above its {}-day average.",options: [5].concat(Array.from({ length: 16 }, (_, k) => 10 + 10 * k), Array.from({ length: 81 }, (_, k) => 165 + k), Array.from({ length: 26 }, (_, k) => 250 + 10 * k))}
 ];
@@ -3492,7 +3778,7 @@ function smaStrategyCode(name, defaults) {
     // ---- The app's SMA engine and the tables it reads (js/data.js, js/simulate.js) ----
 ${SMA_ENGINE_SOURCE}
     // ---- Its inputs, rebuilt from the prices the way the page builds them (js/init.js) ----
-    const daily = data.dates.map((date, i) => ({ date, tqqq: data.tqqq[i], qqq: data.qqq[i], spy: data.spy[i], qld: data.qld[i], sso: data.sso[i], spxl: data.spxl[i], sqqq: data.sqqq[i], gld: data.gld[i] }));
+    const daily = data.dates.map((date, i) => ({ date, tqqq: data.tqqq[i], qqq: data.qqq[i], spy: data.spy[i], qld: data.qld[i], sso: data.sso[i], spxl: data.spxl[i], sqqq: data.sqqq[i], gld: data.gld[i], soxl: data.soxl[i], soxx: data.soxx[i] }));
     const dailyDateToIdx = new Map(data.dates.map((d, i) => [d, i]));
     const quarterlyData = periodRows(daily, getQuarter), monthlyData = periodRows(daily, getMonth);
     let smaAtDailyByKey, smaAtMonthlyByKey, rsiAtDailyByKey, rsiAtMonthlyByKey, dailyRows;
@@ -3685,8 +3971,8 @@ const NINESIG_ENGINE_SOURCE = [simulate, buildFormulaSchedule, walkWeekEnds, isW
 const NINESIG_SETTINGS = [
   {section: "Start"},
   {id: "cashPct",select: "select-9sig-cash",label: "Entry cash share (%)",text: "Divide the entry amount into {}",unit: "%",options: Array.from({ length: 101 }, (_, k) => k)},
-  {id: "parkAsset",select: "select-9sig-park-asset",label: "Safety slice held in",text: "held as {}",options: ["cash",{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "qld",label: "QLD"},{value: "tqqq",label: "TQQQ"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"}],tip: "By default the safety slice (your cash %) is held as cash, earning the rate below. Pick QQQ/SPY/etc. instead to hold that slice in that fund — new money and rebalances buy into it, and the cash interest stops applying. Picking a leveraged fund leverages both slices."},
-  {id: "fund",select: "select-9sig-underlying",label: "Fund",text: "and use the rest to buy {}.",options: [{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"},{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"}]},
+  {id: "parkAsset",select: "select-9sig-park-asset",label: "Safety slice held in",text: "held as {}",options: ["cash",{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"},{value: "qld",label: "QLD"},{value: "tqqq",label: "TQQQ"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"},{value: "soxl",label: "SOXL"},{value: "soxx",label: "SOXX"}],tip: "By default the safety slice (your cash %) is held as cash, earning the rate below. Pick QQQ/SPY/etc. instead to hold that slice in that fund — new money and rebalances buy into it, and the cash interest stops applying. Picking a leveraged fund leverages both slices."},
+  {id: "fund",select: "select-9sig-underlying",label: "Fund",text: "and use the rest to buy {}.",options: [{value: "tqqq",label: "TQQQ"},{value: "qld",label: "QLD"},{value: "sso",label: "SSO"},{value: "spxl",label: "SPXL"},{value: "sqqq",label: "SQQQ"},{value: "gld",label: "GLD"},{value: "soxl",label: "SOXL"},{value: "soxx",label: "SOXX"},{value: "qqq",label: "QQQ"},{value: "spy",label: "SPY"}]},
   {id: "cashRate",select: "select-9sig-cashrate",label: "Cash interest (%/yr)",text: "That parked cash earns {} a year.",fit: false,when: {parkAsset: "cash"},options: [{value: 0,label: "0.0%"},{value: 0.5,label: "0.5%"},{value: 1,label: "1.0%"},{value: 1.5,label: "1.5%"},{value: 2,label: "2.0%"},{value: 2.5,label: "2.5%"},{value: 3,label: "3.0%"},{value: 3.5,label: "3.5%"},{value: 4,label: "4.0%"},{value: 4.5,label: "4.5%"},{value: 5,label: "5.0%"},{value: 5.5,label: "5.5%"},{value: 6,label: "6.0%"},{value: 6.5,label: "6.5%"},{value: 7,label: "7.0%"},{value: 7.5,label: "7.5%"},{value: 8,label: "8.0%"},{value: 8.5,label: "8.5%"},{value: 9,label: "9.0%"},{value: 9.5,label: "9.5%"},{value: 10,label: "10.0%"},{value: 10.5,label: "10.5%"},{value: 11,label: "11.0%"},{value: 11.5,label: "11.5%"},{value: 12,label: "12.0%"},{value: 12.5,label: "12.5%"},{value: 13,label: "13.0%"},{value: 14,label: "14.0%"},{value: 15,label: "15.0%"},{value: 16,label: "16.0%"},{value: 18,label: "18.0%"},{value: 20,label: "20.0%"}],tip: "Annual interest the 9sig strategy's idle cash earns between rebalances. Independent of the SMA and Invested Compounded rates."},
   {section: "Target"},
   {id: "period",select: "select-9sig-period",label: "Rebalance every",text: "Rebalance {}",options: ["weekly","monthly","quarterly","yearly"],tip: "How often you rebalance. Classical 9sig is quarterly with a 9% per-quarter target, so the growth rate next to this is read as 'per chosen period' — quarterly + 9% means the target grows 9% every quarter."},
@@ -3726,7 +4012,7 @@ function nineSigStrategyCode(name, defaults) {
     // ---- The app's 9sig engine and what it reads (js/simulate.js, js/data.js, js/utils.js) ----
 ${NINESIG_ENGINE_SOURCE}
     // ---- Its inputs, rebuilt from the prices as the page builds them (js/init.js) ----
-    const daily = data.dates.map((date, i) => ({ date, tqqq: data.tqqq[i], qqq: data.qqq[i], spy: data.spy[i], qld: data.qld[i], sso: data.sso[i], spxl: data.spxl[i], sqqq: data.sqqq[i], gld: data.gld[i] }));
+    const daily = data.dates.map((date, i) => ({ date, tqqq: data.tqqq[i], qqq: data.qqq[i], spy: data.spy[i], qld: data.qld[i], sso: data.sso[i], spxl: data.spxl[i], sqqq: data.sqqq[i], gld: data.gld[i], soxl: data.soxl[i], soxx: data.soxx[i] }));
     const dailyDateToIdx = new Map(data.dates.map((d, i) => [d, i]));
     const quarterlyData = periodRows(daily, getQuarter), monthlyData = periodRows(daily, getMonth);
     let weeklyData = null, yearlyData = null, periodDataByName = null, monthsInPeriodByName = null, monthlyByQuarter = null;

@@ -3095,6 +3095,10 @@
   .custom-lines-chart .mini-zoom-reset rect { fill: rgba(134, 118, 255, 0.16); stroke: rgba(134, 118, 255, 0.55); stroke-width: 0.3; }
   .custom-lines-chart .mini-zoom-reset:hover rect { fill: rgba(134, 118, 255, 0.34); }
   .custom-lines-chart .mini-zoom-reset text { fill: #383874; }
+  /* The eye on each end label hides its line (the shared .cfg-sub-chip handler flips it). */
+  .custom-lines-chart .mini-line-toggle { cursor: pointer; }
+  .custom-lines-chart .mini-line-toggle.legend-hidden { opacity: var(--state-hidden-opacity); }
+  .custom-lines-chart .mini-line-toggle.legend-hidden:hover { opacity: 0.8; }
   .custom-lines-chart .mini-latest { cursor: pointer; }
   .custom-lines-chart .mini-latest rect { fill: rgba(134, 118, 255, 0.16); stroke: rgba(134, 118, 255, 0.55); stroke-width: 0.3; }
   .custom-lines-chart .mini-latest:hover rect { fill: rgba(134, 118, 255, 0.34); }

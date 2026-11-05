@@ -133,6 +133,8 @@ SPY_EXPENSE_DAILY  = 0.000945 / 252  # 0.0945% annual
 SSO_EXPENSE_DAILY  = 0.0087   / 252  # 0.87%   annual (ProShares Ultra S&P500, 2×)
 SPXL_EXPENSE_DAILY = 0.0095   / 252  # 0.95%   annual (Direxion Daily S&P500 Bull 3×)
 GLD_EXPENSE_DAILY  = 0.0040   / 252  # 0.40%   annual (SPDR Gold Shares)
+SOXL_EXPENSE_DAILY = 0.0075   / 252  # 0.75%   annual (Direxion Daily Semiconductor Bull 3×)
+SOXX_EXPENSE_DAILY = 0.0035   / 252  # 0.35%   annual (iShares Semiconductor ETF, 1×)
 # === Swap-spread calibration ==============================================
 # Real leveraged ETFs pay their swap counterparty something HIGHER than the
 # bare Fed Funds rate. The spread reflects counterparty risk premium, swap
@@ -151,6 +153,13 @@ GLD_EXPENSE_DAILY  = 0.0040   / 252  # 0.40%   annual (SPDR Gold Shares)
 QLD_SWAP_SPREAD   = 0.005
 SSO_SWAP_SPREAD   = 0.005
 TQQQ_SWAP_SPREAD  = 0.0065
+# SOXL's prefix runs on the price-only PHLX index (^SOX), so its fitted term is
+# an effective spread: the real swap spread less the dividends the index leaves
+# out (about 1%/yr for semiconductors, 3 pp at 3×). Fitted on 2010-03-11 to
+# 2021-05-31, the years SOXL tracked ^SOX before moving to the ICE Semiconductor
+# Index: the forward replay then matches the real fund's end value (median daily
+# error 0.105%, worst rolling year 17.6%). At 0 it runs 3.6 pp/yr light.
+SOXL_SWAP_SPREAD  = -0.0181
 SPXL_SWAP_SPREAD  = 0.005
 
 # === Inverse (-3x) model, calibrated ======================================
@@ -193,6 +202,8 @@ tickers = [
     ('SPXL',   'synthetic-spxl.tsv'),
     ('SQQQ',   'synthetic-sqqq.tsv'),
     ('GLD',    'synthetic-gld.tsv'),
+    ('SOXL',   'synthetic-soxl.tsv'),
+    ('SOXX',   'synthetic-soxx.tsv'),
 ]
 # Daily highs and lows of the funds the Turnaround Monday rule can read (its
 # signal: a Monday close under the prior day's low buys, a close over the
@@ -228,6 +239,14 @@ high_low_history = {
 #                            have no daily swings.
 # The LBMA's daily London fix (1968+) would be the better source, but its site
 # blocks scripted downloads, and FRED dropped its copy in 2022.
+# SOXL before its 2010-03-11 launch is the PHLX Semiconductor index (^SOX, Yahoo,
+# from 1994-05-04) walked backward at 3× with financing, like TQQQ from ^NDX
+# (build_soxl_prefix). No semiconductor index exists before May 1994, so the
+# file starts there; js/data.js carries the first price flat before it.
+soxl_history = {'index': '^SOX'}
+# SOXX before its 2001-07-13 launch is the same index less SOXX's fee, at 1x, no
+# financing (build_soxx_prefix): the 1x leg of the SOXL vs SOXX strategy, as QQQ
+# is of TQQQ vs QQQ. ^SOX is price-only, so the prefix runs about 1%/yr light.
 TROY_OUNCES_PER_KG = 32.1507466
 gold_history = {
     'futures':              'GC=F',
@@ -767,6 +786,53 @@ def write_gld_file(gld_df):
           f"{prefix[0][0].strftime('%Y-%m-%d')} to {gld_df.index[-1].strftime('%Y-%m-%d')}")
 
 
+def build_soxl_prefix(soxl_df, days, rate_map):
+    """SOXL's rows before its launch, as [(Timestamp, close)]: ^SOX on the given
+    trading days (the QQQ file's), walked back from SOXL's first close at 3×
+    with financing at the short rate plus SOXL_SWAP_SPREAD and SOXL's fee."""
+    first_real = normalize_ts(soxl_df.index[0])
+    wanted = set(d for d in days if d <= first_real)
+    sox = [(d, c) for d, c in df_to_pairs(fetch(soxl_history['index'])) if d in wanted]
+    _, pairs = walk_backward(sox, first_real, cell(soxl_df['Close'].iloc[0]),
+                             leverage=3, expense_daily=SOXL_EXPENSE_DAILY,
+                             rate_map=rate_map, rate_spread=SOXL_SWAP_SPREAD)
+    return pairs
+
+
+def build_soxx_prefix(soxx_df, days):
+    """SOXX's rows before its launch: ^SOX on the given trading days walked back
+    from SOXX's first close at 1x less SOXX's fee."""
+    first_real = normalize_ts(soxx_df.index[0])
+    wanted = set(d for d in days if d <= first_real)
+    sox = [(d, c) for d, c in df_to_pairs(fetch(soxl_history['index'])) if d in wanted]
+    _, pairs = walk_backward(sox, first_real, cell(soxx_df['Close'].iloc[0]), leverage=1, expense_daily=SOXX_EXPENSE_DAILY)
+    return pairs
+
+
+def write_soxx_file(soxx_df):
+    """synthetic-soxx.tsv from scratch: build_soxx_prefix on the committed QQQ file's trading days, then SOXX's real closes."""
+    data_dir = os.path.join(basedir, DATA_DIR)
+    price_file = dict(tickers)
+    days = [d for d, _ in read_price_tsv(os.path.join(data_dir, price_file['QQQ']))]
+    prefix = build_soxx_prefix(soxx_df, days)
+    write_price_tsv(os.path.join(data_dir, price_file['SOXX']), prefix, soxx_df)
+    print(f"  {price_file['SOXX']}: {len(prefix)} synthesized + {len(soxx_df)} real, "
+          f"{prefix[0][0].strftime('%Y-%m-%d')} to {soxx_df.index[-1].strftime('%Y-%m-%d')}")
+
+
+def write_soxl_file(soxl_df):
+    """synthetic-soxl.tsv from scratch: build_soxl_prefix on the committed QQQ
+    file's trading days with the committed short rates, then SOXL's real closes."""
+    data_dir = os.path.join(basedir, DATA_DIR)
+    price_file = dict(tickers)
+    days = [d for d, _ in read_price_tsv(os.path.join(data_dir, price_file['QQQ']))]
+    rate_map = dict(read_rate_tsv(os.path.join(data_dir, 'short-rates.tsv')))
+    prefix = build_soxl_prefix(soxl_df, days, rate_map)
+    write_price_tsv(os.path.join(data_dir, price_file['SOXL']), prefix, soxl_df)
+    print(f"  {price_file['SOXL']}: {len(prefix)} synthesized + {len(soxl_df)} real, "
+          f"{prefix[0][0].strftime('%Y-%m-%d')} to {soxl_df.index[-1].strftime('%Y-%m-%d')}")
+
+
 def incremental_refresh():
     """Default daily-cron path. The synthesized pre-IPO prefix of each TSV
     is permanent and lives in the committed file; we only need to refresh
@@ -834,6 +900,15 @@ _argp.add_argument('--high-low-history', action='store_true',
                         '(QQQ from ^NDX bars, TQQQ from QQQ at 3x; see '
                         'high_low_history) built from the committed price files. '
                         'Nothing else is touched.')
+_argp.add_argument('--soxl-history', action='store_true',
+                   help='Rewrite synthetic-soxl.tsv: SOXL\'s real closes plus its '
+                        'pre-launch rows from the PHLX Semiconductor index at 3× '
+                        '(see soxl_history), on the committed QQQ file\'s trading '
+                        'days and short rates. Nothing else is touched.')
+_argp.add_argument('--soxx-history', action='store_true',
+                   help='Rewrite synthetic-soxx.tsv: SOXX\'s real closes plus its '
+                        'pre-launch rows from the PHLX Semiconductor index at 1x '
+                        'less its fee, on the committed QQQ file\'s trading days.')
 _argp.add_argument('--gold-history', action='store_true',
                    help='Rewrite synthetic-gld.tsv: GLD\'s real closes plus its '
                         'pre-launch rows from gold prices (see gold_history), on '
@@ -848,6 +923,16 @@ if _args.high_low_history:
 
 if _args.gold_history:
     write_gld_file(fetch('GLD'))
+    print("Done.")
+    sys.exit(0)
+
+if _args.soxl_history:
+    write_soxl_file(fetch('SOXL'))
+    print("Done.")
+    sys.exit(0)
+
+if _args.soxx_history:
+    write_soxx_file(fetch('SOXX'))
     print("Done.")
     sys.exit(0)
 
@@ -869,6 +954,9 @@ spy_df          = fetch('SPY')
 sso_df          = fetch('SSO')                              # ProShares 2× S&P500, 2006-06-21+
 spxl_df         = fetch('SPXL')                             # Direxion 3× S&P500, 2008-11-05+
 gld_df          = fetch('GLD')                              # SPDR Gold Shares, 2004-11-18+
+sqqq_df         = fetch('SQQQ')                             # ProShares UltraPro Short QQQ, 2010-02-11+
+soxl_df         = fetch('SOXL')                             # Direxion 3× semiconductors, 2010-03-11+
+soxx_df         = fetch('SOXX')                             # iShares Semiconductor, 2001-07-13+
 ndx_df          = fetch('^NDX')
 gspc_df         = fetch('^GSPC')
 sp500tr_df      = fetch('^SP500TR')
@@ -1081,13 +1169,17 @@ else:
 qqq_days = [parse_tsv_date(s) for s, _ in qqq_prefix_rows] + [normalize_ts(d) for d in qqq_df.index]
 gld_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_gld_prefix(gld_df, qqq_days)]
 
+# ---- SOXL: real from 2010-03-11, 3× ^SOX with financing back to 1994-05-04 ----
+soxl_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxl_prefix(soxl_df, qqq_days, rate_map)]
+soxx_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxx_prefix(soxx_df, qqq_days)]
+
 
 prefix_by_ticker = {'QQQ': qqq_prefix_rows, 'QLD': qld_prefix_rows,
                     'TQQQ': tqqq_prefix_rows, 'SPY': spy_prefix_rows,
                     'SSO': sso_prefix_rows, 'SPXL': spxl_prefix_rows,
-                    'SQQQ': sqqq_prefix_rows, 'GLD': gld_prefix_rows}
+                    'SQQQ': sqqq_prefix_rows, 'GLD': gld_prefix_rows, 'SOXL': soxl_prefix_rows, 'SOXX': soxx_prefix_rows}
 real_by_ticker   = {'QQQ': qqq_df, 'QLD': qld_df, 'TQQQ': tqqq_df, 'SPY': spy_df,
-                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df, 'GLD': gld_df}
+                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df, 'GLD': gld_df, 'SOXL': soxl_df, 'SOXX': soxx_df}
 
 data_dir = os.path.join(basedir, DATA_DIR)
 os.makedirs(data_dir, exist_ok=True)

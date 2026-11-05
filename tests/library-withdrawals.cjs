@@ -27,11 +27,11 @@ const ck = (name, ok, detail) => {
 };
 
 // ---- data: the same arrays the app hands a custom strategy (buildCustomData) ----
-const TICKERS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld'];
+const TICKERS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'];
 const series = file => parseDataFile(fs.readFileSync(path.join(ROOT, 'data', file), 'utf8'));
 const daily = buildDaily(series('synthetic-qqq.tsv'), series('synthetic-tqqq.tsv'), series('spy.tsv'),
   series('synthetic-qld.tsv'), series('synthetic-sso.tsv'), series('synthetic-spxl.tsv'), series('synthetic-sqqq.tsv'),
-  series('synthetic-gld.tsv'));
+  series('synthetic-gld.tsv'), series('synthetic-soxl.tsv'), series('synthetic-soxx.tsv'));
 const data = {
   dates: daily.map(d => d.date),
   nfci: buildNfciDaily(daily, series('nfci.tsv')),
@@ -144,7 +144,7 @@ const strategyIds = Object.keys(CODE).map(Number).filter(n => !engineRun(n)).sor
   // Entries added on 2026-11-04, after the rule: no saved copy of them lacks
   // it, and their books (MIX_BOOKS_SNIPPET) pay withdrawals in cover(), which
   // sections 1-3 check like everyone else's.
-  const ADDED_AFTER_RULE = [7, 14];
+  const ADDED_AFTER_RULE = [7, 14, 52, 53, 54];
   strategyIds.filter(n => !ADDED_AFTER_RULE.includes(n)).forEach(n => {
     const preRule = CODE[n].replace(WITHDRAWAL_BLOCK, '');
     ck(`#${n} the library text contains the withdrawal block once`, preRule !== CODE[n] && !WITHDRAWAL_BLOCK.test(preRule));

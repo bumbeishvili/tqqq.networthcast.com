@@ -1,6 +1,6 @@
 # tqqq.networthcast.com
 
-Backtesting platform for TQQQ. Strategies run over a reconstructed daily price history that starts in 1953, on TQQQ and seven related funds (QQQ, QLD, SQQQ, SPY, SSO, SPXL, GLD): SMA timing, 9Sig, a library of 46 published and community rules, and custom strategies written in JavaScript, with buy & hold and a cash baseline drawn alongside. A real transaction history can be uploaded to put your own portfolio on the same chart, a separate page follows TQQQ's intraday path session by session, and a desktop widget shows both.
+Backtesting platform for TQQQ. Strategies run over a reconstructed daily price history that starts in 1953, on TQQQ and nine related funds (QQQ, QLD, SQQQ, SPY, SSO, SPXL, GLD, SOXL, SOXX): SMA timing, 9Sig, a library of 46 published and community rules, and custom strategies written in JavaScript, with buy & hold and a cash baseline drawn alongside. A real transaction history can be uploaded to put your own portfolio on the same chart, a separate page follows TQQQ's intraday path session by session, and a desktop widget shows both.
 
 Live: https://tqqq.networthcast.com
 
@@ -59,7 +59,7 @@ Every start year and holding period at once, coloured against a baseline (here c
 
 ## Updating price data
 
-The series under `data/` are TSV files: eight price files, their daily highs and lows, three short-rate files, NFCI, and TQQQ's intraday bars. See [data/README.md](data/README.md) for the format, the synthesis method, and its known biases.
+The series under `data/` are TSV files: ten price files, their daily highs and lows, three short-rate files, NFCI, and TQQQ's intraday bars. See [data/README.md](data/README.md) for the format, the synthesis method, and its known biases.
 
 ```bash
 # One-time setup (creates a venv and installs yfinance)
@@ -72,7 +72,7 @@ python3 -m venv .venv
 
 The default run pulls `period="max"` with `auto_adjust=True`, so every series is dividend- and split-adjusted on the same basis and comparisons between them stay fair. It replaces the post-IPO tail of each price file and copies the committed pre-IPO synthesized prefix through untouched. It does not contact FRED, so the rate files are left alone.
 
-Price files: `synthetic-qqq.tsv`, `synthetic-qld.tsv`, `synthetic-tqqq.tsv`, `spy.tsv`, `synthetic-sso.tsv`, `synthetic-spxl.tsv`, `synthetic-sqqq.tsv`, `synthetic-gld.tsv`.
+Price files: `synthetic-qqq.tsv`, `synthetic-qld.tsv`, `synthetic-tqqq.tsv`, `spy.tsv`, `synthetic-sso.tsv`, `synthetic-spxl.tsv`, `synthetic-sqqq.tsv`, `synthetic-gld.tsv`, `synthetic-soxl.tsv`, `synthetic-soxx.tsv`.
 
 High/low files, written on the same runs from the same bars: `tqqq-hl.tsv`, `qqq-hl.tsv`, `spy-hl.tsv` (date, high, low and that bar's close; real trading days only). The Turnaround Monday strategies read them.
 
@@ -80,7 +80,7 @@ Flags cover the rest:
 
 - `--refresh-rates` re-pulls DFF and TB3MS from FRED and rewrites `fed-funds-effective.tsv`, `t-bill-3mo.tsv`, and `short-rates.tsv`. Nothing else refreshes these, so they drift stale until you run it.
 - `--rebuild` regenerates every price TSV from scratch through the backward-synthesis pipeline. It needs a local `^ndx_d.csv` (Stooq) at the repo root to reach pre-1985 Nasdaq history; that file is not committed, and without it the rebuild stops where Yahoo's `^NDX` stops. Run it when adding a ticker or changing the synthesis.
-- `--high-low-history` and `--gold-history` rebuild the pre-launch rows of the high/low files and of `synthetic-gld.tsv`. [data/README.md](data/README.md) has the details.
+- `--high-low-history`, `--gold-history`, `--soxl-history` and `--soxx-history` rebuild the pre-launch rows of the high/low files, of `synthetic-gld.tsv`, `synthetic-soxl.tsv` and `synthetic-soxx.tsv`. [data/README.md](data/README.md) has the details.
 
 ## Automated refresh
 

@@ -74,15 +74,15 @@
 
   // ---- market data: the same files and derived globals js/init.js sets up ----
   async function loadMarketData() {
-    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, nfci, highLow, fetchedAt] = await Promise.all([
+    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, nfci, highLow, fetchedAt] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
-      loadSQQQDaily().catch(() => []), loadGLDDaily().catch(() => []), loadNFCIWeekly().catch(() => []), Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
+      loadSQQQDaily().catch(() => []), loadGLDDaily().catch(() => []), loadSOXLDaily().catch(() => []), loadSOXXDaily().catch(() => []), loadNFCIWeekly().catch(() => []), Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
       loadDataFetchedAt(),
     ]);
     // The refresh time, as the site keeps it: the signal chart reads it to
     // tell a day still trading from a close (minutesBeforeClose).
     window._dataFetchedAt = fetchedAt;
-    daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq, gld);
+    daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx);
     nfciDaily = buildNfciDaily(daily, nfci);
     highLowDaily = buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]])));
     quarterlyData = periodRows(daily, getQuarter);

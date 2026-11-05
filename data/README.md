@@ -1,6 +1,6 @@
-# Long-history price data for TQQQ, QLD, QQQ, SPY, SSO, SPXL, SQQQ, and GLD
+# Long-history price data for TQQQ, QLD, QQQ, SPY, SSO, SPXL, SQQQ, GLD, SOXL, and SOXX
 
-Daily closing prices for eight ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://tqqq.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
+Daily closing prices for ten ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://tqqq.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
 
 ## ETF launch dates
 
@@ -12,10 +12,12 @@ Daily closing prices for eight ETFs, going back decades before any of them exist
 - **TQQQ** (3× Nasdaq-100) — February 2010
 - **SQQQ** (−3× Nasdaq-100, ProShares UltraPro Short QQQ) — February 2010
 - **GLD** (SPDR Gold Shares, gold bullion) — November 2004
+- **SOXL** (3× semiconductors, Direxion Daily Semiconductor Bull 3X) — March 2010
+- **SOXX** (iShares Semiconductor ETF, 1×) — July 2001
 
 Everything before a fund's launch date is reconstructed. The script walks the longer-lived index backward from launch day, applying the same daily arithmetic the fund itself runs on: leverage, expense ratio, financing cost on the borrowed leg, swap-counterparty spread. What comes out is a continuous "what it would have looked like" series. None of it happened, because the funds didn't exist. It is what the math says their daily prices would have done given the underlying index and the short-term rates of each era.
 
-> **The price files start January 2, 1953.** The rate files go back further; `short-rates.tsv` starts in 1934. 1953 is where daily data gets clean, since the NYSE ran Saturday sessions before then. That start date lives in the committed TSVs themselves. `scripts/update_data.py` has no trimming step, and its daily refresh copies whatever pre-IPO prefix is already on disk.
+> **The price files start January 2, 1953**, except `synthetic-soxl.tsv` and `synthetic-soxx.tsv`, which start May 4, 1994, the first day of the semiconductor index they are built from; the app holds their first price flat before that. The rate files go back further; `short-rates.tsv` starts in 1934. 1953 is where daily data gets clean, since the NYSE ran Saturday sessions before then. That start date lives in the committed TSVs themselves. `scripts/update_data.py` has no trimming step, and its daily refresh copies whatever pre-IPO prefix is already on disk.
 
 ## "How do you approximate TQQQ before it existed?"
 
@@ -46,6 +48,8 @@ The most-asked question about this dataset. The copy-paste answer:
 | **synthetic-spxl.tsv** | November 5, 2008, when SPXL (Direxion Daily S&P500 Bull 3x) launched. | Pre-2008: `(1 + 3 × SP500_daily − 2 × (short_rate + 0.50%)/yr − 0.95%/yr expense)`. 1988–2008 uses real `^SP500TR`, earlier years price-only `^GSPC`. |
 | **synthetic-sqqq.tsv** | February 11, 2010, when SQQQ launched. | Pre-2010 uses the inverse model `(1 − 3 × NDX_daily + 4.028 × short_rate/yr − 1.537 %/yr)`. An inverse fund borrows nothing. It is short 3 units and sits on (1+L)=4 units of cash *earning* the short rate. Both coefficients are fitted against real SQQQ 2010–2026: the rate slope came out 4.028 against a theoretical 4.0, and the −1.537 %/yr intercept covers the 0.95 % fee plus swap spread and slippage. Replayed forward from launch, the model tracks the real fund to within −6.4 % / +1.9 % cumulative over 16.5 years. |
 | **synthetic-gld.tsv** | November 18, 2004, when GLD launched. | Before 2004: gold's own daily price minus GLD's 0.40 %/yr expense ratio, on the same trading days as the other files. Gold prices by stretch: Yahoo gold futures (`GC=F`) from August 30, 2000; the Bundesbank's daily Frankfurt Stock Exchange fixing (DM per kg, converted at that day's Frankfurt DM/USD rate) from June 18, 1968 to December 30, 1998; monthly London prices (World Bank Pink Sheet from 1960, Timothy Green's yearly averages before, via datahub's public-domain `gold-prices` file) for 1953 to June 1968 and 1999 to August 2000. Each month's price sits on the 15th, with a straight line in log price between, so those two stretches have no daily swings. Gold was pegged near $35 an ounce until 1968. Checks: the Frankfurt fixing in dollars lands within 0.2% of the World Bank monthly London price on the median month (1968–1998, 367 months), and gold futures ran 0.48 pp/yr above real GLD over 2004–2026, close to GLD's fee. The LBMA's daily London fix would be the better source for 1968–2000, but its site blocks scripted downloads and FRED dropped its copy in 2022. |
+| **synthetic-soxl.tsv** | March 11, 2010, when SOXL (Direxion Daily Semiconductor Bull 3X) launched. | May 4, 1994 to March 10, 2010: the PHLX Semiconductor index (Yahoo `^SOX`, price-only) walked backward at 3×: `(1 + 3 × SOX_daily − 2 × (short_rate − 1.81%)/yr − 0.75%/yr expense)`. The −1.81 %/yr is an effective spread fitted on March 2010 to May 2021, the years SOXL tracked `^SOX` before moving to the ICE Semiconductor Index: it nets the swap spread against the dividends the price-only index leaves out (about 1 %/yr for semiconductors, 3 pp at 3×). Replayed forward over that window, the formula lands on the real fund's end value, with a median daily error of 0.105 % and a worst rolling year of 17.6 %; at a spread of 0 it runs 3.6 pp/yr light. No semiconductor index exists before May 1994, so the file starts there. |
+| **synthetic-soxx.tsv** | July 13, 2001, when SOXX (iShares Semiconductor ETF) launched. Real dividend-adjusted Yahoo Finance data from there on. | May 4, 1994 to July 12, 2001: the PHLX Semiconductor index (`^SOX`) less SOXX's 0.35 %/yr expense ratio, no financing. The index is price-only, so the prefix runs about 1 %/yr light. SOXX is the 1× leg of the SOXL vs SOXX strategy, as QQQ is of TQQQ vs QQQ. |
 | **fed-funds-effective.tsv** | Daily, July 1, 1954 onward. | None. FRED series `DFF`. Supplies the financing cost on the leveraged leg from 1954. |
 | **t-bill-3mo.tsv** | Monthly, January 1934 onward. | None. FRED series `TB3MS`. The pre-Fed-Funds-market short-rate proxy for 1934–1953. |
 | **short-rates.tsv** | Daily, January 2, 1934 onward. | Derived: `DFF` where it exists, `TB3MS` forward-filled where it doesn't. The only rate file the synthesis reads. |
@@ -88,7 +92,7 @@ Skip the correction and a pre-2010 backtest runs optimistic wherever rates were 
 
 The model above has the fund paying Fed Funds × (L−1). No counterparty actually lends at Fed Funds. They lend at Fed Funds plus a spread covering their risk premium and desk margin.
 
-TQQQ's spread is calibrated: regress the no-spread synthesis against the real fund, then take the spread that closes the residual to about zero over the full window. The other three are that result carried across by leverage tier, and have never been regressed against their own funds.
+TQQQ's and SOXL's spreads are calibrated against their own funds: regress the no-spread synthesis against the real fund, then take the spread that closes the residual to about zero over the fitting window. QLD, SSO and SPXL carry TQQQ's result across by leverage tier, and have never been regressed against their own funds.
 
 | ETF | Leverage | TER (mgmt fee) | Spread used | Basis |
 |---|---|---|---|---|
@@ -96,12 +100,13 @@ TQQQ's spread is calibrated: regress the no-spread synthesis against the real fu
 | **SSO**  | 2× (SPX) | 0.87 % | 0.50 %/yr | estimate; mirrors QLD's 2× spread, not regressed |
 | **TQQQ** | 3× (NDX) | 0.88 % | 0.65 %/yr | calibrated on 2010–present: the 1.3 pp/yr residual ÷ (L−1) = 2 |
 | **SPXL** | 3× (SPX) | 0.95 % | 0.50 %/yr | estimate; S&P 3× swaps assumed tighter than NDX, not regressed |
+| **SOXL** | 3× (SOX) | 0.75 % | −1.81 %/yr, effective | calibrated on March 2010–May 2021 against the price-only `^SOX`; negative because it also stands in for the dividends the index leaves out |
 
 ## How accurate is the synthesized portion?
 
 Four biases survive the financing-cost correction.
 
-**1. Nasdaq dividends before 1999.** For pre-1999 QQQ, QLD, TQQQ, and SQQQ there is only `^NDX`, which is price-only. The official NDX Total Return index (`^XNDX`) only begins March 4, 1999 — **FRED serves its full daily history free** (series [`NASDAQXNDX`](https://fred.stlouisfed.org/data/NASDAQXNDX); Yahoo lists the symbol but returns no history, and NASDAQ.com's API, NASDAQ Data Link, Stooq, Tiingo, EODHD, and Alpha Vantage all gate it) — so no total-return series reaches before 1999 outside institutional data like CRSP. Dividends contributed 0.690 pp/year to QQQ from its 1999 launch to today, so pre-1999 synthetic QQQ runs about 0.7 %/year light and synthetic TQQQ about 2 %/year (3 × that).
+**1. Nasdaq dividends before 1999.** For pre-1999 QQQ, QLD, TQQQ, and SQQQ there is only `^NDX`, which is price-only. The official NDX Total Return index (`^XNDX`) only begins March 4, 1999 — **FRED serves its full daily history free** (series [`NASDAQXNDX`](https://fred.stlouisfed.org/data/NASDAQXNDX); Yahoo lists the symbol but returns no history, and NASDAQ.com's API, NASDAQ Data Link, Stooq, Tiingo, EODHD, and Alpha Vantage all gate it) — so no total-return series reaches before 1999 outside institutional data like CRSP. Dividends contributed 0.690 pp/year to QQQ from its 1999 launch to today, so pre-1999 synthetic QQQ runs about 0.7 %/year light and synthetic TQQQ about 2 %/year (3 × that). SOXL's 1994–2010 prefix is price-only too, but its fitted spread already carries the average dividend gap of 2010–2021; what the fit cannot carry is the index's own drift from the fund's, which reached 17.6 % in the worst rolling year of that window.
 
 **2. S&P dividends before 1988.** SPY, SSO, and SPXL run on price-only `^GSPC` from the files' 1953 start to 1988-01-04. How big that gap is depends on the window you measure `^SP500TR` against `^GSPC` over, because the S&P dividend yield has fallen steadily:
 
@@ -125,7 +130,7 @@ Net direction on TQQQ before 2010, against what real TQQQ would have done had it
 - **Moderate-rate eras** (most of the history): 1–3 pp/year high.
 - **High-rate eras** (1970s–80s): the rate effect is corrected now, leaving the operational component at 2–3 pp/year high.
 
-From 2010 (TQQQ, SQQQ), 2008 (SPXL), 2006 (QLD, SSO), 1999 (QQQ), and 1993 (SPY) onward the prices are real and dividend-adjusted. Backtests confined to the last 15–30 years carry no synthesis bias at all.
+From 2010 (TQQQ, SQQQ, SOXL), 2008 (SPXL), 2006 (QLD, SSO), 2004 (GLD), 2001 (SOXX), 1999 (QQQ), and 1993 (SPY) onward the prices are real and dividend-adjusted. Backtests confined to the last 15–30 years carry no synthesis bias at all.
 
 ### Checked against official sources (August 2026)
 
@@ -153,6 +158,8 @@ Fetch any file straight from GitHub:
 | SPXL | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-spxl.tsv) |
 | SQQQ | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-sqqq.tsv) |
 | GLD  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-gld.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-gld.tsv) |
+| SOXL | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxl.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxl.tsv) |
+| SOXX | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxx.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxx.tsv) |
 | Fed Funds Effective Rate (daily, 1954+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv) |
 | 3-month T-bill (monthly, 1934+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv) |
 | Combined daily short rates (1934+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/short-rates.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/short-rates.tsv) |
@@ -184,12 +191,14 @@ Date	Rate               ← rate files (Rate column, value in % per year)
 
 `.github/workflows/update-data.yml` fires hourly on weekdays (`30 13-22 * * 1-5`) and gates each fire to 09:00–17:30 ET, so nine runs land per trading day: one at the open, seven through the session, one after the close. Each run executes `scripts/update_data.py` in its default incremental mode and commits `data/*.tsv` only when the bytes changed, which makes holidays a no-op.
 
-Incremental mode touches the **eight price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
+Incremental mode touches the **ten price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
 
 ```bash
 python3 scripts/update_data.py --refresh-rates      # re-pull DFF + TB3MS from FRED
 python3 scripts/update_data.py --high-low-history   # rebuild the high/low files' pre-launch rows from the committed price files
 python3 scripts/update_data.py --gold-history       # rebuild synthetic-gld.tsv (real GLD plus its gold-price prefix)
+python3 scripts/update_data.py --soxl-history       # rebuild synthetic-soxl.tsv (real SOXL plus its 3× ^SOX prefix)
+python3 scripts/update_data.py --soxx-history       # rebuild synthetic-soxx.tsv (real SOXX plus its ^SOX prefix)
 python3 scripts/update_data.py --rebuild            # full re-synthesis; needs ^ndx_d.csv for pre-1985
 ```
 

@@ -1,14 +1,16 @@
 // Initialize: load CSV, derive data, set slider max, restore state, render
 (async function init() {
-  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, NFCI_WEEKLY, HIGH_LOW;
+  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, NFCI_WEEKLY, HIGH_LOW;
   try {
-    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, NFCI_WEEKLY, HIGH_LOW] = await Promise.all([
+    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, NFCI_WEEKLY, HIGH_LOW] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
-      // SQQQ and GLD are first-class columns (0-filled on failure): every
-      // engine guards zero prices, so a fetch failure degrades their options
-      // to empty/zero lines instead of blanking the app.
+      // SQQQ, GLD, SOXL and SOXX are first-class columns (0-filled on failure):
+      // every engine guards zero prices, so a fetch failure degrades their
+      // options to empty/zero lines instead of blanking the app.
       loadSQQQDaily().catch(() => []),
       loadGLDDaily().catch(() => []),
+      loadSOXLDaily().catch(() => []),
+      loadSOXXDaily().catch(() => []),
       // NFCI is a signal series, not a price: on failure the credit-veto
       // strategy sees NaN and the veto never fires — degraded, not broken.
       loadNFCIWeekly().catch(() => []),
@@ -29,7 +31,7 @@
     if (spinner) spinner.style.display = 'none';
     return;
   }
-  daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY);
+  daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY);
   nfciDaily = buildNfciDaily(daily, NFCI_WEEKLY);
   highLowDaily = buildHighLowDaily(daily, Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, HIGH_LOW[k]])));
   // "Last updated" freshness note in the header subtitle — the actual
