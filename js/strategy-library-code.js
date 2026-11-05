@@ -211,8 +211,8 @@ function codeFingerprint(code) {
 CODE[1] = `{
   name: "Faber 10-mo / 200-day (monthly) → TQQQ/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold TQQQ while QQQ ends the month above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 12 }, (_, k) => 230 + 10 * k), Array.from({ length: 96 }, (_, k) => 342 + k), [440, 450], Array.from({ length: 31 }, (_, k) => 454 + k), [490, 500], Array.from({ length: 40 }, (_, k) => 505 + 5 * k), Array.from({ length: 12 }, (_, k) => 725 + 25 * k)), default: 500 },
-           ${STAT_PARAM_SNIPPET}],
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 12 }, (_, k) => 230 + 10 * k), Array.from({ length: 96 }, (_, k) => 342 + k), [440, 450], Array.from({ length: 31 }, (_, k) => 454 + k), [490, 500], Array.from({ length: 40 }, (_, k) => 505 + 5 * k), Array.from({ length: 12 }, (_, k) => 725 + 25 * k)), default: 530 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "QQQ's average or median close over the window (the Center line setting). Checked only on the month end." }],
   run(data, p) {
@@ -330,7 +330,7 @@ CODE[8] = `{
   params: [{ id: "band", label: "Band (% around line)", text: "Buy TQQQ when SPY closes {} above its line, and sell when it closes that far below.", unit: "%", options:
       Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 3.5 },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), Array.from({ length: 31 }, (_, k) => 74 + k), Array.from({ length: 4 }, (_, k) => 110 + 10 * k), Array.from({ length: 82 }, (_, k) => 149 + k), [240], Array.from({ length: 31 }, (_, k) => 246 + k), Array.from({ length: 23 }, (_, k) => 280 + 10 * k)), default: 145 },
+      [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), Array.from({ length: 31 }, (_, k) => 74 + k), [110, 120], Array.from({ length: 24 }, (_, k) => 125 + k), Array.from({ length: 82 }, (_, k) => 149 + k), [240], Array.from({ length: 31 }, (_, k) => 246 + k), Array.from({ length: 23 }, (_, k) => 280 + 10 * k)), default: 145 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -449,7 +449,7 @@ CODE[13] = `{
            { id: "exit", label: "Exit band (% below)", text: "Switch to QQQ once SPY closes {} below it.", unit: "%", options:
       Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 5.5 },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)), default: 15 },
+      [5].concat(Array.from({ length: 31 }, (_, k) => 6 + k), Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)), default: 15 },
            ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
@@ -682,9 +682,9 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[20] = `{
   name: "Vol-target TQQQ (scale to target vol)",
   params: [{ id: "target", label: "Target vol (%/yr)", text: "Size TQQQ so the holding swings about {} a year.", unit: "%", options:
-      Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)).concat(Array.from({ length: 40 }, (_, k) => 61 + k)), default: 60 },
+      Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)).concat(Array.from({ length: 40 }, (_, k) => 61 + k)), default: 65 },
            { id: "lookback", label: "Vol lookback (days)", text: "Measure the swings over the last {} days.", options:
-      Array.from({ length: 246 }, (_, k) => 5 + k), default: 15 }],
+      Array.from({ length: 246 }, (_, k) => 5 + k), default: 10 }],
   columns: [{ key: "share", label: "TQQQ share", tip: "Share of the account in TQQQ at the close." },
              { key: "vol", label: "Volatility", tip: "TQQQ's annualised volatility over the lookback. Each month the share is reset to the target divided by it, at most 100%." },
              { key: "target", label: "Target", tip: "The target volatility setting." }],
@@ -1176,7 +1176,7 @@ CODE[7] = `{
   name: "Antonacci dual momentum — SPY vs QQQ → SPXL/TQQQ or cash",
   params: [
     { id: "lookback", label: "Lookback (days)", text: "At each month end, compare SPY's and QQQ's returns over the last {} trading days.", default: 430, options:
-      Array.from({ length: 21 }, (_, k) => 21 + 5 * k).concat(Array.from({ length: 253 }, (_, k) => 126 + k), Array.from({ length: 32 }, (_, k) => 380 + 4 * k)),
+      Array.from({ length: 21 }, (_, k) => 21 + 5 * k).concat(Array.from({ length: 253 }, (_, k) => 126 + k), Array.from({ length: 101 }, (_, k) => 380 + k), Array.from({ length: 6 }, (_, k) => 484 + 4 * k)),
       tip: "252 trading days is 12 months, the length Antonacci uses." },
     { id: "spFund", label: "When SPY leads", text: "If SPY did better, hold {}.", default: "spy", options: [
       { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" }, { value: "spy", label: "SPY" } ],
@@ -1269,26 +1269,26 @@ ${END_ROW_ACTION}
 CODE[14] = `{
   name: "Three-phase SPY 200SMA +4/-3 → TQQQ, QLD + gold, cash + gold",
   params: [
-    { id: "entry", label: "Buy band (% above)", text: "Buy TQQQ once SPY closes {} above its line.", unit: "%", default: 4, options:
+    { id: "entry", label: "Buy band (% above)", text: "Buy TQQQ once SPY closes {} above its line.", unit: "%", default: 0.5, options:
       Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)),
       tip: "How far above its line SPY must close. Between the two bands nothing changes." },
-    { id: "exit", label: "Defensive band (% below)", text: "Go defensive once SPY closes {} under it.", unit: "%", default: 3, options:
+    { id: "exit", label: "Defensive band (% below)", text: "Go defensive once SPY closes {} under it.", unit: "%", default: 7.5, options:
       Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)),
       tip: "How far under its line SPY must close." },
-    { id: "window", label: "Window", text: "The line covers the last {} days.", default: 200, options:
+    { id: "window", label: "Window", text: "The line covers the last {} days.", default: 10, options:
       [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)),
       tip: "Trading days in SPY's line." },
-    ${STAT_PARAM_SNIPPET},
-    { id: "holdDays", label: "Phase two after (days)", text: "After holding TQQQ {} days, move to phase two.", default: 366, options:
+    ${STAT_PARAM_MEDIAN_SNIPPET},
+    { id: "holdDays", label: "Phase two after (days)", text: "After holding TQQQ {} days, move to phase two.", default: 640, options:
       Array.from({ length: 68 }, (_, k) => 30 + 5 * k).concat([366], Array.from({ length: 146 }, (_, k) => 370 + 5 * k)),
       tip: "Calendar days since TQQQ was bought. 366 makes the gain long-term for US taxes." },
     { id: "fund2", label: "Phase two fund", text: "Phase two holds {} as its stock part.", default: "qld", options: [
       { value: "qld", label: "QLD" }, { value: "tqqq", label: "TQQQ" }, { value: "qqq", label: "QQQ" } ],
       tip: "The stock part of phase two." },
-    { id: "gold2", label: "Phase two gold (%)", text: "Phase two keeps {} in gold.", unit: "%", default: 50, options:
+    { id: "gold2", label: "Phase two gold (%)", text: "Phase two keeps {} in gold.", unit: "%", default: 100, options:
       Array.from({ length: 101 }, (_, k) => k),
       tip: "The share of phase two in GLD." },
-    { id: "gold3", label: "Defensive gold (%)", text: "Defensive keeps {} in gold and the rest in cash.", unit: "%", default: 50, options:
+    { id: "gold3", label: "Defensive gold (%)", text: "Defensive keeps {} in gold and the rest in cash.", unit: "%", default: 100, options:
       Array.from({ length: 101 }, (_, k) => k),
       tip: "The share of the defensive phase in GLD." },
     ${mixCostParams("What the cash part earns, as SGOV would.")}
