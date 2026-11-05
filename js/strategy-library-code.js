@@ -3658,57 +3658,6 @@ function withSoxlPile(base, spec) {
 }
 CODE[52] = withSoxlPile(CODE[50], { name: "TQQQ VS QQQ, Mon Turn, Soxl Acc" });
 
-// ===== The stretch strategy on another pair =================================
-// #53 — SOXL vs SOXX stretch (the user, 2026-11-05: "do soxx, soxl relation like
-// you did with tqqq qqq relation"): #47's rules on the semiconductor pair, SOXL's
-// buy & hold growth against SOXX's over the lookback. Built from #47's text at
-// load, so a change to the rules reaches it; the funds, the names and the
-// defaults are swapped (the defaults from this pair's own fit, scratchpad
-// edge/fitPair.cjs). SQQQ stays the inverse fund: there is no SOXS on the site.
-// #54 is #53 with Turnaround Monday in its idle cash, buying SOXL.
-function withPair(base, spec) {
-  let t = base;
-  const once = (find, repl, what) => {
-    const at = t.indexOf(find);
-    if (at < 0 || t.indexOf(find, at + 1) >= 0) throw new Error(`withPair(${spec.name}): ${what} must appear exactly once in the base`);
-    t = t.slice(0, at) + repl + t.slice(at + find.length);
-  };
-  t = t.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
-  once('T = data.tqqq, Q = data.qqq', `T = data.${spec.lev}, Q = data.${spec.one}`, 'the price arrays');
-  once('{ value: "qqq", label: "QQQ" }', `{ value: "${spec.one}", label: "${spec.oneName}" }`, 'the 1x hold option');
-  t = t.split('"tqqq"').join(`"${spec.lev}"`);
-  t = t.replace(/\bTQQQ\b/g, spec.levName).replace(/\bQQQ\b/g, spec.oneName);   // whole words; SQQQ keeps its name
-  // the pair's own defaults: each param's `default:` inside its own block, and run()'s fallbacks
-  const lit = v => typeof v === 'string' ? JSON.stringify(v) : String(v);
-  for (const [id, v] of Object.entries(spec.defaults)) {
-    const at = t.indexOf(`id: "${id}"`);
-    if (at < 0 || t.indexOf(`id: "${id}"`, at + 1) >= 0) throw new Error(`withPair(${spec.name}): param ${id} must appear exactly once`);
-    const rest = t.slice(at), stop = Math.min(...[rest.indexOf('{ id: "', 1), rest.indexOf('{ section:', 1), rest.indexOf('\n  ],')].filter(k => k > 0));
-    const seg = rest.slice(0, stop), m = /default:\s*("[^"]*"|true|false|-?\d+(?:\.\d+)?)/.exec(seg);
-    if (!m) throw new Error(`withPair(${spec.name}): no default for ${id}`);
-    t = t.slice(0, at) + seg.replace(m[0], `default: ${lit(v)}`) + t.slice(at + stop);
-  }
-  for (const [find, repl] of spec.fallbacks || []) once(find, repl, 'the fallback ' + find);
-  return t;
-}
-CODE[53] = withPair(CODE[47], { name: "SOXL vs SOXX stretch", lev: "soxl", one: "soxx", levName: "SOXL", oneName: "SOXX",
-  // the pair's own fit on Q1 2010 - Q4 2025, round values from the plateau climb (scratchpad edge/fitPair.cjs, roundPair.cjs)
-  defaults: {"lookbackDays": 570, "startAvgDays": 2, "topLead": 155, "topHold": "sqqq", "topDays": 35, "backLead": 90, "floorLead": -10, "floorHold": "sqqq", "reentryLead": 20, "reentryCloses": 1, "deepLead": -40, "overPct": 70, "overWindow": 200},
-  fallbacks: [
-    ['const L = Math.round(+p.lookbackDays || 550), years', 'const L = Math.round(+p.lookbackDays || 570), years'],
-    ['const W = p.startAvgDays == null ? 65 :', 'const W = p.startAvgDays == null ? 2 :'],
-    ['const top = p.topLead == null ? 125 : +p.topLead, back = p.backLead == null ? 25 : +p.backLead', 'const top = p.topLead == null ? 155 : +p.topLead, back = p.backLead == null ? 90 : +p.backLead'],
-    ['const floor = p.floorLead == null ? 5 : +p.floorLead', 'const floor = p.floorLead == null ? -10 : +p.floorLead'],
-    ['const reentry = p.reentryLead == null ? 25 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 5);', 'const reentry = p.reentryLead == null ? 20 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 1);'],
-    ['const deep = p.deepLead == null ? -30 : +p.deepLead', 'const deep = p.deepLead == null ? -40 : +p.deepLead'],
-    ['OW = +p.overWindow || 250;', 'OW = +p.overWindow || 200;'] ] });
-// #54: #53 with Turnaround Monday in its idle cash, buying SOXL on TQQQ's prior-day low and high: the
-// best of buying SOXL or TQQQ on TQQQ's or SOXL's signal (scratchpad edge/monday-pair.cjs).
-CODE[54] = withTurnaroundMonday(CODE[53], { name: "SOXL vs SOXX + Turnaround Monday", signal: "tqqq", levels: "hl", fund: "soxl", hooks: [
-  ['      const want = capSq(i, wantNow(i));', '      const want = tmHold(i, capSq(i, wantNow(i)));', 'the holding decision'],
-  ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
-  ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
-
 // ===== The SMA strategy as code =============================================
 // The user (2026-11-04): "I want built in sma panel ... converted into code,
 // but still keeping all functionality as is, and the result should stay
