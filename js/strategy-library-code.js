@@ -724,7 +724,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
           share: total > 0 ? sh * px / total * 100 : 0, vol: volAt(i) * 100, target: p.target });
       }
     }
-    return { log, lines: [{ key: "share", label: "TQQQ share", unit: "%" }, { key: "vol", label: L + "-day volatility", unit: "%" },
+    return { log, lines: [{ key: "share", label: "TQQQ share", unit: "%" }, { key: "vol", label: L + "-day volatility", unit: "%", priceKey: "price" },
       { key: "target", label: "Target (" + p.target + "%)", unit: "%" }] };
   }
 }`;
@@ -3234,7 +3234,7 @@ ${END_ROW_ACTION}
     const lines = [{ key: "assetPrice", label: "TQQQ price", group: PRICE }];
     if (over > 0 || dGuard) lines.push({ key: "medianPrice", label: OW + "-day median", group: PRICE });
     if (over > 0) lines.push({ key: "overLine", label: "Overextended (+" + Math.round(over * 100) + "%)", group: PRICE });
-    lines.push({ key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: LEAD });
+    lines.push({ key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: LEAD, priceKey: "assetPrice" });
     if (topOn) lines.push({ key: "ceilingLine", label: "Ceiling", unit: "%", group: LEAD, priceKey: "ceilingPx" });
     if (floorOn) lines.push({ key: "floorLine", label: "Floor", unit: "%", group: LEAD, priceKey: "floorPx" });
     if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD, priceKey: "deepPx" });
@@ -3368,7 +3368,7 @@ function withTurnaroundMonday(base, spec) {
     // and the rest (#50: price 186, Monday 146, lead 104, NFCI none;
     // scratchpad r7/panel-trades.cjs).
     const afterFirst = lines.findIndex(l => l.group !== lines[0].group);
-    lines.splice(afterFirst < 0 ? lines.length : afterFirst, 0, { key: "tmChange", label: tmS + " close vs prior close", unit: "%", group: ${panel} },
+    lines.splice(afterFirst < 0 ? lines.length : afterFirst, 0, { key: "tmChange", label: tmS + " close vs prior close", unit: "%", group: ${panel}, priceKey: "tmClose" },
       ${levelLines});
     res.lines = lines;
     if (res.signals) {
@@ -3393,7 +3393,7 @@ function withTurnaroundMonday(base, spec) {
   // buys, the first close over the high sells; both 0% where the prior close
   // stands in), and a Monday trade's panel.
   t = once(t, '        log.push({\n', '        log.push({\n          tmTrade: tmActive ? tmSince : null,\n'
-    + '          tmChange: i > 0 && data[tmSig][i - 1] > 0 ? (data[tmSig][i] / data[tmSig][i - 1] - 1) * 100 : null,\n'
+    + '          tmChange: i > 0 && data[tmSig][i - 1] > 0 ? (data[tmSig][i] / data[tmSig][i - 1] - 1) * 100 : null, tmClose: data[tmSig][i] > 0 ? data[tmSig][i] : null,\n'
     + '          tmHighPct: i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmHigh, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
     + '          tmLowPct: i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmLow, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
     + '          tmHighPx: i > 0 && data[tmSig][i - 1] > 0 ? tmLevel(tmHigh, i - 1) : null, tmLowPx: i > 0 && data[tmSig][i - 1] > 0 ? tmLevel(tmLow, i - 1) : null,\n'
@@ -3647,7 +3647,7 @@ function withSoxlPile(base, spec) {
   t = once(t, '    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD, priceKey: "deepPx" });\n',
     '    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD, priceKey: "deepPx" });\n'
     + '    if (data.soxl && soxlWhen === "lead") lines.push({ key: "soxlPrice", label: "SOXL price", group: SOXL_PRICE, tall: true }, { key: "soxlLeadInPx", label: "Hold SOXL under", group: SOXL_PRICE }, { key: "soxlLeadOutPx", label: "Back to TQQQ over", group: SOXL_PRICE },\n'
-    + '      { key: "soxlLead", label: "SOXL ahead of SOXX", unit: "%", group: SOXL_PANEL, tall: true }, { key: "soxlLeadIn", label: "Hold SOXL under", unit: "%", group: SOXL_PANEL, priceKey: "soxlLeadInPx" }, { key: "soxlLeadOut", label: "Back to TQQQ over", unit: "%", group: SOXL_PANEL, priceKey: "soxlLeadOutPx" });\n'
+    + '      { key: "soxlLead", label: "SOXL ahead of SOXX", unit: "%", group: SOXL_PANEL, tall: true, priceKey: "soxlPrice" }, { key: "soxlLeadIn", label: "Hold SOXL under", unit: "%", group: SOXL_PANEL, priceKey: "soxlLeadInPx" }, { key: "soxlLeadOut", label: "Back to TQQQ over", unit: "%", group: SOXL_PANEL, priceKey: "soxlLeadOutPx" });\n'
     + '    else if (data.soxl && soxlWhen !== "never" && soxlWhen !== "always") lines.push({ key: "soxlPrice", label: "SOXL price", group: SOXL_PANEL, tall: true }, soxlWhen === "belowAvg" ? { key: "soxlAvgLine", label: SW + "-day average", group: SOXL_PANEL } : { key: "soxlLine", label: Math.round(soxlDrop * 100) + "% under the " + SW + "-day high", group: SOXL_PANEL });\n', 'the chart lines');
   t = once(t, '      const hp = priceOf(held, i), holdingsValue = shares * hp;\n', '      const hp = priceOf(held, i), holdingsValue = shares * hp;\n' + joined, 'the holdings value line');
   t = once(t, '      log: log, lines: lines,\n', '      log: log, holdings: holdings, lines: lines,\n', 'the result object');
@@ -3784,7 +3784,7 @@ ${SMA_ENGINE_SOURCE}
         if (a != null) { o.average = a; if (entryBuf > 0) o.buyLine = a * (1 + entryBuf / 100); if (exitBuf > 0) o.sellLine = a * (1 - exitBuf / 100); }
         if (num(rsiS[i]) != null) { o.rsiSell = rsiS[i]; if (rsiSellLvl > 0) { o.rsiSellLevel = rsiSellLvl; o.rsiSellLevelPx = rsiLevelPx(wS, +p.rsiSellWindow || 10, rsiSellLvl, i); } }
         if (num(rsiB[i]) != null) { o.rsiBuy = rsiB[i]; if (rsiBuyLvl > 0) { o.rsiBuyLevel = rsiBuyLvl; o.rsiBuyLevelPx = rsiLevelPx(wB, +p.rsiBuyWindow || 10, rsiBuyLvl, i); } }
-        if (b != null && data[brakeAsset][i] > 0) { o.brakeGauge = (data[brakeAsset][i] / b - 1) * 100; if (brakeLvl > 0) { o.brakeLevel = brakeLvl; o.brakeLevelPx = b * (1 + brakeLvl / 100); } }
+        if (b != null && data[brakeAsset][i] > 0) { o.brakeGauge = (data[brakeAsset][i] / b - 1) * 100; o.brakePrice = data[brakeAsset][i]; if (brakeLvl > 0) { o.brakeLevel = brakeLvl; o.brakeLevelPx = b * (1 + brakeLvl / 100); } }
         return o;
       };
       const pct = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2) + "%";
@@ -3836,10 +3836,10 @@ ${SMA_ENGINE_SOURCE}
       if (entryBuf > 0) lines.push({ key: "buyLine", label: "Buy above (+" + entryBuf + "%)", group: SIG + " trend" });
       if (exitBuf > 0) lines.push({ key: "sellLine", label: "Sell below (−" + exitBuf + "%)", group: SIG + " trend" });
       if (rsiSellLvl > 0 || rsiBuyLvl > 0) {
-        if (rsiSellLvl > 0) lines.push({ key: "rsiSell", label: "RSI(" + (+p.rsiSellWindow || 10) + ")", unit: "num", group: "RSI" }, { key: "rsiSellLevel", label: "Sell at " + rsiSellLvl, unit: "num", group: "RSI", priceKey: "rsiSellLevelPx" });
-        if (rsiBuyLvl > 0) lines.push({ key: "rsiBuy", label: "RSI(" + (+p.rsiBuyWindow || 10) + ")", unit: "num", group: "RSI" }, { key: "rsiBuyLevel", label: "Buy under " + rsiBuyLvl, unit: "num", group: "RSI", priceKey: "rsiBuyLevelPx" });
+        if (rsiSellLvl > 0) lines.push({ key: "rsiSell", label: "RSI(" + (+p.rsiSellWindow || 10) + ")", unit: "num", group: "RSI", priceKey: "signalClose" }, { key: "rsiSellLevel", label: "Sell at " + rsiSellLvl, unit: "num", group: "RSI", priceKey: "rsiSellLevelPx" });
+        if (rsiBuyLvl > 0) lines.push({ key: "rsiBuy", label: "RSI(" + (+p.rsiBuyWindow || 10) + ")", unit: "num", group: "RSI", priceKey: "signalClose" }, { key: "rsiBuyLevel", label: "Buy under " + rsiBuyLvl, unit: "num", group: "RSI", priceKey: "rsiBuyLevelPx" });
       }
-      if (brakeLvl > 0) lines.push({ key: "brakeGauge", label: brakeAsset.toUpperCase() + " vs " + brakeW + "-day average", unit: "%", group: "Bubble brake" }, { key: "brakeLevel", label: "To cash at +" + brakeLvl + "%", unit: "%", group: "Bubble brake", priceKey: "brakeLevelPx" });
+      if (brakeLvl > 0) lines.push({ key: "brakeGauge", label: brakeAsset.toUpperCase() + " vs " + brakeW + "-day average", unit: "%", group: "Bubble brake", priceKey: "brakePrice" }, { key: "brakeLevel", label: "To cash at +" + brakeLvl + "%", unit: "%", group: "Bubble brake", priceKey: "brakeLevelPx" });
       return { log, holdings: r.ddControls || [], lines, signals: smaSignals() };
     }
 
