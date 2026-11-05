@@ -35,7 +35,14 @@ const USER_AGENT = 'Mozilla/5.0 (compatible; tqqq.networthcast.com quotes proxy)
 // feed is asked instead, and its price and time are used when it says the market
 // is open and its print is newer. Yahoo's prior close stays, since the overlay's
 // guard compares it with the files, and the answer says which source the price is from.
+// With Alpaca keys present (below), Alpaca's trade is the price in session and this is the fallback.
 const STALE_MS = 3 * 60 * 1000, NASDAQ = 'https://api.nasdaq.com/api/quote/', NASDAQ_TIMEOUT_MS = 4000;
+// Alpaca's IEX feed is the live price during session hours: one call for every
+// symbol, official and real-time on the free plan (IEX's own trades, which for
+// these funds print many times a second). The keys are worker secrets
+// (ALPACA_API_KEY, ALPACA_API_SECRET, uploaded by the deploy workflow from the
+// repository's secrets); without them the Yahoo and Nasdaq path runs as before.
+const ALPACA = 'https://data.alpaca.markets/v2/stocks/trades/latest', ALPACA_TIMEOUT_MS = 4000;
 const NASDAQ_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const NY_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
@@ -68,7 +75,7 @@ export default {
     const key = url.origin + route.key;
     const cached = await fromCache(key);
     if (cached) return respond(cached.text, cached.type, cors, 'HIT');
-    const { ok, text, type } = await route.build();
+    const { ok, text, type } = await route.build(env);
     if (ok) await toCache(key, text, type, route.ttl, ctx);
     return respond(text, type, cors, 'MISS', ok ? 200 : 502);
   },
@@ -83,12 +90,14 @@ function quotesRoute(url) {
   return {
     key: '/quotes?symbols=' + list.join(','),
     ttl: QUOTE_TTL,
-    build: async () => {
-      const quotes = {}, errors = {};
+    build: async (env) => {
+      const quotes = {}, errors = {}, inSession = sessionNow();
+      const trades = inSession ? await alpacaTrades(list, env) : {};
       await Promise.all(list.map(async symbol => {
         try {
           const q = quoteOf(await chart(symbol, '1d', '1d'));
-          quotes[symbol] = sessionNow() && q.time && Date.now() - Date.parse(q.time) > STALE_MS ? await freshen(symbol, q) : q;
+          quotes[symbol] = trades[symbol] ? withTrade(q, trades[symbol], 'alpaca')
+            : inSession && q.time && Date.now() - Date.parse(q.time) > STALE_MS ? await freshen(symbol, q) : q;
         }
         catch (e) { errors[symbol] = String(e.message || e); }
       }));
@@ -195,6 +204,28 @@ function nasdaqTimeToIso(text) {
   const wallAtGuess = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
   return new Date(guess + (guess - wallAtGuess)).toISOString();   // shift by New York's offset at that moment
 }
+// The latest IEX trade per symbol from Alpaca: { SYM: { price, time } }, empty without keys or on any failure.
+async function alpacaTrades(symbols, env) {
+  const key = env && env.ALPACA_API_KEY, secret = env && env.ALPACA_API_SECRET;
+  if (!key || !secret) return {};
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ALPACA_TIMEOUT_MS);
+    const res = await fetch(ALPACA + '?feed=iex&symbols=' + encodeURIComponent(symbols.join(',')), { headers: { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret, 'Accept': 'application/json' }, signal: ctl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return {};
+    const trades = ((await res.json()) || {}).trades || {}, out = {};
+    for (const [symbol, t] of Object.entries(trades)) if (t && t.p > 0 && t.t) out[symbol] = { price: t.p, time: new Date(t.t).toISOString() };
+    return out;
+  } catch (e) { return {}; }
+}
+// A Yahoo quote with a newer trade from another feed on it: the price and time
+// change, the day's range widens if need be, the prior close stays (the overlay's
+// guard compares it with the files), and the answer names the source.
+function withTrade(q, trade, source) {
+  if (!(trade.price > 0) || !trade.time || (q.time && Date.parse(trade.time) <= Date.parse(q.time))) return q;
+  return { ...q, price: trade.price, time: trade.time, changePct: q.prevClose > 0 ? (trade.price / q.prevClose - 1) * 100 : null,
+    high: Math.max(q.high || 0, trade.price) || trade.price, low: q.low > 0 ? Math.min(q.low, trade.price) : trade.price, source, yahooTime: q.time };
+}
 // Nasdaq's quote for a symbol whose Yahoo quote has gone stale: the price and time
 // are replaced when Nasdaq reports the market open and a newer print; otherwise the
 // Yahoo quote comes back marked stale. Nasdaq's feed answers browser-like requests only.
@@ -208,8 +239,7 @@ async function freshen(symbol, q) {
     const data = ((await res.json()) || {}).data || {}, pd = data.primaryData || {};
     const price = parseFloat(String(pd.lastSalePrice || '').replace(/[$,]/g, '')), time = nasdaqTimeToIso(pd.lastTradeTimestamp);
     if (data.marketStatus !== 'Open' || !(price > 0) || !time || Date.parse(time) <= Date.parse(q.time)) return stale;
-    return { ...q, price, time, changePct: q.prevClose > 0 ? (price / q.prevClose - 1) * 100 : null,
-      high: Math.max(q.high || 0, price) || price, low: q.low > 0 ? Math.min(q.low, price) : price, source: 'nasdaq', yahooTime: q.time };
+    return withTrade(q, { price, time }, 'nasdaq');
   } catch (e) { return stale; }
 }
 

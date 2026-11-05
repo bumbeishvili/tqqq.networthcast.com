@@ -13,7 +13,9 @@ The site's price history is committed to git by the GitHub Action. This worker s
 
 The intraday page (`experiments/tqqq-intraday.html`) reads today's session from this TSV route once its `QUOTES_PROXY` constant holds the deployed URL; until then it reads the committed file the hourly pipeline writes.
 
-When Yahoo's trade time is more than three minutes old during New York session hours (its whole US feed froze for over an hour on 2026-11-05), the quote is refetched from Nasdaq's public quote feed and carries `source: "nasdaq"` with `yahooTime`; if Nasdaq cannot answer, the Yahoo quote comes back with `stale: true`. A fresh quote has no `source` field.
+During New York session hours the price and time come from Alpaca's IEX feed (one call for every symbol; official, real-time on the free plan) when the worker holds the keys `ALPACA_API_KEY` and `ALPACA_API_SECRET`, which the deploy workflow uploads from the repository's secrets; such a quote carries `source: "alpaca"` and `yahooTime`. Yahoo still frames it: prior close, day range, and the official close outside the session.
+
+When Alpaca is unavailable and Yahoo's trade time is more than three minutes old during New York session hours (its whole US feed froze for over an hour on 2026-11-05), the quote is refetched from Nasdaq's public quote feed and carries `source: "nasdaq"` with `yahooTime`; if Nasdaq cannot answer, the Yahoo quote comes back with `stale: true`. A fresh quote has no `source` field.
 
 `prevClose` is Yahoo's prior close on Yahoo's current adjustment basis. A page overlaying `price` on the committed files should compare `prevClose` with its own last close first: a gap of more than a few percent means the files are on another basis (a split, as SOXX on 2026-11-05) and the overlay has to wait for the refreshed files. When Yahoo reports a split in the requested range the quote carries `splitToday`.
 
@@ -29,6 +31,7 @@ Automatic: a push to `main` that touches `cloudflare/quotes/**` runs `.github/wo
 | --- | --- |
 | `CLOUDFLARE_API_TOKEN` | Cloudflare dashboard → My Profile → API Tokens → Create Token → the "Edit Cloudflare Workers" template |
 | `CLOUDFLARE_ACCOUNT_ID` | Cloudflare dashboard → Workers & Pages → the Account ID in the right-hand column |
+| `ALPACA_API_KEY`, `ALPACA_API_SECRET` | already present for the data workflow; uploaded to the worker as secrets by the deploy |
 
 The first deploy prints the `https://tqqq-quotes.<account>.workers.dev` URL in the workflow log; it stays the same afterwards. "Run workflow" on the Actions page deploys without a push.
 

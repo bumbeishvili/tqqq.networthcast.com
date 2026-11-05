@@ -19,6 +19,12 @@ if (OFFLINE) {
   Date.now = () => nowFixed;
   globalThis.fetch = async (url) => {
     const u = new URL(url);
+    if (u.hostname === 'data.alpaca.markets') {
+      if (globalThis.__alpacaDown) return new Response('forbidden', { status: 403 });
+      const symbols = (u.searchParams.get('symbols') || '').split(','), trades = {};
+      for (const sym of symbols) trades[sym] = { t: new Date(nowFixed - 5000).toISOString().replace('.000Z', '.123456789Z'), p: 40 + sym.length + 0.75, s: 100, x: 'V' };
+      return Response.json({ trades });
+    }
     if (u.hostname === 'api.nasdaq.com') {
       const symbol = u.pathname.split('/')[3];
       if (STALE[symbol] === 'nasdaq-down') return new Response('blocked', { status: 403 });
@@ -36,7 +42,7 @@ if (OFFLINE) {
 
 const BASE = 'https://tqqq-quotes.example.workers.dev';
 const ctx = { waitUntil: p => p };
-const call = (path, { origin, method = 'GET' } = {}) => worker.fetch(new Request(BASE + path, { method, headers: origin ? { Origin: origin } : {} }), {}, ctx);
+const call = (path, { origin, method = 'GET', env = {} } = {}) => worker.fetch(new Request(BASE + path, { method, headers: origin ? { Origin: origin } : {} }), env, ctx);
 let failed = 0;
 const check = (name, ok, detail = '') => { console.log((ok ? 'ok   ' : 'FAIL ') + name + (detail ? '  ' + detail : '')); if (!ok) failed++; };
 
@@ -53,6 +59,16 @@ if (OFFLINE) {
   check('stale Yahoo + Nasdaq open: Nasdaq price and time, Yahoo prior close kept, source nasdaq', soxl.source === 'nasdaq' && soxl.price === 44.5 && soxl.time === '2026-11-05T18:29:00.000Z' && soxl.prevClose === 43 && soxl.yahooTime && !soxl.stale, JSON.stringify(soxl));
   check('stale Yahoo + Nasdaq failing: Yahoo quote marked stale', spy.source === 'yahoo' && spy.stale === true && spy.price === 43.25, JSON.stringify(spy));
   check('fresh Yahoo: untouched, no source field', tqqq.source === undefined && tqqq.stale === undefined, JSON.stringify(tqqq));
+  // with Alpaca keys: its trade is the in-session price for every symbol, Yahoo's prior close kept; a down Alpaca falls back to the path above
+  const KEYS = { ALPACA_API_KEY: 'k', ALPACA_API_SECRET: 's' };
+  let ra = await call('/quotes?symbols=TQQQ,SOXL,SPY&x=alpaca', { origin: site, env: KEYS }); let ba = await ra.json();
+  const at = ba.quotes.TQQQ, as = ba.quotes.SOXL;
+  check('alpaca keys: price and time from the IEX trade, source alpaca, prior close from Yahoo', at.source === 'alpaca' && at.price === 44.75 && at.time === '2026-11-05T18:29:55.123Z' && at.prevClose === 43 && at.yahooTime, JSON.stringify(at));
+  check('alpaca keys: a stale Yahoo symbol takes the Alpaca trade before Nasdaq', as.source === 'alpaca' && as.price === 44.75, JSON.stringify(as));
+  globalThis.__alpacaDown = true;
+  ra = await call('/quotes?symbols=TQQQ,SOXL&x=alpaca-down', { origin: site, env: KEYS }); ba = await ra.json();
+  check('alpaca down: fresh Yahoo stands, stale Yahoo goes to Nasdaq', ba.quotes.TQQQ.source === undefined && ba.quotes.SOXL.source === 'nasdaq', JSON.stringify(ba.quotes));
+  globalThis.__alpacaDown = false;
 }
 r = await call('/quotes', { origin: local }); b = await r.json();
 check('localhost:5500 origin: 200, served from the cache', r.status === 200 && r.headers.get('X-Cache') === 'HIT' && r.headers.get('Access-Control-Allow-Origin') === local);

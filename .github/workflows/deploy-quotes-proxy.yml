@@ -2,8 +2,9 @@ name: Deploy quotes proxy
 
 # The Cloudflare Worker in cloudflare/quotes deploys on every push to main that
 # touches that folder (the hourly data commits never do), after the handler's
-# own checks pass offline. Needs two repository secrets: CLOUDFLARE_API_TOKEN
-# (an "Edit Cloudflare Workers" token) and CLOUDFLARE_ACCOUNT_ID. See
+# own checks pass offline. Needs the repository secrets CLOUDFLARE_API_TOKEN
+# (an "Edit Cloudflare Workers" token), CLOUDFLARE_ACCOUNT_ID, and the Alpaca
+# keys the data workflow already has (ALPACA_API_KEY, ALPACA_API_SECRET). See
 # cloudflare/quotes/README.md.
 on:
   push:
@@ -39,3 +40,11 @@ jobs:
           workingDirectory: cloudflare/quotes
           wranglerVersion: '4'   # the action's own default is 3.90, which wrangler flags as out of date
           command: deploy
+          # Alpaca's keys, the same repository secrets the data workflow uses, become
+          # worker secrets after the deploy (the worker reads env.ALPACA_API_KEY/SECRET).
+          secrets: |
+            ALPACA_API_KEY
+            ALPACA_API_SECRET
+        env:
+          ALPACA_API_KEY: ${{ secrets.ALPACA_API_KEY }}
+          ALPACA_API_SECRET: ${{ secrets.ALPACA_API_SECRET }}
