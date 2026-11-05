@@ -10,6 +10,7 @@
 //   GET /bars/TQQQ?range=1d&interval=1m             intraday bars as JSON (ranges and intervals in BAR_RANGES)
 //   GET /bars/TQQQ?range=1d&interval=1m&format=tsv  the same bars in the layout of data/intraday/tqqq-today-1m.tsv
 //                                                   (bar open time in New York, regular session only), for the intraday page
+//   Bars come from Alpaca's IEX feed when the keys are present (X-Source: alpaca), else Yahoo.
 //
 // Who may call it: pages on https://tqqq.networthcast.com and pages served from
 // localhost or 127.0.0.1 on any port (Live Server, the test server, the desktop
@@ -42,7 +43,8 @@ const STALE_MS = 3 * 60 * 1000, NASDAQ = 'https://api.nasdaq.com/api/quote/', NA
 // these funds print many times a second). The keys are worker secrets
 // (ALPACA_API_KEY, ALPACA_API_SECRET, uploaded by the deploy workflow from the
 // repository's secrets); without them the Yahoo and Nasdaq path runs as before.
-const ALPACA = 'https://data.alpaca.markets/v2/stocks/trades/latest', ALPACA_TIMEOUT_MS = 4000;
+const ALPACA = 'https://data.alpaca.markets/v2/stocks/trades/latest', ALPACA_BARS = 'https://data.alpaca.markets/v2/stocks/', ALPACA_TIMEOUT_MS = 4000;
+const ALPACA_TIMEFRAME = { '1m': '1Min', '5m': '5Min' }, ALPACA_LOOKBACK_DAYS = { '1d': 6, '5d': 10 };   // enough calendar days to hold the sessions asked for
 const NASDAQ_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const NY_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
@@ -51,7 +53,7 @@ const JSON_TYPE = 'application/json', TSV_TYPE = 'text/tab-separated-values; cha
 const SESSION_OPEN_MIN = 9 * 60 + 30, SESSION_LAST_BAR_MIN = 15 * 60 + 59;
 const NEW_YORK = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
-const memory = new Map();   // key -> { until, text, type }
+const memory = new Map();   // key -> { until, text, type, source }
 
 export default {
   async fetch(request, env, ctx) {
@@ -74,10 +76,10 @@ export default {
 
     const key = url.origin + route.key;
     const cached = await fromCache(key);
-    if (cached) return respond(cached.text, cached.type, cors, 'HIT');
-    const { ok, text, type } = await route.build(env);
-    if (ok) await toCache(key, text, type, route.ttl, ctx);
-    return respond(text, type, cors, 'MISS', ok ? 200 : 502);
+    if (cached) return respond(cached.text, cached.type, cors, 'HIT', 200, cached.source);
+    const { ok, text, type, source } = await route.build(env);
+    if (ok) await toCache(key, text, type, route.ttl, ctx, source);
+    return respond(text, type, cors, 'MISS', ok ? 200 : 502, source);
   },
 };
 
@@ -116,33 +118,36 @@ function barsRoute(url) {
   return {
     key: '/bars/' + symbol + '?range=' + range + '&interval=' + interval + '&format=' + format,
     ttl: BARS_TTL,
-    build: async () => {
-      let result;
-      try { result = await chart(symbol, range, interval); }
-      catch (e) { return { ok: false, type: JSON_TYPE, text: JSON.stringify({ fetchedAt: new Date().toISOString(), symbol, error: String(e.message || e) }) }; }
-      const q = result.indicators.quote[0], ts = result.timestamp || [];
+    build: async (env) => {
+      // Alpaca's bars first (the keys present), Yahoo's otherwise or on any Alpaca failure.
+      let bars = await alpacaBars(symbol, range, interval, env), source = 'alpaca';
+      if (!bars) {
+        source = 'yahoo';
+        let result;
+        try { result = await chart(symbol, range, interval); }
+        catch (e) { return { ok: false, type: JSON_TYPE, text: JSON.stringify({ fetchedAt: new Date().toISOString(), symbol, error: String(e.message || e) }) }; }
+        const q = result.indicators.quote[0], ts = result.timestamp || [];
+        bars = [];
+        for (let i = 0; i < ts.length; i++) if (q.close[i] != null) bars.push({ t: ts[i], o: q.open[i] == null ? q.close[i] : q.open[i], h: q.high[i] == null ? q.close[i] : q.high[i], l: q.low[i] == null ? q.close[i] : q.low[i], c: q.close[i], v: q.volume[i] || 0 });
+      }
       if (format === 'tsv') {
         // One row per minute, as the pipeline's file. Yahoo's last bar is stamped with
         // the latest trade's second and can share a minute with the bar in progress;
         // it then updates that row (close, high, low) instead of adding one.
         const byMinute = new Map();
-        for (let i = 0; i < ts.length; i++) {
-          const c = q.close[i];
-          if (c == null) continue;
-          const t = ts[i] - ts[i] % 60, ny = newYork(t), minute = ny.hour * 60 + ny.minute;
+        for (const b of bars) {
+          const t = b.t - b.t % 60, ny = newYork(t), minute = ny.hour * 60 + ny.minute;
           if (minute < SESSION_OPEN_MIN || minute > SESSION_LAST_BAR_MIN) continue;
-          const o = q.open[i] == null ? c : q.open[i], h = q.high[i] == null ? c : q.high[i], l = q.low[i] == null ? c : q.low[i], v = q.volume[i] || 0;
           const row = byMinute.get(t);
-          if (!row) byMinute.set(t, { stamp: ny.stamp, o, h, l, c, v });
-          else { row.h = Math.max(row.h, h); row.l = Math.min(row.l, l); row.c = c; row.v = Math.max(row.v, v); }
+          if (!row) byMinute.set(t, { stamp: ny.stamp, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v });
+          else { row.h = Math.max(row.h, b.h); row.l = Math.min(row.l, b.l); row.c = b.c; row.v = Math.max(row.v, b.v); }
         }
         const rows = ['Date\tOpen\tHigh\tLow\tClose\tVolume'];
         for (const r of byMinute.values()) rows.push(r.stamp + '\t' + [r.o, r.h, r.l, r.c].map(v => v.toFixed(4)).join('\t') + '\t' + Math.round(r.v));
-        return { ok: true, type: TSV_TYPE, text: rows.join('\n') + '\n' };
+        return { ok: true, type: TSV_TYPE, text: rows.join('\n') + '\n', source };
       }
-      const bars = [];
-      for (let i = 0; i < ts.length; i++) if (q.close[i] != null) bars.push({ t: new Date(ts[i] * 1000).toISOString(), o: q.open[i], h: q.high[i], l: q.low[i], c: q.close[i], v: q.volume[i] });
-      return { ok: true, type: JSON_TYPE, text: JSON.stringify({ fetchedAt: new Date().toISOString(), symbol, range, interval, timezone: result.meta.exchangeTimezoneName, bars }) };
+      return { ok: true, type: JSON_TYPE, source, text: JSON.stringify({ fetchedAt: new Date().toISOString(), symbol, range, interval, timezone: 'America/New_York', source,
+        bars: bars.map(b => ({ t: new Date(b.t * 1000).toISOString(), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v })) }) };
     },
   };
 }
@@ -218,6 +223,27 @@ async function alpacaTrades(symbols, env) {
     return out;
   } catch (e) { return {}; }
 }
+// Alpaca's IEX bars for the sessions a range asks for (the latest session for 1d,
+// the last five for 5d), as [{ t (epoch seconds, the bar's start), o, h, l, c, v }];
+// null without keys, on failure, or when nothing came back. IEX's volume is IEX's
+// share of the day only; the prices are the IEX tape's, printed many times a minute.
+async function alpacaBars(symbol, range, interval, env) {
+  const key = env && env.ALPACA_API_KEY, secret = env && env.ALPACA_API_SECRET;
+  if (!key || !secret) return null;
+  try {
+    const start = new Date(Date.now() - ALPACA_LOOKBACK_DAYS[range] * 86400000).toISOString();
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ALPACA_TIMEOUT_MS);
+    const res = await fetch(ALPACA_BARS + encodeURIComponent(symbol) + '/bars?timeframe=' + ALPACA_TIMEFRAME[interval] + '&start=' + encodeURIComponent(start) + '&limit=10000&feed=iex&adjustment=raw&sort=asc',
+      { headers: { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret, 'Accept': 'application/json' }, signal: ctl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const list = (((await res.json()) || {}).bars || []).filter(b => b && b.c > 0 && b.t).map(b => ({ t: Math.floor(Date.parse(b.t) / 1000), o: b.o, h: b.h, l: b.l, c: b.c, v: b.v || 0 }));
+    if (!list.length) return null;
+    const sessions = [...new Set(list.map(b => newYork(b.t).stamp.split(' ')[0]))];
+    const keep = new Set(sessions.slice(range === '5d' ? -5 : -1));
+    return list.filter(b => keep.has(newYork(b.t).stamp.split(' ')[0]));
+  } catch (e) { return null; }
+}
 // A Yahoo quote with a newer trade from another feed on it: the price and time
 // change, the day's range widens if need be, the prior close stays (the overlay's
 // guard compares it with the files), and the answer names the source.
@@ -250,23 +276,24 @@ async function fromCache(key) {
   if (!cache) return null;
   const res = await cache.match(new Request(key));
   if (!res) return null;
-  const entry = { until: Date.now() + 5000, text: await res.text(), type: res.headers.get('Content-Type') || JSON_TYPE };   // a short memory copy, the edge copy keeps its own age
+  const entry = { until: Date.now() + 5000, text: await res.text(), type: res.headers.get('Content-Type') || JSON_TYPE, source: res.headers.get('X-Source') || undefined };   // a short memory copy, the edge copy keeps its own age
   memory.set(key, entry);
   return entry;
 }
 
-async function toCache(key, text, type, ttl, ctx) {
-  memory.set(key, { until: Date.now() + ttl * 1000, text, type });
+async function toCache(key, text, type, ttl, ctx, source) {
+  memory.set(key, { until: Date.now() + ttl * 1000, text, type, source });
   const cache = edgeCache();
   if (!cache) return;
-  const put = cache.put(new Request(key), new Response(text, { headers: { 'Content-Type': type, 'Cache-Control': 's-maxage=' + ttl } })).catch(() => {});
+  const put = cache.put(new Request(key), new Response(text, { headers: { 'Content-Type': type, 'Cache-Control': 's-maxage=' + ttl, ...(source ? { 'X-Source': source } : {}) } })).catch(() => {});
   if (ctx && ctx.waitUntil) ctx.waitUntil(put); else await put;
 }
 
 function edgeCache() { return (typeof caches !== 'undefined' && caches.default) || null; }
 
-function respond(text, type, cors, cacheState, status = 200) {
-  return new Response(text, { status, headers: { ...cors, 'Content-Type': type, 'Cache-Control': 'public, max-age=' + BROWSER_TTL, 'X-Cache': cacheState } });
+// X-Source names the feed the bars came from (the TSV layout has no room for it).
+function respond(text, type, cors, cacheState, status = 200, source) {
+  return new Response(text, { status, headers: { ...cors, 'Content-Type': type, 'Cache-Control': 'public, max-age=' + BROWSER_TTL, 'X-Cache': cacheState, ...(source ? { 'X-Source': source } : {}) } });
 }
 
 function reply(status, body, cors = {}) {

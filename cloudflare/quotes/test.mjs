@@ -21,6 +21,12 @@ if (OFFLINE) {
     const u = new URL(url);
     if (u.hostname === 'data.alpaca.markets') {
       if (globalThis.__alpacaDown) return new Response('forbidden', { status: 403 });
+      if (/\/bars$/.test(u.pathname)) {
+        // two sessions of 1-minute IEX bars: 11/4 (two bars) and 11/5 from 09:30 (three bars, the last in progress)
+        const iso = t => new Date(t * 1000).toISOString();
+        const bars = [[open - 86400, 40], [open - 86400 + 60, 40.5], [open, 41], [open + 60, 41.5], [open + 120, 42]].map(([t, c]) => ({ t: iso(t), o: c - 0.25, h: c + 0.25, l: c - 0.5, c, v: 777, n: 9, vw: c }));
+        return Response.json({ bars, symbol: u.pathname.split('/')[3], next_page_token: null });
+      }
       const symbols = (u.searchParams.get('symbols') || '').split(','), trades = {};
       for (const sym of symbols) trades[sym] = { t: new Date(nowFixed - 5000).toISOString().replace('.000Z', '.123456789Z'), p: 40 + sym.length + 0.75, s: 100, x: 'V' };
       return Response.json({ trades });
@@ -100,7 +106,7 @@ r = await call('/bars/TQQQ?range=1d&interval=1m&format=tsv', { origin: site }); 
 const lines = tsv.trim().split('\n'), rowRe = /^\d{1,2}\/\d{1,2}\/\d{4} \d{2}:\d{2}:\d{2}\t\d+\.\d{4}\t\d+\.\d{4}\t\d+\.\d{4}\t\d+\.\d{4}\t\d+$/;
 const stampOf = line => line.split('\t')[0], clockOf = line => stampOf(line).split(' ')[1];
 const minuteOf = line => { const [h, m] = clockOf(line).split(':'); return +h * 60 + +m; };
-check('tsv: 200 as tab-separated text', r.status === 200 && /^text\/tab-separated-values/.test(r.headers.get('Content-Type')) && r.headers.get('X-Cache') === 'MISS');
+check('tsv: 200 as tab-separated text, from Yahoo without keys', r.status === 200 && /^text\/tab-separated-values/.test(r.headers.get('Content-Type')) && r.headers.get('X-Cache') === 'MISS' && r.headers.get('X-Source') === 'yahoo');
 check('tsv: header line as the committed file', lines[0] === 'Date\tOpen\tHigh\tLow\tClose\tVolume');
 check('tsv: every row "M/D/YYYY HH:MM:SS" + four 4-decimal prices + integer volume', lines.length > 1 && lines.slice(1).every(l => rowRe.test(l)), (lines.length - 1) + ' rows, first ' + JSON.stringify(lines[1]) + ', last ' + JSON.stringify(lines[lines.length - 1]));
 check('tsv: rows inside 09:30-15:59 New York only', lines.slice(1).every(l => minuteOf(l) >= 9 * 60 + 30 && minuteOf(l) <= 15 * 60 + 59));
@@ -123,5 +129,22 @@ check('bars for a symbol outside the list: 400', r.status === 400);
 r = await call('/nothing', { origin: site });
 check('unknown route: 404', r.status === 404);
 
+// The Alpaca bars last: the cache key is the route and its parameters, keys or not, so these run on
+// symbols the Yahoo checks above did not touch.
+if (OFFLINE) {
+  const KEYS = { ALPACA_API_KEY: 'k', ALPACA_API_SECRET: 's' };
+  let ra, ba;
+  // bars from Alpaca: the latest session only for 1d, the pipeline's TSV layout, X-Source on both forms; Yahoo when Alpaca is down
+  ra = await call('/bars/QQQ?range=1d&interval=1m&format=tsv', { origin: site, env: KEYS }); const tsvA = await ra.text(); const linesA = tsvA.trim().split('\n');
+  check('alpaca bars tsv: X-Source alpaca, three rows of 11/5 only, IEX volume as given', ra.headers.get('X-Source') === 'alpaca' && linesA.length === 4 && linesA[1] === '11/5/2026 09:30:00\t40.7500\t41.2500\t40.5000\t41.0000\t777' && linesA[3].startsWith('11/5/2026 09:32:00\t'), linesA.join(' | '));
+  ra = await call('/bars/QQQ?range=1d&interval=1m', { origin: site, env: KEYS }); ba = await ra.json();
+  check('alpaca bars json: source alpaca, three bars, ISO times', ba.source === 'alpaca' && ra.headers.get('X-Source') === 'alpaca' && ba.bars.length === 3 && ba.bars[0].t === '2026-11-05T14:30:00.000Z', JSON.stringify(ba.bars[0]));
+  ra = await call('/bars/QQQ?range=5d&interval=5m', { origin: site, env: KEYS }); ba = await ra.json();
+  check('alpaca bars 5d: both sessions', ba.bars.length === 5, ba.bars.length + ' bars');
+  globalThis.__alpacaDown = true;
+  ra = await call('/bars/SPY?range=1d&interval=1m&format=tsv', { origin: site, env: KEYS }); const tsvY = await ra.text();
+  check('alpaca down: bars from Yahoo, X-Source yahoo', ra.headers.get('X-Source') === 'yahoo' && tsvY.trim().split('\n').length === 4, 'status ' + ra.status + ' source ' + ra.headers.get('X-Source') + ' cache ' + ra.headers.get('X-Cache') + ' | ' + tsvY.slice(0, 160).replace(/\n/g, ' / '));
+  globalThis.__alpacaDown = false;
+}
 console.log(failed ? failed + ' check(s) failed' : 'all checks passed');
 process.exit(failed ? 1 : 0);

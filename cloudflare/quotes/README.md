@@ -11,6 +11,8 @@ The site's price history is committed to git by the GitHub Action. This worker s
 | `GET /bars/TQQQ?range=1d&interval=1m` | `{ symbol, range, interval, timezone, bars: [{ t, o, h, l, c, v }] }`; `range` 1d with 1m or 5m bars, 5d with 5m |
 | `GET /bars/TQQQ?range=1d&interval=1m&format=tsv` | the same bars in the layout of `data/intraday/tqqq-today-1m.tsv` (`Date Open High Low Close Volume`, the bar's open time in New York as `M/D/YYYY HH:MM:SS`, regular session 09:30-15:59 only, four decimals, integer volume): today's session for the intraday page, at most a minute old. Outside market days it is the last session, as the committed file is. |
 
+Bars come from Alpaca's IEX feed when the worker holds the keys (`X-Source: alpaca` on the response; 1d is the latest session, 5d the last five), from Yahoo otherwise or when Alpaca fails (`X-Source: yahoo`). IEX's volume is IEX's share of the day, not the consolidated tape; the intraday page does not read it.
+
 The intraday page (`experiments/tqqq-intraday.html`) reads today's session from this TSV route once its `QUOTES_PROXY` constant holds the deployed URL; until then it reads the committed file the hourly pipeline writes.
 
 During New York session hours the price and time come from Alpaca's IEX feed (one call for every symbol; official, real-time on the free plan) when the worker holds the keys `ALPACA_API_KEY` and `ALPACA_API_SECRET`, which the deploy workflow uploads from the repository's secrets; such a quote carries `source: "alpaca"` and `yahooTime`. Yahoo still frames it: prior close, day range, and the official close outside the session.
