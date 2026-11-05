@@ -3574,11 +3574,14 @@ function withSoxlPile(base, spec) {
       holdings.push({ date: dates[i], cash: cash + pileCash + pileTransfer, h });
 `;
   const card = `    // This entry's panel order (the user, 2026-11-05: "move this chart up so it
-    // is just down of price chart"): each fund's price over its relative
-    // pricing, TQQQ's pair then SOXL's, Turnaround Monday after them (the
-    // Monday generator put it second, by trade count), credit stress last.
+    // is just down of price chart", then "put turnaround monday between these
+    // two"): TQQQ's price over its pair, Turnaround Monday (the Monday
+    // generator put it second, by trade count), SOXL's price over its pair,
+    // credit stress last. With no SOXL panel the Monday panel sits before credit stress.
     if (res.lines) {
-      const tm = res.lines.filter(l => l.group === "Turnaround Monday"), rest = res.lines.filter(l => l.group !== "Turnaround Monday"), at = rest.findIndex(l => l.group === "Credit stress (NFCI)");
+      const tm = res.lines.filter(l => l.group === "Turnaround Monday"), rest = res.lines.filter(l => l.group !== "Turnaround Monday");
+      let at = rest.findIndex(l => l.group === "SOXL price" || l.group === "SOXL vs SOXX");
+      if (at < 0) at = rest.findIndex(l => l.group === "Credit stress (NFCI)");
       res.lines = at < 0 ? rest.concat(tm) : rest.slice(0, at).concat(tm, rest.slice(at));
     }
     // The SOXL pile on the dashboard.
