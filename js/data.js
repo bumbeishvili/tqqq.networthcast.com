@@ -67,6 +67,17 @@ async function loadLiveQuotes() {
   if (!resp.ok) throw new Error('The quotes proxy answered HTTP ' + resp.status);
   return resp.json();
 }
+// A live time that lags the clock by more than five minutes while New York is in
+// session: the quote feed has stalled (Yahoo froze for over an hour on 2026-11-05).
+// Outside session hours an old time is the last close and normal.
+const LIVE_STALL_MS = 5 * 60 * 1000;
+function liveStalled(asOf, now = new Date()) {
+  const part = Object.fromEntries(NY_CLOCK.formatToParts(now).map(p => [p.type, p.value]));
+  const weekday = new Date(`${part.year}-${part.month}-${part.day}T12:00:00Z`).getUTCDay();
+  const nyMin = +part.hour * 60 + +part.minute;
+  const inSession = weekday >= 1 && weekday <= 5 && nyMin >= 9 * 60 + 30 && nyMin < MARKET_CLOSE_NY_MIN;
+  return inSession && now.getTime() - asOf.getTime() > LIVE_STALL_MS;
+}
 function nyDateOf(d) {
   const part = Object.fromEntries(NY_CLOCK.formatToParts(d).map(p => [p.type, p.value]));
   return `${part.year}-${part.month}-${part.day}`;

@@ -3103,6 +3103,10 @@
   .custom-lines-chart .mini-zoom-reset:hover rect { fill: rgba(134, 118, 255, 0.34); }
   .custom-lines-chart .mini-zoom-reset text { fill: #383874; }
   /* The eye on each end label hides its line (the shared .cfg-sub-chip handler flips it). */
+  /* A finger over the chart: the page still scrolls under a vertical drag; a
+     pinch or a sideways drag goes to the chart's own zoom and pan
+     (js/signal-chart.js), not to the browser's page zoom. */
+  .custom-lines-chart { touch-action: pan-y; }
   .custom-lines-chart .mini-line-toggle { cursor: pointer; }
   .custom-lines-chart .mini-line-toggle.legend-hidden { opacity: var(--state-hidden-opacity); }
   .custom-lines-chart .mini-line-toggle.legend-hidden:hover { opacity: 0.8; }

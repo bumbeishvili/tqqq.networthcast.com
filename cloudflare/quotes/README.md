@@ -13,6 +13,8 @@ The site's price history is committed to git by the GitHub Action. This worker s
 
 The intraday page (`experiments/tqqq-intraday.html`) reads today's session from this TSV route once its `QUOTES_PROXY` constant holds the deployed URL; until then it reads the committed file the hourly pipeline writes.
 
+When Yahoo's trade time is more than three minutes old during New York session hours (its whole US feed froze for over an hour on 2026-11-05), the quote is refetched from Nasdaq's public quote feed and carries `source: "nasdaq"` with `yahooTime`; if Nasdaq cannot answer, the Yahoo quote comes back with `stale: true`. A fresh quote has no `source` field.
+
 `prevClose` is Yahoo's prior close on Yahoo's current adjustment basis. A page overlaying `price` on the committed files should compare `prevClose` with its own last close first: a gap of more than a few percent means the files are on another basis (a split, as SOXX on 2026-11-05) and the overlay has to wait for the refreshed files. When Yahoo reports a split in the requested range the quote carries `splitToday`.
 
 ## Who may call it

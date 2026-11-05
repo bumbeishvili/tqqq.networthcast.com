@@ -9,13 +9,26 @@
 import worker from './src/worker.mjs';
 
 const OFFLINE = process.argv.includes('--offline');
+// Offline, the stub plays three Yahoo moods per symbol: fresh (the default), stale with
+// Nasdaq answering (SOXL), stale with Nasdaq failing (SPY); the session clock is pinned
+// to a weekday afternoon so the staleness rule is live in the test.
+const STALE = { SOXL: 'nasdaq', SPY: 'nasdaq-down' };
 if (OFFLINE) {
   const open = Date.UTC(2026, 10, 5, 14, 30) / 1000;   // 2026-11-05 09:30 EST
+  const nowFixed = Date.UTC(2026, 10, 5, 18, 30);       // 13:30 EST, a Thursday
+  Date.now = () => nowFixed;
   globalThis.fetch = async (url) => {
-    const symbol = decodeURIComponent(new URL(url).pathname.split('/').pop());
+    const u = new URL(url);
+    if (u.hostname === 'api.nasdaq.com') {
+      const symbol = u.pathname.split('/')[3];
+      if (STALE[symbol] === 'nasdaq-down') return new Response('blocked', { status: 403 });
+      return Response.json({ data: { marketStatus: 'Open', primaryData: { lastSalePrice: '$44.50', lastTradeTimestamp: 'Nov 5, 2026 1:29 PM ET', isRealTime: true } } });
+    }
+    const symbol = decodeURIComponent(u.pathname.split('/').pop());
+    const tradeAt = STALE[symbol] ? nowFixed / 1000 - 70 * 60 : nowFixed / 1000 - 30;   // a stale Yahoo print is 70 minutes old, a fresh one 30 seconds
     const px = 40 + symbol.length, ts = [open, open + 60, open + 120, open + 147, open + 6.5 * 3600], TRAIL = 3;
     const col = (v, trail) => ts.map((_, k) => k === TRAIL ? trail : v);
-    return Response.json({ chart: { result: [{ meta: { regularMarketPrice: px + 0.25, chartPreviousClose: px - 1, regularMarketTime: open + 147, exchangeTimezoneName: 'America/New_York' },
+    return Response.json({ chart: { result: [{ meta: { regularMarketPrice: px + 0.25, chartPreviousClose: px - 1, regularMarketTime: tradeAt, exchangeTimezoneName: 'America/New_York' },
       timestamp: ts, indicators: { quote: [{ open: col(px - 0.5, px + 0.25), high: col(px + 0.5, px + 0.25), low: col(px - 1, px + 0.25), close: col(px, px + 0.25), volume: col(1000, 0) }] } }], error: null } });
   };
   console.log('offline: Yahoo replaced by a canned chart answer');
@@ -35,6 +48,12 @@ check('site origin: /quotes answers 200 with ten quotes', r.status === 200 && n 
 check('site origin: CORS header names the origin', r.headers.get('Access-Control-Allow-Origin') === site && r.headers.get('Vary') === 'Origin');
 check('first call was a cache miss', r.headers.get('X-Cache') === 'MISS');
 
+if (OFFLINE) {
+  const soxl = b.quotes.SOXL, spy = b.quotes.SPY, tqqq = b.quotes.TQQQ;
+  check('stale Yahoo + Nasdaq open: Nasdaq price and time, Yahoo prior close kept, source nasdaq', soxl.source === 'nasdaq' && soxl.price === 44.5 && soxl.time === '2026-11-05T18:29:00.000Z' && soxl.prevClose === 43 && soxl.yahooTime && !soxl.stale, JSON.stringify(soxl));
+  check('stale Yahoo + Nasdaq failing: Yahoo quote marked stale', spy.source === 'yahoo' && spy.stale === true && spy.price === 43.25, JSON.stringify(spy));
+  check('fresh Yahoo: untouched, no source field', tqqq.source === undefined && tqqq.stale === undefined, JSON.stringify(tqqq));
+}
 r = await call('/quotes', { origin: local }); b = await r.json();
 check('localhost:5500 origin: 200, served from the cache', r.status === 200 && r.headers.get('X-Cache') === 'HIT' && r.headers.get('Access-Control-Allow-Origin') === local);
 r = await call('/quotes', { origin: 'http://localhost:8766' });

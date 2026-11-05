@@ -29,6 +29,16 @@ const BAR_RANGES = { '1d': ['1m', '5m'], '5d': ['5m'] };
 const QUOTE_TTL = 60, BARS_TTL = 60, BROWSER_TTL = 20;
 const UPSTREAM = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 const USER_AGENT = 'Mozilla/5.0 (compatible; tqqq.networthcast.com quotes proxy)';
+// Yahoo's whole US feed froze for over an hour on 2026-11-05 (every symbol's last
+// trade stuck at 12:10:50 ET while the market traded on). When a quote's trade time
+// is more than STALE_MS old during New York session hours, Nasdaq's public quote
+// feed is asked instead, and its price and time are used when it says the market
+// is open and its print is newer. Yahoo's prior close stays, since the overlay's
+// guard compares it with the files, and the answer says which source the price is from.
+const STALE_MS = 3 * 60 * 1000, NASDAQ = 'https://api.nasdaq.com/api/quote/', NASDAQ_TIMEOUT_MS = 4000;
+const NASDAQ_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
+const NY_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
 const JSON_TYPE = 'application/json', TSV_TYPE = 'text/tab-separated-values; charset=utf-8';
 // The TSV layout's session window, bar open times in New York (scripts/update_intraday_today.py).
 const SESSION_OPEN_MIN = 9 * 60 + 30, SESSION_LAST_BAR_MIN = 15 * 60 + 59;
@@ -76,7 +86,10 @@ function quotesRoute(url) {
     build: async () => {
       const quotes = {}, errors = {};
       await Promise.all(list.map(async symbol => {
-        try { quotes[symbol] = quoteOf(await chart(symbol, '1d', '1d')); }
+        try {
+          const q = quoteOf(await chart(symbol, '1d', '1d'));
+          quotes[symbol] = sessionNow() && q.time && Date.now() - Date.parse(q.time) > STALE_MS ? await freshen(symbol, q) : q;
+        }
         catch (e) { errors[symbol] = String(e.message || e); }
       }));
       const ok = Object.keys(errors).length === 0;
@@ -164,6 +177,40 @@ function quoteOf(result) {
     volume: last >= 0 ? q.volume[last] : null,
     ...(split.length ? { splitToday: split } : {}),
   };
+}
+
+// New York session hours by the clock: a weekday, 09:30 to 16:00 (holidays included; Nasdaq's market status settles those).
+function sessionNow(now = new Date()) {
+  const p = {}; for (const { type, value } of NY_PARTS.formatToParts(now)) p[type] = value;
+  const minute = (+p.hour % 24) * 60 + +p.minute;
+  return !['Sat', 'Sun'].includes(p.weekday) && minute >= 9 * 60 + 30 && minute < 16 * 60;
+}
+// A New York wall-clock time ("Nov 5, 2026 1:24 PM ET", as Nasdaq writes it) as an ISO instant.
+function nasdaqTimeToIso(text) {
+  const m = /^([A-Z][a-z]{2}) (\d{1,2}), (\d{4}) (\d{1,2}):(\d{2}) (AM|PM) ET$/.exec(String(text || '').trim());
+  if (!m || !(m[1] in MONTHS)) return null;
+  const hour = (+m[4] % 12) + (m[6] === 'PM' ? 12 : 0);
+  const guess = Date.UTC(+m[3], MONTHS[m[1]], +m[2], hour, +m[5]);   // the wall time read as UTC
+  const p = {}; for (const { type, value } of NY_PARTS.formatToParts(new Date(guess))) p[type] = value;
+  const wallAtGuess = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour % 24, +p.minute);
+  return new Date(guess + (guess - wallAtGuess)).toISOString();   // shift by New York's offset at that moment
+}
+// Nasdaq's quote for a symbol whose Yahoo quote has gone stale: the price and time
+// are replaced when Nasdaq reports the market open and a newer print; otherwise the
+// Yahoo quote comes back marked stale. Nasdaq's feed answers browser-like requests only.
+async function freshen(symbol, q) {
+  const stale = { ...q, stale: true, source: 'yahoo' };
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), NASDAQ_TIMEOUT_MS);
+    const res = await fetch(NASDAQ + encodeURIComponent(symbol) + '/info?assetclass=etf', { headers: { 'User-Agent': NASDAQ_UA, 'Accept': 'application/json' }, signal: ctl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return stale;
+    const data = ((await res.json()) || {}).data || {}, pd = data.primaryData || {};
+    const price = parseFloat(String(pd.lastSalePrice || '').replace(/[$,]/g, '')), time = nasdaqTimeToIso(pd.lastTradeTimestamp);
+    if (data.marketStatus !== 'Open' || !(price > 0) || !time || Date.parse(time) <= Date.parse(q.time)) return stale;
+    return { ...q, price, time, changePct: q.prevClose > 0 ? (price / q.prevClose - 1) * 100 : null,
+      high: Math.max(q.high || 0, price) || price, low: q.low > 0 ? Math.min(q.low, price) : price, source: 'nasdaq', yahooTime: q.time };
+  } catch (e) { return stale; }
 }
 
 async function fromCache(key) {

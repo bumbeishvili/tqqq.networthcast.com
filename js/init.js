@@ -54,7 +54,7 @@
     const el = document.getElementById('data-fetched-at');
     if (!wrap || !el) return;
     const pad2 = (n) => n < 10 ? '0' + n : '' + n;
-    el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + (isLive ? ' (live)' : '');
+    el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + (isLive ? (liveStalled(d) ? ' (live, feed stalled)' : ' (live)') : '');
     wrap.removeAttribute('hidden');
   };
   if (live) showDataTime(live.asOf, true);

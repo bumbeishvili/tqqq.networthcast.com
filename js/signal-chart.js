@@ -106,6 +106,8 @@ function _miniAssetKey(held) {
 // or the Reset button restores the full range. The zoom is kept per strategy,
 // so a re-render (resize, fresh log) preserves it.
 const MINI_ZOOM = { minSpanMs: 30 * 86400000, wheelK: 0.002, rightAnchorPx: 200 };
+// A touch screen: the hints say pinch and drag instead of the modifier key.
+const MINI_TOUCH_UI = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 const MINI_MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MINI_WEEKDAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const _miniShortDate = t => { const d = new Date(t); return `${d.getUTCDate()} ${MINI_MON[d.getUTCMonth()]} ${d.getUTCFullYear()}`; };
@@ -514,13 +516,13 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const hintW = txt => txt.length * 0.6 * (7 / k);   // JetBrains Mono advance
   let zoomUi = '';
   if (!offRest) {
-    const hint = `${MOD_KEY} + scroll to zoom`;
+    const hint = MINI_TOUCH_UI ? 'pinch to zoom' : `${MOD_KEY} + scroll to zoom`;
     if (!compact && hintW(hint) <= padR - 4 / k) zoomUi = `<text x="${(W - 2 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.6)">${hint}</text>`;
   } else {
     const factor = ((T1 - T0) / (t1 - t0)).toFixed(1);
-    const resetBtn = `<g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
+    const resetBtn = `<g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MINI_TOUCH_UI ? 'A pinch zooms, a drag pans.' : `${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.`}</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
     if (atEnd) {
-      const long = `×${factor} · ${MOD_KEY} + drag to pan`;
+      const long = MINI_TOUCH_UI ? `×${factor} · drag to pan` : `×${factor} · ${MOD_KEY} + drag to pan`;
       const hint = hintW(long) <= padR - btnW - 8 / k ? long : `×${factor}`;
       zoomUi = (compact ? '' : `<text x="${(btnX - 4 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.9)">${hint}</text>`) + resetBtn;
     } else {
@@ -958,6 +960,81 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.mini-zoom-reset')) _miniZoomReset(svg);
   if (e.target.closest('.mini-latest')) _miniJumpToLatest(svg);
 });
+// Touch, through pointer events so the mouse handlers stay as they are: a
+// pinch zooms the time axis around the fingers' midpoint, a one-finger drag
+// across the chart pans it, and a vertical drag still scrolls the page
+// (touch-action: pan-y on the chart, styles.css, which also keeps the browser
+// from zooming the whole page on a pinch over it). A touch pointer is captured
+// by the element it lands on, and every step re-renders the chart into a new
+// svg, so the capture is released at once and each event finds the chart
+// under it; the gesture reads the chart's current data by its id.
+const _miniTouch = { cfgId: null, fingers: new Map(), start: null, raf: 0 };
+function _miniTouchStart(data, svg) {
+  const f = [..._miniTouch.fingers.values()];
+  const rect = svg.getBoundingClientRect(), pxPerUnit = rect.width / data.W;
+  const start = { t0: data.t0, t1: data.t1, pxPerMs: pxPerUnit * (data.W - data.padL - data.padR) / (data.t1 - data.t0), x: f[0].x, y: f[0].y, mode: f.length >= 2 ? 'pinch' : 'tap' };
+  if (f.length >= 2) {
+    start.dist = Math.hypot(f[1].x - f[0].x, f[1].y - f[0].y) || 1;
+    start.pivot = _miniTimeAtX(data, ((f[0].x + f[1].x) / 2 - rect.left) / pxPerUnit);
+  }
+  _miniTouch.start = start;
+}
+// The window to show; a frame at most, since every move re-renders the chart.
+function _miniTouchApply(t0, t1, data) {
+  if (t0 === data.t0 && t1 === data.t1) return;
+  if (t1 - t0 >= data.T1 - data.T0 && !data.home) delete window._miniZooms[data.cfgId];
+  else window._miniZooms[data.cfgId] = { t0, t1 };
+  if (!_miniTouch.raf) _miniTouch.raf = requestAnimationFrame(() => { _miniTouch.raf = 0; _miniChartRerender(data.cfgId); });
+}
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+  const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
+  const data = _miniDataOf(svg);
+  if (!svg || !data || !data.series.length) return;
+  if (e.target.hasPointerCapture && e.target.hasPointerCapture(e.pointerId)) e.target.releasePointerCapture(e.pointerId);
+  if (_miniTouch.cfgId !== data.cfgId) _miniTouch.fingers.clear();
+  _miniTouch.cfgId = data.cfgId;
+  _miniTouch.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  _miniTouchStart(data, svg);
+  if (_miniTouch.fingers.size >= 2) _miniChartClearHover();
+});
+document.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'touch' || !_miniTouch.fingers.has(e.pointerId)) return;
+  const data = window._miniCharts[_miniTouch.cfgId], start = _miniTouch.start;
+  if (!data || !start) return;
+  _miniTouch.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const f = [..._miniTouch.fingers.values()];
+  const full = data.T1 - data.T0, startSpan = start.t1 - start.t0;
+  if (start.mode === 'pinch' && f.length >= 2) {
+    // The span scales with the fingers' distance; the date under their first midpoint stays put, as the wheel's pivot does.
+    const dist = Math.hypot(f[1].x - f[0].x, f[1].y - f[0].y) || 1;
+    const next = Math.max(Math.min(MINI_ZOOM.minSpanMs, full), Math.min(full, startSpan * start.dist / dist));
+    const frac = (start.pivot - start.t0) / startSpan;
+    let t0 = start.pivot - frac * next, t1 = start.pivot + (1 - frac) * next;
+    if (t0 < data.T0) { t0 = data.T0; t1 = t0 + next; }
+    if (t1 > data.T1) { t1 = data.T1; t0 = t1 - next; }
+    if (next >= full) { t0 = data.T0; t1 = data.T1; }
+    _miniTouchApply(t0, t1, data);
+    return;
+  }
+  if (f.length !== 1) return;
+  const dx = f[0].x - start.x, dy = f[0].y - start.y;
+  // A drag is a pan once it has gone sideways; a vertical one is the page's scroll.
+  if (start.mode === 'tap') { if (Math.abs(dx) < 8 || Math.abs(dx) < Math.abs(dy)) return; start.mode = 'pan'; _miniChartClearHover(); }
+  if (start.mode !== 'pan') return;
+  const span = start.t1 - start.t0;
+  const t1 = Math.min(data.T1, Math.max(data.T0 + span, start.t1 - dx / start.pxPerMs));
+  _miniTouchApply(t1 - span, t1, data);
+});
+const _miniTouchEnd = (e) => {
+  if (e.pointerType !== 'touch' || !_miniTouch.fingers.has(e.pointerId)) return;
+  _miniTouch.fingers.delete(e.pointerId);
+  const data = window._miniCharts[_miniTouch.cfgId], svg = document.querySelector(`.custom-lines-chart[data-mini-id="${_miniTouch.cfgId}"]`);
+  if (_miniTouch.fingers.size && data && svg) _miniTouchStart(data, svg);   // a pinch down to one finger: a fresh drag from here
+  else { _miniTouch.start = null; _miniTouch.cfgId = null; }
+};
+document.addEventListener('pointerup', _miniTouchEnd);
+document.addEventListener('pointercancel', _miniTouchEnd);
 // Mouse down on the chart starts one of two drags. With the modifier held it
 // pans the zoomed window: the chart follows the cursor, pixel for pixel, until
 // the button is released, and stops at either end of the data (a full view has
