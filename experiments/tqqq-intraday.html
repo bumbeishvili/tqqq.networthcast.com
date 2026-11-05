@@ -301,7 +301,7 @@ function buildDays(rows) {
   return sessions.slice(1).map((day, i) => {
     const prevClose = sessions[i].bars[sessions[i].bars.length - 1].close;
     const pct = price => (price / prevClose - 1) * 100;
-    const points = [{ minute: SESSION_OPEN_MIN, pct: pct(day.open) }].concat(day.bars.map(b => ({ minute: b.minute, pct: pct(b.close) })));
+    const points = [{ minute: SESSION_OPEN_MIN, pct: pct(day.open), close: day.open }].concat(day.bars.map(b => ({ minute: b.minute, pct: pct(b.close), close: b.close })));   // close: the price behind the point, for today's label
     const last = points[points.length - 1];
     return {
       id: day.id,
@@ -681,14 +681,15 @@ class IntradayOverlayChart {
     g._add('g.today-rings').attr('transform', `translate(${cx},${cy})`)
       ._add('circle.today-ring', [0, 1]).attr('r', 5).classed('second', k => k === 1);
     g._add('circle.today-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
-    const nearRightEdge = cx > chartWidth - 110;
-    // Today's change vs the previous close, beside the dot and below it so
-    // sell labels above the line stay clear.
+    const nearRightEdge = cx > chartWidth - 180;
+    // Today's change vs the previous close and the price itself, beside the dot
+    // and below it so sell labels above the line stay clear.
     const tone = last.pct > 0 ? 'up' : last.pct < 0 ? 'down' : '';
+    const price = last.close > 0 ? ` ($${last.close.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : '';
     g._add('text.today-label')
       .attr('x', cx + (nearRightEdge ? -10 : 10)).attr('y', cy + 18)
       .attr('text-anchor', nearRightEdge ? 'end' : 'start')
-      .html(`today <tspan class="${tone}">${fmtPct(last.pct)}</tspan>`);
+      .html(`today <tspan class="${tone}">${fmtPct(last.pct)}</tspan>${price}`);
   }
 
   drawAggregates() {
