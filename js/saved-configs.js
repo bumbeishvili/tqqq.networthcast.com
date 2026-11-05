@@ -159,17 +159,21 @@ function customDetailLog(cfg) {
   const ctx = window._customCtx, shown = (window._customResults || {})[cfg.id];
   if (!ctx || !shown || shown.error) return null;
   const sig = customSig(cfg, ctx);
-  if (shown.sig !== sig) return null;   // the display run is still catching up; its arrival re-renders the panel
   const have = window._customDetailLogs[cfg.id];
   if (have && have.sig === sig) return have.log;
-  window._customDetailLogs[cfg.id] = { sig, log: null };
+  // A new live price (the signature's data stamp) keeps the last log on screen
+  // until the run with the price is in; any other change (settings, the range)
+  // draws the display log until then, since the old log shows the old rules.
+  const carried = have && have.log && _sigSansStamp(have.sig) === _sigSansStamp(sig) ? have.log : null;
+  if (shown.sig !== sig) return carried;   // the display run is still catching up; its arrival re-renders the panel
+  window._customDetailLogs[cfg.id] = { sig, log: carried };
   postCustomJob(cfg, cfg.params || {}, Object.assign({}, computeCustomGlobals(cfg, ctx), { dailyDisplay: true }), (msg, err) => {
     const slot = window._customDetailLogs[cfg.id];
     if (!slot || slot.sig !== sig) return;   // superseded by a newer signature
     slot.log = (!err && msg && Array.isArray(msg.log)) ? msg.log : [];
     if (window._openCustomCfgId === cfg.id) _miniChartRerender();
   });
-  return null;
+  return carried;
 }
 // The years before the main chart's range, for the panel's signal chart: the
 // same code and settings over the whole history in the data, logged daily,
@@ -791,9 +795,11 @@ which timing fired. A rule with no line is a bug. Declare them as lines:
   A later group draws at a quarter of the first panel's height with up to three lines, taller with
   more; tall: true on one of its lines draws it at full height (a second fund's price over its
   relative pricing, say). Max 6 lines per group, 6 groups.
-  priceKey: "floorPx" on a line names the price its level sits at, logged under that key (the TQQQ
-  close that puts the lead on the floor, say): the chart writes it in brackets after the line's name,
-  "Floor ($50.22)", so an order can be set at it. Log null when there is none.
+  priceKey: "floorPx" on a line names the price its level sits at, logged under that key: the chart
+  writes it in brackets after the line's name, "Floor ($50.22)", so an order can be set at it. For a
+  level relative to another fund (TQQQ's lead over QQQ) log the close the two reach together, QQQ
+  moving a third of TQQQ's move from the prior close: that price holds through the day, where the
+  close that reads the level at QQQ's price right now moves with QQQ. Log null when there is none.
 
 === OWN MONEY: a rule that decides how much goes in (only when the rule says so) ===
 Most strategies trade the money the app hands them (p.initial, p.contributions). Some rules decide the
@@ -1061,8 +1067,21 @@ function buildCustomData() {
   return _customDataCache;
 }
 // After the daily rows change (a live price from the quotes proxy): the next
-// custom run rebuilds the data and the worker receives it again.
-function invalidateCustomData() { _customDataCache = null; _customDataSent = false; }
+// custom run rebuilds the data and the worker receives it again, and the runs
+// that read the latest row run again (customDataStamp in their signature).
+let _customDataVersion = 0;
+function invalidateCustomData() { _customDataCache = null; _customDataSent = false; _customDataVersion++; }
+// The data a run's result stands on, for its signature (customSig): the
+// data's version while the run's window reaches the latest row, which a live
+// price moves between the files' refreshes, so the result follows the price
+// (the user, 2026-11-06: the signal chart kept the file's close). Nothing for
+// a run that ends earlier, whose result holds: the day-change badge's run to
+// yesterday's close, and the panel chart's history run, of which the chart
+// draws only the rows before the main run's range.
+function customDataStamp(ctx) { return ctx.isLatestDaySelected ? 'data' + _customDataVersion : ''; }
+// A signature without its data stamp, its last field: two that agree on it
+// differ only in the live price.
+const _sigSansStamp = sig => sig.slice(0, sig.lastIndexOf('|'));
 
 // === Sandboxed execution ================================================
 // Custom strategy code is NEVER evaluated on the main thread. It runs inside a
@@ -1340,7 +1359,7 @@ function customSig(cfg, ctx) {
   const ownMoney = ((window._customResults || {})[cfg.id] || {}).money === 'own';
   const money = ownMoney ? [] : [ctx.initial, ctx.monthly, ctx.annualRaise];
   return [cfg.code || '', JSON.stringify(cfg.params || {}), ...money,
-    ctx.simEntryIdx, ctx.exitIdx, ctx.entryDateOverride || '', ctx.exitDateOverride || '', ownMoney ? '' : schedKey, ctx.displayGrain || ''].join('|');
+    ctx.simEntryIdx, ctx.exitIdx, ctx.entryDateOverride || '', ctx.exitDateOverride || '', ownMoney ? '' : schedKey, ctx.displayGrain || '', customDataStamp(ctx)].join('|');
 }
 // --- strategies that bring their own money --------------------------------
 // A custom strategy whose code declares money: "own" decides its own deposits
@@ -1433,7 +1452,8 @@ function computeCustomGlobals(cfg, ctx) {
 function scheduleCustomYesterdayRun(cfg, ctx) {
   if (!ctx.isLatestDaySelected || !ctx.prevTradingDayDate) return;
   if (!cfg.code || !String(cfg.code).trim()) return;
-  const yesterdayCtx = Object.assign({}, ctx, { exitDateOverride: ctx.prevTradingDayDate });
+  // Its window ends on yesterday's close, which no live price moves (customDataStamp).
+  const yesterdayCtx = Object.assign({}, ctx, { exitDateOverride: ctx.prevTradingDayDate, isLatestDaySelected: false });
   const sig = customSig(cfg, yesterdayCtx);
   const cached = window._customYesterdayResults[cfg.id];
   if (cached && cached.sig === sig) return; // already have this one
@@ -3253,7 +3273,7 @@ function computeCustomParamBars(cfg, sp, opts, popup) {
     // startIdx/endIdx/initial/monthly/annualRaise left old bars on screen.
     const contribKey = globals.contributions ? JSON.stringify(globals.contributions) : '';
     const key = [cfg.code, JSON.stringify(merged), globals.startIdx, globals.endIdx, globals.initial, globals.monthly, globals.annualRaise,
-      globals.entryDate || '', globals.exitDate || '', contribKey, globals.displayGrain || '', globals.exactWindow ? 1 : 0, globals.depositsFromHistory ? 1 : 0].join('|');
+      globals.entryDate || '', globals.exitDate || '', contribKey, globals.displayGrain || '', globals.exactWindow ? 1 : 0, globals.depositsFromHistory ? 1 : 0, customDataStamp(ctx)].join('|');
     const cached = window._customPreviewCache[key];
     if (cached != null) { finals[i] = cached; draw(); return; }
     runCustomPreview(cfg, overrides, globals, (msg) => {

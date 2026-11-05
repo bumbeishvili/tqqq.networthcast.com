@@ -674,7 +674,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
           held: invested ? "TQQQ" : "CASH", note: note, fastLine: maF, slowLine: maS, assetPrice: sig[i] });
     }
-    return { log, lines: [{ key: "fastLine", label: F + "-day " + stat }, { key: "slowLine", label: S + "-day " + stat }, { key: "assetPrice", label: "QQQ price" }] };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "fastLine", label: F + "-day " + stat }, { key: "slowLine", label: S + "-day " + stat }] };
   }
 }`;
 
@@ -3099,9 +3099,21 @@ CODE[47] = `{
       : state === "top" && topHold === "sqqq" && topDays && days >= topDays ? "SQQQ held for its " + topDays + " days; " : "";
     // The rules' levels as TQQQ prices for a day's close: a close past one is
     // the trade it names. A lead threshold x is the close that puts TQQQ x%
-    // ahead of QQQ over the lookback.
+    // ahead of QQQ over the lookback. The lead is TQQQ against QQQ, so the
+    // close that reads x% at QQQ's price right now (atLead) moves with QQQ
+    // through the day; the close TQQQ and QQQ reach together, QQQ moving a
+    // third of TQQQ's move from the prior close (TQQQ's daily leverage, LEV),
+    // holds all day, so an order can be set at it (crossAt; the user,
+    // 2026-11-06, after a floor price that moved with the market).
     const leadLbl = (x) => x >= 0 ? x + "% ahead" : -x + "% behind";
     const atLead = (i, x) => lead[i] === lead[i] ? baseT[i] * (Q[i] / baseQ[i]) * (1 + x / 100) : null;
+    const LEV = 3;
+    const crossAt = (i, x) => {
+      if (!(lead[i] === lead[i]) || !(i > 0 && T[i - 1] > 0 && Q[i - 1] > 0)) return null;
+      const perQ = baseT[i] / baseQ[i] * (1 + x / 100), t0 = T[i - 1], q0 = Q[i - 1];   // TQQQ per QQQ dollar on the level; the prior closes
+      const px = (LEV - 1) * perQ * q0 * t0 / (LEV * t0 - perQ * q0);
+      return px > 0 ? px : null;
+    };
     // The levels that can fire from the current state, for the Nearest signal
     // card. Each says whether crossing it sells TQQQ or buys it (kind).
     const signalLevels = (i) => {
@@ -3113,11 +3125,11 @@ CODE[47] = `{
         if (on) add("Overextended (+" + Math.round(over * 100) + "%)", ln, "down", wantsT ? "buy" : "", "a close under it ends the SQQQ hold");
         else add("Overextended (+" + Math.round(over * 100) + "%)", ln, "up", holdsT ? "sell" : "", "a close above it holds SQQQ");
       }
-      if (topOn && (state === "in" || state === "deep")) add("Ceiling (" + leadLbl(top) + ")", atLead(i, top), "up", holdsT ? "sell" : "", "a close above it steps aside to " + lbl(topHold));
-      if (topOn && band && state === "top") add("Back at (" + leadLbl(back) + ")", atLead(i, back), "down", "buy", "a close under it buys TQQQ");
-      if (floorOn && state === "in") add("Floor (" + leadLbl(floor) + ")", atLead(i, floor), "down", holdsT ? "sell" : "", "a close under it sells to " + lbl(floorHold));
-      if (floorOn && state === "brk") add("Re-entry (" + leadLbl(reentry) + ")", atLead(i, reentry), "up", "buy", closesNeeded + (closesNeeded > 1 ? " closes" : " close") + " above it buy TQQQ");
-      if (deepOn && state === "brk") add("Deep buy (" + leadLbl(deep) + ")", atLead(i, deep), "down", "buy", "a close under it buys TQQQ");
+      if (topOn && (state === "in" || state === "deep")) add("Ceiling (" + leadLbl(top) + ")", crossAt(i, top), "up", holdsT ? "sell" : "", "a close above it steps aside to " + lbl(topHold));
+      if (topOn && band && state === "top") add("Back at (" + leadLbl(back) + ")", crossAt(i, back), "down", "buy", "a close under it buys TQQQ");
+      if (floorOn && state === "in") add("Floor (" + leadLbl(floor) + ")", crossAt(i, floor), "down", holdsT ? "sell" : "", "a close under it sells to " + lbl(floorHold));
+      if (floorOn && state === "brk") add("Re-entry (" + leadLbl(reentry) + ")", crossAt(i, reentry), "up", "buy", closesNeeded + (closesNeeded > 1 ? " closes" : " close") + " above it buy TQQQ");
+      if (deepOn && state === "brk") add("Deep buy (" + leadLbl(deep) + ")", crossAt(i, deep), "down", "buy", "a close under it buys TQQQ");
       if (dGuard && state === "deep" && !deepPaused) add("Deep buy guard (−" + Math.round(dGuard * 100) + "%)", deepPx * (1 - dGuard), "down", holdsT ? "sell" : "", "a close under it sells to cash");
       if (dGuard && state === "deep" && deepPaused && med) add(OW + "-day median", med, "up", "buy", "a close above it buys the deep buy back");
       return { med, out };
@@ -3141,8 +3153,9 @@ CODE[47] = `{
         medianPrice: med,
         overLine: over > 0 && med ? med * (1 + over) : null,
         ceilingLine: ceilingLead, floorLine: floorLead, deepLine: deepLead,
-        // The close that puts the lead on each level today (atLead): the labels name it in brackets, for orders at a price.
-        ceilingPx: ceilingLead == null ? null : atLead(i, ceilingLead), floorPx: floorLead == null ? null : atLead(i, floorLead), deepPx: deepLead == null ? null : atLead(i, deepLead),
+        // The close that puts the lead on each level today, QQQ moving along (crossAt): the labels name it in brackets, for orders at a price. The deep buy guard is a price already.
+        ceilingPx: ceilingLead == null ? null : crossAt(i, ceilingLead), floorPx: floorLead == null ? null : crossAt(i, floorLead),
+        deepPx: deepLead == null ? null : state === "deep" && dGuard && !deepPaused ? deepPx * (1 - dGuard) : crossAt(i, deep),
         nfci: nfTh && isFinite(nf) ? nf : null,
         nfciVeto: nfTh && isFinite(nf) ? nfTh : null
       };
@@ -3536,6 +3549,16 @@ function withSoxlPile(base, spec) {
         if (soxlWhen === "lead") soxlOnAt[i] = on && (!SC || data.soxl[i] > soxlConf[i]) ? 1 : 0;
       }
     }
+    // The SOXL close that puts the lead on a level today, SOXX moving a third of SOXL's move from
+    // the prior close (SOXL's daily leverage): it holds through the day, so an order can be set at
+    // it, where the close that reads the level at SOXX's price right now moves with SOXX.
+    const SOXL_LEV = 3;
+    const soxlCrossAt = (i, lvl) => {
+      if (!(soxlBase[i] > 0) || !(i > 0 && data.soxl[i - 1] > 0 && data.soxx[i - 1] > 0)) return null;
+      const perX = soxlBase[i] / data.soxx[i] * (1 + lvl / 100), s0 = data.soxl[i - 1], x0 = data.soxx[i - 1];   // SOXL per SOXX dollar on the level; the prior closes
+      const px = (SOXL_LEV - 1) * perX * x0 * s0 / (SOXL_LEV * s0 - perX * x0);
+      return px > 0 ? px : null;
+    };
     const SOXL_PRICE = "SOXL price", SOXL_PANEL = soxlWhen === "lead" ? "SOXL vs SOXX" : SOXL_PRICE;   // SOXL_PANEL: where the SOXL rule's trades are marked
     let soxlPrev = false, soxlSwitch = false, soxlLeft = false;
     const soxlUnder = (i) => soxlHi[i] > 0 ? ((1 - data.soxl[i] / soxlHi[i]) * 100).toFixed(0) + "% under its " + SW + "-day high" : "";
@@ -3652,7 +3675,7 @@ function withSoxlPile(base, spec) {
   t = once(t, '      const hp = priceOf(held, i), holdingsValue = shares * hp;\n', '      const hp = priceOf(held, i), holdingsValue = shares * hp;\n' + joined, 'the holdings value line');
   t = once(t, '      log: log, lines: lines,\n', '      log: log, holdings: holdings, lines: lines,\n', 'the result object');
   t = once(t, '          date: dates[i], value: holdingsValue + cash, action: action, note: note,\n',
-    '          date: dates[i], value: holdingsValue + cash + pileValue, action: action, note: note,\n          soxlPile: pileValue > 0 ? pileValue : null, soxlPut: pilePut > 0 ? pilePut : null,\n          soxlPrice: soxlPx > 0 && soxlHi[i] > 0 ? soxlPx : null, soxlLine: soxlHi[i] > 0 ? soxlHi[i] * (1 - soxlDrop) : null, soxlAvgLine: soxlAvg[i] > 0 ? soxlAvg[i] : null,\n          soxlLead: soxlLead[i] === soxlLead[i] ? soxlLead[i] : null, soxlLeadIn: soxlLead[i] === soxlLead[i] ? leadIn : null, soxlLeadOut: soxlLead[i] === soxlLead[i] ? leadOut : null,\n          soxlLeadInPx: soxlBase[i] > 0 ? soxlBase[i] * (1 + leadIn / 100) : null, soxlLeadOutPx: soxlBase[i] > 0 ? soxlBase[i] * (1 + leadOut / 100) : null,\n', 'the log row');
+    '          date: dates[i], value: holdingsValue + cash + pileValue, action: action, note: note,\n          soxlPile: pileValue > 0 ? pileValue : null, soxlPut: pilePut > 0 ? pilePut : null,\n          soxlPrice: soxlPx > 0 && soxlHi[i] > 0 ? soxlPx : null, soxlLine: soxlHi[i] > 0 ? soxlHi[i] * (1 - soxlDrop) : null, soxlAvgLine: soxlAvg[i] > 0 ? soxlAvg[i] : null,\n          soxlLead: soxlLead[i] === soxlLead[i] ? soxlLead[i] : null, soxlLeadIn: soxlLead[i] === soxlLead[i] ? leadIn : null, soxlLeadOut: soxlLead[i] === soxlLead[i] ? leadOut : null,\n          soxlLeadInPx: soxlCrossAt(i, leadIn), soxlLeadOutPx: soxlCrossAt(i, leadOut),\n', 'the log row');
   if (!t.endsWith('    return res;\n  }\n}')) throw new Error(`withSoxlPile(${spec.name}): the base must end with its dashboard`);
   return t.slice(0, -'    return res;\n  }\n}'.length) + card + '    return res;\n  }\n}';
 }

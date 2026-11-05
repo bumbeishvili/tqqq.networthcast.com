@@ -44,6 +44,9 @@ function customLineShown(cfg, key) { return ((cfg.subShown || {})[key]) !== fals
 // chart 2x more in height"), then with six panels on #52 asked for "all charts
 // 50% lower in height", which is this again; the extra gridlines stayed.
 const MINI_CHART = { W: 320, H: 148, padL: 6 };
+// The day-change badge's colours on a price line's label: styles.css's
+// --green-text and --red-text, as js/chart.js's end labels draw them.
+const MINI_DAY_CHANGE = { up: '#067d21', down: '#c81e1f' };
 // Lines measured on different things (two funds' prices, a lead in percent, a
 // stress index) can name a group: each group draws as its own panel, with its
 // own scale, unit and gutter labels, stacked on the one time axis in the order
@@ -382,11 +385,29 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // in percent is the strategy's reading of it (2026-11-05).
   const _pxTxt = px => '$' + px.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });   // the plain price, as an order is written
   for (const s of series) s.tagLabel = s.label + (s.endPt.px > 0 ? ' (' + _pxTxt(s.endPt.px) + ')' : '');
+  // A price panel's first line is the price its levels are compared with
+  // (LINES in the prompt); on the latest day its label carries the day's
+  // change against the prior close, as the main chart's end labels do (the
+  // user, 2026-11-06): "+1.2%" after its name, on the row above it in the
+  // compact layout. Only from one trading day to the next: the display log's
+  // weekly rows (while the detail run is on its way) carry none.
+  const latestDate = daily[daily.length - 1].date, priorDate = daily.length > 1 ? daily[daily.length - 2].date : null;
+  for (const s of series) {
+    if (s.unit !== '$' || s.badge || series.find(o => o.panel === s.panel) !== s) continue;
+    const at = s.pts.indexOf(s.endPt), prev = at > 0 ? s.pts[at - 1] : null;
+    if (!prev || s.endPt.d !== latestDate || prev.d !== priorDate) continue;
+    const delta = computeDayChange(s.endPt.v, prev.v);
+    if (delta) s.badge = { text: fmtDayChangePct(delta), color: delta.pct >= 0 ? MINI_DAY_CHANGE.up : MINI_DAY_CHANGE.down };
+  }
   const gutterSeries = series.filter(s => s.hidden || (s.shown && !s.partial));
-  const nameRowsOf = (name, badge, color) => (compact && badge ? [{ text: badge.text, color: badge.color }] : [])
-    .concat((compact ? _miniNameRows(name) : [name]).map(text => ({ text, color })));
+  // A label's name rows: the compact layout stacks a row per word under any
+  // badge; the full layout has one row with the badge after the name (tail).
+  const nameRowsOf = (name, badge, color) => compact
+    ? (badge ? [{ text: badge.text, color: badge.color }] : []).concat(_miniNameRows(name).map(text => ({ text, color })))
+    : [{ text: name, color, tail: badge || null }];
+  const rowChars = row => row.text.length + (row.tail ? 1 + row.tail.text.length : 0);
   const valColW = Math.max(0, ...gutterSeries.map(s => _valTxt(s.unit, s.endPt.v).length)) * (9 / k) * 0.6;
-  const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.tagLabel, s.badge, s.color)).map(row => row.text.length)) * (7 / k) * 0.62;
+  const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.tagLabel, s.badge, s.color)).map(rowChars)) * (7 / k) * 0.62;
   const eyeW = compact ? 0 : 11 / k;   // the eye before each label's value (the compact layout has none)
   const padR = Math.min(4 / k + eyeW + valColW + 4 / k + nameColW + 5 / k, 0.45 * W);
   // The panels split the plot's height by their shares, a gap apart, each
@@ -606,7 +627,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
       const base = e.y + 3 / k;
       const firstRow = compact ? e.y + 2.5 / k - (e.rows.length - 1) / 2 * rowLh : base;
       const texts = `<text x="${(W - padR + 4 / k + eyeW + valColW).toFixed(1)}" y="${base.toFixed(1)}" text-anchor="end" font-family="JetBrains Mono" font-size="${(9 / k).toFixed(2)}" font-weight="600" fill="${e.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2.5 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_valTxt(e.unit, e.v)}</text>`
-        + e.rows.map((row, j) => `<text x="${(W - padR + 8 / k + eyeW + valColW).toFixed(1)}" y="${(firstRow + j * rowLh).toFixed(1)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${row.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke"${e.hidden ? ' text-decoration="line-through"' : ''}>${_escHtml(row.text)}</text>`).join('');
+        + e.rows.map((row, j) => `<text x="${(W - padR + 8 / k + eyeW + valColW).toFixed(1)}" y="${(firstRow + j * rowLh).toFixed(1)}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${row.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke"${e.hidden ? ' text-decoration="line-through"' : ''}>${_escHtml(row.text)}${row.tail ? `<tspan fill="${row.tail.color}"> ${_escHtml(row.tail.text)}</tspan>` : ''}</text>`).join('');
       if (compact) { endLabels += texts; continue; }
       // The label is a button (the user, 2026-11-05: the eye chips moved onto
       // the chart's labels): the eye before the value hides the line or shows
