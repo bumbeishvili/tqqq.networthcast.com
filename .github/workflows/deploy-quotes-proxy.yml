@@ -1,0 +1,40 @@
+name: Deploy quotes proxy
+
+# The Cloudflare Worker in cloudflare/quotes deploys on every push to main that
+# touches that folder (the hourly data commits never do), after the handler's
+# own checks pass offline. Needs two repository secrets: CLOUDFLARE_API_TOKEN
+# (an "Edit Cloudflare Workers" token) and CLOUDFLARE_ACCOUNT_ID. See
+# cloudflare/quotes/README.md.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'cloudflare/quotes/**'
+      - '.github/workflows/deploy-quotes-proxy.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+# Two pushes in a row deploy once, the later one.
+concurrency:
+  group: deploy-quotes-proxy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check the handler (origin gate, routes, cache; no network)
+        run: node cloudflare/quotes/test.mjs --offline
+      - name: Deploy with wrangler
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: cloudflare/quotes
+          command: deploy

@@ -194,7 +194,11 @@ const DATA_URL = DATA_ROOT + 'data/intraday/tqqq-5m.tsv';
 // latest 15 minutes; Yahoo serves the current minute, so today is drawn from
 // this file and the history from the other. Absent until the first run of
 // the day's pipeline, and stale (the last session) outside market days.
-const DATA_URL_TODAY = DATA_ROOT + 'data/intraday/tqqq-today-1m.tsv';
+// With the quotes proxy's URL set (cloudflare/quotes, deployed to Cloudflare:
+// 'https://tqqq-quotes.<account>.workers.dev'), today comes from the proxy
+// instead, in the same layout, at most a minute old, polled every minute.
+const QUOTES_PROXY = '';
+const DATA_URL_TODAY = QUOTES_PROXY ? QUOTES_PROXY + '/bars/TQQQ?range=1d&interval=1m&format=tsv' : DATA_ROOT + 'data/intraday/tqqq-today-1m.tsv';
 const TODAY_BAR_MINUTES = 1;
 const SESSION_OPEN_MIN = 9 * 60 + 30;
 const SESSION_CLOSE_MIN = 16 * 60;
@@ -1152,7 +1156,7 @@ scaleToggle.on('click', () => {
   applyScale(log);
   chart.render();
 });
-const DATA_REFRESH_MS = 10 * 60 * 1000;
+const DATA_REFRESH_MS = QUOTES_PROXY ? 60 * 1000 : 10 * 60 * 1000;   // the proxy's answer is a minute old at most; the pipeline's file, an hour
 
 // Today's 1-minute rows replace that day's 5-minute rows when the file holds
 // the current session, or a day the history has not reached yet. A stale

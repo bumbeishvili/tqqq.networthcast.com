@@ -1,0 +1,11 @@
+name = "tqqq-quotes"
+main = "src/worker.mjs"
+compatibility_date = "2026-10-01"
+
+# Deploys to https://tqqq-quotes.<your-account>.workers.dev. For a hostname on
+# the networthcast.com zone (needs the zone on Cloudflare), add instead:
+# routes = [{ pattern = "quotes.networthcast.com", custom_domain = true }]
+workers_dev = true
+
+[observability]
+enabled = true

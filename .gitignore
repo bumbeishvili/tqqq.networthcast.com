@@ -4,3 +4,6 @@
 __pycache__/
 .figma.env
 .env
+
+# wrangler state for the Cloudflare worker (cloudflare/quotes)
+.wrangler/
