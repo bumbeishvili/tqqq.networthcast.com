@@ -295,7 +295,8 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
       if (!r || r.date == null) continue;
       const v = r[ln.key];
       if (typeof v === 'number' && isFinite(v) && (spec.linear || v > 0)) {
-        pts.push({ t: Date.parse(r.date), v, d: String(r.date), gap: broken && pts.length > 0 });
+        // px: the price the line's level sits at that day (the line's priceKey), for the label's bracket.
+        pts.push({ t: Date.parse(r.date), v, d: String(r.date), gap: broken && pts.length > 0, px: ln.priceKey && r[ln.priceKey] > 0 ? r[ln.priceKey] : undefined });
         broken = false;
       } else broken = true;
     }
@@ -376,11 +377,15 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // capped so a narrow panel keeps a usable plot area — when capped, long
   // names clip at the right edge instead of covering lines.
   const _valTxt = (unit, v) => unit === '$' ? (v < 0 ? '-' : '') + (Math.abs(v) >= 1000 ? fmt(Math.abs(v)) : '$' + Math.abs(v).toFixed(2)) : _miniFmtValue(unit, v);
+  // A level line declared with a priceKey names its price too, in brackets after
+  // its name ("Floor ($48.12)"): the user sets orders at prices, and the level
+  // in percent is the strategy's reading of it (2026-11-05).
+  for (const s of series) s.tagLabel = s.label + (s.endPt.px > 0 ? ' (' + _valTxt('$', s.endPt.px) + ')' : '');
   const gutterSeries = series.filter(s => s.hidden || (s.shown && !s.partial));
   const nameRowsOf = (name, badge, color) => (compact && badge ? [{ text: badge.text, color: badge.color }] : [])
     .concat((compact ? _miniNameRows(name) : [name]).map(text => ({ text, color })));
   const valColW = Math.max(0, ...gutterSeries.map(s => _valTxt(s.unit, s.endPt.v).length)) * (9 / k) * 0.6;
-  const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.label, s.badge, s.color)).map(row => row.text.length)) * (7 / k) * 0.62;
+  const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.tagLabel, s.badge, s.color)).map(row => row.text.length)) * (7 / k) * 0.62;
   const eyeW = compact ? 0 : 11 / k;   // the eye before each label's value (the compact layout has none)
   const padR = Math.min(4 / k + eyeW + valColW + 4 / k + nameColW + 5 / k, 0.45 * W);
   // The panels split the plot's height by their shares, a gap apart, each
@@ -564,7 +569,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // that fits inside the plot, else to its left.
   let lineTags = '';
   for (const s of series.filter(s => !s.hidden && s.shown && s.partial)) {
-    const P = panels[s.panel], x = xAt(s.endPt.t), txt = `${s.label} ${_valTxt(s.unit, s.endPt.v)}`;
+    const P = panels[s.panel], x = xAt(s.endPt.t), txt = `${s.tagLabel} ${_valTxt(s.unit, s.endPt.v)}`;
     const y = Math.max(P.top + 6 / k, Math.min(P.bottom - 1 / k, yAt(s.panel, s.endPt.v) + 2.5 / k));
     const right = x + 3 / k + txt.length * 0.6 * (7 / k) <= W - padR;
     lineTags += `<text class="mini-line-tag" x="${(right ? x + 3 / k : x - 3 / k).toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${s.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(txt)}</text>`;
@@ -584,7 +589,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     // panel (its value set no scale); in a panel with nothing drawn, at the top.
     const ends = panelLabels[p].map(s => {
       const y = P.empty ? NaN : yAt(p, s.endPt.v);
-      return { y: y === y ? Math.max(P.top, Math.min(P.bottom, y)) : P.top, v: s.endPt.v, unit: s.unit, rows: nameRowsOf(s.label, s.badge, s.color), color: s.color, key: s.key, hidden: s.hidden };
+      return { y: y === y ? Math.max(P.top, Math.min(P.bottom, y)) : P.top, v: s.endPt.v, unit: s.unit, rows: nameRowsOf(s.tagLabel, s.badge, s.color), color: s.color, key: s.key, hidden: s.hidden };
     });
     ends.sort((a, b) => a.y - b.y);
     const minY = p === 0 ? 0 : ruleY(p) + 2 / k, maxY = p === nPanels - 1 ? plotBottom : ruleY(p + 1) - 2 / k;

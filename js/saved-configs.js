@@ -1148,6 +1148,7 @@ function customWorkerMain() {
         if (l.unit === '%' || l.unit === 'num') line.unit = l.unit;   // a percent or plain-number line (see LINES in the prompt)
         if (l.group != null && String(l.group).trim()) line.group = String(l.group).trim().slice(0, 40);
         if (l.tall === true) line.tall = true;   // its panel at full height (see LINES in the prompt)
+        if (typeof l.priceKey === 'string' && l.priceKey.trim()) line.priceKey = l.priceKey.trim().slice(0, 40);   // the log key with the level's price, shown in brackets (see LINES in the prompt)
       }
       var g = line.group || '';
       if (!(g in perGroup)) { if (groups >= 6) continue; perGroup[g] = 0; groups++; }   // 6 panels: TQQQ VS QQQ, Mon Turn, Soxl Acc draws price, lead, SOXL price, SOXL lead, Monday and NFCI

@@ -3132,13 +3132,15 @@ CODE[47] = `{
     const chartRow = (i) => {
       const med = rel[i] === rel[i] ? T[i] / (1 + rel[i]) : null, led = lead[i] === lead[i];
       const out = state === "brk" || deepPaused, nf = data.nfci ? data.nfci[i] : NaN;
+      const ceilingLead = topOn && led ? (state === "top" && band ? back : top) : null, floorLead = floorOn && led ? (out ? reentry : floor) : null;
+      const deepLead = deepOn && led ? (state === "deep" && dGuard && !deepPaused ? (deepPx * (1 - dGuard) / atLead(i, 0) - 1) * 100 : deep) : null;
       return {
         assetPrice: T[i] > 0 ? T[i] : null,
         medianPrice: med,
         overLine: over > 0 && med ? med * (1 + over) : null,
-        ceilingLine: topOn && led ? (state === "top" && band ? back : top) : null,
-        floorLine: floorOn && led ? (out ? reentry : floor) : null,
-        deepLine: deepOn && led ? (state === "deep" && dGuard && !deepPaused ? (deepPx * (1 - dGuard) / atLead(i, 0) - 1) * 100 : deep) : null,
+        ceilingLine: ceilingLead, floorLine: floorLead, deepLine: deepLead,
+        // The close that puts the lead on each level today (atLead): the labels name it in brackets, for orders at a price.
+        ceilingPx: ceilingLead == null ? null : atLead(i, ceilingLead), floorPx: floorLead == null ? null : atLead(i, floorLead), deepPx: deepLead == null ? null : atLead(i, deepLead),
         nfci: nfTh && isFinite(nf) ? nf : null,
         nfciVeto: nfTh && isFinite(nf) ? nfTh : null
       };
@@ -3231,9 +3233,9 @@ ${END_ROW_ACTION}
     if (over > 0 || dGuard) lines.push({ key: "medianPrice", label: OW + "-day median", group: PRICE });
     if (over > 0) lines.push({ key: "overLine", label: "Overextended (+" + Math.round(over * 100) + "%)", group: PRICE });
     lines.push({ key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: LEAD });
-    if (topOn) lines.push({ key: "ceilingLine", label: "Ceiling", unit: "%", group: LEAD });
-    if (floorOn) lines.push({ key: "floorLine", label: "Floor", unit: "%", group: LEAD });
-    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD });
+    if (topOn) lines.push({ key: "ceilingLine", label: "Ceiling", unit: "%", group: LEAD, priceKey: "ceilingPx" });
+    if (floorOn) lines.push({ key: "floorLine", label: "Floor", unit: "%", group: LEAD, priceKey: "floorPx" });
+    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD, priceKey: "deepPx" });
     if (nfTh) lines.push({ key: "nfci", label: "NFCI", unit: "num", group: CREDIT }, { key: "nfciVeto", label: "Credit veto", unit: "num", group: CREDIT });
     const nearest = signalLevels(e).out.filter(l => l.kind).map(l => ({ ...l, dist: l.px / T[e] - 1 })).sort((a, b) => Math.abs(a.dist) - Math.abs(b.dist))[0];
     const cards = [
@@ -3306,8 +3308,8 @@ function withTurnaroundMonday(base, spec) {
   // The panel's level lines, on the same scale as the signal fund's move: the
   // prior day's high and low, or the prior close.
   const levelLines = hl
-    ? `{ key: "tmHighPct", label: "Prior day's high", unit: "%", group: ${panel} }, { key: "tmLowPct", label: "Prior day's low", unit: "%", group: ${panel} }`
-    : `{ key: "tmLowPct", label: "Prior close", unit: "%", group: ${panel} }`;
+    ? `{ key: "tmHighPct", label: "Prior day's high", unit: "%", group: ${panel}, priceKey: "tmHighPx" }, { key: "tmLowPct", label: "Prior day's low", unit: "%", group: ${panel}, priceKey: "tmLowPx" }`
+    : `{ key: "tmLowPct", label: "Prior close", unit: "%", group: ${panel}, priceKey: "tmLowPx" }`;
   const once = (text, find, repl, what) => {
     const at = text.indexOf(find);
     if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withTurnaroundMonday(${spec.name}): ${what} must appear exactly once in the base`);
@@ -3392,6 +3394,7 @@ function withTurnaroundMonday(base, spec) {
     + '          tmChange: i > 0 && data[tmSig][i - 1] > 0 ? (data[tmSig][i] / data[tmSig][i - 1] - 1) * 100 : null,\n'
     + '          tmHighPct: i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmHigh, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
     + '          tmLowPct: i > 0 && data[tmSig][i - 1] > 0 ? (tmLevel(tmLow, i - 1) / data[tmSig][i - 1] - 1) * 100 : null,\n'
+    + '          tmHighPx: i > 0 && data[tmSig][i - 1] > 0 ? tmLevel(tmHigh, i - 1) : null, tmLowPx: i > 0 && data[tmSig][i - 1] > 0 ? tmLevel(tmLow, i - 1) : null,\n'
     + '          ...(tmWhy ? { firedBy: tmPanel(null) } : {}),\n', 'the log row');
   t = once(t, END_ROW_ACTION + '\n', '      if (tmKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + tmWhy : tmWhy; }   // a sale the Monday trade held off\n' + END_ROW_ACTION + '\n', 'the end-of-run action');
   for (const [find, repl, what] of spec.hooks) t = once(t, find, repl, what);
@@ -3639,10 +3642,10 @@ function withSoxlPile(base, spec) {
   // relative soxl pricing too"), both at full height. In the lead mode the
   // price panel carries the lead's levels as SOXL prices (the price at which
   // the lead would sit on the level today), so the crossings read there too.
-  t = once(t, '    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD });\n',
-    '    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD });\n'
+  t = once(t, '    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD, priceKey: "deepPx" });\n',
+    '    if (deepOn) lines.push({ key: "deepLine", label: "Deep buy", unit: "%", group: LEAD, priceKey: "deepPx" });\n'
     + '    if (data.soxl && soxlWhen === "lead") lines.push({ key: "soxlPrice", label: "SOXL price", group: SOXL_PRICE, tall: true }, { key: "soxlLeadInPx", label: "Hold SOXL under", group: SOXL_PRICE }, { key: "soxlLeadOutPx", label: "Back to TQQQ over", group: SOXL_PRICE },\n'
-    + '      { key: "soxlLead", label: "SOXL ahead of SOXX", unit: "%", group: SOXL_PANEL, tall: true }, { key: "soxlLeadIn", label: "Hold SOXL under", unit: "%", group: SOXL_PANEL }, { key: "soxlLeadOut", label: "Back to TQQQ over", unit: "%", group: SOXL_PANEL });\n'
+    + '      { key: "soxlLead", label: "SOXL ahead of SOXX", unit: "%", group: SOXL_PANEL, tall: true }, { key: "soxlLeadIn", label: "Hold SOXL under", unit: "%", group: SOXL_PANEL, priceKey: "soxlLeadInPx" }, { key: "soxlLeadOut", label: "Back to TQQQ over", unit: "%", group: SOXL_PANEL, priceKey: "soxlLeadOutPx" });\n'
     + '    else if (data.soxl && soxlWhen !== "never" && soxlWhen !== "always") lines.push({ key: "soxlPrice", label: "SOXL price", group: SOXL_PANEL, tall: true }, soxlWhen === "belowAvg" ? { key: "soxlAvgLine", label: SW + "-day average", group: SOXL_PANEL } : { key: "soxlLine", label: Math.round(soxlDrop * 100) + "% under the " + SW + "-day high", group: SOXL_PANEL });\n', 'the chart lines');
   t = once(t, '      const hp = priceOf(held, i), holdingsValue = shares * hp;\n', '      const hp = priceOf(held, i), holdingsValue = shares * hp;\n' + joined, 'the holdings value line');
   t = once(t, '      log: log, lines: lines,\n', '      log: log, holdings: holdings, lines: lines,\n', 'the result object');
