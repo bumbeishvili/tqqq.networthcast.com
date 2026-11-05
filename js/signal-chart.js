@@ -380,7 +380,8 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // A level line declared with a priceKey names its price too, in brackets after
   // its name ("Floor ($48.12)"): the user sets orders at prices, and the level
   // in percent is the strategy's reading of it (2026-11-05).
-  for (const s of series) s.tagLabel = s.label + (s.endPt.px > 0 ? ' (' + _valTxt('$', s.endPt.px) + ')' : '');
+  const _pxTxt = px => '$' + px.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });   // the plain price, as an order is written
+  for (const s of series) s.tagLabel = s.label + (s.endPt.px > 0 ? ' (' + _pxTxt(s.endPt.px) + ')' : '');
   const gutterSeries = series.filter(s => s.hidden || (s.shown && !s.partial));
   const nameRowsOf = (name, badge, color) => (compact && badge ? [{ text: badge.text, color: badge.color }] : [])
     .concat((compact ? _miniNameRows(name) : [name]).map(text => ({ text, color })));

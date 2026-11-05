@@ -791,6 +791,9 @@ which timing fired. A rule with no line is a bug. Declare them as lines:
   A later group draws at a quarter of the first panel's height with up to three lines, taller with
   more; tall: true on one of its lines draws it at full height (a second fund's price over its
   relative pricing, say). Max 6 lines per group, 6 groups.
+  priceKey: "floorPx" on a line names the price its level sits at, logged under that key (the TQQQ
+  close that puts the lead on the floor, say): the chart writes it in brackets after the line's name,
+  "Floor ($50.22)", so an order can be set at it. Log null when there is none.
 
 === OWN MONEY: a rule that decides how much goes in (only when the rule says so) ===
 Most strategies trade the money the app hands them (p.initial, p.contributions). Some rules decide the

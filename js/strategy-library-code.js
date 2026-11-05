@@ -1251,12 +1251,14 @@ ${END_ROW_ACTION}
         log.push({ date: data.dates[i], value: value, action: action, note: note, held: heldText(),
           price: main ? priceOf(main, i) : 0, holdingsValue: value - cash, cash: cash, contributed: contributed,
           invested: invested, fee: fee, feesPaid: feesPaid,
-          ...(s === s ? { spyRet: s * 100 } : {}), ...(q === q ? { qqqRet: q * 100 } : {}), hurdleRet: hurdle * 100 });
+          ...(s === s ? { spyRet: s * 100 } : {}), ...(q === q ? { qqqRet: q * 100 } : {}), hurdleRet: hurdle * 100,
+          // The close that puts each fund's return on the hurdle: the return lines name it in brackets.
+          spyHurdlePx: i - L >= 0 && data.spy[i - L] > 0 ? data.spy[i - L] * (1 + hurdle) : null, qqqHurdlePx: i - L >= 0 && data.qqq[i - L] > 0 ? data.qqq[i - L] * (1 + hurdle) : null });
       }
     }
     return { log, holdings, lines: [
-      { key: "spyRet", label: "SPY " + span + " return", unit: "%" },
-      { key: "qqqRet", label: "QQQ " + span + " return", unit: "%" },
+      { key: "spyRet", label: "SPY " + span + " return", unit: "%", priceKey: "spyHurdlePx" },
+      { key: "qqqRet", label: "QQQ " + span + " return", unit: "%", priceKey: "qqqHurdlePx" },
       { key: "hurdleRet", label: "Cash over the same days", unit: "%" }] };
   }
 }`;
@@ -3817,13 +3819,23 @@ ${SMA_ENGINE_SOURCE}
       const avgArr = smaAtDailyByKey[sig + "_" + W] || [], brakeArr = smaAtDailyByKey[brakeAsset + "_" + brakeW] || [];
       const rsiS = rsiAtDailyByKey[sig + "_" + (+p.rsiSellWindow || 10)] || [], rsiB = rsiAtDailyByKey[sig + "_" + (+p.rsiBuyWindow || 10)] || [];
       const num = (v) => (typeof v === "number" && isFinite(v)) ? v : undefined;
+      // The signal fund's close today that would put its RSI on a level, from
+      // yesterday's Wilder averages (as the app's SMA panel draws it): the level
+      // lines name it in brackets, for an order at a price.
+      const rsiLevel = (prev, ag, al, n, x) => {
+        if (!(x > 0 && x < 100) || !(prev > 0) || ag == null || al == null) return undefined;
+        const rs = x / (100 - x), m = n - 1, rise = m * (rs * al - ag);
+        return rise >= 0 ? prev + rise : prev - m * (ag / rs - al);
+      };
+      const wS = rsiSellLvl > 0 ? wilderAverages(data[sig], +p.rsiSellWindow || 10) : null, wB = rsiBuyLvl > 0 ? wilderAverages(data[sig], +p.rsiBuyWindow || 10) : null;
+      const rsiLevelPx = (w, n, lvl, i) => w && i > 0 ? rsiLevel(data[sig][i - 1], w.ag[i - 1], w.al[i - 1], n, lvl) : undefined;
       // The readings every log row carries, for the columns and the signal chart.
       const reading = (i) => {
         const a = num(avgArr[i]), b = num(brakeArr[i]), o = { signalClose: data[sig][i] };
         if (a != null) { o.average = a; if (entryBuf > 0) o.buyLine = a * (1 + entryBuf / 100); if (exitBuf > 0) o.sellLine = a * (1 - exitBuf / 100); }
-        if (num(rsiS[i]) != null) { o.rsiSell = rsiS[i]; if (rsiSellLvl > 0) o.rsiSellLevel = rsiSellLvl; }
-        if (num(rsiB[i]) != null) { o.rsiBuy = rsiB[i]; if (rsiBuyLvl > 0) o.rsiBuyLevel = rsiBuyLvl; }
-        if (b != null && data[brakeAsset][i] > 0) { o.brakeGauge = (data[brakeAsset][i] / b - 1) * 100; if (brakeLvl > 0) o.brakeLevel = brakeLvl; }
+        if (num(rsiS[i]) != null) { o.rsiSell = rsiS[i]; if (rsiSellLvl > 0) { o.rsiSellLevel = rsiSellLvl; o.rsiSellLevelPx = rsiLevelPx(wS, +p.rsiSellWindow || 10, rsiSellLvl, i); } }
+        if (num(rsiB[i]) != null) { o.rsiBuy = rsiB[i]; if (rsiBuyLvl > 0) { o.rsiBuyLevel = rsiBuyLvl; o.rsiBuyLevelPx = rsiLevelPx(wB, +p.rsiBuyWindow || 10, rsiBuyLvl, i); } }
+        if (b != null && data[brakeAsset][i] > 0) { o.brakeGauge = (data[brakeAsset][i] / b - 1) * 100; if (brakeLvl > 0) { o.brakeLevel = brakeLvl; o.brakeLevelPx = b * (1 + brakeLvl / 100); } }
         return o;
       };
       const pct = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2) + "%";
@@ -3875,10 +3887,10 @@ ${SMA_ENGINE_SOURCE}
       if (entryBuf > 0) lines.push({ key: "buyLine", label: "Buy above (+" + entryBuf + "%)", group: SIG + " trend" });
       if (exitBuf > 0) lines.push({ key: "sellLine", label: "Sell below (−" + exitBuf + "%)", group: SIG + " trend" });
       if (rsiSellLvl > 0 || rsiBuyLvl > 0) {
-        if (rsiSellLvl > 0) lines.push({ key: "rsiSell", label: "RSI(" + (+p.rsiSellWindow || 10) + ")", unit: "num", group: "RSI" }, { key: "rsiSellLevel", label: "Sell at " + rsiSellLvl, unit: "num", group: "RSI" });
-        if (rsiBuyLvl > 0) lines.push({ key: "rsiBuy", label: "RSI(" + (+p.rsiBuyWindow || 10) + ")", unit: "num", group: "RSI" }, { key: "rsiBuyLevel", label: "Buy under " + rsiBuyLvl, unit: "num", group: "RSI" });
+        if (rsiSellLvl > 0) lines.push({ key: "rsiSell", label: "RSI(" + (+p.rsiSellWindow || 10) + ")", unit: "num", group: "RSI" }, { key: "rsiSellLevel", label: "Sell at " + rsiSellLvl, unit: "num", group: "RSI", priceKey: "rsiSellLevelPx" });
+        if (rsiBuyLvl > 0) lines.push({ key: "rsiBuy", label: "RSI(" + (+p.rsiBuyWindow || 10) + ")", unit: "num", group: "RSI" }, { key: "rsiBuyLevel", label: "Buy under " + rsiBuyLvl, unit: "num", group: "RSI", priceKey: "rsiBuyLevelPx" });
       }
-      if (brakeLvl > 0) lines.push({ key: "brakeGauge", label: brakeAsset.toUpperCase() + " vs " + brakeW + "-day average", unit: "%", group: "Bubble brake" }, { key: "brakeLevel", label: "To cash at +" + brakeLvl + "%", unit: "%", group: "Bubble brake" });
+      if (brakeLvl > 0) lines.push({ key: "brakeGauge", label: brakeAsset.toUpperCase() + " vs " + brakeW + "-day average", unit: "%", group: "Bubble brake" }, { key: "brakeLevel", label: "To cash at +" + brakeLvl + "%", unit: "%", group: "Bubble brake", priceKey: "brakeLevelPx" });
       return { log, holdings: r.ddControls || [], lines, signals: smaSignals() };
     }
 
