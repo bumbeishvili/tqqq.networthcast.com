@@ -46,7 +46,8 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
 - The percent beside the portfolio's value, above its name, is its change
   over the latest session. Your sheet holds no positions, so the figure is the strategy's
   move over that session. It assumes your account holds what the strategy
-  holds.
+  holds, with #52 TQQQ and its SOXL pile, so it can differ from TQQQ's own
+  move.
 - The signal chart covers the whole price history in the site's data, back
   to 1953. It rests on your portfolio's dates; ⌘ + scroll out or ⌘ + drag to
   see earlier years, and Reset or a double-click brings you back. Its trades
@@ -65,8 +66,11 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
 - On the portfolio and signal charts, ⌘ + scroll zooms and ⌘ + drag pans. A plain drag
   measures the change over a range. While zoomed, Reset and Latest sit in the
   chart's bottom-right corner; a double-click also resets.
-- The page re-reads your sheet and the market data every 5 minutes. The site's
-  data files update about once an hour during market hours.
+- The page re-reads your sheet and the market data every 5 minutes, and the
+  live prices every minute. The intraday chart takes its live print from the
+  page rather than fetching its own, so the intraday chart, the signal chart's
+  price line and the portfolio's badge show one print from one moment. The
+  site's data files update about once an hour during market hours.
 
 ## Changing it
 

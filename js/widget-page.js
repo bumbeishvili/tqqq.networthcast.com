@@ -14,6 +14,7 @@
 // widget/tqqq.widget frames this page.
 (function widgetPage() {
   const REFRESH_MS = 5 * 60 * 1000;           // re-reads the sheet and the market data; the data files change hourly
+  const QUOTES_MS = 60 * 1000;                 // re-reads the live prices, as the site does; the proxy's answer is a minute old at most
   const WIDGET_ENTRY = 52;                     // the strategy the widget tracks: SOXL, TQQQ VS QQQ, Mon Turns (the user, 2026-11-06; #50 before)
   const PORTFOLIO_PX = 190;                    // height of the top chart
   const BOTTOM_PX = 240;                       // the bottom row's share of a full screen; the intraday chart's height until the signal chart draws
@@ -72,6 +73,7 @@
 
   // ---- market data: the same files and derived globals js/init.js sets up ----
   readUiScale();   // the touch type scale (styles.css --ui-scale), before anything draws
+  let highLowRows = null, liveQuotes = null;   // the Monday-rule funds' raw high/low rows; the latest live quotes, this page's only source of them
   async function loadMarketData() {
     const [qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, nfci, highLow, fetchedAt, live] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
@@ -81,21 +83,36 @@
       loadLiveQuotes().catch(err => { console.error('Live prices unavailable:', err); return null; }),
     ]);
     daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx);
-    const highLowRows = Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]]));
-    const applied = applyLiveQuotes(daily, highLowRows, live);
-    // The time the prices stand at, as the site keeps it: the latest trade when
-    // live prices applied, else the files' refresh. The signal chart reads it to
-    // tell a day still trading from a close (minutesBeforeClose).
-    window._dataFetchedAt = applied ? applied.asOf : fetchedAt;
-    window._liveExtended = applied ? applied.extended : null;   // the funds' extended-hours prints, for the signal chart's price lines
+    highLowRows = Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]]));
+    liveQuotes = live;
+    handQuotesToFrame();
+    applyLive(live, fetchedAt);
     nfciDaily = buildNfciDaily(daily, nfci);
     highLowDaily = buildHighLowDaily(daily, highLowRows);
     quarterlyData = periodRows(daily, getQuarter);
     monthlyData = periodRows(daily, getMonth);
     dailyDateToIdx = new Map(daily.map((d, i) => [d.date, i]));
-    // A refresh brings new rows: the worker gets the rebuilt data on its next job.
-    _customDataCache = null;
-    _customDataSent = false;
+  }
+  // The live quotes onto the daily rows (js/data.js applyLiveQuotes): the latest
+  // regular price on the latest row, and the funds' extended-hours prints for
+  // the signal chart's price lines and the badge. Returns what applied.
+  function applyLive(live, filesFetchedAt) {
+    const applied = applyLiveQuotes(daily, highLowRows, live);
+    // The time the prices stand at, as the site keeps it: the latest trade when
+    // live prices applied, else the files' refresh. The signal chart reads it to
+    // tell a day still trading from a close (minutesBeforeClose).
+    window._dataFetchedAt = applied ? applied.asOf : filesFetchedAt;
+    window._liveExtended = applied ? applied.extended : null;
+    return applied;
+  }
+  // The intraday frame's quotes are this page's latest, so the frame fetches
+  // none itself (experiments/tqqq-intraday.html listens in its embed mode) and
+  // its print is the one the signal chart's price row and the badge show, from
+  // the same moment (the user, 2026-11-06: "they should be the same"). Sent on
+  // every fetch and on the frame's load, which can come after the first fetch.
+  function handQuotesToFrame() {
+    const frame = $('wp-intraday');
+    if (liveQuotes && frame.contentWindow) frame.contentWindow.postMessage({ type: 'tqqq-widget-quotes', quotes: liveQuotes }, '*');
   }
 
   // ---- the strategy: WIDGET_ENTRY, with the settings of its copy in the link
@@ -305,9 +322,28 @@
   sizeIntraday(chartPx($('wp-signal'), BOTTOM_PX));
   $('wp-intraday').addEventListener('load', reportSize);
   $('wp-intraday').addEventListener('load', () => relayPointerMoves($('wp-intraday').contentWindow, $('wp-intraday')));
+  $('wp-intraday').addEventListener('load', handQuotesToFrame);
   $('wp-intraday').src = 'experiments/tqqq-intraday.html?' + intraday.toString();
 
-  let cfgs = null, txRows = null;
+  let cfgs = null, txRows = null, money = null;
+  // The strategy on the rows as they stand: your run and the history run, then the charts.
+  async function rerun() {
+    _customDataCache = null;   // the worker gets the rows as they stand now
+    _customDataSent = false;
+    money = moneyContext(txRows);
+    const [mine, history] = await Promise.all([
+      runStrategy(computeCustomGlobals(cfg, money.ctx)),
+      runStrategy(computeCustomGlobals(cfg, defaultMoney(daily[0].date))),
+    ]);
+    if ([mine, history].some(run => !Array.isArray(run.log) || run.log.length < 2)) throw new Error('The strategy returned no rows.');
+    log = mine.log;
+    endHoldings = mine.endHoldings;
+    signalLog = history.log;
+    signalHoldings = history.holdings || null;   // per-day holdings, for the signal chart's tooltip
+    lines = Array.isArray(history.lines) ? history.lines : [];
+    portfolio = portfolioSeries(money, txRows || []);
+    redraw();
+  }
   async function refresh() {
     try {
       await loadMarketData();
@@ -316,25 +352,33 @@
         cfg = pickStrategy(Array.isArray(cfgs) ? expandLibraryShares(cfgs) : cfgs);
       }
       if (sheet) txRows = await sheetRows(sheet);   // the sheet is re-read on every refresh
-      const money = moneyContext(txRows);
-      const [mine, history] = await Promise.all([
-        runStrategy(computeCustomGlobals(cfg, money.ctx)),
-        runStrategy(computeCustomGlobals(cfg, defaultMoney(daily[0].date))),
-      ]);
-      if ([mine, history].some(run => !Array.isArray(run.log) || run.log.length < 2)) throw new Error('The strategy returned no rows.');
-      log = mine.log;
-      endHoldings = mine.endHoldings;
-      signalLog = history.log;
-      signalHoldings = history.holdings || null;   // per-day holdings, for the signal chart's tooltip
-      lines = Array.isArray(history.lines) ? history.lines : [];
-      portfolio = portfolioSeries(money, txRows || []);
-      redraw();
+      await rerun();
       showError('');
     } catch (err) {
       showError(err && err.message ? err.message : String(err));
     }
     reportSize();
   }
+  // The live prices every minute, as the site polls them. A new regular print
+  // changes the latest row, so the strategy runs again (the site re-runs its
+  // custom lines the same way); new extended-hours prints only redraw the price
+  // rows and the badge. The frame gets the quotes either way (handQuotesToFrame).
+  async function pollQuotes() {
+    const live = await loadLiveQuotes().catch(err => { console.error('Live prices unavailable:', err); return null; });
+    if (!live) return;
+    liveQuotes = live;
+    handQuotesToFrame();
+    if (!Array.isArray(daily) || !money) return;   // the first refresh is still loading: it applies these quotes itself
+    try {
+      const before = window._dataFetchedAt instanceof Date ? window._dataFetchedAt.getTime() : null;
+      const applied = applyLive(live, window._dataFetchedAt);
+      if (applied && applied.asOf.getTime() !== before) await rerun();
+      else { portfolio = portfolioSeries(money, txRows || []); redraw(); }
+    } catch (err) {
+      showError(err && err.message ? err.message : String(err));
+    }
+  }
   refresh();
   setInterval(refresh, REFRESH_MS);
+  setInterval(pollQuotes, QUOTES_MS);
 })();
