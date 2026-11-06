@@ -63,9 +63,13 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
   stays on the same side. The last refresh before the close comes about
   25 minutes before it. After the close the chip names the day instead.
 - Hover any chart for its readout.
-- On the portfolio and signal charts, ⌘ + scroll zooms and ⌘ + drag pans. A plain drag
-  measures the change over a range. While zoomed, Reset and Latest sit in the
-  chart's bottom-right corner; a double-click also resets.
+- A plain drag on any chart measures the change over a range. On the intraday
+  chart that is the move across the dragged span for today's path, the mean,
+  the median and the day nearest the pointer, each on its own badge. Shift at
+  release keeps the range; Escape or the next press clears it.
+- On the portfolio and signal charts, ⌘ + scroll zooms and ⌘ + drag pans. While
+  zoomed, Reset and Latest sit in the chart's bottom-right corner; a
+  double-click also resets.
 - The page re-reads your sheet and the market data every 5 minutes, and the
   live prices every minute. The intraday chart takes its live print from the
   page rather than fetching its own, so the intraday chart, the signal chart's

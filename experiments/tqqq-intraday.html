@@ -140,6 +140,24 @@
   .hover-cross text{dominant-baseline:middle}
   text.hover-end{fill:var(--hover)}
   text.hover-end .dim{font-weight:400;fill:var(--muted)}
+  /* A dragged range, as on the site's charts: the span shaded between two
+     dashed edges, a chord across it for today, the mean, the median and the
+     hovered day, each with a badge naming its move over the span, and a time
+     chip at each end. */
+  .range-marks{pointer-events:none}
+  .range-marks text{font-family:var(--mono);font-size:10.5px;font-weight:600;paint-order:stroke;stroke:var(--panel);stroke-width:3px;stroke-linejoin:round}
+  .range-span{fill:rgba(134,118,255,.1)}
+  .range-edge{stroke:rgba(56,56,116,.35);stroke-width:1;stroke-dasharray:3 3}
+  .range-chord{fill:none;stroke-width:1.5;stroke-dasharray:4 3}
+  .range-chord.today{stroke:var(--violet)} .range-chord.mean{stroke:var(--mean)} .range-chord.median{stroke:var(--orange)} .range-chord.day{stroke:var(--hover)}
+  .range-end{stroke:var(--panel);stroke-width:1.5}
+  .range-end.today{fill:var(--violet)} .range-end.mean{fill:var(--mean)} .range-end.median{fill:var(--orange)} .range-end.day{fill:var(--hover)}
+  .range-badge rect{fill:var(--panel);stroke-width:1;rx:4}
+  .range-badge text{text-anchor:middle;dominant-baseline:middle}
+  .range-badge .name{fill:var(--muted)}
+  .range-badge.up rect{stroke:var(--green)} .range-badge.up .move{fill:var(--green)}
+  .range-badge.down rect{stroke:var(--red)} .range-badge.down .move{fill:var(--red)}
+  .range-badge.flat rect{stroke:var(--faint)} .range-badge.flat .move{fill:var(--muted)}
 </style>
 </head>
 <body>
@@ -281,6 +299,7 @@ const LINE_LABEL_MIN_GAP = 13;           // px between the mean and median end l
 const HOVER_LABEL_GAP = 14;              // px between stacked crosshair value labels
 const HOVER_LABEL_ROOM = 150;            // px from the right edge inside which hover labels flip to the left
 const HOVER_END_HEIGHT = 26;             // px the two-line end label needs
+const RANGE_BADGE_H = 16;                // px a range badge's pill stands, and the gap between stacked ones
 const HOVER_END_CLEARANCE = 20;          // px the end label keeps from the mean / median names
 
 // Calendar date in New York, as the data's day timestamps are midnight ET.
@@ -559,6 +578,12 @@ class IntradayOverlayChart {
       todayId: null,            // the latest day in the file, drawn on its own layer on top
       opacityCount: null,       // days the opacity is tuned for; defaults to the days drawn
       extended: null,           // the latest pre-market or after-hours print { session, price, changePct }, pulsing at the start outside the session
+      // A dragged range (drawHover): the bar pressed on while the button is
+      // held, the span on screen { a, b, dayId } in minutes, and that span
+      // once Shift at release keeps it, redrawn by every render until it clears.
+      rangeAnchor: null,
+      rangeShown: null,
+      rangePinned: null,
     };
     this.getState = () => attrs;
     this.setState = d => Object.assign(attrs, d);
@@ -853,25 +878,105 @@ class IntradayOverlayChart {
       .attr('y1', 0).attr('y2', chartHeight)
       .style('display', 'none');
     const marks = chart._add('g.hover-marks').style('display', 'none');
+    const range = chart._add('g.range-marks').style('display', 'none');
     const dayPaths = chart.selectAll('path.day-path');
     const bisectMinute = d3.bisector(a => a.minute).center;
     const bisectPoint = d3.bisector(p => p.minute).center;
+    // The aggregate bar under a pointer, its x clamped to the plot, and the
+    // move its height reads as, from any event: the drag's handlers sit on the
+    // window, so the pointer is taken against the plot's own frame.
+    const barAt = minute => aggregates[bisectMinute(aggregates, minute)];
+    const pointerBar = event => {
+      const [px, py] = d3.pointer(event, chart.node());
+      return { agg: barAt(x.invert(Math.max(0, Math.min(chartWidth, px)))), cursorPct: y.invert(py) };
+    };
+    // The day whose path is nearest the pointer's height at a bar.
+    const nearestDay = (minute, cursorPct) => d3.least(data, d => {
+      const p = d.points[bisectPoint(d.points, minute)];
+      return p.minute === minute ? Math.abs(p.pct - cursorPct) : Infinity;
+    });
+    const highlightDay = day => dayPaths.classed('hover', d => d === day).style('opacity', d => d === day ? 1 : restOpacity(d));
+    const hideHover = () => { rule.style('display', 'none'); marks.style('display', 'none'); highlightDay(null); };
+
+    // A dragged range, as on the site's charts: press on the plot and drag,
+    // and the span between the two bars is shaded, with a chord across it for
+    // today's line (while the session is live, as far as its last bar), the
+    // mean, the median and the day nearest the pointer, a badge on each
+    // naming its move over the span, and a time chip at each end. The two
+    // readings on a line are moves from the previous close, so the move
+    // across the span is the price ratio between them. It clears on release;
+    // Shift at release keeps it until Escape or the next press.
+    const showRange = (a, b, day) => {
+      const lo = a.minute <= b.minute ? a : b, hi = a.minute <= b.minute ? b : a;
+      const xA = x(lo.minute), xB = x(hi.minute);
+      hideHover();
+      highlightDay(day);
+      range.style('display', null);
+      range._add('rect.range-span').attr('x', xA).attr('y', 0).attr('width', xB - xA).attr('height', chartHeight);
+      range._add('line.range-edge', [xA, xB]).attr('x1', d => d).attr('x2', d => d).attr('y1', 0).attr('y2', chartHeight);
+      const at = (points, minute) => points[bisectPoint(points, minute)];
+      const chords = [];
+      if (live) {
+        const p0 = at(today.points, lo.minute), p1 = at(today.points, hi.minute);
+        if (p1.minute > p0.minute) chords.push({ id: 'today', name: 'today', p0, p1 });
+      }
+      chords.push({ id: 'mean', name: 'mean', p0: { minute: lo.minute, pct: lo.mean }, p1: { minute: hi.minute, pct: hi.mean } });
+      chords.push({ id: 'median', name: 'median', p0: { minute: lo.minute, pct: lo.median }, p1: { minute: hi.minute, pct: hi.median } });
+      if (day && !(live && day.id === todayId)) chords.push({ id: 'day', name: d3.timeFormat('%b %-d')(day.date), p0: at(day.points, lo.minute), p1: at(day.points, hi.minute) });
+      for (const c of chords) {
+        c.move = ((100 + c.p1.pct) / (100 + c.p0.pct) - 1) * 100;
+        c.tone = c.move > 0.005 ? 'up' : c.move < -0.005 ? 'down' : 'flat';
+        c.x0 = x(c.p0.minute); c.x1 = x(c.p1.minute); c.y0 = y(c.p0.pct); c.y1 = y(c.p1.pct);
+      }
+      range._add('line.range-chord', chords).attr('class', c => `range-chord ${c.id}`)
+        .attr('x1', c => c.x0).attr('y1', c => c.y0).attr('x2', c => c.x1).attr('y2', c => c.y1);
+      range._add('circle.range-end', chords.flatMap(c => [{ id: c.id + '-0', line: c.id, x: c.x0, y: c.y0 }, { id: c.id + '-1', line: c.id, x: c.x1, y: c.y1 }]))
+        .attr('class', e => `range-end ${e.line}`).attr('cx', e => e.x).attr('cy', e => e.y).attr('r', 3);
+      // Badges at the chords' midpoints, pushed apart when chords run close
+      // together and kept inside the plot.
+      const badges = chords.map(c => ({ id: c.id, tone: c.tone, name: c.name, text: fmtPct(c.move), x: (c.x0 + c.x1) / 2, y: (c.y0 + c.y1) / 2 }));
+      for (const b of badges) { b.w = (b.name.length + 1 + b.text.length) * 6.6 + 12; b.x = Math.max(b.w / 2, Math.min(chartWidth - b.w / 2, b.x)); }
+      const stacked = d3.sort(badges, b => b.y);
+      for (let i = 1; i < stacked.length; i++) stacked[i].y = Math.max(stacked[i].y, stacked[i - 1].y + RANGE_BADGE_H);
+      for (let i = stacked.length - 1; i >= 0; i--) stacked[i].y = Math.min(stacked[i].y, i === stacked.length - 1 ? chartHeight - RANGE_BADGE_H / 2 : stacked[i + 1].y - RANGE_BADGE_H);
+      for (let i = 0; i < stacked.length; i++) stacked[i].y = Math.max(stacked[i].y, i === 0 ? RANGE_BADGE_H / 2 : stacked[i - 1].y + RANGE_BADGE_H);
+      const badge = range._add('g.range-badge', badges).attr('class', b => `range-badge ${b.tone}`).attr('transform', b => `translate(${b.x},${b.y})`);
+      badge._add('rect.range-badge-bg').attr('x', b => -b.w / 2).attr('y', -RANGE_BADGE_H / 2).attr('width', b => b.w).attr('height', RANGE_BADGE_H);
+      badge._add('text.range-badge-text').html(b => `<tspan class="name">${b.name} </tspan><tspan class="move">${b.text}</tspan>`);
+      // A time chip under each edge, one chip naming both when they would overlap.
+      const clock = m => fmtClock(m + minuteOffset);
+      const chipW = t => t.length * 6.6 + 12, chipH = 16;
+      const chips = xB - xA >= chipW(clock(lo.minute)) + 6
+        ? [{ id: 'a', x: xA, text: clock(lo.minute) }, { id: 'b', x: xB, text: clock(hi.minute) }]
+        : [{ id: 'a', x: (xA + xB) / 2, text: `${clock(lo.minute)}–${clock(hi.minute)}` }];
+      for (const c of chips) { c.w = chipW(c.text); c.x = Math.max(c.w / 2, Math.min(chartWidth - c.w / 2, c.x)); }
+      const chip = range._add('g.range-time-chip', chips).attr('transform', c => `translate(${c.x},${chartHeight + 10})`);
+      chip._add('rect.hover-time-bg').attr('x', c => -c.w / 2).attr('y', -chipH / 2).attr('width', c => c.w).attr('height', chipH);
+      chip._add('text.hover-time').text(c => c.text);
+    };
+    const clearRange = () => {
+      range.style('display', 'none');
+      highlightDay(null);
+      this.setState({ rangeShown: null, rangePinned: null });
+    };
 
     chart._add('rect.hover-target')
       .attr('width', chartWidth).attr('height', chartHeight)
       .attr('fill', 'transparent')
+      .on('mousedown', (event) => {
+        if (event.button !== 0) return;
+        this.setState({ rangeAnchor: pointerBar(event).agg.minute });
+        event.preventDefault();   // no text selection while dragging
+      })
       .on('mousemove', (event) => {
-        const minute = x.invert(d3.pointer(event)[0]);
-        const agg = aggregates[bisectMinute(aggregates, minute)];
+        const { rangeAnchor, rangePinned } = this.getState();
+        if (rangeAnchor != null || rangePinned) return;   // a drag draws from the window's handler; a kept range holds
+        const { agg, cursorPct } = pointerBar(event);
         rule.style('display', null).attr('x1', x(agg.minute)).attr('x2', x(agg.minute));
 
         // The day whose path is nearest the cursor gets highlighted.
-        const cursorPct = y.invert(d3.pointer(event)[1]);
-        const nearest = d3.least(data, d => {
-          const p = d.points[bisectPoint(d.points, agg.minute)];
-          return p.minute === agg.minute ? Math.abs(p.pct - cursorPct) : Infinity;
-        });
-        dayPaths.classed('hover', d => d === nearest).style('opacity', d => d === nearest ? 1 : restOpacity(d));
+        const nearest = nearestDay(agg.minute, cursorPct);
+        highlightDay(nearest);
         const nearestPct = nearest.points[bisectPoint(nearest.points, agg.minute)].pct;
 
         marks.style('display', null);
@@ -928,10 +1033,36 @@ class IntradayOverlayChart {
         endLabel.attr('x', endX).selectAll('tspan').attr('x', endX);
       })
       .on('mouseleave', () => {
-        rule.style('display', 'none');
-        marks.style('display', 'none');
-        dayPaths.classed('hover', false).style('opacity', restOpacity);
+        const { rangeAnchor, rangePinned } = this.getState();
+        if (rangeAnchor != null || rangePinned) return;
+        hideHover();
       });
+    // The drag follows the pointer past the plot's edges, so its handlers sit
+    // on the window; one set per chart, replaced on each render.
+    const { id } = this.getState();
+    d3.select(window)
+      // Any press dismisses a kept range; a press on the plot then starts its own drag.
+      .on('mousedown.range-' + id, () => { if (this.getState().rangePinned) clearRange(); })
+      .on('mousemove.range-' + id, (event) => {
+        const { rangeAnchor, rangePinned } = this.getState();
+        if (rangeAnchor == null || rangePinned) return;
+        const { agg, cursorPct } = pointerBar(event);
+        if (agg.minute === rangeAnchor) { range.style('display', 'none'); this.setState({ rangeShown: null }); return; }
+        const day = nearestDay(agg.minute, cursorPct);
+        showRange(barAt(rangeAnchor), agg, day);
+        this.setState({ rangeShown: { a: rangeAnchor, b: agg.minute, dayId: day ? day.id : null } });
+      })
+      .on('mouseup.range-' + id, (event) => {
+        const { rangeAnchor, rangeShown } = this.getState();
+        if (rangeAnchor == null) return;
+        this.setState({ rangeAnchor: null });
+        if (event.shiftKey && rangeShown) { this.setState({ rangePinned: rangeShown }); return; }
+        clearRange();
+      })
+      .on('keydown.range-' + id, (event) => { if (event.key === 'Escape' && this.getState().rangePinned) clearRange(); });
+    // A kept range outlives a redraw (the widget's live print each minute).
+    const pinned = this.getState().rangePinned;
+    if (pinned) showRange(barAt(pinned.a), barAt(pinned.b), data.find(d => d.id === pinned.dayId) || null);
   }
 
   drawSvgAndWrappers() {
@@ -1241,7 +1372,11 @@ function mergeTodayRows(history, today) {
 const EXTENDED_SESSION_NAMES = { pre: 'pre-market', post: 'after hours', overnight: 'overnight' };
 let parentQuotes = null;
 if (EMBED) window.addEventListener('message', e => {
-  if (e.source !== window.parent || !e.data || e.data.type !== 'tqqq-widget-quotes') return;
+  if (e.source !== window.parent || !e.data) return;
+  // The page around this one holds the keyboard (a press on a chart moves no
+  // focus): its Escape, relayed, clears a kept range here as it does on its own chart.
+  if (e.data.type === 'tqqq-widget-escape') { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); return; }
+  if (e.data.type !== 'tqqq-widget-quotes') return;
   parentQuotes = e.data.quotes;
   chart.extended(extendedPrint(parentQuotes));
   if (chart.getState().data) chart.render();   // drawn already: redraw with the print; else loadData's first render takes it

@@ -36,7 +36,7 @@ Every start year and holding period at once, coloured against a baseline (here c
 
 ![TQQQ intraday paths](images/readme-intraday.png)
 
-[experiments/tqqq-intraday.html](experiments/tqqq-intraday.html): every session's 5-minute path since September 2023, the mean and median path, and filters by the day's open and close.
+[experiments/tqqq-intraday.html](experiments/tqqq-intraday.html): every session's 5-minute path since September 2023, the mean and median path, and filters by the day's open and close. Hover for the path nearest the pointer; drag across the plot for the move over that span on today's path, the mean, the median and the nearest day.
 
 ### Desktop widget
 

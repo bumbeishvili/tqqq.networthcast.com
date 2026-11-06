@@ -323,6 +323,10 @@
   $('wp-intraday').addEventListener('load', reportSize);
   $('wp-intraday').addEventListener('load', () => relayPointerMoves($('wp-intraday').contentWindow, $('wp-intraday')));
   $('wp-intraday').addEventListener('load', handQuotesToFrame);
+  // Escape clears a kept range on the signal chart (js/signal-chart.js) and,
+  // relayed, on the intraday chart in its frame: keys arrive on this page,
+  // since a press on a chart moves no focus into the frame.
+  window.addEventListener('keydown', e => { if (e.key === 'Escape') $('wp-intraday').contentWindow.postMessage({ type: 'tqqq-widget-escape' }, '*'); });
   $('wp-intraday').src = 'experiments/tqqq-intraday.html?' + intraday.toString();
 
   let cfgs = null, txRows = null, money = null;
