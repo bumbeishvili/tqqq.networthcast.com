@@ -16,6 +16,10 @@
   /* Every text at the regular weight, the charts' labels and tooltips
      included: the user wants no bold anywhere in the widget. */
   body.widget-page * { font-weight: 400 !important; }
+  /* The one exception: in the signal chart's tooltip the entry of the line
+     nearest the pointer is bold, as on the site (the user, 2026-11-06: "the
+     active hovering closest thing is not getting bolded like in the website"). */
+  body.widget-page #mini-chart-tip .mct-hot { font-weight: 700 !important; }
   body.widget-page { margin: 0; padding: 6px; min-height: 0; }
   /* Three charts and nothing else, each on its own white tile: your portfolio
      across the top, TQQQ intraday and the strategy's signal chart side by side
