@@ -535,13 +535,21 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const btnX = W - 2 / k - btnW, chipX = btnX - 4 / k - chipW;
   const btnY = compact ? plotBottom + (padB - btnH) / 2 : axisTopH + 1 / k;
   const axisEnd = compact && offRest ? (atEnd ? btnX : chipX) - 4 / k : W;
-  // Date labels just under the plot, and on a tall chart in the band above the
-  // strip too (topAxis). Centers are clamped inside the viewBox so the first
-  // and last never render half-cut at the edges, and a label that would touch
-  // the one before it, or the compact layout's zoom buttons, is dropped
-  // (JetBrains Mono advance ≈ 0.6em).
+  // Date labels just under the plot, on a tall chart in the band above the
+  // strip too (topAxis), and in the gap above each later panel, to the right
+  // of its name, so a stacked chart has dates at every divider (the user,
+  // 2026-11-06: "show axes between signal charts too, on the right side of
+  // the names, we already got space there"). Centers are clamped inside the
+  // viewBox so the first and last never render half-cut at the edges, and a
+  // label that would touch the one before it, or the compact layout's zoom
+  // buttons, is dropped (JetBrains Mono advance ≈ 0.6em). A gap label that
+  // would touch the panel's name or reach into the gutter is left out; it
+  // wears the name's halo, since the trade bands and the latest-date line
+  // run through the gap.
   const yLabel = (plotBottom + MINI_PX.labelGap / k).toFixed(1), yLabelTop = (axisTopH - 4 / k).toFixed(1);
   const axisFs = 8 / k, axisCharW = 0.6 * axisFs, axisGap = 6 / k;
+  const gapRows = titled ? panels.slice(1).map(P => ({ y: (P.top - 3 / k).toFixed(2), left: padL + 1 + (P.name ? P.name.length * 0.6 * (7 / k) : 0) + axisGap })) : [];
+  const halo = `stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke"`;
   let xAxis = '', lastRight = -Infinity;
   for (const tk of _miniTimeTicks(t0, t1, 6)) {
     const half = tk.label.length * axisCharW / 2;
@@ -550,6 +558,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     lastRight = lx + half;
     const attrs = `x="${lx.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${axisFs.toFixed(2)}" fill="rgba(122,122,166,0.75)"`;
     xAxis += `<text ${attrs} y="${yLabel}">${tk.label}</text>` + (topAxis ? `<text class="mini-axis-top" ${attrs} y="${yLabelTop}">${tk.label}</text>` : '');
+    for (const row of gapRows) if (lx - half >= row.left && lx + half <= W - padR) xAxis += `<text class="mini-axis-gap" ${attrs} y="${row.y}" ${halo}>${tk.label}</text>`;
   }
   // Hints beside the buttons, outside the compact layout: how to zoom while
   // at full range; the factor and the pan hint while zoomed. A hint that
