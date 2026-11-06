@@ -191,7 +191,7 @@
   // default money: the signal chart, so how far back it reaches never depends
   // on your sheet. That chart rests on your period (its home view) and zooms
   // and pans across the whole history.
-  let cfg = null, lines = [], log = [], signalLog = [], endHoldings = null, portfolio = { lines: [], rows: [] };
+  let cfg = null, lines = [], log = [], signalLog = [], signalHoldings = null, endHoldings = null, portfolio = { lines: [], rows: [] };
   // Every chart's text is sized as on the signal chart, the narrowest of them.
   // `heightPx` fits the chart to that height; null lets it take its own height,
   // as on the site, where each panel after the first adds to it. `view` adds
@@ -244,7 +244,7 @@
     // height for its panels, the intraday chart following (alignIntraday).
     if (cfg && signalLog.length && (!id || id === cfg.id)) {
       const home = { t0: Date.parse(log[0].date), t1: Date.parse(signalLog[signalLog.length - 1].date) };
-      place($('wp-signal'), chartHtml(cfg, lines, signalLog, $('wp-signal'), FILL ? $('wp-signal').clientHeight : null, { home }));
+      place($('wp-signal'), chartHtml(cfg, lines, signalLog, $('wp-signal'), FILL ? $('wp-signal').clientHeight : null, { home, holdings: signalHoldings }));
       alignIntraday();
     }
   }
@@ -326,6 +326,7 @@
       log = mine.log;
       endHoldings = mine.endHoldings;
       signalLog = history.log;
+      signalHoldings = history.holdings || null;   // per-day holdings, for the signal chart's tooltip
       lines = Array.isArray(history.lines) ? history.lines : [];
       portfolio = portfolioSeries(money, txRows || []);
       redraw();

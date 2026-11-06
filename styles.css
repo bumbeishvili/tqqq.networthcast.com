@@ -3072,6 +3072,10 @@
     color: var(--text-muted);
     margin-bottom: 4px;
   }
+  /* What the strategy holds at the hovered day: the fund, its shares and
+     its worth, and the cash beside it. */
+  #mini-chart-tip .mct-hold { color: var(--text-muted); margin: -2px 0 5px; line-height: 1.5; max-width: 340px; }
+  #mini-chart-tip .mct-hold b { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text); }
   /* Value readouts: a row per panel, its reading and then its levels in
      brackets, wrapping under the name past max-width. */
   #mini-chart-tip .mct-row {

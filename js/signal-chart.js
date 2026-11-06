@@ -488,7 +488,10 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // Everything the hover and zoom handlers need to resolve a cursor position
   // back to dates, values and bands, under the chart's id (its svg carries
   // it); window._miniChartHover is the most recently built one.
-  const chartData = { series: series.filter(s => !s.hidden), panels, t0, t1, T0, T1, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home };
+  // The log and, when the run returned them, its per-day holdings: the
+  // tooltip reads what is held at a day from them (_miniHoldingAt).
+  const holdings = opts && Array.isArray(opts.holdings) && opts.holdings.length ? opts.holdings : null;
+  const chartData = { series: series.filter(s => !s.hidden), panels, t0, t1, T0, T1, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home, log, holdings };
   window._miniCharts[cfg.id] = chartData;
   window._miniChartHover = chartData;
 
@@ -839,6 +842,50 @@ function _miniFmtReadout(unit, v) { return unit === '$' ? _miniFmtExact(v) : _mi
 // parenthesis is dropped ("Overextended (+55%)" reads "Overextended") so the
 // brackets never nest.
 // `hot` is the line nearest the cursor: its entry is bold, a level in full ink.
+// The latest entry of a date-sorted array (log rows, holdings) at or before a day.
+function _miniLatestAt(arr, d) {
+  if (!arr || !arr.length || arr[0].date > d) return null;
+  let lo = 0, hi = arr.length - 1;
+  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (arr[m].date <= d) lo = m; else hi = m; }
+  return arr[hi].date <= d ? arr[hi] : arr[lo];
+}
+function _miniPriceAt(fund, d) {
+  const i = typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx ? dailyDateToIdx.get(d) : null;
+  const px = i != null ? daily[i][fund] : null;
+  return px > 0 ? px : null;
+}
+// What the strategy holds at a day, for the tooltip (the user, 2026-11-06:
+// "say what we are holding currently, ticker and how much"): from the run's
+// per-day holdings when it returned them (the engine-based and multi-fund
+// entries), else from the latest log row at or before the day: the documented
+// row (held, shares, cash), or an older row that names what the whole value
+// sits in (held and value, with share for "TQQQ + CASH"). Each fund's worth is
+// its shares at that day's close in the site's data; cash is named when it is
+// more than pennies of the total. Empty when the log says nothing.
+function _miniHoldingAt(data, d, label = 'Holding') {
+  let parts, cash;
+  const at = _miniLatestAt(data.holdings, d);
+  if (at) { parts = Object.entries(at.h).filter(([, sh]) => sh > 0); cash = at.cash > 0 ? at.cash : 0; }
+  else {
+    const row = _miniLatestAt(data.log, d);
+    if (!row || typeof row.held !== 'string') return '';
+    const names = row.held.toLowerCase().split('+').map(s => s.trim()), funds = names.filter(s => s !== 'cash');
+    if (typeof row.cash === 'number' && typeof row.shares === 'number') {
+      if (funds.length > 1) return '';
+      parts = funds.length && row.shares > 0 ? [[funds[0], row.shares]] : []; cash = row.cash > 0 ? row.cash : 0;
+    } else if (typeof row.value === 'number') {
+      const part = names.length === 1 ? (funds.length ? 1 : 0) : row.share / 100, px = funds.length ? _miniPriceAt(funds[0], d) : null;
+      if (!(part >= 0 && part <= 1) || funds.length > 1 || (funds.length && !px)) return '';
+      parts = funds.length && part > 0 ? [[funds[0], row.value * part / px]] : []; cash = row.value * (1 - part);
+    } else return '';
+  }
+  const priced = parts.map(([fund, sh]) => ({ fund, sh, worth: _miniPriceAt(fund, d) ? sh * _miniPriceAt(fund, d) : null }));
+  const total = priced.reduce((s, p) => s + (p.worth || 0), 0) + cash;
+  const sharesTxt = n => (n >= 100 ? Math.round(n).toLocaleString('en-US') : n.toFixed(2));
+  const items = priced.map(p => `<b>${_escHtml(p.fund.toUpperCase())}</b> ${sharesTxt(p.sh)} sh${p.worth != null ? ` · ${fmtFull(p.worth)}` : ''}`);
+  if (cash >= 1 && (!priced.length || cash >= 0.005 * total)) items.push(`${priced.length ? '' : '<b>cash</b> '}${priced.length ? 'cash ' : ''}${fmtFull(cash)}`);
+  return items.length ? `<div class="mct-hold">${label} ${items.join(' · ')}</div>` : '';
+}
 function _miniPanelRows(data, items, value, level, hot) {
   const mark = (it, html) => (it === hot ? `<span class="mct-hot">${html}</span>` : html);
   return data.panels.map((_, p) => {
@@ -1233,6 +1280,7 @@ document.addEventListener('mousemove', (e) => {
     // Each reading from the range's start to its end, coloured by direction,
     // and its levels at the end; the chords' badges carry the moves.
     tip.innerHTML = `<div class="mct-date">${fmtLogDate(lo.d)} – ${fmtLogDate(hi.d)}</div>`
+      + _miniHoldingAt(data, hi.d, 'Holding at the end')
       + _miniPanelRows(data, spans,
           s => `<span class="mct-from">${_miniFmtReadout(s.unit, s.p0.v)} →</span> <b class="${s.p1.v >= s.p0.v ? 'mct-pos' : 'mct-neg'}">${_miniFmtReadout(s.unit, s.p1.v)}</b>`,
           s => _miniFmtReadout(s.unit, s.p1.v))
@@ -1262,6 +1310,7 @@ document.addEventListener('mousemove', (e) => {
   g.innerHTML = `<line x1="${cx.toFixed(1)}" y1="${data.padT}" x2="${cx.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
     + hits.map(h => `<circle cx="${cx.toFixed(1)}" cy="${yAt(h, h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join('');
   tip.innerHTML = `<div class="mct-date">${fmtLogDate(anchor.d)}</div>`
+    + _miniHoldingAt(data, anchor.d)
     + _miniPanelRows(data, hits, h => `<b>${_miniFmtReadout(h.unit, h.pt.v)}</b>`, h => _miniFmtReadout(h.unit, h.pt.v), hot);
   _miniPlaceTip(tip, e);
   window._miniHoverActive = true;

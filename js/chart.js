@@ -1295,7 +1295,7 @@ function renderStrategyPanelBody(idx) {
   const signal = nativeSignalChart(idx);
   if (signal) {
     html += `<div class="strategy-panel-section-label" style="margin-top:14px">Signal chart</div>`
-      + buildCustomLinesChartHtml(signal.cfg, signal.lines, signal.log, body.clientWidth, { home: signal.home });
+      + buildCustomLinesChartHtml(signal.cfg, signal.lines, signal.log, body.clientWidth, { home: signal.home, holdings: signal.holdings });
   }
   // 9sig-specific content: log first, then the "explained" rules block
   // (rules are reference material; the live log is what the user usually
@@ -1494,7 +1494,9 @@ function smaSignalChart() {
     }
     if (!traded) rows.push({ ...day, held });
   }
-  return { lines, rows, home: { t0: Date.parse(start), t1: Date.parse(end) } };
+  // The engine's control points (date, shares per fund, cash) are the
+  // holdings the chart's tooltip names.
+  return { lines, rows, home: { t0: Date.parse(start), t1: Date.parse(end) }, holdings: _logData.smaControls || null };
 }
 function nineSigSignalChart() {
   const log = _logData && _logData.log;
@@ -1512,11 +1514,12 @@ function nineSigSignalChart() {
     const date = daily[i].date;
     while (k + 1 < log.length && log[k + 1].date <= date) k++;
     const r = log[k], next = log[k + 1];
-    const holding = (r.price > 0 ? r.tqqqVal / r.price : 0) * daily[i][key];
+    const shares = r.price > 0 ? r.tqqqVal / r.price : 0, holding = shares * daily[i][key];
     const signal = next && r.target > 0 && next.target > 0
       ? r.target * Math.pow(next.target / r.target, (Date.parse(date) - Date.parse(r.date)) / (Date.parse(next.date) - Date.parse(r.date)))
       : r.target;
-    const day = { date, sigHolding: holding, sigLine: signal, held: UL };
+    // held, shares and cash: what the chart's tooltip names as the holding.
+    const day = { date, sigHolding: holding, sigLine: signal, held: UL, shares, cash: r.cash };
     // The rebalance's own words: "BUY $12.3K", "SELL $8.1K (30d expired)",
     // "RESET $40K (spike)". A sell's row holds cash, so the trade reads
     // "Sell TQQQ".
@@ -1557,7 +1560,7 @@ function nativeSignalCfg(idx) {
 function nativeSignalChart(idx) {
   const built = idx === 8 ? smaSignalChart() : idx === 0 ? nineSigSignalChart() : null;
   if (!built) return null;
-  return { cfg: nativeSignalCfg(idx), lines: built.lines, log: built.rows, home: built.home };
+  return { cfg: nativeSignalCfg(idx), lines: built.lines, log: built.rows, home: built.home, holdings: built.holdings || null };
 }
 // The strategy over a range dragged on a built-in panel's signal chart (its
 // tooltip, js/signal-chart.js's setMiniRangeSim): the panel's settings through
@@ -4204,7 +4207,7 @@ function render() {
   // Stash latest data for the side-panel log tables. Normally this is the
   // canonical base simulation; but when a saved strategy is open for editing the
   // panel describes THAT strategy, so swap in its (separately computed) sim.
-  _logData = { log, bhPoints, qqqPoints, spyPoints, qldPoints, ssoPoints, spxlPoints, sqqqPoints, gldPoints, soxlPoints, soxxPoints, smaLog };
+  _logData = { log, bhPoints, qqqPoints, spyPoints, qldPoints, ssoPoints, spxlPoints, sqqqPoints, gldPoints, soxlPoints, soxxPoints, smaLog, smaControls: smaDdControls };
   if (window._editingConfigId && window._editingConfigSim) {
     const cs = window._editingConfigSim;
     _logData = {
@@ -4220,6 +4223,7 @@ function render() {
       soxlPoints: cs.soxlPoints || soxlPoints,
       soxxPoints: cs.soxxPoints || soxxPoints,
       smaLog:     cs.smaLog     || smaLog,
+      smaControls: cs.ddControls || smaDdControls,
     };
   }
   // The marker plugin reads _logData.smaLog, which is only finalized here —

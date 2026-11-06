@@ -154,7 +154,7 @@ function buildConfigSubChipsHtml(cfg) {
 // every day; the library snippet and the prompt both honour the flag. Cached
 // per result signature beside the display result and used only here; a
 // strategy that ignores the flag returns its ordinary log and nothing changes.
-window._customDetailLogs = window._customDetailLogs || {};   // cfgId → { sig, log | null while running }
+window._customDetailLogs = window._customDetailLogs || {};   // cfgId → { sig, log | null while running, holdings } (holdings: the run's per-day holdings, for the chart's tooltip)
 function customDetailLog(cfg) {
   const ctx = window._customCtx, shown = (window._customResults || {})[cfg.id];
   if (!ctx || !shown || shown.error) return null;
@@ -166,11 +166,12 @@ function customDetailLog(cfg) {
   // draws the display log until then, since the old log shows the old rules.
   const carried = have && have.log && _sigSansStamp(have.sig) === _sigSansStamp(sig) ? have.log : null;
   if (shown.sig !== sig) return carried;   // the display run is still catching up; its arrival re-renders the panel
-  window._customDetailLogs[cfg.id] = { sig, log: carried };
+  window._customDetailLogs[cfg.id] = { sig, log: carried, holdings: carried ? have.holdings : null };
   postCustomJob(cfg, cfg.params || {}, Object.assign({}, computeCustomGlobals(cfg, ctx), { dailyDisplay: true }), (msg, err) => {
     const slot = window._customDetailLogs[cfg.id];
     if (!slot || slot.sig !== sig) return;   // superseded by a newer signature
     slot.log = (!err && msg && Array.isArray(msg.log)) ? msg.log : [];
+    slot.holdings = (!err && msg && Array.isArray(msg.holdings)) ? msg.holdings : null;
     if (window._openCustomCfgId === cfg.id) _miniChartRerender();
   });
   return carried;
@@ -181,17 +182,18 @@ function customDetailLog(cfg) {
 // lines and trades, which follow prices; it never shows this run's money).
 // Cached per signature; its arrival redraws the open panel.
 const CUSTOM_HISTORY_MONEY = 10000;
-window._customHistoryLogs = window._customHistoryLogs || {};   // cfgId → { sig, log | null while running }
+window._customHistoryLogs = window._customHistoryLogs || {};   // cfgId → { sig, log | null while running, holdings }
 function customHistoryLog(cfg) {
   const ctx = { initial: CUSTOM_HISTORY_MONEY, monthly: 0, annualRaise: 0, entryDateOverride: daily[0].date, exitDateOverride: daily[daily.length - 1].date, contribSchedule: null };
   const sig = customSig(cfg, ctx);
   const have = window._customHistoryLogs[cfg.id];
   if (have && have.sig === sig) return have.log;
-  window._customHistoryLogs[cfg.id] = { sig, log: null };
+  window._customHistoryLogs[cfg.id] = { sig, log: null, holdings: null };
   postCustomJob(cfg, cfg.params || {}, Object.assign({}, computeCustomGlobals(cfg, ctx), { dailyDisplay: true }), (msg, err) => {
     const slot = window._customHistoryLogs[cfg.id];
     if (!slot || slot.sig !== sig) return;   // superseded by a newer signature
     slot.log = (!err && msg && Array.isArray(msg.log)) ? msg.log : [];
+    slot.holdings = (!err && msg && Array.isArray(msg.holdings)) ? msg.holdings : null;
     if (window._openCustomCfgId === cfg.id) _miniChartRerender();
   });
   return null;
@@ -204,11 +206,18 @@ function customHistoryLog(cfg) {
 function customSignalChartView(cfg, displayLog) {
   const detail = customDetailLog(cfg);
   const main = detail && detail.length ? detail : displayLog;
-  if (!main.length) return { log: main, home: null };
+  if (!main.length) return { log: main, home: null, holdings: null };
   const home = { t0: Date.parse(main[0].date), t1: Date.parse(main[main.length - 1].date) };
   const history = customHistoryLog(cfg);
   const before = history ? history.filter(r => r.date < main[0].date) : [];
-  return { log: before.concat(main), home };
+  // The per-day holdings beside each log, for the tooltip: the detail run's
+  // when its log is the one shown, else the display run's (the same days
+  // either way); the history run's before the main run's first day.
+  const detailSlot = window._customDetailLogs[cfg.id], historySlot = window._customHistoryLogs[cfg.id];
+  const mainHoldings = detailSlot && detailSlot.log === main ? detailSlot.holdings : ((window._customResults || {})[cfg.id] || {}).holdings;
+  const beforeHoldings = history && historySlot && historySlot.log === history && historySlot.holdings ? historySlot.holdings.filter(e => e.date < main[0].date) : [];
+  const holdings = mainHoldings ? beforeHoldings.concat(mainHoldings) : null;
+  return { log: before.concat(main), home, holdings };
 }
 
 // The strategy over a range dragged on the panel's signal chart (its tooltip,
@@ -257,11 +266,11 @@ function redrawPanelSignalChart() {
     const auxLines = (window._customLines || {})[id] || [];
     if (!cfg || !auxLines.length) return;
     const view = customSignalChartView(cfg, (window._customLogs || {})[id] || []);
-    html = buildCustomLinesChartHtml(cfg, auxLines, view.log, body.clientWidth, { home: view.home });
+    html = buildCustomLinesChartHtml(cfg, auxLines, view.log, body.clientWidth, { home: view.home, holdings: view.holdings });
   } else {
     const signal = nativeSignalChart(_currentPanelIdx);
     if (!signal) return;
-    html = buildCustomLinesChartHtml(signal.cfg, signal.lines, signal.log, body.clientWidth, { home: signal.home });
+    html = buildCustomLinesChartHtml(signal.cfg, signal.lines, signal.log, body.clientWidth, { home: signal.home, holdings: signal.holdings });
   }
   if (!html) return;
   const tpl = document.createElement('div');
@@ -1311,7 +1320,18 @@ function customWorkerMain() {
           }
         }
       }
-      out = { reqId: msg.reqId, schema: schema, name: mod.name || null, log: log, holdingsDD: holdingsDD, endHoldings: endHoldings,
+      // The per-day holdings themselves, for the signal chart's tooltip
+      // (what is held at a date): each entry's date, cash and numeric shares.
+      var holdings = null;
+      if (res && Array.isArray(res.holdings) && res.holdings.length) {
+        holdings = [];
+        for (var hi = 0; hi < res.holdings.length; hi++) {
+          var he = res.holdings[hi]; if (!he || he.date == null) continue;
+          var hh = {}, hf; for (hf in (he.h || {})) if (typeof he.h[hf] === 'number' && he.h[hf] > 0) hh[hf] = he.h[hf];
+          holdings.push({ date: he.date, cash: typeof he.cash === 'number' ? he.cash : 0, h: hh });
+        }
+      }
+      out = { reqId: msg.reqId, schema: schema, name: mod.name || null, log: log, holdingsDD: holdingsDD, endHoldings: endHoldings, holdings: holdings,
               columns: readColumns(res && res.columns) || readColumns(mod.columns),
               signals: readSignals(res && res.signals),
               lines: readLines(res && res.lines) || readLines(mod.lines),
@@ -1617,7 +1637,7 @@ function onCustomWorkerMessage(e) {
     return;
   }
   window._customResults[pend.cfgId] = {
-    sig: pend.sig, log: msg.log || [], schema: msg.schema || [], holdingsDD: msg.holdingsDD || null, endHoldings: msg.endHoldings || null,
+    sig: pend.sig, log: msg.log || [], schema: msg.schema || [], holdingsDD: msg.holdingsDD || null, endHoldings: msg.endHoldings || null, holdings: msg.holdings || null,
     columns: msg.columns || null, signals: msg.signals || null, lines: msg.lines || null, series: msg.series || null, explain: msg.explain || null,
     name: msg.name || null, error: msg.error || null, money: msg.money || null,
     totalContributed: (typeof msg.totalContributed === 'number') ? msg.totalContributed : null,
@@ -1939,7 +1959,7 @@ function computeConfigSeries(cfg, ctx) {
     points = (r.smaPoints || []).map(pt => ({ date: pt.date, value: pt.value }));
     // Full multi-asset holdings per step → honest daily-revalued max drawdown.
     ddMulti = r.ddControls || null;
-    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'sma', smaLog: r.smaLog, smaPoints: r.smaPoints };
+    if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'sma', smaLog: r.smaLog, smaPoints: r.smaPoints, ddControls: r.ddControls };
     const _smaCtlLast = (ddMulti && ddMulti.length) ? ddMulti[ddMulti.length - 1] : null;
     if (_smaCtlLast) endState = { h: _smaCtlLast.h, cash: _smaCtlLast.cash };
   } else if (cfg.type === 'bh') {
@@ -4030,7 +4050,7 @@ function renderCustomPanelBody(cfgId) {
   if (auxLines && auxLines.length) {
     const auxView = customSignalChartView(cfg, (window._customLogs || {})[cfgId] || []);
     html += `<div class="strategy-panel-section-label" style="margin-top:14px">Signal chart</div>
-      ${buildCustomLinesChartHtml(cfg, auxLines, auxView.log, body.clientWidth, { home: auxView.home })}`;
+      ${buildCustomLinesChartHtml(cfg, auxLines, auxView.log, body.clientWidth, { home: auxView.home, holdings: auxView.holdings })}`;
   }
 
   // Live signal dashboard (whatever the strategy reported in `signals`), then
