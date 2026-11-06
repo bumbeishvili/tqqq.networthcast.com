@@ -200,25 +200,42 @@ function quoteOf(result) {
 // Outside the regular session the latest print is an extended-hours one. Yahoo's
 // chart with the pre-market and after-hours bars (04:00-09:30 and 16:00-20:00
 // New York) stamps its last bar with the latest trade, whatever the interval;
-// the session it falls in comes from the meta's currentTradingPeriod. The quote
-// keeps the regular session's price, time and prior close (the files' basis);
-// `extended` adds the session, the print, its time and its change against the
-// regular price. Null when there is no such print (a weekend morning before the
-// Friday evening's last print has aged out, a fund nobody traded) or when the
-// call fails: the regular quote stands on its own.
+// the session it falls in is read off the bar's own New York clock: the meta's
+// currentTradingPeriod rolls to the next day at midnight while the bars stay
+// the last session's, which made the after-hours print vanish from the site
+// after midnight (the user, 2026-11-06). The overnight session (20:00-04:00,
+// Blue Ocean, Sunday to Thursday nights) has no bars; its latest print is the
+// meta's fulldayPrice, which carries no time, so the print carries the time it
+// was read. The quote keeps the regular session's price, time and prior close
+// (the files' basis); `extended` adds the session, the print, its time and its
+// change against the regular price. Null when there is no such print (a bar a
+// day old, as on a weekend; a fund nobody traded) or when the call fails: the
+// regular quote stands on its own.
 const EXTENDED_INTERVAL = '5m';
-async function extendedOf(symbol, q) {
+const PRE_FROM = 4 * 60, REGULAR_FROM = 9 * 60 + 30, POST_FROM = 16 * 60, OVERNIGHT_FROM = 20 * 60;   // New York minutes of day
+const EXTENDED_MAX_AGE_MS = 24 * 3600 * 1000;
+function nyMinute(date) {
+  const p = {}; for (const { type, value } of NY_PARTS.formatToParts(date)) p[type] = value;
+  return (+p.hour % 24) * 60 + +p.minute;
+}
+// The session a bar falls in by its New York clock; null for a regular-session bar.
+function barSession(epochSeconds) {
+  const m = nyMinute(new Date(epochSeconds * 1000));
+  return m >= POST_FROM && m < OVERNIGHT_FROM ? 'post' : m >= PRE_FROM && m < REGULAR_FROM ? 'pre' : null;
+}
+async function extendedOf(symbol, q, now = new Date()) {
   if (!(q.price > 0)) return null;
   let result;
   try { result = await chart(symbol, '1d', EXTENDED_INTERVAL, true); } catch (e) { return null; }
-  const periods = result.meta.currentTradingPeriod || {}, ts = result.timestamp || [], close = (result.indicators.quote[0] || {}).close || [];
+  const ts = result.timestamp || [], close = (result.indicators.quote[0] || {}).close || [];
   let last = ts.length - 1;
   while (last >= 0 && !(close[last] > 0)) last--;
-  if (last < 0) return null;
-  const t = ts[last], within = p => p && t >= p.start && t < p.end;
-  const session = within(periods.post) ? 'post' : within(periods.pre) ? 'pre' : null;
-  if (!session) return null;
-  return { session, price: close[last], time: new Date(t * 1000).toISOString(), changePct: (close[last] / q.price - 1) * 100 };
+  const bar = last >= 0 && now.getTime() - ts[last] * 1000 < EXTENDED_MAX_AGE_MS
+    ? { session: barSession(ts[last]), price: close[last], time: new Date(ts[last] * 1000).toISOString() } : null;
+  const m = nyMinute(now), fullday = result.meta.fulldayPrice;
+  const overnight = (m >= OVERNIGHT_FROM || m < PRE_FROM) && fullday > 0 && (!bar || fullday !== bar.price);
+  const print = overnight ? { session: 'overnight', price: fullday, time: now.toISOString() } : bar && bar.session ? bar : null;
+  return print && { ...print, changePct: (print.price / q.price - 1) * 100 };
 }
 // New York session hours by the clock: a weekday, 09:30 to 16:00 (holidays included; Nasdaq's market status settles those).
 function sessionNow(now = new Date()) {

@@ -1227,11 +1227,11 @@ function mergeTodayRows(history, today) {
 }
 
 // Outside the regular session the proxy's TQQQ quote carries `extended`, the latest
-// pre-market or after-hours print with its change against the close
+// pre-market, after-hours or overnight print with its change against the close
 // (cloudflare/quotes/README.md): the chart pulses it at its start (drawExtended).
 // Nothing while the session runs, when the chart itself is live, or when the
 // proxy is not configured.
-const EXTENDED_SESSION_NAMES = { pre: 'pre-market', post: 'after hours' };
+const EXTENDED_SESSION_NAMES = { pre: 'pre-market', post: 'after hours', overnight: 'overnight' };
 function loadLiveQuote() {
   if (!QUOTES_PROXY) return Promise.resolve(null);
   return fetch(QUOTES_PROXY + '/quotes?symbols=TQQQ', { cache: 'no-store' })

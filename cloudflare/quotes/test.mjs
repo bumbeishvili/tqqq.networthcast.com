@@ -17,6 +17,7 @@ const OFFLINE = process.argv.includes('--offline');
 const STALE = { SOXL: 'nasdaq', SPY: 'nasdaq-down' };
 const SESSION_CLOCK = Date.UTC(2026, 10, 5, 18, 30);   // 13:30 EST, a Thursday
 let nowFixed = SESSION_CLOCK;
+let FULLDAY = null;   // the chart meta's fulldayPrice for TQQQ (the overnight print) when set
 if (OFFLINE) {
   const open = Date.UTC(2026, 10, 5, 14, 30) / 1000;   // 2026-11-05 09:30 EST
   // Both clocks the worker reads stand at nowFixed: Date.now() and new Date() with
@@ -53,7 +54,7 @@ if (OFFLINE) {
     const session = [open, open + 60, open + 120, open + 147, close];
     const ts = !prePost ? session : symbol === 'GLD' ? session.slice(0, 4) : session.concat([close + 600]);
     const col = (v, trail, post) => ts.map((_, k) => k === TRAIL ? trail : k === POST ? post : v);
-    return Response.json({ chart: { result: [{ meta: { regularMarketPrice: px + 0.25, chartPreviousClose: px - 1, regularMarketTime: tradeAt, exchangeTimezoneName: 'America/New_York',
+    return Response.json({ chart: { result: [{ meta: { regularMarketPrice: px + 0.25, chartPreviousClose: px - 1, regularMarketTime: tradeAt, exchangeTimezoneName: 'America/New_York', ...(FULLDAY && symbol === 'TQQQ' ? { fulldayPrice: FULLDAY } : {}),
       currentTradingPeriod: { pre: { start: open - 5.5 * 3600, end: open }, regular: { start: open, end: close }, post: { start: close, end: close + 4 * 3600 } } },
       timestamp: ts, indicators: { quote: [{ open: col(px - 0.5, px + 0.25, px - 0.5), high: col(px + 0.5, px + 0.25, px - 0.5), low: col(px - 1, px + 0.25, px - 1), close: col(px, px + 0.25, px - 0.75), volume: col(1000, 0, 10) }] } }], error: null } });
   };
@@ -86,6 +87,25 @@ if (OFFLINE) {
   const pt = bp.quotes.TQQQ, pg = bp.quotes.GLD;
   check('after the close: extended names the post-session print, its time and its change against the close; the regular price kept', pt.price === 44.25 && pt.source === undefined && pt.extended && pt.extended.session === 'post' && pt.extended.price === 43.25 && pt.extended.time === '2026-11-05T21:10:00.000Z' && Math.abs(pt.extended.changePct - (43.25 / 44.25 - 1) * 100) < 1e-9, JSON.stringify(pt));
   check('after the close, a fund with no print after it: no extended field', pg.extended === undefined && pg.price === 43.25, JSON.stringify(pg));
+  // After midnight the bars are still Thursday's: the after-hours print stands, classified by its own clock.
+  nowFixed = Date.UTC(2026, 10, 6, 6, 30);   // 01:30 EST, Friday
+  rp = await call('/quotes?symbols=TQQQ,GLD', { origin: site }); bp = await rp.json();
+  check('after midnight: Thursday\'s after-hours print still named, with its own time', bp.quotes.TQQQ.extended && bp.quotes.TQQQ.extended.session === 'post' && bp.quotes.TQQQ.extended.price === 43.25 && bp.quotes.TQQQ.extended.time === '2026-11-05T21:10:00.000Z', JSON.stringify(bp.quotes.TQQQ.extended));
+  check('after midnight: a fund whose last bar is a session bar has no extended field', bp.quotes.GLD.extended === undefined, JSON.stringify(bp.quotes.GLD.extended));
+  // Overnight: the meta's fulldayPrice differs from the last bar, so it is the print, timed when read.
+  FULLDAY = 44.9; nowFixed = Date.UTC(2026, 10, 6, 6, 32);   // two minutes on: the cache entry has aged out
+  rp = await call('/quotes?symbols=TQQQ,GLD', { origin: site }); bp = await rp.json();
+  const on = bp.quotes.TQQQ.extended;
+  check('overnight: fulldayPrice is the print, session overnight, timed when read, change against the regular price', on && on.session === 'overnight' && on.price === 44.9 && on.time === '2026-11-06T06:32:00.000Z' && Math.abs(on.changePct - (44.9 / 44.25 - 1) * 100) < 1e-9, JSON.stringify(on));
+  check('overnight: a fund without a fulldayPrice has no extended field', bp.quotes.GLD.extended === undefined, JSON.stringify(bp.quotes.GLD.extended));
+  // 20:02 Thursday with fulldayPrice at the last bar: nothing has traded overnight yet, the after-hours print stands.
+  FULLDAY = 43.25; nowFixed = Date.UTC(2026, 10, 6, 1, 2);   // 20:02 EST, Thursday
+  rp = await call('/quotes?symbols=TQQQ', { origin: site }); bp = await rp.json();
+  check('20:02 with fulldayPrice at the last bar: the after-hours print stands', bp.quotes.TQQQ.extended && bp.quotes.TQQQ.extended.session === 'post' && bp.quotes.TQQQ.extended.price === 43.25 && bp.quotes.TQQQ.extended.time === '2026-11-05T21:10:00.000Z', JSON.stringify(bp.quotes.TQQQ.extended));
+  // A bar a day old (a weekend morning) is no print.
+  FULLDAY = null; nowFixed = Date.UTC(2026, 10, 7, 6, 30);   // 01:30 EST, Saturday
+  rp = await call('/quotes?symbols=TQQQ', { origin: site }); bp = await rp.json();
+  check('a day later: the bar has aged out, no extended field', bp.quotes.TQQQ.extended === undefined, JSON.stringify(bp.quotes.TQQQ.extended));
   nowFixed = SESSION_CLOCK;
   // with Alpaca keys: its trade is the in-session price for every symbol, Yahoo's prior close kept; a down Alpaca falls back to the path above
   const KEYS = { ALPACA_API_KEY: 'k', ALPACA_API_SECRET: 's' };

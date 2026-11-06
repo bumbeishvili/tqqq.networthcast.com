@@ -63,9 +63,9 @@ const QUOTES_PROXY = 'https://tqqq-quotes.dato-developer.workers.dev';
 const LIVE_FUNDS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'];
 const LIVE_PREV_CLOSE_TOLERANCE = 0.03;
 // Outside the regular session a quote carries `extended`: the fund's latest
-// pre-market or after-hours print, its time and its change against the close
-// (the proxy's README). The names the pages give the two sessions.
-const EXTENDED_SESSION_NAMES = { pre: 'pre-market', post: 'after hours' };
+// pre-market, after-hours or overnight print, its time and its change against
+// the close (the proxy's README). The names the pages give the sessions.
+const EXTENDED_SESSION_NAMES = { pre: 'pre-market', post: 'after hours', overnight: 'overnight' };
 async function loadLiveQuotes() {
   const resp = await fetch(QUOTES_PROXY + '/quotes', { cache: 'no-store' });
   if (!resp.ok) throw new Error('The quotes proxy answered HTTP ' + resp.status);
