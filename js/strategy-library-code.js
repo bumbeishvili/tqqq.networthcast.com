@@ -3479,11 +3479,11 @@ function withSoxlPile(base, spec) {
   const params = `    { section: "SOXL instead of TQQQ" },
     { id: "soxlWhen", label: "Hold SOXL instead of TQQQ", tip: "While the rules hold TQQQ, the account holds SOXL instead under this condition. The lead rule (SOXL's growth against SOXX's over the lookback, held from a close under the entry level until one over the exit level) made the most on 2010-2025 and was out of SOXL before the 2026 crash; the two price rules and Always made less, and every rule lost to plain TQQQ in 2003-2007.", text: "Hold SOXL instead of TQQQ {}.", default: "lead", options: [
       { value: "never", label: "never" }, { value: "lead", label: "while SOXL's lead over SOXX is low" }, { value: "drawdown", label: "while SOXL is far under its high" }, { value: "belowAvg", label: "while SOXL is below its average" }, { value: "always", label: "always" } ] },
-    { id: "soxlLeadDays", label: "Lead lookback (trading days)", tip: "How many trading days of growth are compared: SOXL's against SOXX's. 400 is about 19 months; 350 to 450 all beat the price rules since 2010.", text: "The lead is SOXL's growth against SOXX's over the last {} trading days.", default: 400, options:
+    { id: "soxlLeadDays", label: "Lead lookback (trading days)", tip: "How many trading days of growth are compared: SOXL's against SOXX's. 380 is about 18 months; 350 to 450 all beat the price rules since 2010.", text: "The lead is SOXL's growth against SOXX's over the last {} trading days.", default: 380, options:
       [60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 310, 320, 330, 340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460, 470, 480, 490, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750] },
-    { id: "soxlLeadEnter", label: "Hold SOXL at lead under (%)", tip: "The first close with the lead under this holds SOXL. 0 means SOXL has grown no more than SOXX over the lookback; negative means it is behind.", text: "Hold SOXL from the first close with the lead under {}.", unit: "%", default: 0, options:
+    { id: "soxlLeadEnter", label: "Hold SOXL at lead under (%)", tip: "The first close with the lead under this holds SOXL. 0 means SOXL has grown no more than SOXX over the lookback; negative means it is behind.", text: "Hold SOXL from the first close with the lead under {}.", unit: "%", default: -15, options:
       Array.from({ length: 25 }, (_, k) => -80 + 5 * k) },
-    { id: "soxlLeadExit", label: "Back to TQQQ at lead over (%)", tip: "The first close with the lead over this goes back to TQQQ. The gap to the entry level keeps a lead hovering around one line from switching every few days.", text: "Back to TQQQ at the first close with the lead over {}.", unit: "%", default: 20, options:
+    { id: "soxlLeadExit", label: "Back to TQQQ at lead over (%)", tip: "The first close with the lead over this goes back to TQQQ. The gap to the entry level keeps a lead hovering around one line from switching every few days.", text: "Back to TQQQ at the first close with the lead over {}.", unit: "%", default: 90, options:
       Array.from({ length: 33 }, (_, k) => -60 + 5 * k) },
     { id: "soxlDrop", label: "Far under the high (%)", tip: "How far under its highest close of the window SOXL has to be for the rule to hold it. 40 to 70 all beat TQQQ alone since 2010; 50 is the plateau's middle.", text: "Far under means {} under the highest close of the window.", unit: "%", default: 50, options:
       Array.from({ length: 11 }, (_, k) => 20 + 5 * k) },
@@ -3536,7 +3536,7 @@ function withSoxlPile(base, spec) {
     // close with both ends in the data; SOXL is held from a close with the lead under the
     // entry level until the first close with it over the exit level. The state runs over
     // the whole history, so a moved Entry never starts it blank.
-    const LD = Math.max(1, Math.round(+p.soxlLeadDays || 400)), leadIn = p.soxlLeadEnter == null ? 0 : +p.soxlLeadEnter, leadOut = p.soxlLeadExit == null ? 20 : +p.soxlLeadExit;
+    const LD = Math.max(1, Math.round(+p.soxlLeadDays || 380)), leadIn = p.soxlLeadEnter == null ? -15 : +p.soxlLeadEnter, leadOut = p.soxlLeadExit == null ? 90 : +p.soxlLeadExit;
     const soxlLead = new Float64Array(n).fill(NaN), soxlBase = new Float64Array(n).fill(NaN);   // soxlBase: the SOXL price at a lead of 0% today
     if (data.soxl && data.soxx) {
       let on = false;
@@ -3620,10 +3620,10 @@ function withSoxlPile(base, spec) {
       // rules chose (TQQQ); while SOXL stands in for it, say so everywhere.
       const sWhen = p.soxlWhen || "lead", sWin = Math.round(+p.soxlWindow || 225), sDrop = p.soxlDrop == null ? 50 : +p.soxlDrop;
       const sLead = lastRow.soxlLead, sLeadTxt = sLead != null ? (sLead >= 0 ? "+" : "−") + Math.abs(sLead).toFixed(0) + "%" : "n/a";
-      const sIn = p.soxlLeadEnter == null ? 0 : +p.soxlLeadEnter, sOut = p.soxlLeadExit == null ? 20 : +p.soxlLeadExit;
+      const sIn = p.soxlLeadEnter == null ? -15 : +p.soxlLeadEnter, sOut = p.soxlLeadExit == null ? 90 : +p.soxlLeadExit;
       const inSoxl = lastRow.held === "SOXL";
       const sRule = sWhen === "always" ? "SOXL is always held for TQQQ"
-        : sWhen === "lead" ? "SOXL's lead over SOXX " + sLeadTxt + " over " + Math.round(+p.soxlLeadDays || 400) + " days; held for TQQQ from under " + sIn + "% until over " + sOut + "%"
+        : sWhen === "lead" ? "SOXL's lead over SOXX " + sLeadTxt + " over " + Math.round(+p.soxlLeadDays || 380) + " days; held for TQQQ from under " + sIn + "% until over " + sOut + "%"
         : sWhen === "belowAvg" ? "SOXL " + (lastRow.soxlAvgLine > 0 ? Math.abs((1 - lastRow.soxlPrice / lastRow.soxlAvgLine) * 100).toFixed(0) + "% " + (lastRow.soxlPrice < lastRow.soxlAvgLine ? "below" : "above") + " its " + sWin + "-day average" : "against its " + sWin + "-day average") + "; held for TQQQ while below"
         : "SOXL " + (lastRow.soxlLine > 0 ? ((1 - lastRow.soxlPrice / (lastRow.soxlLine / (1 - sDrop / 100))) * 100).toFixed(0) + "% under its " + sWin + "-day high" : "against its " + sWin + "-day high") + "; held for TQQQ past " + sDrop + "%";
       if (sWhen !== "never" && (lastRow.soxlPrice > 0 || sLead != null)) {
