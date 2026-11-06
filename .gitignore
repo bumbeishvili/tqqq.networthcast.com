@@ -7,3 +7,6 @@ __pycache__/
 
 # wrangler state for the Cloudflare worker (cloudflare/quotes)
 .wrangler/
+
+# downloaded raw data kept locally, never published
+_raw/
