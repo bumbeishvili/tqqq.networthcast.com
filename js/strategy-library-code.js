@@ -3434,7 +3434,8 @@ CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Mond
   ['      const trigger = triggerAt(i);', '      const trigger = tmPanel(triggerAt(i));', 'the trade panel'],
   ['const reason = (i, w) => ', 'const reason = (i, w) => tmWhy ? tmWhy : ', 'the trade reason'] ] });
 
-// #52 — TQQQ VS QQQ, Mon Turn, Soxl Acc: #50 with the monthly contributions
+// #52 — SOXL, TQQQ VS QQQ, Mon Turns (the user's name, 2026-11-06; "TQQQ VS QQQ,
+// Mon Turn, Soxl Acc" before): #50 with the monthly contributions
 // piling up in SOXL while the stretch rules hold TQQQ, handed to the strategy
 // as one contribution when the rules switch to SQQQ (the user's idea,
 // 2026-11-05, scratchpad soxl/recheck.cjs). Built from #50's text at load,
@@ -3679,7 +3680,7 @@ function withSoxlPile(base, spec) {
   if (!t.endsWith('    return res;\n  }\n}')) throw new Error(`withSoxlPile(${spec.name}): the base must end with its dashboard`);
   return t.slice(0, -'    return res;\n  }\n}'.length) + card + '    return res;\n  }\n}';
 }
-CODE[52] = withSoxlPile(CODE[50], { name: "TQQQ VS QQQ, Mon Turn, Soxl Acc" });
+CODE[52] = withSoxlPile(CODE[50], { name: "SOXL, TQQQ VS QQQ, Mon Turns" });
 
 // ===== The SMA strategy as code =============================================
 // The user (2026-11-04): "I want built in sma panel ... converted into code,
