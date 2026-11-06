@@ -31,7 +31,7 @@ outside the repo, because it holds your sheet link. Never copy it into the repo.
 |---|---|
 | `sheetUrl` | Your transaction sheet's published CSV link (Google Sheets: File, Share, Publish to web, CSV). |
 | `sheetColumns` | Header names of the sheet's `date`, `amount` and portfolio `value` columns. |
-| `shareLink` | The site's Share link. The widget shows TQQQ vs QQQ + Turnaround Monday, with the settings and colour of your copy of it in the link. Without one, it runs that strategy at its defaults. |
+| `shareLink` | The site's Share link. The widget shows TQQQ VS QQQ, Mon Turn, Soxl Acc (library #52), with the settings and colour of your copy of it in the link. Without one, it runs that strategy at its defaults. |
 | `intraday` | The intraday chart's settings: `similarDaysOnly`; `from`, the period's first day as `YYYY-MM-DD` (the period ends at the latest day); `log`, a log scale instead of the default linear one. |
 | `pageUrl` | The page the widget shows. Default: the copy the installer puts in the widget's `lib/site` folder. Set `https://tqqq.networthcast.com/widget.html` to show the deployed page instead; on the desktop that page answers hover only (see Troubleshooting). |
 | `dataUrl` | Where the page reads the market data files. Default: `https://tqqq.networthcast.com/`. |

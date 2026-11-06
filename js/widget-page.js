@@ -14,7 +14,7 @@
 // widget/tqqq.widget frames this page.
 (function widgetPage() {
   const REFRESH_MS = 5 * 60 * 1000;           // re-reads the sheet and the market data; the data files change hourly
-  const WIDGET_ENTRY = 50;                     // the strategy the widget tracks: TQQQ vs QQQ + Turnaround Monday
+  const WIDGET_ENTRY = 52;                     // the strategy the widget tracks: TQQQ VS QQQ, Mon Turn, Soxl Acc (the user, 2026-11-06; #50 before)
   const DEFAULT_COLOR = '#e879f9';             // a library copy's colour when the link gives none
   const PORTFOLIO_PX = 190;                    // height of the top chart
   const BOTTOM_PX = 240;                       // the bottom row's share of a full screen; the intraday chart's height until the signal chart draws
