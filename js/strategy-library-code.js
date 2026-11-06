@@ -3484,7 +3484,7 @@ function withSoxlPile(base, spec) {
     { id: "soxlLeadEnter", label: "Hold SOXL at lead under (%)", tip: "The first close with the lead under this holds SOXL. 0 means SOXL has grown no more than SOXX over the lookback; negative means it is behind.", text: "Hold SOXL from the first close with the lead under {}.", unit: "%", default: -15, options:
       Array.from({ length: 25 }, (_, k) => -80 + 5 * k) },
     { id: "soxlLeadExit", label: "Back to TQQQ at lead over (%)", tip: "The first close with the lead over this goes back to TQQQ. The gap to the entry level keeps a lead hovering around one line from switching every few days.", text: "Back to TQQQ at the first close with the lead over {}.", unit: "%", default: 90, options:
-      Array.from({ length: 33 }, (_, k) => -60 + 5 * k) },
+      Array.from({ length: 93 }, (_, k) => -60 + 5 * k) },   // −60% to 400% in 5s (the user, 2026-11-06: "so lead can go up to 400%")
     { id: "soxlDrop", label: "Far under the high (%)", tip: "How far under its highest close of the window SOXL has to be for the rule to hold it. 40 to 70 all beat TQQQ alone since 2010; 50 is the plateau's middle.", text: "Far under means {} under the highest close of the window.", unit: "%", default: 50, options:
       Array.from({ length: 11 }, (_, k) => 20 + 5 * k) },
     { id: "soxlWindow", label: "Window (trading days)", tip: "The window of closes the high and the average are taken over. 250 is about a year.", text: "The high and the average cover the last {} trading days.", default: 225, options:
