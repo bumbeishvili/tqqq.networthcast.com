@@ -68,12 +68,6 @@
   .switch input:checked+.track::after{transform:translateX(14px)}
   .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
-  /* The latest pre-market or after-hours print, above the chart while there is one
-     (renderLiveNote); the embedded widget chart stays bare. */
-  .live-note{margin:8px 0 0;font:600 11.5px var(--mono);color:var(--muted)}
-  .live-note b{color:var(--text)}
-  .live-note .up{color:var(--green)} .live-note .down{color:var(--red)}
-  .embed .live-note{display:none}
   #chart{position:relative;min-height:520px}
   /* ?embed=widget (the desktop widget page, widget.html): the chart alone,
      filling its frame. The filters and the period slider stay wired but
@@ -87,7 +81,7 @@
   .embed .scale-toggle{display:none}
   /* The widget's other two charts label at 8-9px; the embedded chart matches. */
   .embed .axis text,.embed .now-label,.embed .annotation text{font-size:9px}
-  .embed .line-label,.embed .today-label{font-size:9.5px}
+  .embed .line-label,.embed .today-label,.embed .extended-label{font-size:9.5px}
   .embed .panel{background:transparent;border:0;box-shadow:none;padding:0}
   .embed #chart{min-height:0}
   .embed *{font-weight:400 !important}   /* the desktop widget sets no bold anywhere */
@@ -106,16 +100,17 @@
   .day-path.hover{opacity:1;stroke:var(--hover);stroke-width:1.5}
   .day-path.reference{opacity:1;stroke:var(--violet);stroke-width:2}
   /* Today's path: on top of every other layer, glowing, with a live pulse at
-     its last bar while the session is open. */
-  .today{pointer-events:none}
+     its last bar while the session is open. Outside the session the same
+     pulse marks the latest pre-market or after-hours print at the start. */
+  .today,.extended{pointer-events:none}
   .today-glow{fill:none;stroke:var(--violet);stroke-width:9;stroke-linejoin:round;stroke-linecap:round;opacity:.14}
   .today-path{fill:none;stroke:var(--violet);stroke-width:2.25;stroke-linejoin:round;stroke-linecap:round}
-  .today-dot{fill:var(--violet);stroke:var(--panel);stroke-width:2}
-  .today-ring{fill:none;stroke:var(--violet);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:live-pulse 1.8s ease-out infinite}
-  .today-ring.second{animation-delay:.9s}
+  .pulse-dot{fill:var(--violet);stroke:var(--panel);stroke-width:2}
+  .pulse-ring{fill:none;stroke:var(--violet);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:live-pulse 1.8s ease-out infinite}
+  .pulse-ring.second{animation-delay:.9s}
   @keyframes live-pulse{0%{transform:scale(.5);opacity:.8}100%{transform:scale(3.2);opacity:0}}
-  .today-label{font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--violet)}
-  .today-label .up{fill:var(--green)} .today-label .down{fill:var(--red)}
+  .today-label,.extended-label{font-family:var(--mono);font-size:11px;font-weight:600;fill:var(--violet)}
+  .today-label .up,.extended-label .up{fill:var(--green)} .today-label .down,.extended-label .down{fill:var(--red)}
   .mean-path{fill:none;stroke:var(--mean);stroke-width:2.5}
   .median-path{fill:none;stroke:var(--orange);stroke-width:2;stroke-dasharray:6 4}
   .line-label{font-family:var(--mono);font-size:10.5px;font-weight:600;dominant-baseline:middle;pointer-events:none}
@@ -174,7 +169,6 @@
         </div>
       </div>
     </div>
-    <div class="live-note" id="live-note" hidden></div>
     <div id="chart">
       <button type="button" class="scale-toggle" id="scale-toggle" aria-pressed="true" title="Switch the vertical axis between a symmetric log scale and a linear one">log</button>
     </div>
@@ -234,6 +228,13 @@ const MINUTES_PER_DAY = 24 * 60;
 const parseStamp = d3.timeParse('%m/%d/%Y %H:%M:%S');
 const fmtPct = (d, decimals = 2) => (d > 0 ? '+' : '') + d.toFixed(decimals) + '%';
 const fmtAxisPct = d => (d > 0 ? '+' : '') + parseFloat(d.toFixed(2)) + '%';
+// A move and the price behind it, as the today and extended-hours labels read
+// it: "+1.26% ($51.10)", the percent toned by its sign.
+const moveHtml = (pct, price) => {
+  const tone = pct > 0 ? 'up' : pct < 0 ? 'down' : '';
+  const priced = price > 0 ? ` ($${price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : '';
+  return `<tspan class="${tone}">${fmtPct(pct)}</tspan>${priced}`;
+};
 const fmtClock = minutes => {
   const wrapped = ((minutes % MINUTES_PER_DAY) + MINUTES_PER_DAY) % MINUTES_PER_DAY;
   const h = Math.floor(wrapped / 60), m = wrapped % 60;
@@ -554,6 +555,7 @@ class IntradayOverlayChart {
       matchCutoff: null,        // last matched minute; shades the window when set
       todayId: null,            // the latest day in the file, drawn on its own layer on top
       opacityCount: null,       // days the opacity is tuned for; defaults to the days drawn
+      extended: null,           // the latest pre-market or after-hours print { session, price, changePct }, pulsing at the start outside the session
     };
     this.getState = () => attrs;
     this.setState = d => Object.assign(attrs, d);
@@ -578,6 +580,7 @@ class IntradayOverlayChart {
     this.drawNow();
     this.drawAnnotations();
     this.drawToday();
+    this.drawExtended();
     this.drawHover();
     this.setState({ firstRender: false });
     return this;
@@ -682,26 +685,35 @@ class IntradayOverlayChart {
         .on('end', () => path.attr('stroke-dasharray', null).attr('stroke-dashoffset', null));
     }
     const cx = x(last.minute), cy = y(last.pct);
-    // The rings group always exists; its circles are joined to two items
-    // while live and to none otherwise, so an empty join never has to chain
-    // off an empty selection.
-    g._add('g.today-rings').attr('transform', `translate(${cx},${cy})`)
-      ._add('circle.today-ring', [0, 1]).attr('r', 5).classed('second', k => k === 1);
-    g._add('circle.today-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
+    this.drawPulse(g, cx, cy);
     const nearRightEdge = cx > chartWidth - 180;
     // Today's change vs the previous close and the price itself, beside the dot.
-    // Below it by default; when the lines run through that band over the label's
-    // width (near the right edge the label sits over the line's last stretch),
-    // above the dot instead, and past the lines when both bands are taken.
-    const tone = last.pct > 0 ? 'up' : last.pct < 0 ? 'down' : '';
-    const price = last.close > 0 ? ` ($${last.close.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})` : '';
     const label = g._add('text.today-label').attr('text-anchor', nearRightEdge ? 'end' : 'start')
-      .html(`today <tspan class="${tone}">${fmtPct(last.pct)}</tspan>${price}`);
+      .html(`today ${moveHtml(last.pct, last.close)}`);
+    this.placeLabel(label, cx, cy, nearRightEdge, today.points);
+  }
+
+  // A dot with two rings pulsing out of it: today's last bar while the
+  // session is open, an extended-hours print at the start outside it. The
+  // rings group always exists and its circles are joined to two items, so an
+  // empty join never has to chain off an empty selection.
+  drawPulse(g, cx, cy) {
+    g._add('g.pulse-rings').attr('transform', `translate(${cx},${cy})`)
+      ._add('circle.pulse-ring', [0, 1]).attr('r', 5).classed('second', k => k === 1);
+    g._add('circle.pulse-dot').attr('cx', cx).attr('cy', cy).attr('r', 4);
+  }
+
+  // Sets a label beside its dot. Below it by default; when the lines run
+  // through that band over the label's width (near the right edge the label
+  // sits over the line's last stretch), above the dot instead, and past the
+  // lines when both bands are taken. `points` is the drawn line the dot ends;
+  // the mean and median count everywhere.
+  placeLabel(label, cx, cy, nearRightEdge, points) {
+    const { x, y, aggregates } = this.getState();
     const labelW = label.node().getComputedTextLength(), lx = cx + (nearRightEdge ? -10 : 10);
     const x0 = nearRightEdge ? lx - labelW : lx, x1 = x0 + labelW;
-    const { aggregates } = this.getState();
     const ys = [];
-    for (const p of today.points) { const px = x(p.minute); if (px >= x0 - 8 && px <= x1 + 8) ys.push(y(p.pct)); }
+    for (const p of points) { const px = x(p.minute); if (px >= x0 - 8 && px <= x1 + 8) ys.push(y(p.pct)); }
     for (const a of aggregates || []) { const px = x(a.minute); if (px >= x0 - 8 && px <= x1 + 8) { ys.push(y(a.mean)); ys.push(y(a.median)); } }
     const clear = (top, bottom) => !ys.some(v => v >= top - 7 && v <= bottom + 7);   // 7px: the glow's half width and a margin
     let ly = cy + 18;                                   // the band cy+8 .. cy+24
@@ -710,6 +722,22 @@ class IntradayOverlayChart {
       else { const lo = Math.max(...ys), hi = Math.min(...ys); ly = lo - cy <= cy - hi ? lo + 22 : hi - 14; }
     }
     label.attr('x', lx).attr('y', ly);
+  }
+
+  // Outside the regular session the proxy's TQQQ quote carries the latest
+  // pre-market or after-hours print (cloudflare/quotes/README.md). Its change
+  // against the close is where the next session's line will start, so it
+  // pulses at the chart's start on the axis, its label beside it (the user,
+  // 2026-11-06). Nothing while the session runs: the chart is live then.
+  drawExtended() {
+    const { chart, extended, x, y, chartHeight } = this.getState();
+    const g = chart._add('g.extended').style('display', extended ? null : 'none');
+    if (!extended) return;
+    const cx = x(SESSION_OPEN_MIN), cy = Math.max(0, Math.min(chartHeight, y(extended.changePct)));
+    this.drawPulse(g, cx, cy);
+    const label = g._add('text.extended-label').attr('text-anchor', 'start')
+      .html(`${EXTENDED_SESSION_NAMES[extended.session]} ${moveHtml(extended.changePct, extended.price)}`);
+    this.placeLabel(label, cx, cy, false, []);
   }
 
   drawAggregates() {
@@ -1198,24 +1226,21 @@ function mergeTodayRows(history, today) {
 }
 
 // Outside the regular session the proxy's TQQQ quote carries `extended`, the latest
-// pre-market or after-hours print (cloudflare/quotes/README.md): it goes above the
-// chart with its time in New York and its change against the close, which the
-// chart's today label keeps (the user, 2026-11-06). Nothing while the session
-// runs, when the chart itself is live, or when the proxy is not configured.
-const EXTENDED_SESSION_NAMES = { pre: 'Pre-market', post: 'After hours' };
-const marketClock = new Intl.DateTimeFormat('en-US', { timeZone: MARKET_TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+// pre-market or after-hours print with its change against the close
+// (cloudflare/quotes/README.md): the chart pulses it at its start (drawExtended).
+// Nothing while the session runs, when the chart itself is live, or when the
+// proxy is not configured.
+const EXTENDED_SESSION_NAMES = { pre: 'pre-market', post: 'after hours' };
 function loadLiveQuote() {
   if (!QUOTES_PROXY) return Promise.resolve(null);
   return fetch(QUOTES_PROXY + '/quotes?symbols=TQQQ', { cache: 'no-store' })
     .then(r => { if (!r.ok) throw new Error('The quotes proxy answered HTTP ' + r.status); return r.json(); })
     .catch(err => { console.warn('Live quote unavailable:', err); return null; });
 }
-function renderLiveNote(quotes) {
-  const el = document.getElementById('live-note');
+function extendedPrint(quotes) {
   const q = quotes && quotes.quotes && quotes.quotes.TQQQ, x = q && q.extended;
-  if (!x || !(x.price > 0) || !(x.session in EXTENDED_SESSION_NAMES)) { el.hidden = true; el.textContent = ''; return; }
-  el.innerHTML = `${EXTENDED_SESSION_NAMES[x.session]} ${marketClock.format(new Date(x.time))} ET · <b>$${x.price.toFixed(2)}</b> · <span class="${x.changePct >= 0 ? 'up' : 'down'}">${fmtPct(x.changePct)}</span> vs the close $${q.price.toFixed(2)}`;
-  el.hidden = false;
+  if (!x || !(x.price > 0) || typeof x.changePct !== 'number' || !(x.session in EXTENDED_SESSION_NAMES)) return null;
+  return { session: x.session, price: x.price, changePct: x.changePct };
 }
 
 function loadData() {
@@ -1225,7 +1250,7 @@ function loadData() {
     d3.tsv(DATA_URL_TODAY, { cache: 'no-cache' }).catch(() => []),
     loadLiveQuote(),
   ]).then(([history, today, quotes]) => {
-    renderLiveNote(quotes);
+    chart.extended(extendedPrint(quotes));
     const allDays = buildDays(mergeTodayRows(history, today));
     const allPct = allDays.flatMap(d => d.points.map(p => p.pct));
     // The y extent only ever grows, so a refresh never rescales the plot.

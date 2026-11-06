@@ -1282,7 +1282,36 @@ function customWorkerMain() {
         });
         holdingsDD = computeDailyMaxDrawdownMulti(res.holdings, DATA_ROWS);
       }
-      out = { reqId: msg.reqId, schema: schema, name: mod.name || null, log: log, holdingsDD: holdingsDD,
+      // The run's end state, which the main thread marks at extended-hours
+      // prints for the badge (extendedMoveOf, js/utils.js): a multi-fund
+      // strategy's last holdings entry; else the last row's held fund and
+      // shares with its cash; else, for a row that only names what the whole
+      // value sits in ("TQQQ", "CASH", or "TQQQ + CASH" with `share`, the
+      // fund's percent of the value), that value at the fund's close. Null
+      // when the log says none of this.
+      var endHoldings = null;
+      if (res && Array.isArray(res.holdings) && res.holdings.length) {
+        var lastHeld = res.holdings[res.holdings.length - 1], endH = {}, hk;
+        for (hk in lastHeld.h) if (typeof lastHeld.h[hk] === 'number') endH[hk] = lastHeld.h[hk];
+        endHoldings = { h: endH, cash: typeof lastHeld.cash === 'number' ? lastHeld.cash : 0 };
+      } else if (log.length && typeof log[log.length - 1].held === 'string') {
+        var lastRow = log[log.length - 1], rowH = {};
+        if (typeof lastRow.cash === 'number') {
+          var heldKey = lastRow.held.toLowerCase();
+          if (heldKey !== 'cash' && lastRow.shares > 0) rowH[heldKey] = lastRow.shares;
+          endHoldings = { h: rowH, cash: lastRow.cash };
+        } else if (typeof lastRow.value === 'number') {
+          var names = lastRow.held.toLowerCase().split('+').map(function (s) { return s.trim(); });
+          var fund = names.filter(function (s) { return s !== 'cash'; });
+          var part = names.length === 1 ? (fund.length ? 1 : 0) : lastRow.share / 100;
+          var di = DATA.dates.lastIndexOf(lastRow.date);
+          if (fund.length < 2 && part >= 0 && part <= 1 && (!fund.length || (DATA[fund[0]] && DATA[fund[0]][di] > 0))) {
+            if (fund.length && part > 0) rowH[fund[0]] = lastRow.value * part / DATA[fund[0]][di];
+            endHoldings = { h: rowH, cash: lastRow.value * (1 - part) };
+          }
+        }
+      }
+      out = { reqId: msg.reqId, schema: schema, name: mod.name || null, log: log, holdingsDD: holdingsDD, endHoldings: endHoldings,
               columns: readColumns(res && res.columns) || readColumns(mod.columns),
               signals: readSignals(res && res.signals),
               lines: readLines(res && res.lines) || readLines(mod.lines),
@@ -1307,7 +1336,7 @@ window._customLines = window._customLines || {};     // cfgId -> [{ key, label }
 window._customSeries = window._customSeries || {};   // cfgId -> [{ key, label, dash }] its dollar lines for the main chart (readSeries)
 window._customExplain = window._customExplain || {}; // cfgId -> its explanation text (readExplain)
 window._customSignals = window._customSignals || {}; // cfgId -> { cards, decision } live signal dashboard
-window._customResults = window._customResults || {}; // cfgId -> { sig, log, schema, name, error, totalContributed }
+window._customResults = window._customResults || {}; // cfgId -> { sig, log, schema, name, error, totalContributed, endHoldings }
 window._customYesterdayResults = window._customYesterdayResults || {}; // cfgId -> { sig, value, error } — day-over-day change badge, see scheduleCustomYesterdayRun
 const CUSTOM_TIMEOUT_MS = 4000;
 let _customWorker = null, _customWorkerSeq = 0, _customDataSent = false;
@@ -1588,7 +1617,7 @@ function onCustomWorkerMessage(e) {
     return;
   }
   window._customResults[pend.cfgId] = {
-    sig: pend.sig, log: msg.log || [], schema: msg.schema || [], holdingsDD: msg.holdingsDD || null,
+    sig: pend.sig, log: msg.log || [], schema: msg.schema || [], holdingsDD: msg.holdingsDD || null, endHoldings: msg.endHoldings || null,
     columns: msg.columns || null, signals: msg.signals || null, lines: msg.lines || null, series: msg.series || null, explain: msg.explain || null,
     name: msg.name || null, error: msg.error || null, money: msg.money || null,
     totalContributed: (typeof msg.totalContributed === 'number') ? msg.totalContributed : null,
@@ -1765,8 +1794,11 @@ function computeConfigSeries(cfg, ctx) {
   // Returns a RAW yesterday value (deflated to real $ when the inflation
   // toggle is on) — endLabelPlugin diffs it against whichever TODAY value is
   // current at draw time, same as the async custom-strategy path in
-  // computeCustomSeries. Invested Compounded gets no badge (a
-  // monthly-stepped synthetic baseline has no meaningful daily change).
+  // computeCustomSeries. The holdings themselves are cached too
+  // (window._configEndHoldings): outside the session the badge marks them at
+  // the funds' extended-hours prints instead (extendedMoveOf). Invested
+  // Compounded gets no badge (a monthly-stepped synthetic baseline has no
+  // meaningful daily change).
   const ydayFromHoldings = (holdings, cash) => {
     if (!isLatestDaySelected || !prevTradingDayDate || typeof repriceAtPrevTradingDay !== 'function') return null;
     const v = repriceAtPrevTradingDay(holdings, cash);
@@ -1776,7 +1808,8 @@ function computeConfigSeries(cfg, ctx) {
     return v * defl;
   };
   window._configDayChange = window._configDayChange || {};
-  let ydayVal = null; // set per-branch below, written to the cache once after
+  window._configEndHoldings = window._configEndHoldings || {};
+  let endState = null; // { h, cash }: the run's end-state holdings, set per-branch below, both caches written once after
 
   const p = cfg.params || {};
   let points = null;
@@ -1863,11 +1896,11 @@ function computeConfigSeries(cfg, ctx) {
       const _parkKey = (opts.parkAsset || 'cash').toLowerCase();
       const _todayRow = daily[daily.length - 1];
       if (_parkKey === 'cash') {
-        ydayVal = ydayFromHoldings({ [ddKey]: _sigShares }, _sigLast.cash);
+        endState = { h: { [ddKey]: _sigShares }, cash: _sigLast.cash };
       } else if (_todayRow[_parkKey] > 0) {
         const _h = { [ddKey]: _sigShares };
         _h[_parkKey] = (_h[_parkKey] || 0) + _sigLast.cash / _todayRow[_parkKey];
-        ydayVal = ydayFromHoldings(_h, 0);
+        endState = { h: _h, cash: 0 };
       }
     }
   } else if (cfg.type === 'sma') {
@@ -1908,7 +1941,7 @@ function computeConfigSeries(cfg, ctx) {
     ddMulti = r.ddControls || null;
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'sma', smaLog: r.smaLog, smaPoints: r.smaPoints };
     const _smaCtlLast = (ddMulti && ddMulti.length) ? ddMulti[ddMulti.length - 1] : null;
-    if (_smaCtlLast) ydayVal = ydayFromHoldings(_smaCtlLast.h, _smaCtlLast.cash);
+    if (_smaCtlLast) endState = { h: _smaCtlLast.h, cash: _smaCtlLast.cash };
   } else if (cfg.type === 'bh') {
     // Same in-between snapshotting the main Buy & Hold line gets (js/chart.js's
     // sigOpts) — without it this config's line falls back to bhPoints' native
@@ -1957,7 +1990,7 @@ function computeConfigSeries(cfg, ctx) {
     ddKey = key === 'qqq' ? 'qqq' : key === 'spy' ? 'spy' : key === 'qld' ? 'qld' : key === 'sso' ? 'sso' : key === 'spxl' ? 'spxl' : key === 'sqqq' ? 'sqqq' : key === 'gld' ? 'gld' : key === 'soxl' ? 'soxl' : key === 'soxx' ? 'soxx' : 'tqqq';
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'bh', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints, sqqqPoints: r.sqqqPoints, gldPoints: r.gldPoints, soxlPoints: r.soxlPoints, soxxPoints: r.soxxPoints };
     const _bhLast = (rawArr && rawArr.length) ? rawArr[rawArr.length - 1] : null;
-    if (_bhLast && _bhLast.shares > 0) ydayVal = ydayFromHoldings({ [ddKey]: _bhLast.shares }, 0);
+    if (_bhLast && _bhLast.shares > 0) endState = { h: { [ddKey]: _bhLast.shares }, cash: 0 };
   } else if (cfg.type === 'invested') {
     const rate = (typeof sliderToRate === 'function' ? sliderToRate(+pget(p, 'slider-rate', 0)) : 0) / 100;
     const investedOpts = {
@@ -1973,7 +2006,8 @@ function computeConfigSeries(cfg, ctx) {
     // No day-change badge for Invested Compounded — see ydayFromHoldings'
     // comment above.
   }
-  window._configDayChange[cfg.id] = ydayVal;
+  window._configDayChange[cfg.id] = endState ? ydayFromHoldings(endState.h, endState.cash) : null;
+  window._configEndHoldings[cfg.id] = endState;
 
   const data = resampleByDate(points, labels);
   const finalV = data.length ? data[data.length - 1] : 0;
@@ -2175,15 +2209,16 @@ function appendActualPortfolioDatasets(chart, ctx) {
 }
 // The day's move of the strategy the account follows (js/transactions.js's
 // txFollowKey), as js/chart.js's txFollowPct reads it at draw time: a Buy &
-// Hold's is its ticker's close-to-close move; a line on the chart (the 9sig or
-// SMA panel, a saved strategy) is read off its own badge; a library strategy
+// Hold's is its ticker's close-to-close move (with its one share, for the
+// move to an extended-hours print); a line on the chart (the 9sig or SMA
+// panel, a saved strategy) is read off its own badge; a library strategy
 // runs here as a temporary strategy, which fills the same day-change caches a
 // saved one does, and keeps its latest value in the chart's units.
 function txFollowMove(key, ctx) {
   if (key.startsWith('bh-')) {
     const ticker = key.slice(3);
     const yday = repriceAtPrevTradingDay({ [ticker]: 1 }, 0), today = daily[daily.length - 1][ticker];
-    return { pct: yday > 0 && today > 0 ? (today / yday - 1) * 100 : null };
+    return { pct: yday > 0 && today > 0 ? (today / yday - 1) * 100 : null, holdings: { [ticker]: 1 } };
   }
   if (key in STRATEGY_KEY_TO_DATASET_IDX) return { idx: STRATEGY_KEY_TO_DATASET_IDX[key] };
   if (key.startsWith('cfg:')) return { cfgId: key.slice(4) };

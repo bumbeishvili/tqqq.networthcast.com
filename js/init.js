@@ -97,9 +97,14 @@
     if (!next) return;
     const last = daily[daily.length - 1];
     if (!next.appended && LIVE_FUNDS.every(f => last[f] === before[f])) {
-      // No close moved. A newer extended-hours print changes only the header and
-      // the price lines' rows: no run reads it.
-      if (JSON.stringify(next.extended) !== JSON.stringify(live.extended)) { live = next; showLive(live); redrawPanelSignalChart(); }
+      // No close moved. A newer extended-hours print changes only the header,
+      // the price lines' rows and the end labels' badges: no run reads it.
+      if (JSON.stringify(next.extended) !== JSON.stringify(live.extended)) {
+        live = next;
+        showLive(live);
+        redrawPanelSignalChart();
+        if (chart) chart.update('none');
+      }
       return;
     }
     live = next;

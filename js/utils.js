@@ -273,6 +273,29 @@ function repriceAtPrevTradingDay(holdings, cash) {
   return total;
 }
 
+// The move of the same end-state holdings from the latest close to the funds'
+// latest extended-hours prints (js/data.js's applyLiveQuotes keeps them on
+// window._liveExtended): the value at the prints over the value at the close,
+// with the prints' session. The badge names this pre-market or after-hours
+// move while the files stand at a close (the user, 2026-11-06). Null without
+// prints, and null when a held fund has no print: its close in the print's
+// place would pass off part of the move as none.
+function extendedMoveOf(holdings, cash) {
+  const live = window._liveExtended;
+  if (!live || typeof daily === 'undefined' || !daily || !daily.length) return null;
+  const row = daily[daily.length - 1];
+  let atClose = (typeof cash === 'number' && isFinite(cash)) ? cash : 0, atPrint = atClose;
+  for (const k of Object.keys(holdings || {})) {
+    const sh = holdings[k];
+    if (!(sh > 0)) continue;
+    const print = live.prints[k];
+    if (!print || !(row[k] > 0)) return null;
+    atClose += sh * row[k];
+    atPrint += sh * print.price;
+  }
+  return atClose > 0 ? { session: live.session, ratio: atPrint / atClose } : null;
+}
+
 // ===== Colour separation (OKLab) ========================================
 // How far apart two colours read, measured the way the dataviz validator
 // measures it: Euclidean distance in OKLab ×100, once as seen ("normal") and

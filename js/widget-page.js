@@ -140,8 +140,15 @@
   // session's close to the latest, less that session's deposit (the log's
   // contributed). Applied to the line's latest value, it is your account's
   // move if it holds what the strategy holds. A log that is not daily at its
-  // end has no session move: no badge.
+  // end has no session move: no badge. Outside the session the strategy's
+  // end-state holdings marked at the funds' extended-hours prints name that
+  // move instead, as the site's badges do (extendedMoveOf).
   function sessionBadge(latestValue) {
+    const extended = endHoldings ? extendedMoveOf(endHoldings.h, endHoldings.cash) : null;
+    if (extended) {
+      const move = computeDayChange(latestValue * extended.ratio, latestValue);
+      return move && { text: EXTENDED_SESSION_NAMES[extended.session] + ' ' + fmtDayChangePct(move), color: tokenColor(move.pct >= 0 ? '--green-text' : '--red-text') };
+    }
     const last = log[log.length - 1], prev = log[log.length - 2];
     const session = daily[daily.length - 1].date;
     if (last.date !== session || prev.date !== daily[daily.length - 2].date) return null;
@@ -184,7 +191,7 @@
   // default money: the signal chart, so how far back it reaches never depends
   // on your sheet. That chart rests on your period (its home view) and zooms
   // and pans across the whole history.
-  let cfg = null, lines = [], log = [], signalLog = [], portfolio = { lines: [], rows: [] };
+  let cfg = null, lines = [], log = [], signalLog = [], endHoldings = null, portfolio = { lines: [], rows: [] };
   // Every chart's text is sized as on the signal chart, the narrowest of them.
   // `heightPx` fits the chart to that height; null lets it take its own height,
   // as on the site, where each panel after the first adds to it. `view` adds
@@ -317,6 +324,7 @@
       ]);
       if ([mine, history].some(run => !Array.isArray(run.log) || run.log.length < 2)) throw new Error('The strategy returned no rows.');
       log = mine.log;
+      endHoldings = mine.endHoldings;
       signalLog = history.log;
       lines = Array.isArray(history.lines) ? history.lines : [];
       portfolio = portfolioSeries(money, txRows || []);

@@ -2601,12 +2601,20 @@ function render() {
   // yesterday VALUES (deflated to real $ when the inflation toggle is on) —
   // endLabelPlugin's dayChangeFor diffs each against whatever TODAY value
   // the chart is actually drawing, so both sides are always in the same
-  // (nominal or deflated) units. Invested Compounded gets no badge: it's a
-  // monthly-stepped synthetic baseline with no meaningful close-to-close
-  // daily change.
+  // (nominal or deflated) units. The holdings themselves are kept too
+  // (window._endHoldingsByIdx): outside the session the badge names their
+  // move to the funds' extended-hours prints instead (extendedMoveOf).
+  // Invested Compounded gets no badge: it's a monthly-stepped synthetic
+  // baseline with no meaningful close-to-close daily change.
   window._ydayValueByIdx = {};
+  window._endHoldingsByIdx = {};
   if (isLatestDaySelected) {
     const defl = inflationOn() ? inflFactor(prevTradingDayDate, labels[0]) : 1;
+    const recordEndState = (idx, h, cash) => {
+      window._endHoldingsByIdx[idx] = { h, cash };
+      const yday = repriceAtPrevTradingDay(h, cash);
+      if (yday != null) window._ydayValueByIdx[idx] = yday * defl;
+    };
     const _ulKeys = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl' };
     const _todayRow = daily[daily.length - 1];
     // 9sig: shares from the final snapshot row; park side is either plain
@@ -2615,30 +2623,22 @@ function render() {
     const sigUlKey = _ulKeys[sigUlCol] || 'tqqq';
     const sigShares = finalLog.price > 0 ? finalLog.tqqqVal / finalLog.price : 0;
     const parkKey = (_sig9Base.parkAsset || 'cash').toLowerCase();
-    let y9 = null;
     if (parkKey === 'cash') {
-      y9 = repriceAtPrevTradingDay({ [sigUlKey]: sigShares }, finalLog.cash);
+      recordEndState(0, { [sigUlKey]: sigShares }, finalLog.cash);
     } else if (_todayRow[parkKey] > 0) {
       const h = { [sigUlKey]: sigShares };
       h[parkKey] = (h[parkKey] || 0) + finalLog.cash / _todayRow[parkKey];
-      y9 = repriceAtPrevTradingDay(h, 0);
+      recordEndState(0, h, 0);
     }
-    if (y9 != null) window._ydayValueByIdx[0] = y9 * defl;
     // Consolidated Buy & Hold: pure shares, no cash. (bhKeyName is declared
     // further below — normalize bhKey locally instead of reordering.)
     const _bhK = ['qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'].includes(bhKey) ? bhKey : 'tqqq';
     const bhLast = bhPicked.series[bhPicked.series.length - 1];
-    if (bhLast && bhLast.shares > 0) {
-      const yBh = repriceAtPrevTradingDay({ [_bhK]: bhLast.shares }, 0);
-      if (yBh != null) window._ydayValueByIdx[2] = yBh * defl;
-    }
+    if (bhLast && bhLast.shares > 0) recordEndState(2, { [_bhK]: bhLast.shares }, 0);
     // SMA: full multi-asset end state from the drawdown control points
     // (emitDD is always on for the main SMA line).
     const smaCtlLast = smaDdControls && smaDdControls.length ? smaDdControls[smaDdControls.length - 1] : null;
-    if (smaCtlLast) {
-      const ySma = repriceAtPrevTradingDay(smaCtlLast.h, smaCtlLast.cash);
-      if (ySma != null) window._ydayValueByIdx[8] = ySma * defl;
-    }
+    if (smaCtlLast) recordEndState(8, smaCtlLast.h, smaCtlLast.cash);
   }
 
   // Chart. Series come from the display points (quarter snapshots for a yearly
@@ -3072,8 +3072,31 @@ function render() {
   // nominal and real dollars), and a today-value change between the
   // yesterday-fetch and this draw self-corrects instead of showing a stale
   // pairing.
-  const dayChangeFor = (i, ds, todayVal) => {
-    if (ds && ds._txDay) return txLineDayChange(ds._txDay, todayVal);
+  //
+  // Outside the regular session the same end-state holdings (cached beside
+  // the yesterday values: window._endHoldingsByIdx, window._configEndHoldings,
+  // a custom run's endHoldings) are marked at the funds' latest pre-market or
+  // after-hours prints instead (extendedMoveOf, js/utils.js), and the badge
+  // names that session's move, "(after hours +1.3% · +$74.8K)" (the user,
+  // 2026-11-06: not the previous day's change, the after-hours change). The
+  // session's own change stands while there are no prints, and for a line
+  // holding a fund without one.
+  const endHoldingsFor = (i, ds) => {
+    if (window._endHoldingsByIdx && (i in window._endHoldingsByIdx)) return window._endHoldingsByIdx[i];
+    if (ds && ds._configSub) return null;
+    const cfgId = ds && ds._configId;
+    if (!cfgId) return null;
+    if (window._configEndHoldings && (cfgId in window._configEndHoldings)) return window._configEndHoldings[cfgId];
+    const cr = window._customResults && window._customResults[cfgId];
+    return cr && !cr.error ? cr.endHoldings : null;
+  };
+  const withSession = (delta, session) => delta ? { ...delta, session } : null;
+  const extendedChangeFor = (i, ds, todayVal) => {
+    const end = endHoldingsFor(i, ds);
+    const move = end ? extendedMoveOf(end.h, end.cash) : null;
+    return move ? withSession(computeDayChange(todayVal * move.ratio, todayVal), move.session) : null;
+  };
+  const sessionChangeFor = (i, ds, todayVal) => {
     if (window._ydayValueByIdx && (i in window._ydayValueByIdx)) {
       return computeDayChange(todayVal, window._ydayValueByIdx[i]);
     }
@@ -3090,35 +3113,52 @@ function render() {
     if (cy && !cy.error) return computeDayChange(todayVal, cy.value);
     return null;
   };
+  const dayChangeFor = (i, ds, todayVal) => {
+    if (ds && ds._txDay) return txLineDayChange(ds._txDay, todayVal);
+    return extendedChangeFor(i, ds, todayVal) || sessionChangeFor(i, ds, todayVal);
+  };
   // The real account's sheet records values but no holdings, so its day move
   // is borrowed from the strategy it follows (window._txDay.move, see
   // js/saved-configs.js's txFollowMove): that strategy's own badge percent,
-  // or a Buy & Hold's fixed one.
+  // or a Buy & Hold's fixed one. { pct, session }, the session set when the
+  // move is to an extended-hours print; null without a move.
   const txFollowPct = () => {
     const move = window._txDay.move;
-    if ('pct' in move) return move.pct;
+    if ('pct' in move) {
+      const ext = move.holdings ? extendedMoveOf(move.holdings, 0) : null;
+      return ext ? { pct: (ext.ratio - 1) * 100, session: ext.session } : { pct: move.pct };
+    }
     const last = chart.data.labels.length - 1;
     const i = 'idx' in move ? move.idx : chart.data.datasets.findIndex(d => d._configId === move.cfgId && !d._configSub);
     const delta = i >= 0
       ? dayChangeFor(i, chart.data.datasets[i], chart.data.datasets[i].data[last])
       : dayChangeFor(-1, { _configId: move.cfgId }, move.today); // a library strategy: no line, its run's value
-    return delta ? delta.pct : null;
+    return delta ? { pct: delta.pct, session: delta.session } : null;
   };
   // Portfolio's and Profit's day change: the followed move applied to the
   // latest reading less today's deposit gives yesterday's portfolio, and
-  // yesterday's profit is that less what was in by yesterday. Scaled into the
-  // chart's units (real $ when the inflation toggle is on) through todayVal.
+  // yesterday's profit is that less what was in by yesterday. An
+  // extended-hours move runs the other way, forward from the reading, which
+  // stands at the close. Scaled into the chart's units (real $ when the
+  // inflation toggle is on) through todayVal.
   const txLineDayChange = (line, todayVal) => {
     const day = window._txDay;
-    const pct = day && txFollowPct();
-    if (pct == null) return null;
-    const ydayPortfolio = (day.portfolio - day.flowToday) / (1 + pct / 100);
+    const move = day && txFollowPct();
+    if (!move || move.pct == null) return null;
+    if (move.session) {
+      const printed = day.portfolio * (1 + move.pct / 100);
+      const [today, next] = line === 'actual'
+        ? [day.portfolio, printed]
+        : [day.portfolio - day.invested, printed - day.invested];
+      return withSession(computeDayChange(todayVal * next / today, todayVal), move.session);
+    }
+    const ydayPortfolio = (day.portfolio - day.flowToday) / (1 + move.pct / 100);
     const [today, yday] = line === 'actual'
       ? [day.portfolio, ydayPortfolio]
       : [day.portfolio - day.invested, ydayPortfolio - (day.invested - day.flowToday)];
     return computeDayChange(todayVal, todayVal * yday / today);
   };
-  const deltaLabelText = (delta) => `(${fmtDayChange(delta)})`;
+  const deltaLabelText = (delta) => `(${delta.session ? EXTENDED_SESSION_NAMES[delta.session] + ' ' : ''}${fmtDayChange(delta)})`;
   const endLabelPlugin = {
     id: 'endLabels',
     // Size the reserved right margin to whatever the widest current label
