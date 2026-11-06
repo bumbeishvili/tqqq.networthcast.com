@@ -282,7 +282,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const tall = lines.some(ln => customLineGroup(ln) === name && ln.tall === true);   // a full-height panel whatever its count
     return { name, unit, linear: forcedLinear || unit === 'num' || negative, count, tall };
   });
-  const all = [];
+  const all = [], colors = customLineColors(lines);
   lines.forEach((ln, i) => {
     const hidden = !customLineShown(cfg, ln.key);
     if (hidden && compact) return;
@@ -304,7 +304,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
         broken = false;
       } else broken = true;
     }
-    if (pts.length > 1) all.push({ key: ln.key, label: ln.label, color: ln.color || customLineColorAt(cfg, lines, i), pts, badge: ln.badge || null, unit: spec.unit, spec, hidden });
+    if (pts.length > 1) all.push({ key: ln.key, label: ln.label, color: colors[i], pts, badge: ln.badge || null, unit: spec.unit, spec, hidden });
   });
   window._miniChartHover = null;
   if (!all.length) return '';
@@ -1316,34 +1316,46 @@ document.addEventListener('mousemove', (e) => {
   window._miniHoverActive = true;
 });
 
-// Series colours for the signal mini chart. The first declared line (usually
-// the traded fund's own price) wears the strategy's colour, so it matches that
-// strategy's line on the main chart; the rest come from this palette in fixed
-// order. Every line is on screen at once, so the six were chosen to clear the
-// dataviz validator's floors under ALL pairings: at worst OKLab ΔE 18.2 as
-// seen and 9.5 under protan/deutan simulation (floors 15 and 6). The yellow
-// sits last of the six because it is the one below 3:1 contrast on the panel.
-// The two after it are reserves, also clear of every other entry: a strategy
-// coloured close to two palette entries pushes both to the end, and with six
-// lines declared it would otherwise have to reuse one of them. At render time
-// an entry closer than those floors to the strategy's own colour moves to the
-// end of the order, so it is used only once the others run out. This is what
-// used to put a green "Overextended" line beside a green price line.
-const CUSTOM_MINI_COLORS = ['#4f46e5', '#e34948', '#0d9488', '#a21caf', '#854d0e', '#eda100', '#7788ff', '#ff44bb'];
+// Series colours for the signal mini chart. A line named after a fund (its
+// label starts with the fund's ticker: "TQQQ price", "SPY 430-day return",
+// "SOXL ahead of SOXX") wears that fund's colour, js/data.js FUND_COLORS, the
+// same colour the fund has on the main chart and in every other strategy's
+// chart (the user, 2026-11-06: "consistent colors for all things, like for
+// tqqq price, for soxl price"). Every other line takes this palette by its
+// place among the panel's other such lines, so the first level in a panel is
+// indigo in every strategy. Every line is on screen at once, so the six were
+// chosen to clear the dataviz validator's floors under ALL pairings (OKLab
+// ΔE 15 as seen and 6 under protan/deutan simulation; at worst 16.9 and 7.9)
+// and, each of them, TQQQ's red. Against the other funds a few pairs sit
+// inside the floors (QQQ's blue and the magenta, QLD's violet and the indigo,
+// GLD's gold and the brown), so at render time an entry closer than the floors
+// to a fund colour drawn in the same panel moves to the end of the order for
+// that panel and is used only once the others run out. Nothing wraps: a panel
+// holds six lines at most (readLines), and a fund's line takes none of these.
+const CUSTOM_MINI_COLORS = ['#4f46e5', '#a21caf', '#0d9488', '#854d0e', '#7788ff', '#ea5da9'];
 const LINE_COLOR_FLOORS = { normal: 15, cvd: 6 };
-function customLineColor(cfg, i) {
-  if (i === 0) return cfg.color;
-  const farEnough = c => { const s = colorSeparation(c, cfg.color); return s.normal >= LINE_COLOR_FLOORS.normal && s.cvd >= LINE_COLOR_FLOORS.cvd; };
-  const order = [...CUSTOM_MINI_COLORS.filter(farEnough), ...CUSTOM_MINI_COLORS.filter(c => !farEnough(c))];
-  return order[(i - 1) % order.length];
-}
 // The panel a declared line draws in: its group's name, "" for the first panel.
 function customLineGroup(ln) { return (ln && ln.group) || ''; }
-// A declared line's colour by its place in its own group, so the first line
-// of each panel wears the strategy's colour and the rest take the palette.
-function customLineColorAt(cfg, lines, i) {
-  const group = customLineGroup(lines[i]);
-  let place = 0;
-  for (let j = 0; j < i; j++) if (customLineGroup(lines[j]) === group) place++;
-  return customLineColor(cfg, place);
+// The fund a declared line is named after: the ticker its label starts with
+// ("TQQQ price" → tqqq), null for a level ("250-day median", "Hold SOXL under").
+function fundOfLine(ln) {
+  const m = /^([A-Z]{3,4}) /.exec(ln.label || '');
+  const fund = m && m[1].toLowerCase();
+  return fund && FUND_COLORS[fund] ? fund : null;
+}
+// A colour for every declared line, in order: a fund's for the first line of
+// each fund in a panel, the palette for the rest (a second line of the same
+// fund included), the entries near the panel's fund colours last.
+function customLineColors(lines) {
+  const fundsIn = {};   // group → the fund colours drawn in that panel
+  for (const ln of lines) { const fund = fundOfLine(ln); if (fund) (fundsIn[customLineGroup(ln)] = fundsIn[customLineGroup(ln)] || new Set()).add(FUND_COLORS[fund]); }
+  const clear = (a, b) => { const s = colorSeparation(a, b); return s.normal >= LINE_COLOR_FLOORS.normal && s.cvd >= LINE_COLOR_FLOORS.cvd; };
+  const orderFor = group => { const far = c => [...(fundsIn[group] || [])].every(f => clear(c, f)); return [...CUSTOM_MINI_COLORS.filter(far), ...CUSTOM_MINI_COLORS.filter(c => !far(c))]; };
+  const panels = {};   // group → { funds coloured so far, levels coloured so far, this panel's palette order }
+  return lines.map(ln => {
+    const group = customLineGroup(ln), panel = panels[group] = panels[group] || { funds: new Set(), levels: 0, order: orderFor(group) };
+    const fund = fundOfLine(ln);
+    if (fund && !panel.funds.has(fund)) { panel.funds.add(fund); return FUND_COLORS[fund]; }
+    return panel.order[panel.levels++ % panel.order.length];
+  });
 }

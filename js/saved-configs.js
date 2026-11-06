@@ -73,11 +73,15 @@ function getSavedConfigs() { return savedConfigs; }
 // Saved strategies store their colour on the config (cfg.color). Base
 // strategies are canonical, so their colour override is SESSION-ONLY — it's
 // kept in memory but never persisted, so a refresh restores the default hue.
-const DEFAULT_BASE_COLORS = { '9sig': '#45818e', 'bh': '#ff2d2e', 'invested': '#bf9000', 'sma': '#c64eff' };
+// Buy & Hold's default is the picked fund's colour (js/data.js FUND_COLORS),
+// so a saved Buy & Hold SOXL is orange like every other SOXL line.
+const DEFAULT_BASE_COLORS = { '9sig': '#45818e', 'invested': '#bf9000', 'sma': '#c64eff' };
 const BASE_COLOR_DATASET_IDX = { '9sig': 0, 'bh': 2, 'invested': 7, 'sma': 8 };
 window._lineColorOverrides = {};
+function bhUnderlying() { return ((document.getElementById('select-bh-underlying') || {}).value) || 'tqqq'; }
 function getBaseColor(type) {
   const ov = window._lineColorOverrides || {};
+  if (type === 'bh') return ov.bh || FUND_COLORS[bhUnderlying()];
   return ov[type] || DEFAULT_BASE_COLORS[type] || '#7a7aa6';
 }
 function setBaseColor(type, color) {
@@ -786,6 +790,9 @@ which timing fired. A rule with no line is a bug. Declare them as lines:
   Declare only levels a rule actually uses, in raw units, no rescaling.
 - The price being compared (the fund your rule reads, which may differ from the fund you trade) is
   the FIRST line, so the user can watch it cross your levels: { key: "assetPrice", label: "TQQQ price" }.
+- Colours are the chart's: a line whose label starts with a fund's ticker ("TQQQ price", "SPY 430-day
+  return", "TQQQ ahead of QQQ") draws in that fund's colour, the same colour the fund has on every
+  chart; every other line takes the chart's level palette in the order declared.
 - A rule on a percent that is no price (a volatility, a share of the account) draws in percent: give
   its lines unit: "%" and log the percent itself (40 for 40%). An index reading that is neither (a
   stress index such as data.nfci) takes unit: "num". Do not mix units inside one group.
@@ -1182,7 +1189,7 @@ function customWorkerMain() {
         if (typeof l.priceKey === 'string' && l.priceKey.trim()) line.priceKey = l.priceKey.trim().slice(0, 40);   // the log key with the level's price, shown in brackets (see LINES in the prompt)
       }
       var g = line.group || '';
-      if (!(g in perGroup)) { if (groups >= 6) continue; perGroup[g] = 0; groups++; }   // 6 panels: TQQQ VS QQQ, Mon Turn, Soxl Acc draws price, lead, SOXL price, SOXL lead, Monday and NFCI
+      if (!(g in perGroup)) { if (groups >= 6) continue; perGroup[g] = 0; groups++; }   // 6 panels: SOXL, TQQQ VS QQQ, Mon Turns draws price, lead, SOXL price, SOXL lead, Monday and NFCI
       if (perGroup[g] >= 6) continue;
       perGroup[g]++;
       out.push(line);
@@ -2144,7 +2151,7 @@ function appendConfigDatasets(chart, ctx) {
 // like saved-config lines; the endLabelPlugin / tooltip / range-select all pick
 // them up generically. Colours, shared with the desktop widget's top chart
 // (js/widget-page.js): teal, a neutral slate for the money in, and the signal
-// palette's purple for Profit (red would read as a loss). By colorSeparation
+// chart's magenta (js/signal-chart.js CUSTOM_MINI_COLORS) for Profit. By colorSeparation
 // the slate sits at least 20 apart as seen and 11 in the worst colour-blind
 // view from every line this chart draws; the widget's earlier orange sat 4
 // from 9sig's Cash and 3 (colour-blind) from Buy & Hold TQQQ.

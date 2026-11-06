@@ -2787,6 +2787,7 @@ function render() {
     chart.data.datasets[0].data = totalD;
     chart.data.datasets[1].data = tqqqValD;
     chart.data.datasets[2].data = bhActiveD;
+    chart.data.datasets[2].borderColor = FUND_COLORS[bhKey];   // the picked fund's colour; a session override (applyBaseColorOverrides below) still wins
     // Datasets 3 (B&H QQQ), 4 (B&H SPY), 9 (B&H QLD), 10 (B&H SSO) are kept
     // zeroed and hidden — dataset 2 above serves as the consolidated B&H slot now.
     chart.data.datasets[3].data = []; chart.data.datasets[3].hidden = true;
@@ -2816,20 +2817,23 @@ function render() {
   } else {
   const ctx = document.getElementById('mainChart').getContext('2d');
 
-  // Hue map — Orion light theme (each chosen for contrast on a white plot area):
+  // Hue map — Orion light theme (each chosen for contrast on a white plot area).
+  // The Buy & Hold slots wear their fund's colour (js/data.js FUND_COLORS, the
+  // same colour the fund's line has on a signal chart); slot 2 follows the
+  // fund picked in #select-bh-underlying at render.
   //   0  9sig          teal        #45818e
   //   1  9sig Holding  deep blue   #023aff
-  //   2  B&H TQQQ      red         #ff2d2e
-  //   3  B&H QQQ       green       #00b929
-  //   4  B&H SPY       pink        #ff708b
+  //   2  B&H (picked)  the fund's  FUND_COLORS[bhKey]
+  //   3  B&H QQQ       blue        FUND_COLORS.qqq
+  //   4  B&H SPY       green       FUND_COLORS.spy
   //   5  9sig Target   orange      #d9631a
   //   6  9sig Cash     dark amber  #b06000
   //   7  Invested Comp faint navy  rgba(56,56,116,0.35)
   //   8  SMA           purple-deep #c64eff
-  //  10  B&H QLD       teal        #0891b2
-  //  11  B&H SSO       violet      #7c3aed
-  //  12  B&H SPXL      rose        #e11d48
-  const lineColors = ["#45818e", "#023aff", "#ff2d2e", "#00b929", "#ff708b", "#d9631a", "#b06000", "#bf9000", "#c64eff", "#0891b2", "#7c3aed", "#e11d48"];
+  //   9  B&H QLD       violet      FUND_COLORS.qld
+  //  10  B&H SSO       fuchsia     FUND_COLORS.sso
+  //  11  B&H SPXL      pink        FUND_COLORS.spxl
+  const lineColors = ["#45818e", "#023aff", FUND_COLORS[bhKey], FUND_COLORS.qqq, FUND_COLORS.spy, "#d9631a", "#b06000", "#bf9000", "#c64eff", FUND_COLORS.qld, FUND_COLORS.sso, FUND_COLORS.spxl];
   // Day-over-day change badge colors — mirror styles.css's --green-text/
   // --red-text. Hardcoded to match this file's existing convention for canvas
   // colors (lineColors above); there's no CSS-custom-property-reading idiom
@@ -3776,11 +3780,11 @@ function render() {
           hidden: true
         },
         {
-          // Consolidated Buy & Hold slot — label + data swap based on
+          // Consolidated Buy & Hold slot — label, data and colour swap based on
           // #select-bh-underlying. Default = TQQQ.
           label: bhPicked.label,
           data: bhActiveD,
-          borderColor: "#ff2d2e",
+          borderColor: FUND_COLORS[bhKey],
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -3792,7 +3796,7 @@ function render() {
         {
           label: 'B&H QQQ',
           data: [],
-          borderColor: "#00b929",
+          borderColor: FUND_COLORS.qqq,
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -3805,7 +3809,7 @@ function render() {
         {
           label: 'B&H SPY',
           data: [],
-          borderColor: "#ff708b",
+          borderColor: FUND_COLORS.spy,
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -3868,7 +3872,7 @@ function render() {
         {
           label: 'B&H QLD',
           data: [],
-          borderColor: '#06b6d4',
+          borderColor: FUND_COLORS.qld,
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -3881,7 +3885,7 @@ function render() {
         {
           label: 'B&H SSO',
           data: [],
-          borderColor: '#c084fc',
+          borderColor: FUND_COLORS.sso,
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,
@@ -3894,7 +3898,7 @@ function render() {
         {
           label: 'B&H SPXL',
           data: [],
-          borderColor: '#f43f5e',
+          borderColor: FUND_COLORS.spxl,
           backgroundColor: 'transparent',
           fill: false,
           tension: 0.3,

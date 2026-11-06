@@ -14,8 +14,7 @@
 // widget/tqqq.widget frames this page.
 (function widgetPage() {
   const REFRESH_MS = 5 * 60 * 1000;           // re-reads the sheet and the market data; the data files change hourly
-  const WIDGET_ENTRY = 52;                     // the strategy the widget tracks: TQQQ VS QQQ, Mon Turn, Soxl Acc (the user, 2026-11-06; #50 before)
-  const DEFAULT_COLOR = '#e879f9';             // a library copy's colour when the link gives none
+  const WIDGET_ENTRY = 52;                     // the strategy the widget tracks: SOXL, TQQQ VS QQQ, Mon Turns (the user, 2026-11-06; #50 before)
   const PORTFOLIO_PX = 190;                    // height of the top chart
   const BOTTOM_PX = 240;                       // the bottom row's share of a full screen; the intraday chart's height until the signal chart draws
   const INTRADAY_AXIS_PX = 20;                 // the intraday page's room under its plot (its embed marginBottom)
@@ -26,11 +25,10 @@
   // layout.
   // The top chart's three lines wear the main chart's colours for the same
   // lines (js/saved-configs.js's TX_ACTUAL_COLOR / TX_INVESTED_COLOR /
-  // TX_PROFIT_COLOR): teal, slate and the palette's purple (js/signal-chart.js's
-  // CUSTOM_MINI_COLORS; its turn in the palette would be red, which reads as a
-  // loss). By colorSeparation every pair is at least 25 apart as seen and 16
-  // in the worst colour-blind view; the indigo Invested had before sat 18 and
-  // 9 from the purple, and looked alike.
+  // TX_PROFIT_COLOR): teal, slate and the signal chart's magenta
+  // (js/signal-chart.js's CUSTOM_MINI_COLORS). By colorSeparation every pair
+  // is at least 25 apart as seen and 16 in the worst colour-blind view; the
+  // indigo Invested had before sat 18 and 9 from the magenta, and looked alike.
   // The top chart wears the main chart's "My portfolio" colour.
   const PORTFOLIO = { id: 'widget-portfolio', color: TX_ACTUAL_COLOR };
   const $ = id => document.getElementById(id);
@@ -100,17 +98,18 @@
     _customDataSent = false;
   }
 
-  // ---- the strategy: WIDGET_ENTRY, with the settings and colour of its copy in
-  // the link when the link has one (the user, 2026-10-30: "make sure widget
-  // tracks the new strategy"). Other strategies in the link are not shown. A
-  // library copy runs the current library code, as the site does for a shared
-  // copy (withCurrentCustomCode).
+  // ---- the strategy: WIDGET_ENTRY, with the settings of its copy in the link
+  // when the link has one (the user, 2026-10-30: "make sure widget tracks the
+  // new strategy"). Other strategies in the link are not shown. A library copy
+  // runs the current library code, as the site does for a shared copy
+  // (withCurrentCustomCode). The chart's colours are the site's own (a fund's
+  // colour for its line, the level palette for the rest), not the copy's.
   function pickStrategy(cfgs) {
     const customs = (Array.isArray(cfgs) ? cfgs : []).filter(c => c && c.type === 'custom' && c.code);
     const shared = customs.find(c => libraryEntryOf(c.code) === WIDGET_ENTRY);
     const base = shared ? withCurrentCustomCode([shared])[0]
-      : { type: 'custom', name: null, params: {}, color: DEFAULT_COLOR, code: STRATEGY_CODE[WIDGET_ENTRY] };
-    return { ...base, id: 'widget-strategy', color: base.color || DEFAULT_COLOR };
+      : { type: 'custom', name: null, params: {}, code: STRATEGY_CODE[WIDGET_ENTRY] };
+    return { ...base, id: 'widget-strategy' };
   }
   // The site's default money: its $10,000 from the given day to today.
   function defaultMoney(entryDate) {

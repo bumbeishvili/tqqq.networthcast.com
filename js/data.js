@@ -136,6 +136,18 @@ function applyLiveQuotes(dailyArr, highLowRows, live) {
   return { date, asOf, applied, skipped, appended, extended };
 }
 
+// One colour per fund, wherever a fund's own series draws: the main chart's
+// Buy & Hold line, a signal chart's line named after the fund ("TQQQ price",
+// "SPY 430-day return"; js/signal-chart.js fundOfLine) on the site and in the
+// desktop widget. TQQQ keeps the red its Buy & Hold line has always had; the
+// rest were picked against the signal chart's level palette (js/signal-chart.js
+// CUSTOM_MINI_COLORS) with js/utils.js colorSeparation, so a fund's line and
+// the levels beside it stay apart as seen and in colour-blind views (OKLab ΔE
+// 15 and 6, the dataviz validator's floors), as do the funds that share a
+// panel in the library (SPY and QQQ). TQQQ beside SPY or GLD is a red/green
+// pair, told apart by the end labels.
+const FUND_COLORS = { tqqq: '#ff2d2e', qqq: '#0b6399', spy: '#00b929', qld: '#7c3aed', sso: '#c026d3', spxl: '#be185d', sqqq: '#7f1d1d', gld: '#a16207', soxl: '#e8890b', soxx: '#0ea5e9' };
+
 // Daily highs and lows (data/<fund>-hl.tsv, written by scripts/update_data.py) of the
 // funds the Turnaround Monday rule can read. A row also carries its bar's own
 // close, and a high or low goes onto the price file's close of that day as a
