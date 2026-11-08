@@ -3695,9 +3695,9 @@ CODE[52] = withSoxlPile(CODE[50], { name: "SOXL, TQQQ VS QQQ, Mon Turns" });
 // new strategy, call soxl, tqqq, qqq - 1983 fit"): #52 with the settings the
 // Fit button (Best CAGR) found on the whole chart, Q1 1953 to date, as its
 // defaults (the name is the user's; the fit's 29.5% → 55.3% note matches the
-// 1953 start with a $100K lump sum), sixteen of them changed from #52's, with the ceiling's SQQQ limit
-// set to the defence's 18 days by the user (the fit's 61 could never be
-// reached under that cap); the rules are the same. Built
+// 1953 start with a $100K lump sum), sixteen of them changed from #52's. The
+// ceiling's SQQQ limit of 61 stays as fitted at the user's call, though the
+// defence's 18-day cap cuts every SQQQ hold first. The rules are the same. Built
 // from #52's text at load, so a change to #47, #50 or #52 reaches it. Three of
 // the fitted values lie between the dropdown's options (58.2%, −33%, 101%:
 // the Fit's between-options stage); the dropdown shows such a value in its
@@ -3717,7 +3717,7 @@ function withDefaults(base, spec) {
   return t;
 }
 CODE[53] = withDefaults(CODE[52], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: {
-  lookbackDays: 543, topLead: 123, topDays: 18, backLead: 34, floorLead: 6, floorHold: "sqqq", reentryLead: 65, reentryCloses: 44, deepLead: -32.5,
+  lookbackDays: 543, topLead: 123, topDays: 61, backLead: 34, floorLead: 6, floorHold: "sqqq", reentryLead: 65, reentryCloses: 44, deepLead: -32.5,
   overPct: 58.2, overWindow: 236, sqqqMaxDays: 18, deepGuard: 52, nfciVeto: 0.75, soxlLeadEnter: -33, soxlLeadExit: 101 } });
 
 // ===== The SMA strategy as code =============================================
