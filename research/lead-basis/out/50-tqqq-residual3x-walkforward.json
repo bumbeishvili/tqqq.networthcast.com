@@ -1,0 +1,305 @@
+{
+ "n": 50,
+ "lead": "tqqq",
+ "basis": "residual3x",
+ "mode": "walkforward",
+ "tier": "lead",
+ "starts": 4,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "startAvgDays",
+   "count": 7,
+   "min": 0,
+   "max": 120
+  },
+  {
+   "id": "topLead",
+   "count": 169,
+   "min": -58.8,
+   "max": -13.7
+  },
+  {
+   "id": "backLead",
+   "count": 168,
+   "min": -58.8,
+   "max": -13.7
+  },
+  {
+   "id": "floorLead",
+   "count": 169,
+   "min": -58.8,
+   "max": -13.7
+  },
+  {
+   "id": "reentryLead",
+   "count": 168,
+   "min": -58.8,
+   "max": -13.7
+  },
+  {
+   "id": "deepLead",
+   "count": 169,
+   "min": -58.8,
+   "max": -13.7
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "folds": [
+  {
+   "year": 2016,
+   "fitCagr": 113.4,
+   "fitDd": 40.8,
+   "params": {
+    "lookbackDays": 660,
+    "startAvgDays": 0,
+    "topLead": -16.6,
+    "backLead": -14.1,
+    "floorLead": -29.7,
+    "reentryLead": -56.9,
+    "deepLead": -31
+   },
+   "test": {
+    "cagr": 18.87,
+    "dd": 34.12
+   },
+   "bhTqqq": 18.9
+  },
+  {
+   "year": 2017,
+   "fitCagr": 90.1,
+   "fitDd": 44.5,
+   "params": {
+    "lookbackDays": 590,
+    "startAvgDays": 65,
+    "topLead": -15,
+    "backLead": -15,
+    "floorLead": -26.7,
+    "reentryLead": -28.9,
+    "deepLead": -28.4
+   },
+   "test": {
+    "cagr": 160.94,
+    "dd": 9.07
+   },
+   "bhTqqq": 115.3
+  },
+  {
+   "year": 2018,
+   "fitCagr": 114.9,
+   "fitDd": 31.9,
+   "params": {
+    "lookbackDays": 960,
+    "startAvgDays": 120,
+    "topLead": -27.8,
+    "backLead": -46.2,
+    "floorLead": -27.8,
+    "reentryLead": -27.5,
+    "deepLead": -28.7
+   },
+   "test": {
+    "cagr": 20.78,
+    "dd": 58.08
+   },
+   "bhTqqq": -23.8
+  },
+  {
+   "year": 2019,
+   "fitCagr": 105.2,
+   "fitDd": 43.5,
+   "params": {
+    "lookbackDays": 756,
+    "startAvgDays": 90,
+    "topLead": -19.3,
+    "backLead": -14.4,
+    "floorLead": -25.9,
+    "reentryLead": -17.4,
+    "deepLead": -31
+   },
+   "test": {
+    "cagr": 131.73,
+    "dd": 30.5
+   },
+   "bhTqqq": 131.7
+  },
+  {
+   "year": 2020,
+   "fitCagr": 94.7,
+   "fitDd": 43.5,
+   "params": {
+    "lookbackDays": 720,
+    "startAvgDays": 10,
+    "topLead": -20.4,
+    "backLead": -20.1,
+    "floorLead": -27.1,
+    "reentryLead": -42.4,
+    "deepLead": -30.9
+   },
+   "test": {
+    "cagr": 631.76,
+    "dd": 39.59
+   },
+   "bhTqqq": 100.6
+  },
+  {
+   "year": 2021,
+   "fitCagr": 150.4,
+   "fitDd": 41.1,
+   "params": {
+    "lookbackDays": 360,
+    "startAvgDays": 40,
+    "topLead": 9999,
+    "backLead": -13.7,
+    "floorLead": -15,
+    "reentryLead": -24.3,
+    "deepLead": -29.7
+   },
+   "test": {
+    "cagr": 208.87,
+    "dd": 21.03
+   },
+   "bhTqqq": 92.8
+  },
+  {
+   "year": 2022,
+   "fitCagr": 208.2,
+   "fitDd": 34.1,
+   "params": {
+    "lookbackDays": 300,
+    "startAvgDays": 90,
+    "topLead": 9999,
+    "backLead": -44.2,
+    "floorLead": -15.8,
+    "reentryLead": -22.8,
+    "deepLead": -25.2
+   },
+   "test": {
+    "cagr": -44.72,
+    "dd": 54.81
+   },
+   "bhTqqq": -80.1
+  },
+  {
+   "year": 2023,
+   "fitCagr": 187.5,
+   "fitDd": 40.8,
+   "params": {
+    "lookbackDays": 660,
+    "startAvgDays": 90,
+    "topLead": -20.9,
+    "backLead": -47,
+    "floorLead": -22.8,
+    "reentryLead": -48,
+    "deepLead": -47.3
+   },
+   "test": {
+    "cagr": 224.54,
+    "dd": 15.86
+   },
+   "bhTqqq": 209.9
+  },
+  {
+   "year": 2024,
+   "fitCagr": 238.6,
+   "fitDd": 28.3,
+   "params": {
+    "lookbackDays": 252,
+    "startAvgDays": 90,
+    "topLead": -15.8,
+    "backLead": -13.7,
+    "floorLead": -13.7,
+    "reentryLead": -19.3,
+    "deepLead": -30.6
+   },
+   "test": {
+    "cagr": 38.35,
+    "dd": 23.2
+   },
+   "bhTqqq": 67
+  },
+  {
+   "year": 2025,
+   "fitCagr": 249.6,
+   "fitDd": 28.3,
+   "params": {
+    "lookbackDays": 252,
+    "startAvgDays": 90,
+    "topLead": -16.6,
+    "backLead": -13.7,
+    "floorLead": -13.7,
+    "reentryLead": -17.5,
+    "deepLead": -30.6
+   },
+   "test": {
+    "cagr": -6.16,
+    "dd": 28.39
+   },
+   "bhTqqq": 35.5
+  },
+  {
+   "year": 2026,
+   "fitCagr": 300.5,
+   "fitDd": 33.1,
+   "params": {
+    "lookbackDays": 600,
+    "startAvgDays": 20,
+    "topLead": -43.8,
+    "backLead": -17.9,
+    "floorLead": -45.6,
+    "reentryLead": -45.4,
+    "deepLead": -46.2
+   },
+   "test": {
+    "cagr": 11.03,
+    "dd": 40.09
+   },
+   "bhTqqq": 0.5
+  }
+ ],
+ "chained": {
+  "from": "2016-01-04",
+  "to": "2026-11-06",
+  "cagr": 76.5,
+  "bhTqqq": 34.4
+ },
+ "halves": {
+  "fitH1": {
+   "cagr": 92.8,
+   "params": {
+    "lookbackDays": 920,
+    "startAvgDays": 20,
+    "topLead": -27,
+    "backLead": -20.9,
+    "floorLead": -24.4,
+    "reentryLead": -27.7,
+    "deepLead": -27.6
+   },
+   "testH2": {
+    "cagr": 63.53,
+    "dd": 81.26
+   }
+  },
+  "fitH2": {
+   "cagr": 196.4,
+   "params": {
+    "lookbackDays": 590,
+    "startAvgDays": 20,
+    "topLead": -43.2,
+    "backLead": -43.2,
+    "floorLead": -45,
+    "reentryLead": -45.4,
+    "deepLead": -44.4
+   },
+   "testH1": {
+    "cagr": 48.52,
+    "dd": 40.78
+   }
+  }
+ },
+ "seconds": 2167
+}

@@ -1,0 +1,358 @@
+{
+ "n": 50,
+ "lead": "tqqq",
+ "basis": "ratioMed",
+ "mode": "insample",
+ "tier": "lead",
+ "starts": 16,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "startAvgDays",
+   "count": 7,
+   "min": 0,
+   "max": 120
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -52.9,
+   "max": 78.9
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -52.9,
+   "max": 78.9
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -52.9,
+   "max": 78.9
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -52.9,
+   "max": 78.9
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -52.9,
+   "max": 78.9
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "asShipped": {
+  "cagr": 66.96,
+  "dd": 53
+ },
+ "fit": {
+  "cagr": 119.68,
+  "dd": 47.39,
+  "params": {
+   "lookbackDays": 252,
+   "startAvgDays": 120,
+   "topLead": 37.4,
+   "backLead": 14.3,
+   "floorLead": -5.9,
+   "reentryLead": -5.3,
+   "deepLead": -21.9
+  },
+  "starts": [
+   {
+    "cagr": 104.14,
+    "dd": 60.17,
+    "params": {
+     "lookbackDays": 440,
+     "startAvgDays": 65,
+     "topLead": 78.9,
+     "backLead": 25.2,
+     "floorLead": 12.1,
+     "reentryLead": 56.8,
+     "deepLead": -21.9
+    },
+    "ms": 150173
+   },
+   {
+    "cagr": 119.68,
+    "dd": 47.39,
+    "params": {
+     "lookbackDays": 252,
+     "startAvgDays": 120,
+     "topLead": 37.4,
+     "backLead": 14.3,
+     "floorLead": -5.9,
+     "reentryLead": -5.3,
+     "deepLead": -21.9
+    },
+    "ms": 217354
+   },
+   {
+    "cagr": 104.01,
+    "dd": 46.36,
+    "params": {
+     "lookbackDays": 960,
+     "startAvgDays": 0,
+     "topLead": 51.5,
+     "backLead": 46.2,
+     "floorLead": 26.6,
+     "reentryLead": 20.5,
+     "deepLead": 25.9
+    },
+    "ms": 266424
+   },
+   {
+    "cagr": 98.29,
+    "dd": 58.04,
+    "params": {
+     "lookbackDays": 840,
+     "startAvgDays": 90,
+     "topLead": 78.9,
+     "backLead": 5.2,
+     "floorLead": 1.9,
+     "reentryLead": 52.1,
+     "deepLead": 12.4
+    },
+    "ms": 195754
+   },
+   {
+    "cagr": 106.16,
+    "dd": 47.53,
+    "params": {
+     "lookbackDays": 580,
+     "startAvgDays": 0,
+     "topLead": 45.5,
+     "backLead": 50.5,
+     "floorLead": 18.9,
+     "reentryLead": 1,
+     "deepLead": 22.6
+    },
+    "ms": 184310
+   },
+   {
+    "cagr": 106.5,
+    "dd": 59.78,
+    "params": {
+     "lookbackDays": 620,
+     "startAvgDays": 40,
+     "topLead": 78.9,
+     "backLead": 54.9,
+     "floorLead": 23.6,
+     "reentryLead": 3.7,
+     "deepLead": 31.2
+    },
+    "ms": 296676
+   },
+   {
+    "cagr": 109.84,
+    "dd": 46.45,
+    "params": {
+     "lookbackDays": 880,
+     "startAvgDays": 65,
+     "topLead": 55.6,
+     "backLead": 33.8,
+     "floorLead": 30.1,
+     "reentryLead": 37.6,
+     "deepLead": -2.9
+    },
+    "ms": 135205
+   },
+   {
+    "cagr": 100.96,
+    "dd": 58.04,
+    "params": {
+     "lookbackDays": 920,
+     "startAvgDays": 65,
+     "topLead": 54.9,
+     "backLead": -0.3,
+     "floorLead": 33.3,
+     "reentryLead": 39.5,
+     "deepLead": -2.3
+    },
+    "ms": 129454
+   },
+   {
+    "cagr": 96.78,
+    "dd": 40.78,
+    "params": {
+     "lookbackDays": 1008,
+     "startAvgDays": 40,
+     "topLead": 15.6,
+     "backLead": 6.6,
+     "floorLead": 47.4,
+     "reentryLead": 33.8,
+     "deepLead": 24.6
+    },
+    "ms": 81198
+   },
+   {
+    "cagr": 101.33,
+    "dd": 40.78,
+    "params": {
+     "lookbackDays": 800,
+     "startAvgDays": 40,
+     "topLead": 49.3,
+     "backLead": -52.9,
+     "floorLead": 40.4,
+     "reentryLead": 44.7,
+     "deepLead": -5.9
+    },
+    "ms": 40006
+   },
+   {
+    "cagr": 103.41,
+    "dd": 40.78,
+    "params": {
+     "lookbackDays": 920,
+     "startAvgDays": 90,
+     "topLead": 54.9,
+     "backLead": 33.3,
+     "floorLead": 24.2,
+     "reentryLead": 7.6,
+     "deepLead": 25.9
+    },
+    "ms": 59038
+   },
+   {
+    "cagr": 109.12,
+    "dd": 58.57,
+    "params": {
+     "lookbackDays": 880,
+     "startAvgDays": 40,
+     "topLead": 50.5,
+     "backLead": 48.6,
+     "floorLead": 11,
+     "reentryLead": 39.5,
+     "deepLead": -2.9
+    },
+    "ms": 102370
+   },
+   {
+    "cagr": 105.9,
+    "dd": 60.21,
+    "params": {
+     "lookbackDays": 700,
+     "startAvgDays": 120,
+     "topLead": 53.4,
+     "backLead": -11.8,
+     "floorLead": 3,
+     "reentryLead": -9,
+     "deepLead": 6.6
+    },
+    "ms": 98255
+   },
+   {
+    "cagr": 91.61,
+    "dd": 62.01,
+    "params": {
+     "lookbackDays": 680,
+     "startAvgDays": 10,
+     "topLead": 9999,
+     "backLead": 44.4,
+     "floorLead": 2.5,
+     "reentryLead": -5.3,
+     "deepLead": 5.6
+    },
+    "ms": 217478
+   },
+   {
+    "cagr": 104.27,
+    "dd": 44.08,
+    "params": {
+     "lookbackDays": 800,
+     "startAvgDays": 120,
+     "topLead": 8.1,
+     "backLead": 38.5,
+     "floorLead": 40.4,
+     "reentryLead": -2.3,
+     "deepLead": 39.5
+    },
+    "ms": 115833
+   },
+   {
+    "cagr": 100.91,
+    "dd": 52.14,
+    "params": {
+     "lookbackDays": 756,
+     "startAvgDays": 20,
+     "topLead": 52.1,
+     "backLead": 36.2,
+     "floorLead": 8.9,
+     "reentryLead": 25.2,
+     "deepLead": 53.4
+    },
+    "ms": 46826
+   }
+  ]
+ },
+ "holdout2026": {
+  "cagr": 46.33,
+  "dd": 29.42
+ },
+ "halves": {
+  "h1": {
+   "cagr": 87.96,
+   "dd": 44.83
+  },
+  "h2": {
+   "cagr": 155.36,
+   "dd": 47.39
+  }
+ },
+ "plateau": {
+  "topLead": {
+   "at": 37.4,
+   "neighbours": [
+    114.98,
+    115.73,
+    119.68,
+    114.96
+   ]
+  },
+  "backLead": {
+   "at": 14.3,
+   "neighbours": [
+    112.41,
+    112.41,
+    119.68,
+    118.35
+   ]
+  },
+  "floorLead": {
+   "at": -5.9,
+   "neighbours": [
+    111.98,
+    117.51,
+    115.53,
+    116.38
+   ]
+  },
+  "reentryLead": {
+   "at": -5.3,
+   "neighbours": [
+    116.43,
+    117.51,
+    116.05,
+    109.5
+   ]
+  },
+  "deepLead": {
+   "at": -21.9,
+   "neighbours": [
+    119.38,
+    117.98,
+    108.79,
+    103.37
+   ]
+  }
+ },
+ "seconds": 2337
+}

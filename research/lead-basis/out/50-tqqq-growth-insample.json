@@ -1,0 +1,358 @@
+{
+ "n": 50,
+ "lead": "tqqq",
+ "basis": "growth",
+ "mode": "insample",
+ "tier": "lead",
+ "starts": 16,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "startAvgDays",
+   "count": 7,
+   "min": 0,
+   "max": 120
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "asShipped": {
+  "cagr": 139.71,
+  "dd": 40.78
+ },
+ "fit": {
+  "cagr": 146.67,
+  "dd": 52,
+  "params": {
+   "lookbackDays": 600,
+   "startAvgDays": 90,
+   "topLead": 98.1,
+   "backLead": 85.1,
+   "floorLead": 60.5,
+   "reentryLead": 67.6,
+   "deepLead": 38.3
+  },
+  "starts": [
+   {
+    "cagr": 141.73,
+    "dd": 40.78,
+    "params": {
+     "lookbackDays": 550,
+     "startAvgDays": 65,
+     "topLead": 125.4,
+     "backLead": 25.1,
+     "floorLead": 8.1,
+     "reentryLead": 25.1,
+     "deepLead": -33
+    },
+    "ms": 85136
+   },
+   {
+    "cagr": 123.35,
+    "dd": 52,
+    "params": {
+     "lookbackDays": 540,
+     "startAvgDays": 90,
+     "topLead": 59.8,
+     "backLead": 127.3,
+     "floorLead": 45.7,
+     "reentryLead": 69.8,
+     "deepLead": 32.7
+    },
+    "ms": 136639
+   },
+   {
+    "cagr": 125.53,
+    "dd": 60.17,
+    "params": {
+     "lookbackDays": 590,
+     "startAvgDays": 0,
+     "topLead": 145.9,
+     "backLead": 94.9,
+     "floorLead": 58.6,
+     "reentryLead": 93.8,
+     "deepLead": 34.4
+    },
+    "ms": 114414
+   },
+   {
+    "cagr": 146.67,
+    "dd": 52,
+    "params": {
+     "lookbackDays": 600,
+     "startAvgDays": 90,
+     "topLead": 98.1,
+     "backLead": 85.1,
+     "floorLead": 60.5,
+     "reentryLead": 67.6,
+     "deepLead": 38.3
+    },
+    "ms": 206490
+   },
+   {
+    "cagr": 132.96,
+    "dd": 55.3,
+    "params": {
+     "lookbackDays": 600,
+     "startAvgDays": 90,
+     "topLead": 93.8,
+     "backLead": 110.4,
+     "floorLead": 32.7,
+     "reentryLead": 10.9,
+     "deepLead": 33.6
+    },
+    "ms": 140033
+   },
+   {
+    "cagr": 121.88,
+    "dd": 58.08,
+    "params": {
+     "lookbackDays": 700,
+     "startAvgDays": 40,
+     "topLead": 153.4,
+     "backLead": 40.3,
+     "floorLead": 31.4,
+     "reentryLead": 27.8,
+     "deepLead": -4.2
+    },
+    "ms": 301156
+   },
+   {
+    "cagr": 128.77,
+    "dd": 52,
+    "params": {
+     "lookbackDays": 540,
+     "startAvgDays": 65,
+     "topLead": 123.6,
+     "backLead": 25.5,
+     "floorLead": 36.9,
+     "reentryLead": 38.9,
+     "deepLead": 30.1
+    },
+    "ms": 147340
+   },
+   {
+    "cagr": 114.14,
+    "dd": 52,
+    "params": {
+     "lookbackDays": 640,
+     "startAvgDays": 65,
+     "topLead": 65.3,
+     "backLead": -12.5,
+     "floorLead": 120.4,
+     "reentryLead": 67.2,
+     "deepLead": 41.3
+    },
+    "ms": 186994
+   },
+   {
+    "cagr": 125.28,
+    "dd": 52,
+    "params": {
+     "lookbackDays": 620,
+     "startAvgDays": 40,
+     "topLead": 89.1,
+     "backLead": 61.3,
+     "floorLead": 59.8,
+     "reentryLead": 57.4,
+     "deepLead": 43.5
+    },
+    "ms": 104409
+   },
+   {
+    "cagr": 138.29,
+    "dd": 52,
+    "params": {
+     "lookbackDays": 590,
+     "startAvgDays": 65,
+     "topLead": 106.3,
+     "backLead": 75.6,
+     "floorLead": 71.9,
+     "reentryLead": 67.6,
+     "deepLead": 40.3
+    },
+    "ms": 111572
+   },
+   {
+    "cagr": 116.41,
+    "dd": 60.17,
+    "params": {
+     "lookbackDays": 500,
+     "startAvgDays": 120,
+     "topLead": 108.6,
+     "backLead": 35.1,
+     "floorLead": 37.8,
+     "reentryLead": 68.6,
+     "deepLead": 108.6
+    },
+    "ms": 35388
+   },
+   {
+    "cagr": 118.67,
+    "dd": 40.78,
+    "params": {
+     "lookbackDays": 620,
+     "startAvgDays": 20,
+     "topLead": 87.5,
+     "backLead": 34.7,
+     "floorLead": 24,
+     "reentryLead": -4.2,
+     "deepLead": 16
+    },
+    "ms": 59140
+   },
+   {
+    "cagr": 114.92,
+    "dd": 52,
+    "params": {
+     "lookbackDays": 460,
+     "startAvgDays": 120,
+     "topLead": 114.7,
+     "backLead": 21.3,
+     "floorLead": 23.3,
+     "reentryLead": 29.8,
+     "deepLead": 16
+    },
+    "ms": 75920
+   },
+   {
+    "cagr": 118.31,
+    "dd": 52.14,
+    "params": {
+     "lookbackDays": 520,
+     "startAvgDays": 40,
+     "topLead": 53.8,
+     "backLead": 51.5,
+     "floorLead": 33.6,
+     "reentryLead": 32.7,
+     "deepLead": 32.3
+    },
+    "ms": 70721
+   },
+   {
+    "cagr": 128.35,
+    "dd": 60.17,
+    "params": {
+     "lookbackDays": 550,
+     "startAvgDays": 65,
+     "topLead": 125.4,
+     "backLead": 51.5,
+     "floorLead": 67.6,
+     "reentryLead": 132.2,
+     "deepLead": 25.5
+    },
+    "ms": 99048
+   },
+   {
+    "cagr": 116.94,
+    "dd": 60.17,
+    "params": {
+     "lookbackDays": 590,
+     "startAvgDays": 20,
+     "topLead": 122.6,
+     "backLead": 36.3,
+     "floorLead": 29.8,
+     "reentryLead": 91.9,
+     "deepLead": 27.2
+    },
+    "ms": 38373
+   }
+  ]
+ },
+ "holdout2026": {
+  "cagr": 140.94,
+  "dd": 40.09
+ },
+ "halves": {
+  "h1": {
+   "cagr": 123.73,
+   "dd": 40.78
+  },
+  "h2": {
+   "cagr": 170.56,
+   "dd": 52
+  }
+ },
+ "plateau": {
+  "topLead": {
+   "at": 98.1,
+   "neighbours": [
+    144.43,
+    143.55,
+    140.73,
+    134.59
+   ]
+  },
+  "backLead": {
+   "at": 85.1,
+   "neighbours": [
+    139.88,
+    138.48,
+    144.6,
+    143.94
+   ]
+  },
+  "floorLead": {
+   "at": 60.5,
+   "neighbours": [
+    143.6,
+    146.48,
+    144.12,
+    142.81
+   ]
+  },
+  "reentryLead": {
+   "at": 67.6,
+   "neighbours": [
+    143.78,
+    145.3,
+    146.67,
+    142.36
+   ]
+  },
+  "deepLead": {
+   "at": 38.3,
+   "neighbours": [
+    143.01,
+    143.01,
+    146.67,
+    146.49
+   ]
+  }
+ },
+ "seconds": 1914
+}

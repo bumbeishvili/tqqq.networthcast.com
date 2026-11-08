@@ -1,0 +1,604 @@
+{
+ "TQQQ vs QQQ (550, ±65)": {
+  "decomposition": {
+   "corrLeadVsIndexOnly": 0.854,
+   "corrLeadVsDecay": 0.544,
+   "corrLeadVsResidual": 0.519,
+   "corrIndexOnlyVsDecay": 0.086
+  },
+  "ranges": {
+   "growth": [
+    -46.4,
+    49.7,
+    132.2
+   ],
+   "residual3x": [
+    -52.7,
+    -28.6,
+    -14.2
+   ],
+   "indexOnly": [
+    2.7,
+    112,
+    277
+   ],
+   "decay": [
+    -48.2,
+    -22.5,
+    -11.1
+   ],
+   "ratioMed": [
+    -35.3,
+    23.5,
+    65.3
+   ],
+   "idxGrowth": [
+    1.4,
+    45.6,
+    94.2
+   ],
+   "decayRate63": [
+    -36,
+    -8,
+    -3.3
+   ]
+  },
+  "forward": {
+   "growth h21 TQQQ fwd": {
+    "rho": -0.24,
+    "p": 0
+   },
+   "residual3x h21 TQQQ fwd": {
+    "rho": -0.11,
+    "p": 0
+   },
+   "indexOnly h21 TQQQ fwd": {
+    "rho": -0.195,
+    "p": 0.003
+   },
+   "decay h21 TQQQ fwd": {
+    "rho": -0.095,
+    "p": 0.018
+   },
+   "ratioMed h21 TQQQ fwd": {
+    "rho": -0.181,
+    "p": 0.01
+   },
+   "idxGrowth h21 TQQQ fwd": {
+    "rho": -0.195,
+    "p": 0.003
+   },
+   "decayRate63 h21 TQQQ fwd": {
+    "rho": -0.117,
+    "p": 0.035
+   },
+   "growth h63 TQQQ fwd": {
+    "rho": -0.374,
+    "p": 0
+   },
+   "residual3x h63 TQQQ fwd": {
+    "rho": -0.113,
+    "p": 0.03
+   },
+   "indexOnly h63 TQQQ fwd": {
+    "rho": -0.35,
+    "p": 0
+   },
+   "decay h63 TQQQ fwd": {
+    "rho": -0.106,
+    "p": 0.098
+   },
+   "ratioMed h63 TQQQ fwd": {
+    "rho": -0.254,
+    "p": 0.035
+   },
+   "idxGrowth h63 TQQQ fwd": {
+    "rho": -0.35,
+    "p": 0
+   },
+   "decayRate63 h63 TQQQ fwd": {
+    "rho": -0.178,
+    "p": 0.048
+   },
+   "growth h126 TQQQ fwd": {
+    "rho": -0.472,
+    "p": 0
+   },
+   "residual3x h126 TQQQ fwd": {
+    "rho": -0.127,
+    "p": 0.122
+   },
+   "indexOnly h126 TQQQ fwd": {
+    "rho": -0.452,
+    "p": 0.013
+   },
+   "decay h126 TQQQ fwd": {
+    "rho": -0.11,
+    "p": 0.273
+   },
+   "ratioMed h126 TQQQ fwd": {
+    "rho": -0.306,
+    "p": 0.168
+   },
+   "idxGrowth h126 TQQQ fwd": {
+    "rho": -0.452,
+    "p": 0.013
+   },
+   "decayRate63 h126 TQQQ fwd": {
+    "rho": -0.17,
+    "p": 0.14
+   },
+   "growth h252 TQQQ fwd": {
+    "rho": -0.597,
+    "p": 0.005
+   },
+   "residual3x h252 TQQQ fwd": {
+    "rho": -0.101,
+    "p": 0.393
+   },
+   "indexOnly h252 TQQQ fwd": {
+    "rho": -0.576,
+    "p": 0.048
+   },
+   "decay h252 TQQQ fwd": {
+    "rho": -0.09,
+    "p": 0.507
+   },
+   "ratioMed h252 TQQQ fwd": {
+    "rho": -0.544,
+    "p": 0.058
+   },
+   "idxGrowth h252 TQQQ fwd": {
+    "rho": -0.576,
+    "p": 0.048
+   },
+   "decayRate63 h252 TQQQ fwd": {
+    "rho": -0.171,
+    "p": 0.237
+   }
+  },
+  "deciles126": {
+   "growth": [
+    53.1,
+    38,
+    40.2,
+    34.1,
+    32.9,
+    22,
+    13.6,
+    22.8,
+    10.4,
+    -19.2
+   ],
+   "residual3x": [
+    44.7,
+    40,
+    5.8,
+    23.3,
+    17.1,
+    21.1,
+    37.5,
+    36.4,
+    5.5,
+    16.4
+   ],
+   "indexOnly": [
+    53.5,
+    43.4,
+    37.3,
+    33.4,
+    24.5,
+    22.7,
+    21.7,
+    12.7,
+    -0.1,
+    -1.3
+   ],
+   "decay": [
+    23.6,
+    25,
+    48.5,
+    8.5,
+    23.6,
+    29.8,
+    32.7,
+    35.8,
+    10.7,
+    9.5
+   ],
+   "ratioMed": [
+    48.5,
+    43.4,
+    33.3,
+    27.6,
+    23.2,
+    23,
+    14.1,
+    7.4,
+    15,
+    12.3
+   ],
+   "idxGrowth": [
+    53.5,
+    43.4,
+    37.3,
+    33.4,
+    24.5,
+    22.7,
+    21.7,
+    12.7,
+    -0.1,
+    -1.3
+   ],
+   "decayRate63": [
+    47.3,
+    35.5,
+    33.4,
+    15.5,
+    23,
+    18.3,
+    14.4,
+    13.8,
+    24.6,
+    22.1
+   ]
+  }
+ },
+ "SOXL vs SOXX (380)": {
+  "decomposition": {
+   "corrLeadVsIndexOnly": 0.844,
+   "corrLeadVsDecay": 0.473,
+   "corrLeadVsResidual": 0.46,
+   "corrIndexOnlyVsDecay": -0.02
+  },
+  "ranges": {
+   "growth": [
+    -60.3,
+    16.1,
+    158.7
+   ],
+   "residual3x": [
+    -59.5,
+    -34,
+    -14.4
+   ],
+   "indexOnly": [
+    -18.7,
+    79.1,
+    305.1
+   ],
+   "decay": [
+    -53.5,
+    -29.8,
+    -13.5
+   ],
+   "ratioMed": [
+    -43.5,
+    10.8,
+    65.3
+   ],
+   "idxGrowth": [
+    -9.8,
+    33.8,
+    101.3
+   ],
+   "decayRate63": [
+    -64.2,
+    -20.2,
+    -7.1
+   ]
+  },
+  "forward": {
+   "growth h21 SOXL fwd": {
+    "rho": -0.112,
+    "p": 0.285
+   },
+   "growth h21 SOXL-TQQQ fwd": {
+    "rho": -0.108,
+    "p": 0.198
+   },
+   "residual3x h21 SOXL fwd": {
+    "rho": -0.082,
+    "p": 0.105
+   },
+   "residual3x h21 SOXL-TQQQ fwd": {
+    "rho": -0.024,
+    "p": 0.833
+   },
+   "indexOnly h21 SOXL fwd": {
+    "rho": -0.073,
+    "p": 0.537
+   },
+   "indexOnly h21 SOXL-TQQQ fwd": {
+    "rho": -0.098,
+    "p": 0.302
+   },
+   "decay h21 SOXL fwd": {
+    "rho": -0.067,
+    "p": 0.182
+   },
+   "decay h21 SOXL-TQQQ fwd": {
+    "rho": -0.014,
+    "p": 0.868
+   },
+   "ratioMed h21 SOXL fwd": {
+    "rho": -0.092,
+    "p": 0.35
+   },
+   "ratioMed h21 SOXL-TQQQ fwd": {
+    "rho": -0.077,
+    "p": 0.338
+   },
+   "idxGrowth h21 SOXL fwd": {
+    "rho": -0.073,
+    "p": 0.537
+   },
+   "idxGrowth h21 SOXL-TQQQ fwd": {
+    "rho": -0.098,
+    "p": 0.302
+   },
+   "decayRate63 h21 SOXL fwd": {
+    "rho": -0.023,
+    "p": 0.72
+   },
+   "decayRate63 h21 SOXL-TQQQ fwd": {
+    "rho": 0.057,
+    "p": 0.352
+   },
+   "growth h63 SOXL fwd": {
+    "rho": -0.223,
+    "p": 0.12
+   },
+   "growth h63 SOXL-TQQQ fwd": {
+    "rho": -0.221,
+    "p": 0.15
+   },
+   "residual3x h63 SOXL fwd": {
+    "rho": -0.131,
+    "p": 0.095
+   },
+   "residual3x h63 SOXL-TQQQ fwd": {
+    "rho": -0.083,
+    "p": 0.497
+   },
+   "indexOnly h63 SOXL fwd": {
+    "rho": -0.153,
+    "p": 0.455
+   },
+   "indexOnly h63 SOXL-TQQQ fwd": {
+    "rho": -0.183,
+    "p": 0.245
+   },
+   "decay h63 SOXL fwd": {
+    "rho": -0.112,
+    "p": 0.165
+   },
+   "decay h63 SOXL-TQQQ fwd": {
+    "rho": -0.066,
+    "p": 0.625
+   },
+   "ratioMed h63 SOXL fwd": {
+    "rho": -0.16,
+    "p": 0.285
+   },
+   "ratioMed h63 SOXL-TQQQ fwd": {
+    "rho": -0.151,
+    "p": 0.315
+   },
+   "idxGrowth h63 SOXL fwd": {
+    "rho": -0.153,
+    "p": 0.455
+   },
+   "idxGrowth h63 SOXL-TQQQ fwd": {
+    "rho": -0.183,
+    "p": 0.245
+   },
+   "decayRate63 h63 SOXL fwd": {
+    "rho": -0.002,
+    "p": 0.973
+   },
+   "decayRate63 h63 SOXL-TQQQ fwd": {
+    "rho": 0.114,
+    "p": 0.25
+   },
+   "growth h126 SOXL fwd": {
+    "rho": -0.338,
+    "p": 0.072
+   },
+   "growth h126 SOXL-TQQQ fwd": {
+    "rho": -0.319,
+    "p": 0.095
+   },
+   "residual3x h126 SOXL fwd": {
+    "rho": -0.167,
+    "p": 0.092
+   },
+   "residual3x h126 SOXL-TQQQ fwd": {
+    "rho": -0.123,
+    "p": 0.47
+   },
+   "indexOnly h126 SOXL fwd": {
+    "rho": -0.244,
+    "p": 0.29
+   },
+   "indexOnly h126 SOXL-TQQQ fwd": {
+    "rho": -0.247,
+    "p": 0.198
+   },
+   "decay h126 SOXL fwd": {
+    "rho": -0.15,
+    "p": 0.102
+   },
+   "decay h126 SOXL-TQQQ fwd": {
+    "rho": -0.106,
+    "p": 0.547
+   },
+   "ratioMed h126 SOXL fwd": {
+    "rho": -0.215,
+    "p": 0.357
+   },
+   "ratioMed h126 SOXL-TQQQ fwd": {
+    "rho": -0.262,
+    "p": 0.142
+   },
+   "idxGrowth h126 SOXL fwd": {
+    "rho": -0.244,
+    "p": 0.29
+   },
+   "idxGrowth h126 SOXL-TQQQ fwd": {
+    "rho": -0.247,
+    "p": 0.198
+   },
+   "decayRate63 h126 SOXL fwd": {
+    "rho": -0.045,
+    "p": 0.8
+   },
+   "decayRate63 h126 SOXL-TQQQ fwd": {
+    "rho": 0.054,
+    "p": 0.71
+   },
+   "growth h252 SOXL fwd": {
+    "rho": -0.543,
+    "p": 0.037
+   },
+   "growth h252 SOXL-TQQQ fwd": {
+    "rho": -0.379,
+    "p": 0.12
+   },
+   "residual3x h252 SOXL fwd": {
+    "rho": -0.139,
+    "p": 0.417
+   },
+   "residual3x h252 SOXL-TQQQ fwd": {
+    "rho": -0.11,
+    "p": 0.735
+   },
+   "indexOnly h252 SOXL fwd": {
+    "rho": -0.507,
+    "p": 0.07
+   },
+   "indexOnly h252 SOXL-TQQQ fwd": {
+    "rho": -0.339,
+    "p": 0.23
+   },
+   "decay h252 SOXL fwd": {
+    "rho": -0.118,
+    "p": 0.455
+   },
+   "decay h252 SOXL-TQQQ fwd": {
+    "rho": -0.092,
+    "p": 0.735
+   },
+   "ratioMed h252 SOXL fwd": {
+    "rho": -0.367,
+    "p": 0.107
+   },
+   "ratioMed h252 SOXL-TQQQ fwd": {
+    "rho": -0.333,
+    "p": 0.138
+   },
+   "idxGrowth h252 SOXL fwd": {
+    "rho": -0.507,
+    "p": 0.07
+   },
+   "idxGrowth h252 SOXL-TQQQ fwd": {
+    "rho": -0.339,
+    "p": 0.23
+   },
+   "decayRate63 h252 SOXL fwd": {
+    "rho": -0.051,
+    "p": 0.833
+   },
+   "decayRate63 h252 SOXL-TQQQ fwd": {
+    "rho": 0.001,
+    "p": 1
+   }
+  },
+  "deciles126": {
+   "growth": [
+    49.4,
+    94.5,
+    70.6,
+    35.8,
+    33,
+    29.8,
+    16.1,
+    7.2,
+    8.1,
+    0.2
+   ],
+   "residual3x": [
+    104,
+    73.6,
+    38.7,
+    -5.9,
+    6.4,
+    27.2,
+    37.6,
+    22,
+    29.3,
+    11.9
+   ],
+   "indexOnly": [
+    44.1,
+    56.9,
+    48.7,
+    59.6,
+    41.8,
+    18,
+    16.6,
+    23.4,
+    42.9,
+    -7.3
+   ],
+   "decay": [
+    46.2,
+    125.1,
+    64.7,
+    -16,
+    10.7,
+    -5.1,
+    46.7,
+    26.4,
+    34,
+    11.8
+   ],
+   "ratioMed": [
+    70.6,
+    50.2,
+    38.5,
+    41.3,
+    52.1,
+    30.8,
+    14.6,
+    15.9,
+    13.2,
+    17.5
+   ],
+   "idxGrowth": [
+    44.1,
+    56.9,
+    48.7,
+    59.6,
+    41.8,
+    18,
+    16.6,
+    23.4,
+    42.9,
+    -7.3
+   ],
+   "decayRate63": [
+    53.4,
+    61.2,
+    42.7,
+    22,
+    32,
+    40,
+    15.9,
+    16.8,
+    18.6,
+    41.8
+   ]
+  }
+ }
+}

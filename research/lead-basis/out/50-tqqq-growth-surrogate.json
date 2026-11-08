@@ -1,0 +1,287 @@
+{
+ "n": 50,
+ "lead": "tqqq",
+ "basis": "growth",
+ "mode": "surrogate",
+ "tier": "lead",
+ "starts": 3,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "startAvgDays",
+   "count": 7,
+   "min": 0,
+   "max": 120
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "surrogates": [
+  {
+   "shift": 4584,
+   "cagr": 102,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 720,
+    "startAvgDays": 65,
+    "topLead": 47,
+    "backLead": 36.3,
+    "floorLead": 1.1,
+    "reentryLead": 13.5,
+    "deepLead": -37.3
+   }
+  },
+  {
+   "shift": 13571,
+   "cagr": 89.7,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 756,
+    "startAvgDays": 90,
+    "topLead": 33.2,
+    "backLead": 1.1,
+    "floorLead": 77.8,
+    "reentryLead": -34.3,
+    "deepLead": 46.2
+   }
+  },
+  {
+   "shift": 8214,
+   "cagr": 123,
+   "dd": 52.3,
+   "params": {
+    "lookbackDays": 500,
+    "startAvgDays": 65,
+    "topLead": 31.4,
+    "backLead": 30.1,
+    "floorLead": -57.7,
+    "reentryLead": 80.3,
+    "deepLead": 29.8
+   }
+  },
+  {
+   "shift": 3239,
+   "cagr": 112.1,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 252,
+    "startAvgDays": 120,
+    "topLead": 55,
+    "backLead": 52.9,
+    "floorLead": -40.6,
+    "reentryLead": 24.4,
+    "deepLead": -62.1
+   }
+  },
+  {
+   "shift": 12140,
+   "cagr": 94.3,
+   "dd": 58,
+   "params": {
+    "lookbackDays": 880,
+    "startAvgDays": 65,
+    "topLead": 99.7,
+    "backLead": 36,
+    "floorLead": -18.8,
+    "reentryLead": -24.9,
+    "deepLead": -29.9
+   }
+  },
+  {
+   "shift": 15364,
+   "cagr": 130,
+   "dd": 58,
+   "params": {
+    "lookbackDays": 320,
+    "startAvgDays": 10,
+    "topLead": 96.2,
+    "backLead": 8.1,
+    "floorLead": -4.2,
+    "reentryLead": -36.4,
+    "deepLead": -62.1
+   }
+  },
+  {
+   "shift": 6477,
+   "cagr": 117.1,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 960,
+    "startAvgDays": 120,
+    "topLead": 63.8,
+    "backLead": 73.6,
+    "floorLead": 26.6,
+    "reentryLead": 48.6,
+    "deepLead": 21.3
+   }
+  },
+  {
+   "shift": 13511,
+   "cagr": 99.7,
+   "dd": 81.3,
+   "params": {
+    "lookbackDays": 252,
+    "startAvgDays": 0,
+    "topLead": 153.4,
+    "backLead": 105.2,
+    "floorLead": 51.5,
+    "reentryLead": 130.3,
+    "deepLead": -12.5
+   }
+  },
+  {
+   "shift": 5303,
+   "cagr": 110.6,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 320,
+    "startAvgDays": 10,
+    "topLead": 76.7,
+    "backLead": 75.6,
+    "floorLead": -44.6,
+    "reentryLead": 38.9,
+    "deepLead": -62.1
+   }
+  },
+  {
+   "shift": 3703,
+   "cagr": 107.8,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 880,
+    "startAvgDays": 20,
+    "topLead": 136,
+    "backLead": 129.3,
+    "floorLead": 114.7,
+    "reentryLead": 116.7,
+    "deepLead": 63.1
+   }
+  },
+  {
+   "shift": 11895,
+   "cagr": 90.9,
+   "dd": 58,
+   "params": {
+    "lookbackDays": 1008,
+    "startAvgDays": 120,
+    "topLead": 71.9,
+    "backLead": 71.3,
+    "floorLead": -1.7,
+    "reentryLead": 29.8,
+    "deepLead": -37.3
+   }
+  },
+  {
+   "shift": 8315,
+   "cagr": 118.3,
+   "dd": 39.5,
+   "params": {
+    "lookbackDays": 380,
+    "startAvgDays": 90,
+    "topLead": 63.1,
+    "backLead": 45.2,
+    "floorLead": 32.7,
+    "reentryLead": -12.5,
+    "deepLead": 32.7
+   }
+  },
+  {
+   "shift": 1069,
+   "cagr": 91.5,
+   "dd": 65.3,
+   "params": {
+    "lookbackDays": 300,
+    "startAvgDays": 10,
+    "topLead": 161.6,
+    "backLead": 25.1,
+    "floorLead": 1.1,
+    "reentryLead": 26.1,
+    "deepLead": -23.1
+   }
+  },
+  {
+   "shift": 16361,
+   "cagr": 113.3,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 756,
+    "startAvgDays": 90,
+    "topLead": 9999,
+    "backLead": 55.8,
+    "floorLead": 76.7,
+    "reentryLead": 64.5,
+    "deepLead": 49.1
+   }
+  },
+  {
+   "shift": 5427,
+   "cagr": 111.3,
+   "dd": 58,
+   "params": {
+    "lookbackDays": 520,
+    "startAvgDays": 120,
+    "topLead": 79.2,
+    "backLead": 105.2,
+    "floorLead": 58.1,
+    "reentryLead": 59.1,
+    "deepLead": 4.3
+   }
+  },
+  {
+   "shift": 11564,
+   "cagr": 114.4,
+   "dd": 50.8,
+   "params": {
+    "lookbackDays": 440,
+    "startAvgDays": 0,
+    "topLead": 38.3,
+    "backLead": 109.6,
+    "floorLead": 125.4,
+    "reentryLead": 10.9,
+    "deepLead": 30.4
+   }
+  }
+ ],
+ "surrogateSummary": {
+  "n": 16,
+  "min": 89.7,
+  "median": 111.3,
+  "p90": 118.3,
+  "max": 130
+ },
+ "seconds": 3449
+}
