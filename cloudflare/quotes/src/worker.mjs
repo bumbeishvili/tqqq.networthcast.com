@@ -206,17 +206,38 @@ function quoteOf(result) {
 // after midnight (the user, 2026-11-06). The overnight session (20:00-04:00,
 // Blue Ocean, Sunday to Thursday nights) has no bars; its latest print is the
 // meta's fulldayPrice, which carries no time, so the print carries the time it
-// was read. The quote keeps the regular session's price, time and prior close
+// was read, and only on the nights it runs (a Friday or Saturday night has
+// none). A print stands until a regular session opens after it: Thursday's
+// after-hours print is still there after midnight, and Friday's all weekend,
+// as Yahoo's own page shows it (the user, 2026-11-08, on a Sunday: "overnight
+// also not visible"); a bar from before the latest open is a lagging feed and
+// no print. The quote keeps the regular session's price, time and prior close
 // (the files' basis); `extended` adds the session, the print, its time and its
-// change against the regular price. Null when there is no such print (a bar a
-// day old, as on a weekend; a fund nobody traded) or when the call fails: the
-// regular quote stands on its own.
+// change against the regular price. Null when there is no such print (a fund
+// nobody traded) or when the call fails: the regular quote stands on its own.
 const EXTENDED_INTERVAL = '5m';
 const PRE_FROM = 4 * 60, REGULAR_FROM = 9 * 60 + 30, POST_FROM = 16 * 60, OVERNIGHT_FROM = 20 * 60;   // New York minutes of day
-const EXTENDED_MAX_AGE_MS = 24 * 3600 * 1000;
-function nyMinute(date) {
+// An instant on New York's clock: the day as a count since 1970-01-01, its weekday (0 Sunday) and the minute of the day.
+function nyClock(date) {
   const p = {}; for (const { type, value } of NY_PARTS.formatToParts(date)) p[type] = value;
-  return (+p.hour % 24) * 60 + +p.minute;
+  const day = Date.UTC(+p.year, +p.month - 1, +p.day) / 86400000;
+  return { day, weekday: (day + 4) % 7, minute: (+p.hour % 24) * 60 + +p.minute };   // day 0 was a Thursday
+}
+const nyMinute = date => nyClock(date).minute;
+// Whether a regular session (a weekday's 09:30; holidays count, as in sessionNow) opened after `from` and by `to`.
+function sessionOpenedBetween(from, to) {
+  const a = nyClock(from), b = nyClock(to);
+  for (let day = a.day; day <= b.day; day++) {
+    const weekday = (day + 4) % 7;
+    if (weekday === 0 || weekday === 6) continue;
+    if ((day > a.day || a.minute < REGULAR_FROM) && (day < b.day || b.minute >= REGULAR_FROM)) return true;
+  }
+  return false;
+}
+// The overnight session by the clock: from 20:00 on a Sunday to Thursday night to 04:00 the next morning.
+function overnightNow(now) {
+  const { weekday, minute } = nyClock(now);
+  return minute >= OVERNIGHT_FROM ? weekday <= 4 : minute < PRE_FROM && weekday >= 1 && weekday <= 5;
 }
 // The session a bar falls in by its New York clock; null for a regular-session bar.
 function barSession(epochSeconds) {
@@ -230,10 +251,10 @@ async function extendedOf(symbol, q, now = new Date()) {
   const ts = result.timestamp || [], close = (result.indicators.quote[0] || {}).close || [];
   let last = ts.length - 1;
   while (last >= 0 && !(close[last] > 0)) last--;
-  const bar = last >= 0 && now.getTime() - ts[last] * 1000 < EXTENDED_MAX_AGE_MS
+  const bar = last >= 0 && !sessionOpenedBetween(new Date(ts[last] * 1000), now)
     ? { session: barSession(ts[last]), price: close[last], time: new Date(ts[last] * 1000).toISOString() } : null;
-  const m = nyMinute(now), fullday = result.meta.fulldayPrice;
-  const overnight = (m >= OVERNIGHT_FROM || m < PRE_FROM) && fullday > 0 && (!bar || fullday !== bar.price);
+  const fullday = result.meta.fulldayPrice;
+  const overnight = overnightNow(now) && fullday > 0 && (!bar || fullday !== bar.price);
   const print = overnight ? { session: 'overnight', price: fullday, time: now.toISOString() } : bar && bar.session ? bar : null;
   return print && { ...print, changePct: (print.price / q.price - 1) * 100 };
 }

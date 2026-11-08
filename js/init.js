@@ -54,7 +54,12 @@
     const el = document.getElementById('data-fetched-at');
     if (!wrap || !el) return;
     const pad2 = (n) => n < 10 ? '0' + n : '' + n;
-    const note = !isLive ? '' : extended ? ' (' + EXTENDED_SESSION_NAMES[extended.session] + ')' : liveStalled(d) ? ' (live, feed stalled)' : ' (live)';
+    // The note after the time: live (or stalled) while New York trades; outside
+    // the session the latest print's session, else the close the time is, by its
+    // New York weekday. The time reads in the viewer's zone, so Friday's 16:00
+    // close is "7 Nov, 01:00" in Tbilisi; "(live)" after it read as stale data
+    // on a Sunday (the user, 2026-11-08: "it's not certainly live").
+    const note = !isLive ? '' : extended ? ' (' + EXTENDED_SESSION_NAMES[extended.session] + ')' : liveStalled(d) ? ' (live, feed stalled)' : nyInSession() ? ' (live)' : ' (' + NY_WEEKDAY.format(d) + "'s close)";
     el.textContent = d.getDate() + ' ' + _LOG_MONTHS[d.getMonth()] + ', ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()) + note;
     wrap.removeAttribute('hidden');
   };

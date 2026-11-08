@@ -18,6 +18,7 @@ const STALE = { SOXL: 'nasdaq', SPY: 'nasdaq-down' };
 const SESSION_CLOCK = Date.UTC(2026, 10, 5, 18, 30);   // 13:30 EST, a Thursday
 let nowFixed = SESSION_CLOCK;
 let FULLDAY = null;   // the chart meta's fulldayPrice for TQQQ (the overnight print) when set
+let CHART_DAY = 0;   // days the Yahoo chart stub's bars are moved on from Thursday 11/5 (1: Friday's bars, as Yahoo serves them all weekend)
 if (OFFLINE) {
   const open = Date.UTC(2026, 10, 5, 14, 30) / 1000;   // 2026-11-05 09:30 EST
   // Both clocks the worker reads stand at nowFixed: Date.now() and new Date() with
@@ -48,14 +49,14 @@ if (OFFLINE) {
     }
     const symbol = decodeURIComponent(u.pathname.split('/').pop()), prePost = u.searchParams.get('includePrePost') === 'true';
     const tradeAt = STALE[symbol] ? SESSION_CLOCK / 1000 - 70 * 60 : SESSION_CLOCK / 1000 - 30;   // a stale Yahoo print is 70 minutes old, a fresh one 30 seconds
-    const px = 40 + symbol.length, TRAIL = 3, POST = 5, close = open + 6.5 * 3600;
+    const px = 40 + symbol.length, TRAIL = 3, POST = 5, day = open + CHART_DAY * 86400, close = day + 6.5 * 3600;
     // Three session minutes, the trailing print and the 16:00 bar. With the extended-hours
     // bars: an after-hours print at 16:10 as well, except for GLD, whose answer stops before the close.
-    const session = [open, open + 60, open + 120, open + 147, close];
+    const session = [day, day + 60, day + 120, day + 147, close];
     const ts = !prePost ? session : symbol === 'GLD' ? session.slice(0, 4) : session.concat([close + 600]);
     const col = (v, trail, post) => ts.map((_, k) => k === TRAIL ? trail : k === POST ? post : v);
     return Response.json({ chart: { result: [{ meta: { regularMarketPrice: px + 0.25, chartPreviousClose: px - 1, regularMarketTime: tradeAt, exchangeTimezoneName: 'America/New_York', ...(FULLDAY && symbol === 'TQQQ' ? { fulldayPrice: FULLDAY } : {}),
-      currentTradingPeriod: { pre: { start: open - 5.5 * 3600, end: open }, regular: { start: open, end: close }, post: { start: close, end: close + 4 * 3600 } } },
+      currentTradingPeriod: { pre: { start: day - 5.5 * 3600, end: day }, regular: { start: day, end: close }, post: { start: close, end: close + 4 * 3600 } } },
       timestamp: ts, indicators: { quote: [{ open: col(px - 0.5, px + 0.25, px - 0.5), high: col(px + 0.5, px + 0.25, px - 0.5), low: col(px - 1, px + 0.25, px - 1), close: col(px, px + 0.25, px - 0.75), volume: col(1000, 0, 10) }] } }], error: null } });
   };
   console.log('offline: Yahoo replaced by a canned chart answer');
@@ -102,11 +103,25 @@ if (OFFLINE) {
   FULLDAY = 43.25; nowFixed = Date.UTC(2026, 10, 6, 1, 2);   // 20:02 EST, Thursday
   rp = await call('/quotes?symbols=TQQQ', { origin: site }); bp = await rp.json();
   check('20:02 with fulldayPrice at the last bar: the after-hours print stands', bp.quotes.TQQQ.extended && bp.quotes.TQQQ.extended.session === 'post' && bp.quotes.TQQQ.extended.price === 43.25 && bp.quotes.TQQQ.extended.time === '2026-11-05T21:10:00.000Z', JSON.stringify(bp.quotes.TQQQ.extended));
-  // A bar a day old (a weekend morning) is no print.
-  FULLDAY = null; nowFixed = Date.UTC(2026, 10, 7, 6, 30);   // 01:30 EST, Saturday
+  // A feed still serving Thursday's bars on Friday evening: a session has opened since, so the bar is no print.
+  FULLDAY = null; nowFixed = Date.UTC(2026, 10, 6, 21, 30);   // 16:30 EST, Friday
   rp = await call('/quotes?symbols=TQQQ', { origin: site }); bp = await rp.json();
-  check('a day later: the bar has aged out, no extended field', bp.quotes.TQQQ.extended === undefined, JSON.stringify(bp.quotes.TQQQ.extended));
-  nowFixed = SESSION_CLOCK;
+  check('Friday evening with Thursday\'s bars: a session has opened since, no extended field', bp.quotes.TQQQ.extended === undefined, JSON.stringify(bp.quotes.TQQQ.extended));
+  // The weekend, with Friday's bars as Yahoo serves them: Friday's after-hours print stands until Monday's open;
+  // Saturday night has no overnight session, so a differing fulldayPrice is not a print; Sunday night it is.
+  CHART_DAY = 1; FULLDAY = 44.9;
+  const friPost = { session: 'post', price: 43.25, time: '2026-11-06T21:10:00.000Z' };
+  const sameAs = (x, want) => !!x && x.session === want.session && x.price === want.price && x.time === want.time;
+  nowFixed = Date.UTC(2026, 10, 8, 2, 0);   // 21:00 EST, Saturday
+  rp = await call('/quotes?symbols=TQQQ', { origin: site }); bp = await rp.json();
+  check('Saturday night: no overnight session, Friday\'s after-hours print stands', sameAs(bp.quotes.TQQQ.extended, friPost), JSON.stringify(bp.quotes.TQQQ.extended));
+  nowFixed = Date.UTC(2026, 10, 8, 14, 0);   // 09:00 EST, Sunday
+  rp = await call('/quotes?symbols=TQQQ', { origin: site }); bp = await rp.json();
+  check('Sunday: Friday\'s after-hours print still stands', sameAs(bp.quotes.TQQQ.extended, friPost), JSON.stringify(bp.quotes.TQQQ.extended));
+  nowFixed = Date.UTC(2026, 10, 9, 2, 0);   // 21:00 EST, Sunday
+  rp = await call('/quotes?symbols=TQQQ', { origin: site }); bp = await rp.json();
+  check('Sunday night: fulldayPrice is the overnight print', sameAs(bp.quotes.TQQQ.extended, { session: 'overnight', price: 44.9, time: '2026-11-09T02:00:00.000Z' }), JSON.stringify(bp.quotes.TQQQ.extended));
+  CHART_DAY = 0; FULLDAY = null; nowFixed = SESSION_CLOCK;
   // with Alpaca keys: its trade is the in-session price for every symbol, Yahoo's prior close kept; a down Alpaca falls back to the path above
   const KEYS = { ALPACA_API_KEY: 'k', ALPACA_API_SECRET: 's' };
   let ra = await call('/quotes?symbols=TQQQ,SOXL,SPY&x=alpaca', { origin: site, env: KEYS }); let ba = await ra.json();
