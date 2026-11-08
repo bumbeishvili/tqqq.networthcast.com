@@ -3691,6 +3691,35 @@ function withSoxlPile(base, spec) {
 }
 CODE[52] = withSoxlPile(CODE[50], { name: "SOXL, TQQQ VS QQQ, Mon Turns" });
 
+// #53 — SOXL, TQQQ, QQQ - 1983 fit (the user, 2026-11-08: "let's create this
+// new strategy, call soxl, tqqq, qqq - 1983 fit"): #52 with the settings the
+// Fit button (Best CAGR) found on the whole chart, Q1 1953 to date, as its
+// defaults (the name is the user's; the fit's 29.5% → 55.3% note matches the
+// 1953 start with a $100K lump sum), sixteen of them changed from #52's, with the ceiling's SQQQ limit
+// set to the defence's 18 days by the user (the fit's 61 could never be
+// reached under that cap); the rules are the same. Built
+// from #52's text at load, so a change to #47, #50 or #52 reaches it. Three of
+// the fitted values lie between the dropdown's options (58.2%, −33%, 101%:
+// the Fit's between-options stage); the dropdown shows such a value in its
+// place (js/saved-configs.js customParamOptionsWithCurrent). The prices
+// before 2010 are reconstructed, and the user's rule is to judge a strategy
+// on 2010 onward: the card gives both periods.
+function withDefaults(base, spec) {
+  let t = base.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
+  for (const [id, value] of Object.entries(spec.defaults)) {
+    const head = `{ id: "${id}",`, at = t.indexOf(head);
+    if (at < 0 || t.indexOf(head, at + 1) >= 0) throw new Error(`withDefaults(${spec.name}): the setting ${id} must appear exactly once in the base`);
+    const next = t.indexOf('{ id: "', at + 1), end = next < 0 ? t.length : next;   // this setting's text runs to the next one's
+    const entry = t.slice(at, end), m = /, default: ([^,}]+)/.exec(entry);
+    if (!m) throw new Error(`withDefaults(${spec.name}): the setting ${id} declares no default`);
+    t = t.slice(0, at) + entry.replace(m[0], ', default: ' + JSON.stringify(value)) + t.slice(end);
+  }
+  return t;
+}
+CODE[53] = withDefaults(CODE[52], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: {
+  lookbackDays: 543, topLead: 123, topDays: 18, backLead: 34, floorLead: 6, floorHold: "sqqq", reentryLead: 65, reentryCloses: 44, deepLead: -32.5,
+  overPct: 58.2, overWindow: 236, sqqqMaxDays: 18, deepGuard: 52, nfciVeto: 0.75, soxlLeadEnter: -33, soxlLeadExit: 101 } });
+
 // ===== The SMA strategy as code =============================================
 // The user (2026-11-04): "I want built in sma panel ... converted into code,
 // but still keeping all functionality as is, and the result should stay
