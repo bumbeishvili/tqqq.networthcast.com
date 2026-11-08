@@ -3108,11 +3108,16 @@ CODE[47] = `{
     const leadLbl = (x) => x >= 0 ? x + "% ahead" : -x + "% behind";
     const atLead = (i, x) => lead[i] === lead[i] ? baseT[i] * (Q[i] / baseQ[i]) * (1 + x / 100) : null;
     const LEV = 3;
+    // A level today's close cannot reach without QQQ moving more than a quarter
+    // from its prior close carries no price: the close runs off to infinity as
+    // the move it needs grows (a far level once read $448K), and no order
+    // belongs there. QQQ's largest day on record is 18.6% (2025-04-09).
+    const MAX_PAIR_MOVE = 0.25;
     const crossAt = (i, x) => {
       if (!(lead[i] === lead[i]) || !(i > 0 && T[i - 1] > 0 && Q[i - 1] > 0)) return null;
       const perQ = baseT[i] / baseQ[i] * (1 + x / 100), t0 = T[i - 1], q0 = Q[i - 1];   // TQQQ per QQQ dollar on the level; the prior closes
-      const px = (LEV - 1) * perQ * q0 * t0 / (LEV * t0 - perQ * q0);
-      return px > 0 ? px : null;
+      const move = (perQ * q0 - t0) / (LEV * t0 - perQ * q0);   // QQQ's move from its prior close to the level, TQQQ moving LEV times it
+      return Math.abs(move) <= MAX_PAIR_MOVE ? t0 * (1 + LEV * move) : null;
     };
     // The levels that can fire from the current state, for the Nearest signal
     // card. Each says whether crossing it sells TQQQ or buys it (kind).
@@ -3553,12 +3558,16 @@ function withSoxlPile(base, spec) {
     // The SOXL close that puts the lead on a level today, SOXX moving a third of SOXL's move from
     // the prior close (SOXL's daily leverage): it holds through the day, so an order can be set at
     // it, where the close that reads the level at SOXX's price right now moves with SOXX.
-    const SOXL_LEV = 3;
+    // A level today's close cannot reach without SOXX moving more than a quarter from its prior
+    // close carries no price: the close runs off to infinity as the move it needs grows (the
+    // user, 2026-11-08, at a "Back to TQQQ over" of $448K with the lead at -32%), and no order
+    // belongs there. SOXX's largest day on record is 18.6% (2025-04-09), SOXL's 54.8%.
+    const SOXL_LEV = 3, SOXL_MAX_PAIR_MOVE = 0.25;
     const soxlCrossAt = (i, lvl) => {
       if (!(soxlBase[i] > 0) || !(i > 0 && data.soxl[i - 1] > 0 && data.soxx[i - 1] > 0)) return null;
       const perX = soxlBase[i] / data.soxx[i] * (1 + lvl / 100), s0 = data.soxl[i - 1], x0 = data.soxx[i - 1];   // SOXL per SOXX dollar on the level; the prior closes
-      const px = (SOXL_LEV - 1) * perX * x0 * s0 / (SOXL_LEV * s0 - perX * x0);
-      return px > 0 ? px : null;
+      const move = (perX * x0 - s0) / (SOXL_LEV * s0 - perX * x0);   // SOXX's move from its prior close to the level, SOXL moving SOXL_LEV times it
+      return Math.abs(move) <= SOXL_MAX_PAIR_MOVE ? s0 * (1 + SOXL_LEV * move) : null;
     };
     const SOXL_PRICE = "SOXL price", SOXL_PANEL = soxlWhen === "lead" ? "SOXL vs SOXX" : SOXL_PRICE;   // SOXL_PANEL: where the SOXL rule's trades are marked
     let soxlPrev = false, soxlSwitch = false, soxlLeft = false;
