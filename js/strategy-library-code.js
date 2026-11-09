@@ -115,6 +115,7 @@ const sellToCoverSnippet = (holdings) => [
 const SELL_SH_TO_COVER = sellToCoverSnippet([['sh', 'lev[i]']]);
 const SELL_TQQQ_QQQ_TO_COVER = sellToCoverSnippet([['shT', 'data.tqqq[i]'], ['shQ', 'data.qqq[i]']]);
 const SELL_LEV_PARK_TO_COVER = sellToCoverSnippet([['shLev', 'lev[i]'], ['shPark', 'sig[i]']]);
+const SELL_SH_HELD_TO_COVER = sellToCoverSnippet([['sh', 'heldPx']]);   // one share count, whichever fund is held (the Seasonal TQQQ entry)
 // The strategies that charge a trading cost pay it on this sale too and say so
 // in the row's note. `tracksTraded` is for the one that totals dollars traded.
 const sellHeldToCoverSnippet = (tracksTraded) => [
@@ -154,6 +155,7 @@ const WITHDRAWAL_UPGRADES = [
   { declares: [...FEE_BOOKS, 'note = "", fee = 0'], moneyLine: MONEY_LINE_INVESTED, snippet: SELL_HELD_TO_COVER },
   { declares: ['lev = data', 'sig = data', 'shLev = 0, shPark = 0'], moneyLine: MONEY_LINE, snippet: SELL_LEV_PARK_TO_COVER },
   { declares: ['shT = 0, shQ = 0'], moneyLine: MONEY_LINE, snippet: SELL_TQQQ_QQQ_TO_COVER },
+  { declares: ['const priceOf = (h, i) => h === "TQQQ"', 'heldPx = priceOf(held, i)'], moneyLine: MONEY_LINE, snippet: SELL_SH_HELD_TO_COVER },   // before the plain sh rule, whose declares it also matches
   { declares: ['lev = data', 'let cash = p.initial, sh = 0,'], moneyLine: MONEY_LINE, snippet: SELL_SH_TO_COVER },
 ];
 function upgradeWithdrawalHandling(code) {
@@ -3820,6 +3822,169 @@ function withSpreadStart(base) {
 CODE[54] = withDefaults(withSpreadStart(CODE[52]), { name: "SOXL, TQQQ, QQQ - spread start", defaults: {
   lookbackDays: 600, startSpreadPct: 25, topLead: 97.1, backLead: 78.7, floorLead: 56.8, reentryLead: 92.5, deepLead: 32.5,
   soxlLeadDays: 500, soxlStartSpreadPct: 25, soxlLeadEnter: 27.4, soxlLeadExit: 33.9 } });
+
+// ===== #55 Seasonal TQQQ, #56 Donchian breakout + ATR stop (the user, 2026-11-09:
+// "let's include 2x4", from a search for leveraged-fund strategies the library
+// lacked: a calendar rule and a price-channel trend rule, both new mechanisms
+// here). Both keep their books like #12/#22 (lev, cash, sh) so the shared
+// withdrawal and logging snippets apply.
+const MONTH_OPTIONS_SRC = JSON.stringify(["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"].map((label, k) => ({ value: k + 1, label })));
+// Seasonal TQQQ: the Halloween indicator (Bouman & Jacobsen 2002: November to
+// April beats May to October in most markets) and the turn-of-the-month effect
+// (Lakonishok & Smidt 1988: the last and first few trading days carry most of
+// the month's return), on TQQQ. The window is decided from the calendar alone,
+// at the close before each day: hold TQQQ while tomorrow is inside the window,
+// cash or QQQ outside it. A switch between two funds takes two days (sell at
+// one close, buy at the next) unless "One trade per day" is No. Defaults
+// fitted to 2010-2025 over every month pair and both parking choices: October
+// through July, cash outside (43.3% a year, drawdown 75%; the Halloween months
+// November through April made 15.3%). The turn's defaults stay the published
+// last 1 and first 3 days: its own fit ran to "nearly always in".
+CODE[55] = `{
+  name: "Seasonal TQQQ",
+  params: [
+    { id: "pattern", label: "Pattern", tip: "The season: TQQQ from the first trading day of the start month to the last of the end month. The turn: TQQQ through the last few trading days of every month and the first few of the next.", text: "Hold TQQQ by the calendar: {}.", default: "season", options: [
+      { value: "season", label: "the season, start month to end month" }, { value: "turn", label: "the turn of every month" } ] },
+    { id: "startMonth", label: "Season starts", tip: "The first month of the TQQQ season (the Halloween indicator buys at the end of October).", text: "The season runs from the first trading day of {}", default: 10, options: ${MONTH_OPTIONS_SRC} },
+    { id: "endMonth", label: "Season ends", tip: "The last month of the TQQQ season (the Halloween indicator sells at the end of April).", text: "to the last trading day of {}.", default: 7, options: ${MONTH_OPTIONS_SRC} },
+    { id: "tomBefore", label: "Turn: last days of a month", tip: "With the turn pattern: how many of a month's last trading days TQQQ is held through. The month's remaining trading days are counted from the calendar's weekdays when the data has not reached them yet.", text: "With the turn pattern, hold TQQQ through the last {} trading days of a month", default: 1, options: Array.from({ length: 11 }, (_, k) => k) },
+    { id: "tomAfter", label: "Turn: first days of a month", tip: "With the turn pattern: how many of the next month's first trading days TQQQ is held through.", text: "and the first {} trading days of the next.", default: 3, options: Array.from({ length: 11 }, (_, k) => k) },
+    { id: "offHold", label: "Outside the window", tip: "What the money holds outside the TQQQ window.", text: "Outside the window hold {}.", default: "cash", options: [
+      { value: "cash", label: "cash" }, { value: "qqq", label: "QQQ" } ] },
+    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch between TQQQ and QQQ sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days: {}.", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] }
+  ],
+  columns: [{ key: "inWindow", label: "TQQQ window", tip: "1 while the calendar window holds TQQQ, 0 outside it." }],
+  run(data, p) {
+    const log = [], lev = data.tqqq, park = data.qqq, dates = data.dates, n = dates.length;
+    const PATTERN = p.pattern || "season", M0 = +p.startMonth || 11, M1 = +p.endMonth || 4;
+    const B = Math.max(0, Math.round(+p.tomBefore || 0)), A = Math.max(0, Math.round(+p.tomAfter || 0)), OFF = p.offHold || "cash";
+    // Each trading day's rank from its month's start (1 = the first) and from its end (0 = the last). The
+    // end rank of a day the data has not reached counts the calendar's weekdays left in the month.
+    const fromStart = new Int32Array(n), fromEnd = new Int32Array(n);
+    for (let i = 0; i < n; i++) fromStart[i] = i > 0 && dates[i - 1].slice(0, 7) === dates[i].slice(0, 7) ? fromStart[i - 1] + 1 : 1;
+    for (let i = n - 1; i >= 0; i--) {
+      if (i + 1 < n && dates[i + 1].slice(0, 7) === dates[i].slice(0, 7)) fromEnd[i] = fromEnd[i + 1] + 1;
+      else if (i + 1 < n) fromEnd[i] = 0;
+      else { let c = 0; const d = new Date(dates[i] + "T00:00:00Z"); for (let k = 1; k <= 31; k++) { const e = new Date(d.getTime() + k * 86400000); if (e.getUTCMonth() !== d.getUTCMonth()) break; const w = e.getUTCDay(); if (w !== 0 && w !== 6) c++; } fromEnd[i] = c; }
+    }
+    const monthIn = (m) => M0 <= M1 ? (m >= M0 && m <= M1) : (m >= M0 || m <= M1);
+    // Is trading day i inside the TQQQ window? Day n (tomorrow, past the data) is read from the calendar.
+    const inWindow = (i) => {
+      if (i >= n) { const d = new Date(dates[n - 1] + "T00:00:00Z"); let e = d; do { e = new Date(e.getTime() + 86400000); } while (e.getUTCDay() === 0 || e.getUTCDay() === 6); if (PATTERN !== "turn") return monthIn(e.getUTCMonth() + 1); return e.getUTCMonth() !== d.getUTCMonth() ? 1 <= A : fromEnd[n - 1] - 1 < B; }
+      if (PATTERN === "turn") return fromEnd[i] < B || fromStart[i] <= A;
+      return monthIn(+dates[i].slice(5, 7));
+    };
+    const wantAt = (i) => inWindow(i + 1) ? "TQQQ" : OFF === "qqq" ? "QQQ" : "CASH";
+    const priceOf = (h, i) => h === "TQQQ" ? lev[i] : h === "QQQ" ? park[i] : 0;
+    let cash = p.initial, sh = 0, held = "CASH", pending = null, prevMonth = null;
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      const month = dates[i].slice(0, 7), heldPx = priceOf(held, i);
+      let contributed = 0, action = "hold", note = "";
+      if (p.contributions && p.contributions[dates[i]]) {
+        const amt = p.contributions[dates[i]];
+        cash += amt; contributed = amt; action = "contribution";
+${sellToCoverSnippet([['sh', 'heldPx']])}
+      }
+      prevMonth = month;
+      const want = wantAt(i), windowNow = inWindow(i + 1) ? 1 : 0;
+      const why = PATTERN === "turn" ? "the turn of the month" : "the season";
+      if (pending) {   // second day of a switch: buy what the calendar wants now
+        if (want !== "CASH" && priceOf(want, i) > 0) { sh = cash / priceOf(want, i); cash = 0; held = want; action = "buy"; note = "Bought " + want + ": second day of the switch"; }
+        pending = null;
+      } else if (want !== held) {
+        if (held !== "CASH") { cash += sh * heldPx; sh = 0; action = "sell"; note = "Sold " + held + ": " + (want === "CASH" ? why + " is over" : held === "TQQQ" ? why + " is over; " + want + " is bought " + (p.splitDays === false ? "now" : "tomorrow") : "the TQQQ window opens; TQQQ is bought " + (p.splitDays === false ? "now" : "tomorrow")); held = "CASH";
+          if (want !== "CASH") { if (p.splitDays === false && priceOf(want, i) > 0) { sh = cash / priceOf(want, i); cash = 0; held = want; } else pending = want; } }
+        else if (priceOf(want, i) > 0) { sh = cash / priceOf(want, i); cash = 0; held = want; action = "buy"; note = "Bought " + want + ": " + (want === "TQQQ" ? "the TQQQ window opens" : "outside the window"); }
+      } else if (held !== "CASH" && cash > 0 && heldPx > 0) { sh += cash / heldPx; cash = 0; }
+      const px = lev[i], value = sh * priceOf(held, i) + cash;
+${WEEKLY_MONTH_END_SNIPPET}
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
+        log.push({ date: dates[i], value: value, price: px, contributed: contributed, action: action, held: held, note: note, inWindow: windowNow });
+    }
+    return { log, lines: [{ key: "price", label: "TQQQ price" }] };
+  }
+}`;
+// Donchian breakout with an ATR trailing stop: the Turtle rules (Dennis and
+// Eckhardt, 1983; Faith, Way of the Turtle) on TQQQ, read at the close. Buy
+// when TQQQ closes above its highest close of the last N days; sell when it
+// closes under its lowest close of the last M days or under a stop trailing
+// K average daily moves below the highest close since the entry. The channels
+// and the average move use closes only (a true range needs highs and lows,
+// which the reconstruction before 1985 does not have), so the rule reads the
+// same on every day of the chart. Its position before the Entry is replayed
+// without trades, so a moved Entry inside a trend starts long. Defaults fitted
+// to 2010-2025 over the option grids: a 15-day breakout, a 100-day exit, no
+// stop (37.6% a year, drawdown 81%); the Turtles' 55/20 with a 3-move stop made
+// 3.0%, 20/10 with a 2-move stop 9.2%. The stop's window is moot with the stop off.
+CODE[56] = `{
+  name: "Donchian breakout + ATR stop",
+  params: [
+    { id: "entryDays", label: "Buy above the high of (days)", tip: "TQQQ is bought at a close above its highest close of this many prior days. The Turtles used 20 and 55.", text: "Buy TQQQ when it closes above its highest close of the last {} days.", default: 15, options:
+      [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200, 220, 250, 300] },
+    { id: "exitDays", label: "Sell under the low of (days)", tip: "TQQQ is sold at a close under its lowest close of this many prior days. The Turtles used 10 and 20.", text: "Sell when it closes under its lowest close of the last {} days,", default: 100, options:
+      [3, 5, 7, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 150] },
+    { id: "atrMult", label: "Stop: average moves below the peak", tip: "The trailing stop sits this many average daily moves under the highest close since the entry. The Turtles used 2 true ranges.", text: "or under a stop {} average daily moves below its highest close since the buy.", default: 0, options:
+      Array.from({ length: 19 }, (_, k) => +(1 + 0.5 * k).toFixed(1)).concat([{ value: 0, label: "Off" }]) },
+    { id: "atrDays", label: "Average move over (days)", tip: "The average absolute close-to-close change over this many days: the unit the stop is measured in.", text: "The average move covers the last {} days.", default: 20, options:
+      [5, 7, 10, 14, 20, 25, 30, 40, 50, 60, 80, 100] }
+  ],
+  columns: [
+    { key: "upper", label: "Buy line", tip: "TQQQ's highest close of the entry window, before today. A close above it buys." },
+    { key: "lower", label: "Sell line", tip: "TQQQ's lowest close of the exit window, before today. A close under it sells." },
+    { key: "stop", label: "Stop", tip: "The trailing stop: the highest close since the buy minus the stop's average moves. Blank while out." }
+  ],
+  run(data, p) {
+    const log = [], lev = data.tqqq, dates = data.dates, n = dates.length;
+    const N = Math.max(1, Math.round(+p.entryDays || 55)), M = Math.max(1, Math.round(+p.exitDays || 20)), AD = Math.max(1, Math.round(+p.atrDays || 20)), K = +p.atrMult || 0;
+    // Channel edges from the closes BEFORE each day, and the average absolute daily change through each day.
+    const upper = new Float64Array(n).fill(NaN), lower = new Float64Array(n).fill(NaN), atr = new Float64Array(n).fill(NaN);
+    for (let i = 1; i < n; i++) {
+      if (!(lev[i] > 0)) continue;
+      let hi = 0, lo = Infinity, okHi = i - N >= 0, okLo = i - M >= 0;
+      for (let k = i - N; okHi && k < i; k++) { if (!(lev[k] > 0)) { okHi = false; break; } if (lev[k] > hi) hi = lev[k]; }
+      for (let k = i - M; okLo && k < i; k++) { if (!(lev[k] > 0)) { okLo = false; break; } if (lev[k] < lo) lo = lev[k]; }
+      if (okHi) upper[i] = hi; if (okLo) lower[i] = lo;
+      if (i - AD >= 0) { let s = 0, ok = true; for (let k = i - AD + 1; k <= i; k++) { if (!(lev[k] > 0 && lev[k - 1] > 0)) { ok = false; break; } s += Math.abs(lev[k] - lev[k - 1]); } if (ok) atr[i] = s / AD; }
+    }
+    // The rule's state: in or out, the highest close since the buy, the stop. advance() reads one close.
+    let invested = false, peak = 0, stopPx = 0, why = "";
+    const advance = (i) => {
+      const px = lev[i];
+      if (!(px > 0)) return "hold";
+      if (invested) { if (px > peak) peak = px; stopPx = K > 0 && atr[i] === atr[i] ? peak - K * atr[i] : 0; }
+      if (!invested && upper[i] === upper[i] && px > upper[i]) { invested = true; peak = px; stopPx = K > 0 && atr[i] === atr[i] ? px - K * atr[i] : 0; why = "closed above its " + N + "-day high"; return "buy"; }
+      if (invested && lower[i] === lower[i] && px < lower[i]) { invested = false; why = "closed under its " + M + "-day low"; return "sell"; }
+      if (invested && stopPx > 0 && px < stopPx) { invested = false; why = "closed under the stop, " + K + " average moves below its peak"; return "sell"; }
+      return "hold";
+    };
+    // Memory before the Entry: the rule runs over the prior window without trading, so the first day holds what a running strategy held.
+    for (let i = Math.max(1, p.startIdx - 2 * (N + M + AD)); i < p.startIdx; i++) advance(i);
+    const wasIn = invested;
+    let cash = p.initial, sh = 0, prevMonth = null, holding = false;
+    for (let i = p.startIdx; i <= p.endIdx; i++) {
+      const month = dates[i].slice(0, 7);
+      let contributed = 0, action = "hold", note = "";
+      if (p.contributions && p.contributions[dates[i]]) {
+        const amt = p.contributions[dates[i]];
+        cash += amt; contributed = amt; action = "contribution";
+${SELL_SH_TO_COVER}
+      }
+      prevMonth = month;
+      const px = lev[i];
+      const step = i === p.startIdx && wasIn ? "buy" : advance(i);
+      if (i === p.startIdx && wasIn) { if (px > peak) peak = px; stopPx = K > 0 && atr[i] === atr[i] ? peak - K * atr[i] : 0; why = "was in the trend before the Entry"; }
+      if (step === "buy" && !holding && px > 0) { sh = cash / px; cash = 0; holding = true; action = "buy"; note = "Bought TQQQ: " + why; }
+      else if (step === "sell" && holding) { cash = sh * px; sh = 0; holding = false; action = "sell"; note = "Sold TQQQ: " + why; }
+      else if (holding && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
+${WEEKLY_MONTH_END_SNIPPET}
+      if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
+        log.push({ date: dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action, held: holding ? "TQQQ" : "CASH", note: note,
+          upper: upper[i] === upper[i] ? upper[i] : null, lower: lower[i] === lower[i] ? lower[i] : null, stop: holding && stopPx > 0 ? stopPx : null });
+    }
+    return { log, lines: [{ key: "price", label: "TQQQ price" }, { key: "upper", label: N + "-day high" }, { key: "lower", label: M + "-day low" }, { key: "stop", label: "Stop" }] };
+  }
+}`;
 
 // ===== The SMA strategy as code =============================================
 // The user (2026-11-04): "I want built in sma panel ... converted into code,
