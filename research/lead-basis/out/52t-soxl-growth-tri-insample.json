@@ -1,0 +1,275 @@
+{
+ "n": 52,
+ "lead": "soxl",
+ "basis": "growth",
+ "kernel": "tri",
+ "fixed": {
+  "startKernel": "tri",
+  "lookbackDays": 600,
+  "startSpread": 0.25,
+  "topLead": 97.1,
+  "backLead": 78.7,
+  "floorLead": 56.8,
+  "reentryLead": 92.5,
+  "deepLead": 32.5
+ },
+ "mode": "insample",
+ "tier": "lead",
+ "constrain": 1,
+ "window": 6,
+ "starts": 16,
+ "space": [
+  {
+   "id": "soxlLeadDays",
+   "count": 43,
+   "min": 60,
+   "max": 750
+  },
+  {
+   "id": "soxlStartSpread",
+   "count": 6,
+   "min": 0.1,
+   "max": 1
+  },
+  {
+   "id": "soxlLeadEnter",
+   "count": 199,
+   "min": -64.3,
+   "max": 160
+  },
+  {
+   "id": "soxlLeadExit",
+   "count": 199,
+   "min": -64.3,
+   "max": 160
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "asShipped": {
+  "cagr": 180.72,
+  "dd": 72.45
+ },
+ "fit": {
+  "cagr": 206.61,
+  "dd": 72.45,
+  "params": {
+   "soxlLeadDays": 500,
+   "soxlStartSpread": 0.15,
+   "soxlLeadEnter": 49.7,
+   "soxlLeadExit": 49.7
+  },
+  "starts": [
+   {
+    "cagr": 192.53,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 240,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": -15.1,
+     "soxlLeadExit": 89.6
+    },
+    "ms": 20170
+   },
+   {
+    "cagr": 192.53,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 240,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": -15.1,
+     "soxlLeadExit": 86.2
+    },
+    "ms": 15980
+   },
+   {
+    "cagr": 192.53,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 240,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": -15.1,
+     "soxlLeadExit": 89.6
+    },
+    "ms": 28979
+   },
+   {
+    "cagr": 199.72,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 470,
+     "soxlStartSpread": 0.25,
+     "soxlLeadEnter": 20.7,
+     "soxlLeadExit": 29.7
+    },
+    "ms": 19697
+   },
+   {
+    "cagr": 192.88,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 280,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": 59.1,
+     "soxlLeadExit": 59.1
+    },
+    "ms": 10862
+   },
+   {
+    "cagr": 191.66,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 300,
+     "soxlStartSpread": 0.1,
+     "soxlLeadEnter": -17.3,
+     "soxlLeadExit": 125.9
+    },
+    "ms": 15266
+   },
+   {
+    "cagr": 204.13,
+    "dd": 63.79,
+    "params": {
+     "soxlLeadDays": 410,
+     "soxlStartSpread": 1,
+     "soxlLeadEnter": 16.8,
+     "soxlLeadExit": 20.7
+    },
+    "ms": 15665
+   },
+   {
+    "cagr": 206.61,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 500,
+     "soxlStartSpread": 0.15,
+     "soxlLeadEnter": 49.7,
+     "soxlLeadExit": 49.7
+    },
+    "ms": 15599
+   },
+   {
+    "cagr": 192.79,
+    "dd": 56.66,
+    "params": {
+     "soxlLeadDays": 240,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": 0.1,
+     "soxlLeadExit": 77.5
+    },
+    "ms": 11486
+   },
+   {
+    "cagr": 206.17,
+    "dd": 62.51,
+    "params": {
+     "soxlLeadDays": 330,
+     "soxlStartSpread": 1,
+     "soxlLeadEnter": -4.5,
+     "soxlLeadExit": -0.6
+    },
+    "ms": 5884
+   },
+   {
+    "cagr": 197.7,
+    "dd": 56.66,
+    "params": {
+     "soxlLeadDays": 320,
+     "soxlStartSpread": 1,
+     "soxlLeadEnter": -9,
+     "soxlLeadExit": 1.5
+    },
+    "ms": 15414
+   },
+   {
+    "cagr": 195.91,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 360,
+     "soxlStartSpread": 0.1,
+     "soxlLeadEnter": 60.7,
+     "soxlLeadExit": 64.7
+    },
+    "ms": 16553
+   },
+   {
+    "cagr": 192.47,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 390,
+     "soxlStartSpread": 0.1,
+     "soxlLeadEnter": 52.8,
+     "soxlLeadExit": 68.8
+    },
+    "ms": 10637
+   },
+   {
+    "cagr": 201.79,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 500,
+     "soxlStartSpread": 0.15,
+     "soxlLeadEnter": 47.5,
+     "soxlLeadExit": 47.5
+    },
+    "ms": 6848
+   },
+   {
+    "cagr": 205.1,
+    "dd": 72.45,
+    "params": {
+     "soxlLeadDays": 480,
+     "soxlStartSpread": 0.25,
+     "soxlLeadEnter": 32.6,
+     "soxlLeadExit": 34.4
+    },
+    "ms": 16178
+   },
+   {
+    "cagr": 195.53,
+    "dd": 56.66,
+    "params": {
+     "soxlLeadDays": 310,
+     "soxlStartSpread": 0.75,
+     "soxlLeadEnter": -3.5,
+     "soxlLeadExit": 34.4
+    },
+    "ms": 11423
+   }
+  ]
+ },
+ "holdout2026": {
+  "cagr": 328.1,
+  "dd": 51.59
+ },
+ "halves": {
+  "h1": {
+   "cagr": 143.1,
+   "dd": 55.1
+  },
+  "h2": {
+   "cagr": 284.78,
+   "dd": 72.45
+  }
+ },
+ "plateau": {
+  "soxlLeadEnter": {
+   "at": 49.7,
+   "neighbours": [
+    199.71,
+    200.75,
+    205.92,
+    202.22
+   ]
+  },
+  "soxlLeadExit": {
+   "at": 49.7,
+   "neighbours": [
+    205.52,
+    202.98,
+    201.26,
+    189.69
+   ]
+  }
+ },
+ "seconds": 237
+}

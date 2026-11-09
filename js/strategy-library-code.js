@@ -3720,6 +3720,107 @@ CODE[53] = withDefaults(CODE[52], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults
   lookbackDays: 543, topLead: 123, topDays: 61, backLead: 34, floorLead: 6, floorHold: "sqqq", reentryLead: 65, reentryCloses: 44, deepLead: -32.5,
   overPct: 58.2, overWindow: 236, sqqqMaxDays: 18, deepGuard: 52, nfciVeto: 0.75, soxlLeadEnter: -33, soxlLeadExit: 101 } });
 
+// #54 — SOXL, TQQQ, QQQ - spread start (the user, 2026-11-09: "i want strategy,
+// where rate will be considered, but should not be influenced by when it
+// started measuring"): #52 with both leads measured from a spread of starting
+// days instead of one block or one close. Each start price is an average of
+// past closes weighted like a triangle: most weight at the lookback, falling
+// in a straight line to nothing at ± the spread, so no single day and no edge
+// of a block decides the lead, and a lookback moved by a day moves the lead by
+// a hair. (#52 averages the TQQQ and QQQ starts over a ±65-day block and takes
+// SOXL's and SOXX's from the one close 380 days back.) The lead thresholds are
+// refit to the new measure, whose scale differs; every other setting is #52's.
+// The cliffs the user saw (a lookback of 558 against 559 ending 110 times
+// apart since 1953) were one close sitting 0.1 point from the deep-buy line on
+// 2020-03-20, and no start measure removes them: the lines are all-or-nothing.
+// Numbers in the card (js/strategy-library.js). Built from #52's text at load,
+// so a change to #47, #50 or #52 reaches it.
+function withSpreadStart(base) {
+  const once = (text, find, repl, what) => {
+    const at = text.indexOf(find);
+    if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withSpreadStart: ${what} must appear exactly once in the base`);
+    return text.slice(0, at) + repl + text.slice(at + find.length);
+  };
+  let t = base;
+  // The TQQQ-vs-QQQ lead: its settings' words, the ±W block setting becomes the spread.
+  t = once(t, `tip: "How many trading days of buy & hold growth are compared: TQQQ's against QQQ's. 252 is about a year.", text: "Compare TQQQ's growth with QQQ's over the last {} trading days."`,
+    `tip: "Where the start weight peaks: this many trading days back. 252 is about a year.", text: "Compare TQQQ's growth with QQQ's from a start centred {} trading days back."`, 'the lookback setting');
+  t = once(t, `    { id: "startAvgDays", label: "Start averaged over ± (days)", tip: "Example: with a 550-day lookback and ±65, the start price is the average close from 615 to 485 days ago, so one day's price can't decide the lead. At 0 it is the close 550 days ago.", text: "Average the start price over ±{} days.", default: 65, options:
+      Array.from({ length: 201 }, (_, k) => k) },
+`, `    { id: "startSpreadPct", label: "Start spread (± % of the lookback)", tip: "The start price is an average of past closes weighted like a triangle: most weight at the lookback, falling in a straight line to nothing this far either side of it. Example: a 500-day lookback with 50% counts the closes from 750 to 250 days ago, the one 500 back most. No single day decides the lead.", text: "Spread the start over ±{} of the lookback, the closes nearest its centre counting most.", unit: "%", default: 75, options:
+      Array.from({ length: 100 }, (_, k) => 1 + k) },
+`, 'the start-average setting');
+  t = once(t, `    const W = p.startAvgDays == null ? 65 : Math.max(0, Math.round(+p.startAvgDays));
+`, `    const S = Math.max(1, Math.min(L, Math.round(L * (p.startSpreadPct == null ? 75 : +p.startSpreadPct) / 100)));   // the start triangle's half-width in days, at most the lookback: the start stays in the past
+`, 'the block width');
+  t = once(t, `    // The lead: TQQQ's growth over the lookback divided by QQQ's, minus 1, in
+    // percent. Growth runs from the start price: the average close (geometric
+    // mean) over the W closes either side of the day L back, or that day's
+    // close when W is 0. With one day's close, lookbacks a week apart made 80%
+    // to 141% a year (2010-2025): the lead swung with the day it started on.
+`, `    // The lead: TQQQ's growth divided by QQQ's, minus 1, in percent. Growth
+    // runs from the start price: the geometric mean of the closes L + S - 1 to
+    // L - S + 1 days back, each weighted S minus its distance from L (a
+    // triangle; the weights sum to S * S), so the close L back counts most and
+    // the two ends count once. Prefix sums of log close and of day index times
+    // log close give every day's start in constant time.
+`, 'the lead comment');
+  t = once(t, `    for (let i = L + W; i < n; i++) {
+      const a = i - L - W, b = i - L + W + 1;
+      if (!(T[i] > 0 && Q[i] > 0) || priced[b] - priced[a] !== b - a) continue;
+      baseT[i] = W ? Math.exp((logT[b] - logT[a]) / (b - a)) : T[i - L];
+      baseQ[i] = W ? Math.exp((logQ[b] - logQ[a]) / (b - a)) : Q[i - L];
+`, `    const sT = new Float64Array(n + 1), sQ = new Float64Array(n + 1);
+    for (let i = 0; i < n; i++) { const ok = T[i] > 0 && Q[i] > 0; sT[i + 1] = sT[i] + (ok ? i * Math.log(T[i]) : 0); sQ[i + 1] = sQ[i] + (ok ? i * Math.log(Q[i]) : 0); }
+    const triSum = (P1, P2, c, s1, s2) => (S - c) * (P1[c + 1] - P1[s1]) + (P2[c + 1] - P2[s1]) + (S + c) * (P1[s2 + 1] - P1[c + 1]) - (P2[s2 + 1] - P2[c + 1]);
+    for (let i = L + S; i < n; i++) {
+      const c = i - L, s1 = c - S + 1, s2 = c + S - 1;   // the centre of the start and its first and last day
+      if (!(T[i] > 0 && Q[i] > 0) || priced[s2 + 1] - priced[s1] !== s2 - s1 + 1) continue;
+      baseT[i] = Math.exp(triSum(logT, sT, c, s1, s2) / (S * S));
+      baseQ[i] = Math.exp(triSum(logQ, sQ, c, s1, s2) / (S * S));
+`, 'the lead loop');
+  // The SOXL-vs-SOXX lead: the one close LD back becomes the same triangle, with its own spread setting.
+  t = once(t, `tip: "How many trading days of growth are compared: SOXL's against SOXX's. 380 is about 18 months; 350 to 450 all beat the price rules since 2010.", text: "The lead is SOXL's growth against SOXX's over the last {} trading days."`,
+    `tip: "Where SOXL's start weight peaks: this many trading days back. 380 is about 18 months.", text: "The lead is SOXL's growth against SOXX's from a start centred {} trading days back."`, 'the SOXL lookback setting');
+  t = once(t, `, 675, 700, 725, 750] },
+`, `, 675, 700, 725, 750] },
+    { id: "soxlStartSpreadPct", label: "SOXL start spread (± % of the lookback)", tip: "SOXL's and SOXX's start prices are averages of past closes weighted like a triangle: most weight at the lead lookback, falling in a straight line to nothing this far either side of it.", text: "Spread SOXL's start over ±{} of its lookback.", unit: "%", default: 25, options:
+      Array.from({ length: 100 }, (_, k) => 1 + k) },
+`, 'the SOXL lookback options');
+  t = once(t, `    const soxlLead = new Float64Array(n).fill(NaN), soxlBase = new Float64Array(n).fill(NaN);   // soxlBase: the SOXL price at a lead of 0% today
+    if (data.soxl && data.soxx) {
+      let on = false;
+      for (let i = LD; i <= p.endIdx; i++) {
+        const s0 = data.soxl[i - LD], x0 = data.soxx[i - LD];
+        if (!(s0 > 0 && x0 > 0 && data.soxl[i] > 0 && data.soxx[i] > 0) || dates[i - LD] < SOXL_FROM) continue;
+`, `    const SS = Math.max(1, Math.min(LD, Math.round(LD * (p.soxlStartSpreadPct == null ? 25 : +p.soxlStartSpreadPct) / 100)));   // the SOXL start triangle's half-width in days
+    const soxlLead = new Float64Array(n).fill(NaN), soxlBase = new Float64Array(n).fill(NaN);   // soxlBase: the SOXL price at a lead of 0% today
+    if (data.soxl && data.soxx) {
+      // Each fund's start price: the triangle-weighted geometric mean of its closes LD ± SS days back, as the TQQQ lead's; every day of it priced and on or after SOXL_FROM.
+      const lS = new Float64Array(n + 1), lX = new Float64Array(n + 1), sS = new Float64Array(n + 1), sX = new Float64Array(n + 1), pSX = new Int32Array(n + 1);
+      for (let i = 0; i < n; i++) { const ok = data.soxl[i] > 0 && data.soxx[i] > 0 && dates[i] >= SOXL_FROM, a = ok ? Math.log(data.soxl[i]) : 0, b = ok ? Math.log(data.soxx[i]) : 0; lS[i + 1] = lS[i] + a; lX[i + 1] = lX[i] + b; sS[i + 1] = sS[i] + i * a; sX[i + 1] = sX[i] + i * b; pSX[i + 1] = pSX[i] + (ok ? 1 : 0); }
+      const triSumSx = (P1, P2, c, s1, s2) => (SS - c) * (P1[c + 1] - P1[s1]) + (P2[c + 1] - P2[s1]) + (SS + c) * (P1[s2 + 1] - P1[c + 1]) - (P2[s2 + 1] - P2[c + 1]);
+      let on = false;
+      for (let i = LD + SS; i <= p.endIdx; i++) {
+        const c = i - LD, s1 = c - SS + 1, s2 = c + SS - 1;
+        if (!(data.soxl[i] > 0 && data.soxx[i] > 0) || pSX[s2 + 1] - pSX[s1] !== s2 - s1 + 1) continue;
+        const s0 = Math.exp(triSumSx(lS, sS, c, s1, s2) / (SS * SS)), x0 = Math.exp(triSumSx(lX, sX, c, s1, s2) / (SS * SS));
+`, 'the SOXL lead loop');
+  return t;
+}
+// Defaults: the lead settings fitted to 2010-2025 on this measure ($100K lump
+// sum, research/lead-basis/fit.cjs --kernel tri: the SOXL lead first with the
+// TQQQ lead at #52's words, then the TQQQ lead with that SOXL lead fixed, eight
+// starts), the rest #52's. Both leads chose a quarter spread with 10% to 100%
+// offered. A second SOXL pass against the new TQQQ settings found 0.9 points
+// more with a zero-width band (SOXL in and out at the same 49.7% lead) and was
+// not taken: the band exists to keep a hovering lead from switching every few
+// days. The fit's floor (56.8%) sits above its deep buy (32.5%): sold under the
+// floor, it buys back either far lower or once the lead is back over 92.5%.
+CODE[54] = withDefaults(withSpreadStart(CODE[52]), { name: "SOXL, TQQQ, QQQ - spread start", defaults: {
+  lookbackDays: 600, startSpreadPct: 25, topLead: 97.1, backLead: 78.7, floorLead: 56.8, reentryLead: 92.5, deepLead: 32.5,
+  soxlLeadDays: 500, soxlStartSpreadPct: 25, soxlLeadEnter: 27.4, soxlLeadExit: 33.9 } });
+
 // ===== The SMA strategy as code =============================================
 // The user (2026-11-04): "I want built in sma panel ... converted into code,
 // but still keeping all functionality as is, and the result should stay

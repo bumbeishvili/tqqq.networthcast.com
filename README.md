@@ -1,6 +1,6 @@
 # tqqq.networthcast.com
 
-Backtesting platform for TQQQ. Strategies run over a reconstructed daily price history that starts in 1953, on TQQQ and nine related funds (QQQ, QLD, SQQQ, SPY, SSO, SPXL, GLD, SOXL, SOXX): SMA timing, 9Sig, a library of 48 published and community rules, and custom strategies written in JavaScript, with buy & hold and a cash baseline drawn alongside. A real transaction history can be uploaded to put your own portfolio on the same chart, a separate page follows TQQQ's intraday path session by session, and a desktop widget shows both.
+Backtesting platform for TQQQ. Strategies run over a reconstructed daily price history that starts in 1953, on TQQQ and nine related funds (QQQ, QLD, SQQQ, SPY, SSO, SPXL, GLD, SOXL, SOXX): SMA timing, 9Sig, a library of 49 published and community rules, and custom strategies written in JavaScript, with buy & hold and a cash baseline drawn alongside. A real transaction history can be uploaded to put your own portfolio on the same chart, a separate page follows TQQQ's intraday path session by session, and a desktop widget shows both.
 
 Live: https://tqqq.networthcast.com
 
@@ -14,7 +14,7 @@ $10K plus $500 a month from 2010: TQQQ vs QQQ + Turnaround Monday from the libra
 
 ![The strategy library](images/readme-library.png)
 
-48 strategies: published rules, community favourites and a few of the site's own. Each card has its rules, a sparkline against SPY, and CAGR and max drawdown by era. Try puts one on the chart.
+49 strategies: published rules, community favourites and a few of the site's own. Each card has its rules, a sparkline against SPY, and CAGR and max drawdown by era. Try puts one on the chart.
 
 ### Settings as sentences, Fit, signal charts
 

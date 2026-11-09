@@ -1,0 +1,254 @@
+{
+ "n": 52,
+ "lead": "tqqq",
+ "basis": "growth",
+ "kernel": "box",
+ "fixed": {
+  "soxlLeadDays": 480,
+  "soxlLeadEnter": 11.8,
+  "soxlLeadExit": 19.8
+ },
+ "mode": "insample",
+ "tier": "lead",
+ "constrain": 0,
+ "window": 6,
+ "starts": 8,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "startAvgDays",
+   "count": 7,
+   "min": 0,
+   "max": 120
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "asShipped": {
+  "cagr": 195.81,
+  "dd": 55.1
+ },
+ "fit": {
+  "cagr": 200.02,
+  "dd": 55.1,
+  "params": {
+   "lookbackDays": 550,
+   "startAvgDays": 65,
+   "topLead": 125.4,
+   "backLead": 25.1,
+   "floorLead": 8.1,
+   "reentryLead": 25.1,
+   "deepLead": -33
+  },
+  "starts": [
+   {
+    "cagr": 200.02,
+    "dd": 55.1,
+    "params": {
+     "lookbackDays": 550,
+     "startAvgDays": 65,
+     "topLead": 125.4,
+     "backLead": 25.1,
+     "floorLead": 8.1,
+     "reentryLead": 25.1,
+     "deepLead": -33
+    },
+    "ms": 40578
+   },
+   {
+    "cagr": 160.43,
+    "dd": 55.1,
+    "params": {
+     "lookbackDays": 540,
+     "startAvgDays": 40,
+     "topLead": 66.3,
+     "backLead": 127.3,
+     "floorLead": 45.7,
+     "reentryLead": 45.2,
+     "deepLead": 34.4
+    },
+    "ms": 54261
+   },
+   {
+    "cagr": 173.12,
+    "dd": 55.1,
+    "params": {
+     "lookbackDays": 590,
+     "startAvgDays": 65,
+     "topLead": 96.2,
+     "backLead": 89.1,
+     "floorLead": 51.5,
+     "reentryLead": 44.1,
+     "deepLead": 57.4
+    },
+    "ms": 47947
+   },
+   {
+    "cagr": 189.08,
+    "dd": 63.79,
+    "params": {
+     "lookbackDays": 600,
+     "startAvgDays": 90,
+     "topLead": 102.9,
+     "backLead": 73.6,
+     "floorLead": 59.8,
+     "reentryLead": 112.6,
+     "deepLead": 32.3
+    },
+    "ms": 42759
+   },
+   {
+    "cagr": 187.6,
+    "dd": 55.1,
+    "params": {
+     "lookbackDays": 600,
+     "startAvgDays": 90,
+     "topLead": 93.8,
+     "backLead": 92.9,
+     "floorLead": 81.5,
+     "reentryLead": 39.6,
+     "deepLead": 85.1
+    },
+    "ms": 65282
+   },
+   {
+    "cagr": 170.29,
+    "dd": 63.79,
+    "params": {
+     "lookbackDays": 380,
+     "startAvgDays": 20,
+     "topLead": 136,
+     "backLead": 65.3,
+     "floorLead": 58.1,
+     "reentryLead": 96.2,
+     "deepLead": -4.2
+    },
+    "ms": 86888
+   },
+   {
+    "cagr": 175.31,
+    "dd": 55.1,
+    "params": {
+     "lookbackDays": 540,
+     "startAvgDays": 65,
+     "topLead": 127.3,
+     "backLead": 25.1,
+     "floorLead": 16,
+     "reentryLead": 34,
+     "deepLead": 23.3
+    },
+    "ms": 47135
+   },
+   {
+    "cagr": 146.21,
+    "dd": 63.79,
+    "params": {
+     "lookbackDays": 510,
+     "startAvgDays": 90,
+     "topLead": 63.1,
+     "backLead": -12.5,
+     "floorLead": 111.2,
+     "reentryLead": 67.2,
+     "deepLead": 32.7
+    },
+    "ms": 37989
+   }
+  ]
+ },
+ "holdout2026": {
+  "cagr": 151.89,
+  "dd": 60.57
+ },
+ "halves": {
+  "h1": {
+   "cagr": 96.99,
+   "dd": 55.1
+  },
+  "h2": {
+   "cagr": 354.51,
+   "dd": 35.89
+  }
+ },
+ "plateau": {
+  "topLead": {
+   "at": 125.4,
+   "neighbours": [
+    198.13,
+    196.46,
+    172.24,
+    173.07
+   ]
+  },
+  "backLead": {
+   "at": 25.1,
+   "neighbours": [
+    176.35,
+    200.02,
+    197.67,
+    195.52
+   ]
+  },
+  "floorLead": {
+   "at": 8.1,
+   "neighbours": [
+    184.9,
+    199.23,
+    186.79,
+    181.41
+   ]
+  },
+  "reentryLead": {
+   "at": 25.1,
+   "neighbours": [
+    200.02,
+    200.02,
+    200.02,
+    200.02
+   ]
+  },
+  "deepLead": {
+   "at": -33,
+   "neighbours": [
+    185.13,
+    183.71,
+    198.74,
+    198.74
+   ]
+  }
+ },
+ "seconds": 423
+}

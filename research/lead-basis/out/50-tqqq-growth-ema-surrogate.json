@@ -1,0 +1,268 @@
+{
+ "n": 50,
+ "lead": "tqqq",
+ "basis": "growth",
+ "kernel": "ema",
+ "mode": "surrogate",
+ "tier": "lead",
+ "constrain": 0,
+ "window": 6,
+ "starts": 3,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -38.8,
+   "max": 111
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -38.8,
+   "max": 111
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -38.8,
+   "max": 111
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -38.8,
+   "max": 111
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -38.8,
+   "max": 111
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "surrogates": [
+  {
+   "shift": 4584,
+   "cagr": 111.7,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 480,
+    "topLead": 33.9,
+    "backLead": 84.7,
+    "floorLead": -27.2,
+    "reentryLead": -15,
+    "deepLead": -38.8
+   }
+  },
+  {
+   "shift": 9741,
+   "cagr": 124,
+   "dd": 57.5,
+   "params": {
+    "lookbackDays": 560,
+    "topLead": 49.8,
+    "backLead": 15.7,
+    "floorLead": 0.7,
+    "reentryLead": -6.3,
+    "deepLead": -15
+   }
+  },
+  {
+   "shift": 3584,
+   "cagr": 95.2,
+   "dd": 58.1,
+   "params": {
+    "lookbackDays": 920,
+    "topLead": 111,
+    "backLead": 24.6,
+    "floorLead": 23.7,
+    "reentryLead": 41.5,
+    "deepLead": 14.3
+   }
+  },
+  {
+   "shift": 10453,
+   "cagr": 104.9,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 530,
+    "topLead": 111,
+    "backLead": 24.6,
+    "floorLead": -7.3,
+    "reentryLead": 24.6,
+    "deepLead": -32.4
+   }
+  },
+  {
+   "shift": 4833,
+   "cagr": 113,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 580,
+    "topLead": 111,
+    "backLead": 24.6,
+    "floorLead": 6,
+    "reentryLead": -21,
+    "deepLead": -27.2
+   }
+  },
+  {
+   "shift": 15330,
+   "cagr": 102,
+   "dd": 60.8,
+   "params": {
+    "lookbackDays": 320,
+    "topLead": 90.1,
+    "backLead": 71.7,
+    "floorLead": 49.8,
+    "reentryLead": -0.6,
+    "deepLead": 20.4
+   }
+  },
+  {
+   "shift": 16446,
+   "cagr": 104.5,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 500,
+    "topLead": 111,
+    "backLead": 24.6,
+    "floorLead": 26.1,
+    "reentryLead": 21.7,
+    "deepLead": -30
+   }
+  },
+  {
+   "shift": 4029,
+   "cagr": 126.3,
+   "dd": 44.5,
+   "params": {
+    "lookbackDays": 1008,
+    "topLead": 62.5,
+    "backLead": 47.5,
+    "floorLead": 23.1,
+    "reentryLead": 27.6,
+    "deepLead": 11
+   }
+  },
+  {
+   "shift": 14974,
+   "cagr": 104.3,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 320,
+    "topLead": 68.7,
+    "backLead": 50.5,
+    "floorLead": -29.1,
+    "reentryLead": -5.4,
+    "deepLead": -33.6
+   }
+  },
+  {
+   "shift": 17204,
+   "cagr": 111.6,
+   "dd": 58.1,
+   "params": {
+    "lookbackDays": 960,
+    "topLead": 111,
+    "backLead": 71.2,
+    "floorLead": 19.3,
+    "reentryLead": -5.4,
+    "deepLead": 9.8
+   }
+  },
+  {
+   "shift": 16024,
+   "cagr": 123.2,
+   "dd": 43.9,
+   "params": {
+    "lookbackDays": 580,
+    "topLead": 63.2,
+    "backLead": 65.4,
+    "floorLead": 8.7,
+    "reentryLead": 2.8,
+    "deepLead": -36.1
+   }
+  },
+  {
+   "shift": 17158,
+   "cagr": 121.5,
+   "dd": 55.1,
+   "params": {
+    "lookbackDays": 540,
+    "topLead": 106.2,
+    "backLead": 79.9,
+    "floorLead": 44.3,
+    "reentryLead": 13.1,
+    "deepLead": -2.3
+   }
+  },
+  {
+   "shift": 7800,
+   "cagr": 120.9,
+   "dd": 58.1,
+   "params": {
+    "lookbackDays": 1008,
+    "topLead": 41.5,
+    "backLead": -38.8,
+    "floorLead": 13.7,
+    "reentryLead": 7.4,
+    "deepLead": -36.1
+   }
+  },
+  {
+   "shift": 5654,
+   "cagr": 113.5,
+   "dd": 58,
+   "params": {
+    "lookbackDays": 480,
+    "topLead": 36,
+    "backLead": 38.8,
+    "floorLead": 17.5,
+    "reentryLead": -1.8,
+    "deepLead": -21
+   }
+  },
+  {
+   "shift": 9248,
+   "cagr": 106.1,
+   "dd": 60.2,
+   "params": {
+    "lookbackDays": 360,
+    "topLead": 30,
+    "backLead": 31.2,
+    "floorLead": 49.8,
+    "reentryLead": 29.1,
+    "deepLead": 35.2
+   }
+  },
+  {
+   "shift": 16361,
+   "cagr": 115.6,
+   "dd": 47.9,
+   "params": {
+    "lookbackDays": 280,
+    "topLead": 47.5,
+    "backLead": 46.9,
+    "floorLead": 43.2,
+    "reentryLead": 17.5,
+    "deepLead": 42.7
+   }
+  }
+ ],
+ "surrogateSummary": {
+  "n": 16,
+  "min": 95.2,
+  "median": 113,
+  "p90": 123.2,
+  "max": 126.3
+ },
+ "seconds": 2561
+}

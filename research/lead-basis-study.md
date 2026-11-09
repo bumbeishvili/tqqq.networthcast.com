@@ -206,6 +206,91 @@ rule earns its keep, because its floor and re-entry fire at other times than
 the SOXL entry was tuned for. The tie of section C does not carry into the
 strategy the user runs.
 
+## F. A lead with no start day (2026-11-09)
+
+The user's follow-up: "i want strategy, where rate will be considered, but
+should not be influenced by when it started measuring". Two start kernels
+replace the block (TQQQ and QQQ: the geometric mean over ±65 days around the
+lookback) and the single close (SOXL and SOXX: the close 380 days back):
+
+- **ema**: the start price is an exponential average of every earlier close,
+  mean lag L (the weight fades by L/(L+1) a day). No first day at all.
+- **tri**: the start price is the geometric mean of the closes L ± S days back,
+  weighted S − |distance from L| (a triangle; zero weight at both ends),
+  S = spread × L. Spreads offered: 0.25, 0.5, 0.75, 1, later 0.1 and 0.15 too.
+
+Same protocol as C and D: quantile grids per lead threshold, 16-start
+in-sample fit on 2010–2025 ($100K lump), 16 shuffled-lead fits with 3 starts,
+6-year walk-forward with 4 starts (`fit.cjs --kernel ema|tri`, parity of the
+box/point kernel with the library checked first).
+
+### The TQQQ lead on #50
+
+| Start | Fit 2010–25 | DD | Shuffled median / p90 / max | Walk-forward 2016–26 | Years under B&H | Halves fit→test | 2026 |
+|---|---|---|---|---|---|---|---|
+| block ±W (current) | 146.7 | 52 | 111 / 118 / 130 | 84.0 | 4 of 11 | 104 / 72 | 141 |
+| tri | 129.4 (510 days, spread 0.75) | 41 | 113 / 118 / 132.5 | 77.7 | 4 of 11 | 73 / 44 | 91 |
+| ema | 116.5 (380 days) | 44 | 113 / 123 / 126 | 29.9 | 8 of 11 | 64 / 57 | 169 |
+
+The exponential start loses the signal: its fit is at the shuffled median and
+it walks forward under buy & hold (34.4). The triangle keeps most of it out of
+sample (77.7 against 84.0, the same four losing years) but its fit sits inside
+the shuffled band.
+
+### The SOXL lead on #52 (band kept in order)
+
+| Start | Fit 2010–25 | Shuffled median / p90 / max | Walk-forward (SOXL settings only) | Worst fold DD | 2026 |
+|---|---|---|---|---|---|
+| one close (current) | 195.8 (480 days) | 156 / 179 / 182 | 214.2 | 56 | 190 |
+| tri | 193.5 (500 days, spread 0.25) | 147 / 177 / 181 | 222.3 | 51 | 507 |
+| ema | 190.5 (390 days) | 151 / 180 / 192 | 211.4 | 47 | 128 |
+
+A three-way tie. The triangle picked the narrowest spread offered.
+
+### The TQQQ lead inside #52, both leads on the same kernel
+
+Eight starts, the SOXL lead fixed at its own fit per kernel (block: 480 days,
+in under 11.8%, out over 19.8%; tri: 500 days, spread 0.25, 27.4% / 33.9%).
+
+| Start | Fit 2010–25 | DD | Settings | Halves | 2026 | Shuffled median / p90 / max | Walk-forward 2016–26 |
+|---|---|---|---|---|---|---|---|
+| block ±W | 200.0 | 55.1 | 550 / ±65 / 125.4 / 25.1 / 8.1 / 25.1 / −33 (≈ #52's own) | 97 / 355 | 152 | 147 / 160 / 164 | 159.1 (2 of 11 under B&H) |
+| tri, first grid | 186.2 | 55.1 | 590 / 0.25 / 102.6 / 31.6 / 10.9 / 24.9 / −24.9 | 103 / 302 | 428 | — | — |
+| tri, 0.1 and 0.15 offered | 205.8 | 72.5 | 600 / 0.25 / 97.1 / 78.7 / 56.8 / 92.5 / 32.5 | 138 / 291 | 255 | 150 / 165 / 172 | 102.7 (2 of 11 under B&H) |
+
+Both real fits clear their shuffled bands by 34 to 36 points, so the in-sample
+edge is real for either start, but out of sample the block wins: 159.1% against
+102.7% a year chained over 2016–2026 (the triangle's 2018 fold −20%, 2025 +16%),
+and fitted on one half of 2010–2025 and tested on the other 132 / 94 against
+124 / 72. Still a quarter spread with narrower ones on offer. The 205.8 solution
+is a different regime: floor at 56.8% ahead with the deep buy at 32.5% ahead (sold
+under the floor, back either far lower or once over 92.5%), and its drawdown is
+March 2020 in SOXL (4 to 20 March, −72.5%). A second SOXL pass against these
+TQQQ settings found 206.6 with a zero-width band (in and out at 49.7%), not
+taken.
+
+### Does a spread start flatten the lookback dropdown?
+
+No. Each fit's neighbourhood, lookback ±40 days on #50: block 90–147% (median
+102), tri 74–129% (median 103), ema 94–117% (median 102); each fit is a peak
+over a plateau near 102 whichever the kernel. Shipped #54 against #52 from
+2010: 17 of 80 one-day lookback steps move the end value by more than half,
+against 8; from 1953, 11 of 40 two-day steps move it over 2×, against 6. The
+cliffs are the lines: on #53 a lookback of 558 against 559 ended 110× apart
+since 1953 (93× since 2010) because on 2020-03-20 the lead read −32.6% against
+−32.5% at a deep-buy line of −32.5%; the first run bought the bottom and let the
+SOXL rule ride it (11.75× in 2020), the second sat in SQQQ to the 18-day cap and
+then in cash (0.71×). The start day moved the lead by 0.1 point.
+
+### Shipped
+
+Library #54 "SOXL, TQQQ, QQQ - spread start" (js/strategy-library-code.js
+`withSpreadStart`): #52 with both leads on the triangle, defaults from the
+205.8 fit and the SOXL fit above, the rest #52's. 2010–2025 205.8% / DD 72.5%
+against 177.0% / 47.2% for #52; halves 137.8 / 291.1 against 100.6 / 280.5;
+2026 to date 255% against 392%; from 1983 59.1% against 62.5%; from 1953 31.3%
+against 29.0%; 427 trades against 313.
+
 ## Verdict
 
 1. The user's reading of the lead is right: about three quarters of it is
@@ -231,8 +316,16 @@ strategy the user runs.
    replaces it. The start dependence the user dislikes is the signal, tempered
    already by averaging the start over ±65 days.
 
+6. (F) A start with no first day does not help. The exponential start loses
+   the signal; the triangle ties the block out of sample on #50 (78 against 84)
+   with its fit inside the shuffled band, and fits 6 points higher inside #52
+   at a 72% drawdown. The spread does not smooth the lookback dropdown: the
+   cliffs between neighbouring settings are the all-or-nothing lines, not the
+   start day.
+
 Not to re-propose without a new idea: a decay or realized-variance lead; an
-index-only lead; the ratio against its median as a replacement for the lead.
+index-only lead; the ratio against its median as a replacement for the lead;
+an exponential (fading) start for the lead.
 Untested: a hybrid that keeps the growth lead and adds a short-window decay
 rate as a filter; the earlier volatility-timing result (it paid only with
 same-close switches) argues against spending time on it.
@@ -242,7 +335,8 @@ same-close switches) argues against spending time on it.
 `research/lead-basis/`: `harness.cjs` (data and engine runner), `basis.cjs`
 (the basis switch as text surgery on the library code, with a parity check:
 `node basis.cjs`), `fit.cjs` (the fitter; `--mode insample|walkforward|surrogate`,
-`--lead tqqq|soxl`, `--basis`, `--starts`, `--window`, `--constrain 1`),
+`--lead tqqq|soxl`, `--basis`, `--kernel ema|tri` with `--fixed '{...}'` for the other
+lead's settings (section F), `--starts`, `--window`, `--constrain 1`),
 `partAB.cjs` (sections A and B), `analyze.cjs` (tables from `out/`). Results as
 run are in `out/`. A full in-sample fit of one basis takes about 30 minutes on
 one core; the whole study ran overnight on eight.

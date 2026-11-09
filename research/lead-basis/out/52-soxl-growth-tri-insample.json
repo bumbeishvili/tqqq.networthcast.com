@@ -1,0 +1,264 @@
+{
+ "n": 52,
+ "lead": "soxl",
+ "basis": "growth",
+ "kernel": "tri",
+ "mode": "insample",
+ "tier": "lead",
+ "constrain": 1,
+ "window": 6,
+ "starts": 16,
+ "space": [
+  {
+   "id": "soxlLeadDays",
+   "count": 43,
+   "min": 60,
+   "max": 750
+  },
+  {
+   "id": "soxlStartSpread",
+   "count": 4,
+   "min": 0.25,
+   "max": 1
+  },
+  {
+   "id": "soxlLeadEnter",
+   "count": 199,
+   "min": -64.3,
+   "max": 160
+  },
+  {
+   "id": "soxlLeadExit",
+   "count": 199,
+   "min": -64.3,
+   "max": 160
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "asShipped": {
+  "cagr": 178.05,
+  "dd": 55.1
+ },
+ "fit": {
+  "cagr": 193.52,
+  "dd": 55.1,
+  "params": {
+   "soxlLeadDays": 500,
+   "soxlStartSpread": 0.25,
+   "soxlLeadEnter": 27.4,
+   "soxlLeadExit": 33.9
+  },
+  "starts": [
+   {
+    "cagr": 185.86,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 370,
+     "soxlLeadEnter": -8.2,
+     "soxlLeadExit": 34.4
+    },
+    "ms": 25944
+   },
+   {
+    "cagr": 183.23,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 600,
+     "soxlStartSpread": 1,
+     "soxlLeadEnter": 37,
+     "soxlLeadExit": 90.9
+    },
+    "ms": 18561
+   },
+   {
+    "cagr": 180.73,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 140,
+     "soxlStartSpread": 0.75,
+     "soxlLeadEnter": 29.7,
+     "soxlLeadExit": 67.7
+    },
+    "ms": 15972
+   },
+   {
+    "cagr": 189.92,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 650,
+     "soxlStartSpread": 0.75,
+     "soxlLeadEnter": 72.1,
+     "soxlLeadExit": 77.5
+    },
+    "ms": 26159
+   },
+   {
+    "cagr": 184.76,
+    "dd": 47.16,
+    "params": {
+     "soxlLeadDays": 200,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": -43.2,
+     "soxlLeadExit": 62.3
+    },
+    "ms": 20905
+   },
+   {
+    "cagr": 184.42,
+    "dd": 47.16,
+    "params": {
+     "soxlLeadDays": 240,
+     "soxlStartSpread": 0.75,
+     "soxlLeadEnter": -14,
+     "soxlLeadExit": 80.8
+    },
+    "ms": 24449
+   },
+   {
+    "cagr": 190.46,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 370,
+     "soxlStartSpread": 1,
+     "soxlLeadEnter": 13.1,
+     "soxlLeadExit": 23.5
+    },
+    "ms": 22758
+   },
+   {
+    "cagr": 184.72,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 440,
+     "soxlStartSpread": 1,
+     "soxlLeadEnter": -0.6,
+     "soxlLeadExit": 52.8
+    },
+    "ms": 15692
+   },
+   {
+    "cagr": 184.58,
+    "dd": 47.16,
+    "params": {
+     "soxlLeadDays": 280,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": -41.3,
+     "soxlLeadExit": 89.6
+    },
+    "ms": 30731
+   },
+   {
+    "cagr": 189.68,
+    "dd": 45.67,
+    "params": {
+     "soxlLeadDays": 330,
+     "soxlStartSpread": 1,
+     "soxlLeadEnter": -4.5,
+     "soxlLeadExit": -0.6
+    },
+    "ms": 8212
+   },
+   {
+    "cagr": 187.75,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 400,
+     "soxlStartSpread": 1,
+     "soxlLeadEnter": -8.2,
+     "soxlLeadExit": 40.9
+    },
+    "ms": 32314
+   },
+   {
+    "cagr": 187.99,
+    "dd": 47.16,
+    "params": {
+     "soxlLeadDays": 240,
+     "soxlStartSpread": 0.25,
+     "soxlLeadEnter": -17.3,
+     "soxlLeadExit": 79.1
+    },
+    "ms": 17847
+   },
+   {
+    "cagr": 193.52,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 500,
+     "soxlStartSpread": 0.25,
+     "soxlLeadEnter": 27.4,
+     "soxlLeadExit": 33.9
+    },
+    "ms": 22711
+   },
+   {
+    "cagr": 192.81,
+    "dd": 47.16,
+    "params": {
+     "soxlLeadDays": 320,
+     "soxlStartSpread": 0.25,
+     "soxlLeadEnter": 43.3,
+     "soxlLeadExit": 43.3
+    },
+    "ms": 22036
+   },
+   {
+    "cagr": 190.32,
+    "dd": 55.1,
+    "params": {
+     "soxlLeadDays": 470,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": 9.6,
+     "soxlLeadExit": 28.7
+    },
+    "ms": 25249
+   },
+   {
+    "cagr": 181.48,
+    "dd": 47.16,
+    "params": {
+     "soxlLeadDays": 340,
+     "soxlStartSpread": 0.5,
+     "soxlLeadEnter": -12.3,
+     "soxlLeadExit": 42.4
+    },
+    "ms": 16373
+   }
+  ]
+ },
+ "holdout2026": {
+  "cagr": 506.53,
+  "dd": 48.64
+ },
+ "halves": {
+  "h1": {
+   "cagr": 100.39,
+   "dd": 55.1
+  },
+  "h2": {
+   "cagr": 327.66,
+   "dd": 41.99
+  }
+ },
+ "plateau": {
+  "soxlLeadEnter": {
+   "at": 27.4,
+   "neighbours": [
+    191.66,
+    191.66,
+    193.52,
+    192.59
+   ]
+  },
+  "soxlLeadExit": {
+   "at": 33.9,
+   "neighbours": [
+    193.48,
+    192.7,
+    193.17,
+    192.61
+   ]
+  }
+ },
+ "seconds": 346
+}
