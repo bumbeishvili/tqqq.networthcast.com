@@ -58,7 +58,7 @@ function txFollowGroups() {
     { label: 'Buy & Hold', items: bh },
     { label: 'On the chart', items: [['9sig', nineSigName()], ['sma', 'SMA']] },
     { label: 'Saved', items: savedConfigs.filter(c => c.type !== 'invested').map(c => ['cfg:' + c.id, c.name]) },
-    { label: 'Library', items: STRATEGY_LIBRARY.filter(strategyRunnable).map(s => ['lib:' + s.n, s.name]) },
+    { label: 'Library', items: STRATEGY_LIBRARY.filter(s => strategyRunnable(s) && !s.hidden).map(s => ['lib:' + s.n, s.name]) },   // hidden entries stay resolvable for a stored choice, but are not offered
   ].filter(g => g.items.length);
 }
 // The strategy the account's day change follows: the stored choice, or Buy &
