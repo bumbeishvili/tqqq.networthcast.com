@@ -291,6 +291,30 @@ against 177.0% / 47.2% for #52; halves 137.8 / 291.1 against 100.6 / 280.5;
 2026 to date 255% against 392%; from 1983 59.1% against 62.5%; from 1953 31.3%
 against 29.0%; 427 trades against 313.
 
+## G. The daily-autocorrelation regime (arXiv 2504.20116) as a signal (2026-11-09)
+
+The paper (Compounding Effects in Leveraged ETFs) shows ex post that daily-rebalanced leveraged
+funds beat their multiple in trending windows and trail it in mean-reverting ones, with the
+regime read as the AR(1) coefficient of the index's daily returns. It proposes no timing rule and
+tests none. Here: QQQ's rolling AR(1) over 60, 90, 120 and 250 days against TQQQ's forward return
+and its forward shortfall against 3× QQQ, one point a month 2010–2025, Spearman rank correlation,
+circular-shift null (`research/lead-basis/ar1-regime.cjs`).
+
+| AR(1) window | Forward | TQQQ return ρ (p) | TQQQ − 3×QQQ ρ (p) |
+|---|---|---|---|
+| 60 | 126 d | −0.23 (0.01) | −0.08 (0.41) |
+| 90 | 126 d | −0.18 (0.03) | −0.03 (0.80) |
+| 120 | 63 d | −0.17 (0.03) | 0.05 (0.62) |
+| 120 | 126 d | −0.22 (0.01) | −0.02 (0.84) |
+| 250 | 63 d | −0.16 (0.03) | 0.00 (0.97) |
+| any | 21 d or 252 d | −0.04 to −0.13 (0.12–0.56) | −0.02 to 0.06 (0.78–0.99) |
+
+The shortfall against 3× is unpredictable from the regime (ρ within ±0.08, p ≥ 0.41 everywhere),
+so the paper's mechanism does not forecast. TQQQ's own forward return carries a weak contrarian
+relation at 3–6 months (ρ −0.16 to −0.23, 16 tests, 5 at p ≤ 0.03), a quarter of the lead's
+−0.47 / −0.60 in section B. QQQ's AR(1) over 90 days was positive on 36% of days 2010–2025,
+median −0.04. Not pursued as a filter.
+
 ## Verdict
 
 1. The user's reading of the lead is right: about three quarters of it is

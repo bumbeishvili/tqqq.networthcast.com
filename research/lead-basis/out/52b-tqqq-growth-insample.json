@@ -1,0 +1,363 @@
+{
+ "n": 52,
+ "lead": "tqqq",
+ "basis": "growth",
+ "kernel": "box",
+ "vote": {},
+ "fixed": {},
+ "mode": "insample",
+ "tier": "lead",
+ "constrain": 0,
+ "window": 6,
+ "starts": 16,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "startAvgDays",
+   "count": 7,
+   "min": 0,
+   "max": 120
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "asShipped": {
+  "cagr": 176.98,
+  "dd": 47.16
+ },
+ "fit": {
+  "cagr": 191.74,
+  "dd": 58.58,
+  "params": {
+   "lookbackDays": 590,
+   "startAvgDays": 65,
+   "topLead": 96.2,
+   "backLead": 89.1,
+   "floorLead": 71.9,
+   "reentryLead": 58.1,
+   "deepLead": 41.3
+  },
+  "starts": [
+   {
+    "cagr": 180.93,
+    "dd": 47.16,
+    "params": {
+     "lookbackDays": 550,
+     "startAvgDays": 65,
+     "topLead": 125.4,
+     "backLead": 25.1,
+     "floorLead": 8.1,
+     "reentryLead": 25.1,
+     "deepLead": -33
+    },
+    "ms": 82057
+   },
+   {
+    "cagr": 153.54,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 540,
+     "startAvgDays": 40,
+     "topLead": 66.3,
+     "backLead": 127.3,
+     "floorLead": 45.7,
+     "reentryLead": 45.7,
+     "deepLead": 26.1
+    },
+    "ms": 106484
+   },
+   {
+    "cagr": 191.74,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 590,
+     "startAvgDays": 65,
+     "topLead": 96.2,
+     "backLead": 89.1,
+     "floorLead": 71.9,
+     "reentryLead": 58.1,
+     "deepLead": 41.3
+    },
+    "ms": 75267
+   },
+   {
+    "cagr": 176.73,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 600,
+     "startAvgDays": 90,
+     "topLead": 101,
+     "backLead": 72.5,
+     "floorLead": 59.8,
+     "reentryLead": 112.6,
+     "deepLead": 32.3
+    },
+    "ms": 74417
+   },
+   {
+    "cagr": 176.48,
+    "dd": 59.73,
+    "params": {
+     "lookbackDays": 600,
+     "startAvgDays": 90,
+     "topLead": 93.8,
+     "backLead": 92.9,
+     "floorLead": 79.2,
+     "reentryLead": 46.2,
+     "deepLead": 82.5
+    },
+    "ms": 118644
+   },
+   {
+    "cagr": 135.26,
+    "dd": 51.06,
+    "params": {
+     "lookbackDays": 700,
+     "startAvgDays": 40,
+     "topLead": 153.4,
+     "backLead": -34.3,
+     "floorLead": 53.8,
+     "reentryLead": 40.3,
+     "deepLead": 58.1
+    },
+    "ms": 90163
+   },
+   {
+    "cagr": 165.99,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 540,
+     "startAvgDays": 65,
+     "topLead": 127.3,
+     "backLead": 25.5,
+     "floorLead": 36.9,
+     "reentryLead": 45.2,
+     "deepLead": 28.3
+    },
+    "ms": 76862
+   },
+   {
+    "cagr": 168.66,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 520,
+     "startAvgDays": 65,
+     "topLead": 119.1,
+     "backLead": 118.5,
+     "floorLead": 85.1,
+     "reentryLead": 69.8,
+     "deepLead": 30.4
+    },
+    "ms": 138417
+   },
+   {
+    "cagr": 160.33,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 620,
+     "startAvgDays": 40,
+     "topLead": 133.6,
+     "backLead": 24.4,
+     "floorLead": 89.1,
+     "reentryLead": 61.3,
+     "deepLead": 48.6
+    },
+    "ms": 122088
+   },
+   {
+    "cagr": 157.34,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 590,
+     "startAvgDays": 40,
+     "topLead": 109.6,
+     "backLead": -64.3,
+     "floorLead": 71.9,
+     "reentryLead": 85.1,
+     "deepLead": 38.9
+    },
+    "ms": 84639
+   },
+   {
+    "cagr": 140.96,
+    "dd": 69.24,
+    "params": {
+     "lookbackDays": 640,
+     "startAvgDays": 90,
+     "topLead": 127.3,
+     "backLead": 35.1,
+     "floorLead": 39.6,
+     "reentryLead": 68.6,
+     "deepLead": 108.6
+    },
+    "ms": 62327
+   },
+   {
+    "cagr": 149.67,
+    "dd": 76.46,
+    "params": {
+     "lookbackDays": 620,
+     "startAvgDays": 20,
+     "topLead": 105.2,
+     "backLead": 94.9,
+     "floorLead": 24,
+     "reentryLead": 20.7,
+     "deepLead": -20.7
+    },
+    "ms": 156576
+   },
+   {
+    "cagr": 149,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 460,
+     "startAvgDays": 120,
+     "topLead": 102.9,
+     "backLead": 8.1,
+     "floorLead": 23.3,
+     "reentryLead": 29.8,
+     "deepLead": 16
+    },
+    "ms": 128786
+   },
+   {
+    "cagr": 185.25,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 600,
+     "startAvgDays": 90,
+     "topLead": 92.9,
+     "backLead": 91.9,
+     "floorLead": 60.5,
+     "reentryLead": 67.6,
+     "deepLead": 39.6
+    },
+    "ms": 321219
+   },
+   {
+    "cagr": 159.65,
+    "dd": 76.46,
+    "params": {
+     "lookbackDays": 800,
+     "startAvgDays": 90,
+     "topLead": 114.7,
+     "backLead": 91.9,
+     "floorLead": 55,
+     "reentryLead": 23.3,
+     "deepLead": -12.5
+    },
+    "ms": 259957
+   },
+   {
+    "cagr": 148.81,
+    "dd": 48.2,
+    "params": {
+     "lookbackDays": 590,
+     "startAvgDays": 20,
+     "topLead": 122.6,
+     "backLead": 36.3,
+     "floorLead": 29.8,
+     "reentryLead": 77.8,
+     "deepLead": 30.1
+    },
+    "ms": 179972
+   }
+  ]
+ },
+ "holdout2026": {
+  "cagr": 362.88,
+  "dd": 37.09
+ },
+ "halves": {
+  "h1": {
+   "cagr": 158.77,
+   "dd": 46.04
+  },
+  "h2": {
+   "cagr": 227.27,
+   "dd": 58.58
+  }
+ },
+ "plateau": {
+  "topLead": {
+   "at": 96.2,
+   "neighbours": [
+    190.07,
+    190.77,
+    176.04,
+    172.18
+   ]
+  },
+  "backLead": {
+   "at": 89.1,
+   "neighbours": [
+    181.91,
+    182.69,
+    184.09,
+    183.82
+   ]
+  },
+  "floorLead": {
+   "at": 71.9,
+   "neighbours": [
+    183.41,
+    185.4,
+    183.39,
+    174.12
+   ]
+  },
+  "reentryLead": {
+   "at": 58.1,
+   "neighbours": [
+    171.99,
+    184.32,
+    191.18,
+    191.26
+   ]
+  },
+  "deepLead": {
+   "at": 41.3,
+   "neighbours": [
+    182.88,
+    191.52,
+    189.98,
+    191.39
+   ]
+  }
+ },
+ "seconds": 2079
+}

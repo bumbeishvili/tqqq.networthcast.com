@@ -1,0 +1,301 @@
+{
+ "n": 52,
+ "lead": "tqqq",
+ "basis": "growth",
+ "kernel": "box",
+ "vote": {
+  "voteMode": "winner",
+  "voteLookbacks": [
+   380,
+   443,
+   505,
+   568,
+   630,
+   693,
+   755,
+   818,
+   880
+  ]
+ },
+ "fixed": {},
+ "mode": "surrogate",
+ "tier": "lead",
+ "constrain": 0,
+ "window": 6,
+ "starts": 3,
+ "space": [
+  {
+   "id": "voteSelWindow",
+   "count": 6,
+   "min": 126,
+   "max": 1008
+  },
+  {
+   "id": "voteSelHyst",
+   "count": 5,
+   "min": 1,
+   "max": 1.2
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "surrogates": [
+  {
+   "shift": 4584,
+   "cagr": 126.7,
+   "dd": 76.5,
+   "params": {
+    "voteSelWindow": 1008,
+    "voteSelHyst": 1.2,
+    "topLead": 92.9,
+    "backLead": 77.8,
+    "floorLead": 77.8,
+    "reentryLead": 66.3,
+    "deepLead": 63.8
+   }
+  },
+  {
+   "shift": 13571,
+   "cagr": 114.8,
+   "dd": 80.2,
+   "params": {
+    "voteSelWindow": 252,
+    "voteSelHyst": 1.1,
+    "topLead": 71.9,
+    "backLead": 55.8,
+    "floorLead": -31.4,
+    "reentryLead": 59.8,
+    "deepLead": -35.3
+   }
+  },
+  {
+   "shift": 8214,
+   "cagr": 151.2,
+   "dd": 53.5,
+   "params": {
+    "voteSelWindow": 378,
+    "voteSelHyst": 1.05,
+    "topLead": 93.8,
+    "backLead": 26.6,
+    "floorLead": -20.7,
+    "reentryLead": 47.7,
+    "deepLead": -34.3
+   }
+  },
+  {
+   "shift": 3239,
+   "cagr": 128.5,
+   "dd": 66,
+   "params": {
+    "voteSelWindow": 378,
+    "voteSelHyst": 1.2,
+    "topLead": 127.3,
+    "backLead": -1.7,
+    "floorLead": 4.3,
+    "reentryLead": -31.4,
+    "deepLead": -28.4
+   }
+  },
+  {
+   "shift": 12140,
+   "cagr": 110.6,
+   "dd": 76.5,
+   "params": {
+    "voteSelWindow": 252,
+    "voteSelHyst": 1.2,
+    "topLead": 65.8,
+    "backLead": 87.5,
+    "floorLead": 134.5,
+    "reentryLead": 35.1,
+    "deepLead": 37.8
+   }
+  },
+  {
+   "shift": 15364,
+   "cagr": 129.4,
+   "dd": 72.9,
+   "params": {
+    "voteSelWindow": 126,
+    "voteSelHyst": 1.1,
+    "topLead": 66.3,
+    "backLead": 63.8,
+    "floorLead": -23.1,
+    "reentryLead": -55.1,
+    "deepLead": -20.7
+   }
+  },
+  {
+   "shift": 6477,
+   "cagr": 120.8,
+   "dd": 87.5,
+   "params": {
+    "voteSelWindow": 1008,
+    "voteSelHyst": 1.05,
+    "topLead": 102.9,
+    "backLead": 20.7,
+    "floorLead": 36.3,
+    "reentryLead": 21.9,
+    "deepLead": -23.1
+   }
+  },
+  {
+   "shift": 13511,
+   "cagr": 93.9,
+   "dd": 72.5,
+   "params": {
+    "voteSelWindow": 378,
+    "voteSelHyst": 1.02,
+    "topLead": 1.1,
+    "backLead": 41.9,
+    "floorLead": 13.5,
+    "reentryLead": 36.7,
+    "deepLead": 10.9
+   }
+  },
+  {
+   "shift": 5303,
+   "cagr": 134.4,
+   "dd": 76.5,
+   "params": {
+    "voteSelHyst": 1.02,
+    "topLead": 87.5,
+    "backLead": 29.8,
+    "floorLead": 4.3,
+    "reentryLead": 25.1,
+    "deepLead": -29.9
+   }
+  },
+  {
+   "shift": 3703,
+   "cagr": 120.4,
+   "dd": 72.5,
+   "params": {
+    "voteSelWindow": 252,
+    "voteSelHyst": 1.1,
+    "topLead": 105.2,
+    "backLead": -1.7,
+    "floorLead": -39.6,
+    "reentryLead": 13.5,
+    "deepLead": -44.6
+   }
+  },
+  {
+   "shift": 11895,
+   "cagr": 153.3,
+   "dd": 49.4,
+   "params": {
+    "voteSelWindow": 252,
+    "voteSelHyst": 1.2,
+    "topLead": 99.7,
+    "backLead": 80.3,
+    "floorLead": 79.2,
+    "reentryLead": 48.2,
+    "deepLead": 68.1
+   }
+  },
+  {
+   "shift": 8315,
+   "cagr": 129.6,
+   "dd": 48.6,
+   "params": {
+    "voteSelWindow": 252,
+    "topLead": 116.7,
+    "backLead": 25.1,
+    "floorLead": 29.4,
+    "reentryLead": 25.1,
+    "deepLead": -29.9
+   }
+  },
+  {
+   "shift": 1069,
+   "cagr": 130,
+   "dd": 76.5,
+   "params": {
+    "voteSelWindow": 1008,
+    "voteSelHyst": 1.02,
+    "topLead": 134.5,
+    "backLead": 127.3,
+    "floorLead": -9999,
+    "reentryLead": 41.3,
+    "deepLead": 126.4
+   }
+  },
+  {
+   "shift": 16361,
+   "cagr": 127.2,
+   "dd": 58.8,
+   "params": {
+    "voteSelWindow": 378,
+    "topLead": 119.1,
+    "backLead": 21.3,
+    "floorLead": 10.9,
+    "reentryLead": 30.8,
+    "deepLead": -4.2
+   }
+  },
+  {
+   "shift": 5427,
+   "cagr": 147.4,
+   "dd": 76.5,
+   "params": {
+    "voteSelWindow": 504,
+    "topLead": 52.9,
+    "backLead": 132.2,
+    "floorLead": -1.7,
+    "reentryLead": 21.3,
+    "deepLead": -29.9
+   }
+  },
+  {
+   "shift": 11564,
+   "cagr": 144.7,
+   "dd": 56.1,
+   "params": {
+    "voteSelWindow": 126,
+    "voteSelHyst": 1.02,
+    "topLead": 111.8,
+    "backLead": 109.6,
+    "floorLead": 161.6,
+    "reentryLead": 108.6,
+    "deepLead": 59.8
+   }
+  }
+ ],
+ "surrogateSummary": {
+  "n": 16,
+  "min": 93.9,
+  "median": 129.4,
+  "p90": 147.4,
+  "max": 153.3
+ },
+ "seconds": 10991
+}

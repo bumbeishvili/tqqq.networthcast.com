@@ -1,0 +1,364 @@
+{
+ "n": 52,
+ "lead": "tqqq",
+ "basis": "growth",
+ "kernel": "box",
+ "vote": {},
+ "scale": "vol",
+ "fixed": {},
+ "mode": "insample",
+ "tier": "lead",
+ "constrain": 0,
+ "window": 6,
+ "starts": 16,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "startAvgDays",
+   "count": 7,
+   "min": 0,
+   "max": 120
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -62.8,
+   "max": 285.2
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -62.8,
+   "max": 285.2
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -62.8,
+   "max": 285.2
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -62.8,
+   "max": 285.2
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -62.8,
+   "max": 285.2
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "asShipped": {
+  "cagr": 79.51,
+  "dd": 76.46
+ },
+ "fit": {
+  "cagr": 168.57,
+  "dd": 50.78,
+  "params": {
+   "lookbackDays": 252,
+   "startAvgDays": 40,
+   "topLead": 130.5,
+   "backLead": 63.8,
+   "floorLead": 35.4,
+   "reentryLead": 47.1,
+   "deepLead": -17.9
+  },
+  "starts": [
+   {
+    "cagr": 168.57,
+    "dd": 50.78,
+    "params": {
+     "lookbackDays": 252,
+     "startAvgDays": 40,
+     "topLead": 130.5,
+     "backLead": 63.8,
+     "floorLead": 35.4,
+     "reentryLead": 47.1,
+     "deepLead": -17.9
+    },
+    "ms": 412145
+   },
+   {
+    "cagr": 143.96,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 340,
+     "startAvgDays": 40,
+     "topLead": 135.5,
+     "backLead": 198.5,
+     "floorLead": 166.7,
+     "reentryLead": 144.7,
+     "deepLead": 30.3
+    },
+    "ms": 265534
+   },
+   {
+    "cagr": 128.31,
+    "dd": 62.62,
+    "params": {
+     "lookbackDays": 400,
+     "startAvgDays": 0,
+     "topLead": 232.6,
+     "backLead": -62.8,
+     "floorLead": 106.8,
+     "reentryLead": 85,
+     "deepLead": 102.2
+    },
+    "ms": 202784
+   },
+   {
+    "cagr": 128.5,
+    "dd": 76.46,
+    "params": {
+     "lookbackDays": 420,
+     "startAvgDays": 40,
+     "topLead": 150.8,
+     "backLead": 101.3,
+     "floorLead": 196.8,
+     "reentryLead": 173,
+     "deepLead": 116.1
+    },
+    "ms": 227708
+   },
+   {
+    "cagr": 131.79,
+    "dd": 58.06,
+    "params": {
+     "lookbackDays": 340,
+     "startAvgDays": 120,
+     "topLead": 114.1,
+     "backLead": 85.7,
+     "floorLead": 65.8,
+     "reentryLead": 15,
+     "deepLead": 252.3
+    },
+    "ms": 224992
+   },
+   {
+    "cagr": 123.31,
+    "dd": 51.51,
+    "params": {
+     "lookbackDays": 920,
+     "startAvgDays": 10,
+     "topLead": 99.1,
+     "backLead": 3.6,
+     "floorLead": -16.2,
+     "reentryLead": -5.1,
+     "deepLead": -23.9
+    },
+    "ms": 423104
+   },
+   {
+    "cagr": 166.48,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 480,
+     "startAvgDays": 40,
+     "topLead": 174.3,
+     "backLead": 159,
+     "floorLead": 114.1,
+     "reentryLead": 48.8,
+     "deepLead": 77
+    },
+    "ms": 292066
+   },
+   {
+    "cagr": 136.38,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 440,
+     "startAvgDays": 65,
+     "topLead": 62.9,
+     "backLead": 25.1,
+     "floorLead": 178.1,
+     "reentryLead": 134.3,
+     "deepLead": 89.3
+    },
+    "ms": 279626
+   },
+   {
+    "cagr": 139.5,
+    "dd": 59.73,
+    "params": {
+     "lookbackDays": 440,
+     "startAvgDays": 40,
+     "topLead": 114.1,
+     "backLead": 74.4,
+     "floorLead": 90.2,
+     "reentryLead": 47.8,
+     "deepLead": 93.7
+    },
+    "ms": 170580
+   },
+   {
+    "cagr": 152.09,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 320,
+     "startAvgDays": 120,
+     "topLead": 95.7,
+     "backLead": -62.8,
+     "floorLead": 155.6,
+     "reentryLead": 91,
+     "deepLead": 10
+    },
+    "ms": 81310
+   },
+   {
+    "cagr": 124.25,
+    "dd": 76.46,
+    "params": {
+     "lookbackDays": 440,
+     "startAvgDays": 120,
+     "topLead": 103.2,
+     "backLead": 68.8,
+     "floorLead": 15,
+     "reentryLead": 120.4,
+     "deepLead": 157.8
+    },
+    "ms": 108219
+   },
+   {
+    "cagr": 128.49,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 440,
+     "startAvgDays": 40,
+     "topLead": 155.6,
+     "backLead": 232.6,
+     "floorLead": 66.7,
+     "reentryLead": 122.7,
+     "deepLead": 41
+    },
+    "ms": 71422
+   },
+   {
+    "cagr": 127.74,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 252,
+     "startAvgDays": 20,
+     "topLead": 134.3,
+     "backLead": -19.7,
+     "floorLead": -30.8,
+     "reentryLead": 60.8,
+     "deepLead": 157.8
+    },
+    "ms": 93484
+   },
+   {
+    "cagr": 147.23,
+    "dd": 72.28,
+    "params": {
+     "lookbackDays": 400,
+     "startAvgDays": 20,
+     "topLead": 128.3,
+     "backLead": -62.8,
+     "floorLead": 202.7,
+     "reentryLead": 82.6,
+     "deepLead": 66.7
+    },
+    "ms": 177905
+   },
+   {
+    "cagr": 140.93,
+    "dd": 76.46,
+    "params": {
+     "lookbackDays": 360,
+     "startAvgDays": 120,
+     "topLead": 115.1,
+     "backLead": 129.1,
+     "floorLead": 161,
+     "reentryLead": 112.9,
+     "deepLead": 39.8
+    },
+    "ms": 187082
+   },
+   {
+    "cagr": 142.93,
+    "dd": 76.46,
+    "params": {
+     "lookbackDays": 920,
+     "startAvgDays": 20,
+     "topLead": 9999,
+     "backLead": 73.1,
+     "floorLead": 144.7,
+     "reentryLead": 92.4,
+     "deepLead": 3.6
+    },
+    "ms": 404154
+   }
+  ]
+ },
+ "holdout2026": {
+  "cagr": 370.56,
+  "dd": 43.47
+ },
+ "halves": {
+  "h1": {
+   "cagr": 121.45,
+   "dd": 45.67
+  },
+  "h2": {
+   "cagr": 224.05,
+   "dd": 50.78
+  }
+ },
+ "plateau": {
+  "topLead": {
+   "at": 130.5,
+   "neighbours": [
+    162.47,
+    164.1,
+    159.35,
+    159.9
+   ]
+  },
+  "backLead": {
+   "at": 63.8,
+   "neighbours": [
+    165,
+    167.71,
+    168.57,
+    168.57
+   ]
+  },
+  "floorLead": {
+   "at": 35.4,
+   "neighbours": [
+    160.54,
+    166.02,
+    159.19,
+    153.78
+   ]
+  },
+  "reentryLead": {
+   "at": 47.1,
+   "neighbours": [
+    160.05,
+    160.56,
+    168.57,
+    166.98
+   ]
+  },
+  "deepLead": {
+   "at": -17.9,
+   "neighbours": [
+    150.16,
+    148.33,
+    166.58,
+    162.36
+   ]
+  }
+ },
+ "seconds": 3626
+}

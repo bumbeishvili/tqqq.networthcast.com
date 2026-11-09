@@ -1,0 +1,285 @@
+{
+ "n": 52,
+ "lead": "tqqq",
+ "basis": "growth",
+ "kernel": "box",
+ "vote": {
+  "voteMode": "median",
+  "voteLookbacks": [
+   380,
+   443,
+   505,
+   568,
+   630,
+   693,
+   755,
+   818,
+   880
+  ]
+ },
+ "fixed": {},
+ "mode": "walkforward",
+ "tier": "lead",
+ "constrain": 0,
+ "window": 6,
+ "starts": 4,
+ "space": [
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -64.2,
+   "max": 150.5
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -64.2,
+   "max": 150.5
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -64.2,
+   "max": 150.5
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -64.2,
+   "max": 150.5
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -64.2,
+   "max": 150.5
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "folds": [
+  {
+   "year": 2016,
+   "fitCagr": 123.9,
+   "fitDd": 38.7,
+   "params": {
+    "topLead": 52.2,
+    "backLead": 44.9,
+    "floorLead": -55.2,
+    "reentryLead": -62.2,
+    "deepLead": 7.3
+   },
+   "test": {
+    "cagr": 176.31,
+    "dd": 26.78
+   },
+   "bhTqqq": 18.9
+  },
+  {
+   "year": 2017,
+   "fitCagr": 126.5,
+   "fitDd": 27.3,
+   "params": {
+    "topLead": 57.1,
+    "backLead": 41.2,
+    "floorLead": 28.9,
+    "reentryLead": 23.1,
+    "deepLead": 17.5
+   },
+   "test": {
+    "cagr": 86.5,
+    "dd": 14.96
+   },
+   "bhTqqq": 115.3
+  },
+  {
+   "year": 2018,
+   "fitCagr": 145.8,
+   "fitDd": 36.9,
+   "params": {
+    "topLead": 150.5,
+    "backLead": 81.5,
+    "floorLead": 76.7,
+    "reentryLead": 59.7,
+    "deepLead": 71.1
+   },
+   "test": {
+    "cagr": 3.68,
+    "dd": 45.13
+   },
+   "bhTqqq": -23.8
+  },
+  {
+   "year": 2019,
+   "fitCagr": 142.7,
+   "fitDd": 33,
+   "params": {
+    "topLead": 65.3,
+    "backLead": 110.1,
+    "floorLead": 102.9,
+    "reentryLead": 57.6,
+    "deepLead": 104.3
+   },
+   "test": {
+    "cagr": 267.56,
+    "dd": 25.06
+   },
+   "bhTqqq": 131.7
+  },
+  {
+   "year": 2020,
+   "fitCagr": 198.7,
+   "fitDd": 37.3,
+   "params": {
+    "topLead": 108.1,
+    "backLead": 81.5,
+    "floorLead": 71.7,
+    "reentryLead": 49.9,
+    "deepLead": 60.2
+   },
+   "test": {
+    "cagr": 101.76,
+    "dd": 70.51
+   },
+   "bhTqqq": 100.6
+  },
+  {
+   "year": 2021,
+   "fitCagr": 229.8,
+   "fitDd": 39.1,
+   "params": {
+    "topLead": 94.4,
+    "backLead": 46.2,
+    "floorLead": 18.8,
+    "reentryLead": 20,
+    "deepLead": -22.7
+   },
+   "test": {
+    "cagr": 72.93,
+    "dd": 21.93
+   },
+   "bhTqqq": 92.8
+  },
+  {
+   "year": 2022,
+   "fitCagr": 264.6,
+   "fitDd": 47.2,
+   "params": {
+    "topLead": 119.2,
+    "backLead": 34.8,
+    "floorLead": 18.8,
+    "reentryLead": 20,
+    "deepLead": -22.7
+   },
+   "test": {
+    "cagr": 8.36,
+    "dd": 46.59
+   },
+   "bhTqqq": -80.1
+  },
+  {
+   "year": 2023,
+   "fitCagr": 237.8,
+   "fitDd": 35.9,
+   "params": {
+    "topLead": 88,
+    "backLead": 50.7,
+    "floorLead": 37.8,
+    "reentryLead": 46.5,
+    "deepLead": -22.7
+   },
+   "test": {
+    "cagr": 569.27,
+    "dd": 29.74
+   },
+   "bhTqqq": 209.9
+  },
+  {
+   "year": 2024,
+   "fitCagr": 306.4,
+   "fitDd": 35.9,
+   "params": {
+    "topLead": 88,
+    "backLead": 50.7,
+    "floorLead": 37.8,
+    "reentryLead": 46.5,
+    "deepLead": -22.7
+   },
+   "test": {
+    "cagr": 235.08,
+    "dd": 28.28
+   },
+   "bhTqqq": 67
+  },
+  {
+   "year": 2025,
+   "fitCagr": 278.4,
+   "fitDd": 53,
+   "params": {
+    "topLead": 90.1,
+    "backLead": -58.5,
+    "floorLead": 68,
+    "reentryLead": 31.6,
+    "deepLead": 64.1
+   },
+   "test": {
+    "cagr": -29.2,
+    "dd": 66.15
+   },
+   "bhTqqq": 35.5
+  },
+  {
+   "year": 2026,
+   "fitCagr": 281.2,
+   "fitDd": 42.7,
+   "params": {
+    "topLead": 138.2,
+    "backLead": -64.2,
+    "floorLead": 38.7,
+    "reentryLead": 16.4,
+    "deepLead": -8
+   },
+   "test": {
+    "cagr": 356.53,
+    "dd": 37.97
+   },
+   "bhTqqq": 0.5
+  }
+ ],
+ "chained": {
+  "from": "2016-01-04",
+  "to": "2026-11-06",
+  "cagr": 114.8,
+  "bhTqqq": 34.4
+ },
+ "halves": {
+  "fitH1": {
+   "cagr": 122.2,
+   "params": {
+    "topLead": 57.1,
+    "backLead": 41.2,
+    "floorLead": 28.9,
+    "reentryLead": 23.1,
+    "deepLead": 17.5
+   },
+   "testH2": {
+    "cagr": 76.07,
+    "dd": 65.01
+   }
+  },
+  "fitH2": {
+   "cagr": 255.9,
+   "params": {
+    "topLead": 78.7,
+    "backLead": 53.3,
+    "floorLead": 30.3,
+    "reentryLead": -26,
+    "deepLead": 25.8
+   },
+   "testH1": {
+    "cagr": 60.59,
+    "dd": 48.77
+   }
+  }
+ },
+ "seconds": 5446
+}

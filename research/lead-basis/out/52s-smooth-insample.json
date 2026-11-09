@@ -1,0 +1,385 @@
+{
+ "n": 52,
+ "lead": "tqqq",
+ "basis": "growth",
+ "kernel": "box",
+ "vote": {},
+ "scale": "smooth",
+ "fixed": {},
+ "mode": "insample",
+ "tier": "lead",
+ "constrain": 0,
+ "window": 6,
+ "starts": 16,
+ "space": [
+  {
+   "id": "lookbackDays",
+   "count": 37,
+   "min": 252,
+   "max": 1008
+  },
+  {
+   "id": "startAvgDays",
+   "count": 7,
+   "min": 0,
+   "max": 120
+  },
+  {
+   "id": "leadSmooth",
+   "count": 6,
+   "min": 1,
+   "max": 20
+  },
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "asShipped": {
+  "cagr": 176.98,
+  "dd": 47.16
+ },
+ "fit": {
+  "cagr": 180.93,
+  "dd": 47.16,
+  "params": {
+   "lookbackDays": 550,
+   "startAvgDays": 65,
+   "topLead": 125.4,
+   "backLead": 25.1,
+   "floorLead": 8.1,
+   "reentryLead": 25.1,
+   "deepLead": -33
+  },
+  "starts": [
+   {
+    "cagr": 180.93,
+    "dd": 47.16,
+    "params": {
+     "lookbackDays": 550,
+     "startAvgDays": 65,
+     "topLead": 125.4,
+     "backLead": 25.1,
+     "floorLead": 8.1,
+     "reentryLead": 25.1,
+     "deepLead": -33
+    },
+    "ms": 267995
+   },
+   {
+    "cagr": 171.6,
+    "dd": 56.04,
+    "params": {
+     "lookbackDays": 540,
+     "startAvgDays": 90,
+     "leadSmooth": 5,
+     "topLead": 112.6,
+     "backLead": 27.2,
+     "floorLead": 4.3,
+     "reentryLead": 16,
+     "deepLead": -20.7
+    },
+    "ms": 383179
+   },
+   {
+    "cagr": 153.67,
+    "dd": 67.97,
+    "params": {
+     "lookbackDays": 560,
+     "startAvgDays": 65,
+     "leadSmooth": 20,
+     "topLead": 107.5,
+     "backLead": 57.4,
+     "floorLead": 52.3,
+     "reentryLead": 40.3,
+     "deepLead": 52.3
+    },
+    "ms": 118433
+   },
+   {
+    "cagr": 161,
+    "dd": 50.99,
+    "params": {
+     "lookbackDays": 580,
+     "startAvgDays": 20,
+     "leadSmooth": 3,
+     "topLead": 130.3,
+     "backLead": 50.2,
+     "floorLead": 47.7,
+     "reentryLead": -24.9,
+     "deepLead": 42.8
+    },
+    "ms": 199441
+   },
+   {
+    "cagr": 150.81,
+    "dd": 57.94,
+    "params": {
+     "lookbackDays": 680,
+     "startAvgDays": 20,
+     "leadSmooth": 2,
+     "topLead": 134.5,
+     "backLead": 105.2,
+     "floorLead": 31.8,
+     "reentryLead": 16,
+     "deepLead": 16
+    },
+    "ms": 254229
+   },
+   {
+    "cagr": 151.41,
+    "dd": 58.58,
+    "params": {
+     "lookbackDays": 460,
+     "startAvgDays": 65,
+     "leadSmooth": 10,
+     "topLead": 116.7,
+     "backLead": 57.4,
+     "floorLead": 52.9,
+     "reentryLead": 25.1,
+     "deepLead": 52.3
+    },
+    "ms": 430015
+   },
+   {
+    "cagr": 147.21,
+    "dd": 55.29,
+    "params": {
+     "lookbackDays": 520,
+     "startAvgDays": 20,
+     "leadSmooth": 5,
+     "topLead": 83.8,
+     "backLead": 28.3,
+     "floorLead": 8.1,
+     "reentryLead": -33,
+     "deepLead": -18.8
+    },
+    "ms": 197644
+   },
+   {
+    "cagr": 158.28,
+    "dd": 69.24,
+    "params": {
+     "lookbackDays": 620,
+     "startAvgDays": 120,
+     "leadSmooth": 1,
+     "topLead": 99.7,
+     "backLead": 77.8,
+     "floorLead": 36.7,
+     "reentryLead": 63.8,
+     "deepLead": 32.3
+    },
+    "ms": 356406
+   },
+   {
+    "cagr": 147.87,
+    "dd": 46.04,
+    "params": {
+     "lookbackDays": 580,
+     "startAvgDays": 40,
+     "leadSmooth": 20,
+     "topLead": 27.8,
+     "backLead": 75.6,
+     "floorLead": 106.3,
+     "reentryLead": -1.7,
+     "deepLead": 55.8
+    },
+    "ms": 158494
+   },
+   {
+    "cagr": 173.09,
+    "dd": 50.78,
+    "params": {
+     "lookbackDays": 530,
+     "startAvgDays": 120,
+     "leadSmooth": 20,
+     "topLead": 125.4,
+     "backLead": 80.3,
+     "floorLead": 75.6,
+     "reentryLead": 54.6,
+     "deepLead": 35.1
+    },
+    "ms": 209933
+   },
+   {
+    "cagr": 153.74,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 570,
+     "startAvgDays": 120,
+     "leadSmooth": 3,
+     "topLead": 102.2,
+     "backLead": 17.6,
+     "floorLead": 28.3,
+     "reentryLead": 131.2,
+     "deepLead": 80.3
+    },
+    "ms": 116476
+   },
+   {
+    "cagr": 161.92,
+    "dd": 65.23,
+    "params": {
+     "lookbackDays": 590,
+     "startAvgDays": 40,
+     "leadSmooth": 1,
+     "topLead": 82.5,
+     "backLead": 92.9,
+     "floorLead": 70.6,
+     "reentryLead": 50.2,
+     "deepLead": 69.8
+    },
+    "ms": 126915
+   },
+   {
+    "cagr": 138.28,
+    "dd": 76.46,
+    "params": {
+     "lookbackDays": 700,
+     "startAvgDays": 0,
+     "leadSmooth": 20,
+     "topLead": 98.1,
+     "backLead": 70.6,
+     "floorLead": 60.5,
+     "reentryLead": 82.5,
+     "deepLead": 76.7
+    },
+    "ms": 111787
+   },
+   {
+    "cagr": 161.33,
+    "dd": 46.95,
+    "params": {
+     "lookbackDays": 480,
+     "startAvgDays": 65,
+     "leadSmooth": 20,
+     "topLead": 118.5,
+     "backLead": 43.5,
+     "floorLead": 42.4,
+     "reentryLead": 31.4,
+     "deepLead": 90.6
+    },
+    "ms": 207493
+   },
+   {
+    "cagr": 146.63,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 540,
+     "startAvgDays": 20,
+     "leadSmooth": 2,
+     "topLead": 139.7,
+     "backLead": 58.1,
+     "floorLead": 51.5,
+     "reentryLead": 63.1,
+     "deepLead": 45.7
+    },
+    "ms": 341470
+   },
+   {
+    "cagr": 151.76,
+    "dd": 72.45,
+    "params": {
+     "lookbackDays": 440,
+     "startAvgDays": 120,
+     "leadSmooth": 1,
+     "topLead": 101,
+     "backLead": 91.9,
+     "floorLead": 82.5,
+     "reentryLead": 112.6,
+     "deepLead": 10.9
+    },
+    "ms": 308569
+   }
+  ]
+ },
+ "holdout2026": {
+  "cagr": 371.71,
+  "dd": 43.47
+ },
+ "halves": {
+  "h1": {
+   "cagr": 102.76,
+   "dd": 46.04
+  },
+  "h2": {
+   "cagr": 287.19,
+   "dd": 47.16
+  }
+ },
+ "plateau": {
+  "topLead": {
+   "at": 125.4,
+   "neighbours": [
+    179.27,
+    177.71,
+    153.4,
+    154.17
+   ]
+  },
+  "backLead": {
+   "at": 25.1,
+   "neighbours": [
+    159.14,
+    180.93,
+    178.73,
+    176.71
+   ]
+  },
+  "floorLead": {
+   "at": 8.1,
+   "neighbours": [
+    168.41,
+    179.37,
+    171.32,
+    163.69
+   ]
+  },
+  "reentryLead": {
+   "at": 25.1,
+   "neighbours": [
+    180.93,
+    180.93,
+    180.93,
+    180.93
+   ]
+  },
+  "deepLead": {
+   "at": -33,
+   "neighbours": [
+    166.99,
+    165.66,
+    179.73,
+    179.73
+   ]
+  }
+ },
+ "seconds": 3791
+}

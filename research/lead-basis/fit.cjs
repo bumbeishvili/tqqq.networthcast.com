@@ -16,8 +16,13 @@ const SURROGATES = +arg('surrogates', 20), PASSES = +arg('passes', 4), CONSTRAIN
 const KERNEL = arg('kernel', LEAD === 'tqqq' ? 'box' : 'point');   // start kernel (basis.cjs): box/point = the library's own, ema, tri
 const KERNEL_FIXED = KERNEL === 'box' || KERNEL === 'point' ? {} : { [LEAD === 'tqqq' ? 'startKernel' : 'soxlStartKernel']: KERNEL };
 const SPREADS = [0.1, 0.15, 0.25, 0.5, 0.75, 1];   // tri: half-width as a fraction of the lookback (0.1 and 0.15 added after both first fits picked 0.25, the narrowest then offered)
-const EXTRA_FIXED = JSON.parse(arg('fixed', '{}'));   // --fixed '{"soxlStartKernel":"tri",...}': settings held at these values through the fit (the other lead's kernel and fitted values)
-const code = BASIS_CODE[N];
+const EXTRA_FIXED = JSON.parse(arg('fixed', '{}'));
+const VOTE = (arg('vote', '') || '').trim();   // --vote "450,475,...": the TQQQ lead voted across these horizons (vote.cjs); the lookback and start dims leave the space
+const VOTEMODE = arg('votemode', 'median');    // median | majority
+const VOTE_FIXED = VOTE ? { voteMode: VOTEMODE, voteLookbacks: VOTE.split(',').map(Number) } : {};
+const SCALE = arg('scale', '');   // --scale smooth|vol|sigma: the scale-free leads of scale.cjs (smooth adds the leadSmooth dim; vol = volatility clock; sigma = sigma units)
+const SCALE_FIXED = SCALE === 'vol' ? { leadClock: 'vol' } : SCALE === 'sigma' ? { leadUnits: 'sigma' } : {};   // --fixed '{"soxlStartKernel":"tri",...}': settings held at these values through the fit (the other lead's kernel and fitted values)
+const code = VOTE ? require('./vote.cjs').VOTE_CODE[N] : SCALE ? require('./scale.cjs').SCALE_CODE[N] : BASIS_CODE[N];
 const OUT = arg('out', `out/${N}-${LEAD}-${BASIS}${KERNEL === 'box' || KERNEL === 'point' ? '' : '-' + KERNEL}-${MODE}.json`);
 const basisKey = LEAD === 'tqqq' ? 'leadBasis' : 'soxlLeadBasis', shiftKey = LEAD === 'tqqq' ? 'leadShift' : 'soxlLeadShift';
 const FIT_FROM = '2010-01-01', FIT_TO = '2025-12-31';
@@ -25,7 +30,7 @@ let seed = SEED; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0;
 const optionValues = (id) => strategyOf(code).params.find(p => p.id === id).options.map(o => (o && typeof o === 'object') ? o.value : o);
 // Quantile grid of the basis's lead over the fit period at the default lookback: 199 values from p0.5 to p99.5, 1 decimal.
 function quantileGrid(key) {
-  const r = run(code, { [basisKey]: BASIS, ...KERNEL_FIXED, ...EXTRA_FIXED }, FIT_FROM, FIT_TO);
+  const r = run(code, { [basisKey]: BASIS, ...KERNEL_FIXED, ...EXTRA_FIXED, ...VOTE_FIXED, ...SCALE_FIXED }, FIT_FROM, FIT_TO);
   const v = r.log.map(x => x[key]).filter(x => typeof x === 'number' && isFinite(x)).sort((a, b) => a - b);
   const out = []; for (let k = 1; k <= 199; k++) { const q = +v[Math.round(k / 200 * (v.length - 1))].toFixed(1); if (!out.length || out[out.length - 1] !== q) out.push(q); }
   return out;
@@ -33,8 +38,13 @@ function quantileGrid(key) {
 const SPACE = [];
 if (LEAD === 'tqqq') {
   const G = quantileGrid('leadPct');
-  SPACE.push({ id: 'lookbackDays', values: [252, 280, 300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600, 620, 640, 660, 680, 700, 720, 756, 780, 800, 840, 880, 920, 960, 1008] });
-  if (KERNEL === 'box') SPACE.push({ id: 'startAvgDays', values: [0, 10, 20, 40, 65, 90, 120] });
+  if (!VOTE) SPACE.push({ id: 'lookbackDays', values: [252, 280, 300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500, 510, 520, 530, 540, 550, 560, 570, 580, 590, 600, 620, 640, 660, 680, 700, 720, 756, 780, 800, 840, 880, 920, 960, 1008] });
+  if (!VOTE && KERNEL === 'box') SPACE.push({ id: 'startAvgDays', values: [0, 10, 20, 40, 65, 90, 120] });
+  if (SCALE === 'smooth') SPACE.push({ id: 'leadSmooth', values: [1, 2, 3, 5, 10, 20] });
+  if (VOTE && VOTEMODE === 'winner') {
+    SPACE.push({ id: 'voteSelWindow', values: [126, 252, 378, 504, 756, 1008] });
+    SPACE.push({ id: 'voteSelHyst', values: [1, 1.02, 1.05, 1.1, 1.2] });
+  }
   if (KERNEL === 'tri') SPACE.push({ id: 'startSpread', values: SPREADS });
   SPACE.push({ id: 'topLead', values: G.concat([9999]), lead: true });
   SPACE.push({ id: 'backLead', values: G, lead: true });
@@ -92,9 +102,9 @@ function plateau(params, from, to, fixed) {
   }
   return out;
 }
-const fixed = { [basisKey]: BASIS, ...KERNEL_FIXED, ...EXTRA_FIXED };
+const fixed = { [basisKey]: BASIS, ...KERNEL_FIXED, ...EXTRA_FIXED, ...VOTE_FIXED, ...SCALE_FIXED };
 const bh = (fund, from, to) => { const a = idxOf(from), b = idxBefore(to); const yrs = (Date.parse(data.dates[b]) - Date.parse(data.dates[a])) / (365.25 * 86400000); return +((Math.pow(data[fund][b] / data[fund][a], 1 / yrs) - 1) * 100).toFixed(1); };
-const out = { n: N, lead: LEAD, basis: BASIS, kernel: KERNEL, fixed: EXTRA_FIXED, mode: MODE, tier: TIER, constrain: CONSTRAIN, window: WINDOW, starts: STARTS, space: SPACE.map(s => ({ id: s.id, count: s.values.length, min: s.values.filter(v => typeof v === 'number' && Math.abs(v) < 9000)[0], max: s.values.filter(v => typeof v === 'number' && Math.abs(v) < 9000).slice(-1)[0] })), bhTqqq2010_2025: bh('tqqq', FIT_FROM, FIT_TO) };
+const out = { n: N, lead: LEAD, basis: BASIS, kernel: KERNEL, vote: VOTE_FIXED, scale: SCALE, fixed: EXTRA_FIXED, mode: MODE, tier: TIER, constrain: CONSTRAIN, window: WINDOW, starts: STARTS, space: SPACE.map(s => ({ id: s.id, count: s.values.length, min: s.values.filter(v => typeof v === 'number' && Math.abs(v) < 9000)[0], max: s.values.filter(v => typeof v === 'number' && Math.abs(v) < 9000).slice(-1)[0] })), bhTqqq2010_2025: bh('tqqq', FIT_FROM, FIT_TO) };
 const t0 = Date.now();
 if (MODE === 'insample') {
   out.asShipped = evalOn({}, FIT_FROM, FIT_TO, fixed);

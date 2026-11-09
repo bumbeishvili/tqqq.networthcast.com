@@ -1,0 +1,261 @@
+{
+ "n": 52,
+ "lead": "tqqq",
+ "basis": "growth",
+ "kernel": "box",
+ "vote": {
+  "voteMode": "majority",
+  "voteLookbacks": [
+   450,
+   475,
+   500,
+   525,
+   550,
+   575,
+   600,
+   625,
+   650
+  ]
+ },
+ "fixed": {},
+ "mode": "surrogate",
+ "tier": "lead",
+ "constrain": 0,
+ "window": 6,
+ "starts": 3,
+ "space": [
+  {
+   "id": "topLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "backLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "floorLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "reentryLead",
+   "count": 199,
+   "min": -64.3,
+   "max": 161.6
+  },
+  {
+   "id": "deepLead",
+   "count": 200,
+   "min": -64.3,
+   "max": 161.6
+  }
+ ],
+ "bhTqqq2010_2025": 39.6,
+ "surrogates": [
+  {
+   "shift": 4584,
+   "cagr": 128.9,
+   "dd": 72.5,
+   "params": {
+    "topLead": 49.1,
+    "backLead": 45.7,
+    "floorLead": 31.8,
+    "reentryLead": -40.6,
+    "deepLead": 32.7
+   }
+  },
+  {
+   "shift": 9464,
+   "cagr": 139.5,
+   "dd": 76.5,
+   "params": {
+    "topLead": 106.3,
+    "backLead": 64.5,
+    "floorLead": 13.5,
+    "reentryLead": 26.1,
+    "deepLead": -49.1
+   }
+  },
+  {
+   "shift": 2134,
+   "cagr": 125.2,
+   "dd": 79.9,
+   "params": {
+    "topLead": 142.4,
+    "backLead": 65.8,
+    "floorLead": 65.3,
+    "reentryLead": -35.3,
+    "deepLead": 70.3
+   }
+  },
+  {
+   "shift": 10971,
+   "cagr": 122.3,
+   "dd": 56,
+   "params": {
+    "topLead": 111.8,
+    "backLead": 128.1,
+    "floorLead": 31.4,
+    "reentryLead": 22.6,
+    "deepLead": 37.3
+   }
+  },
+  {
+   "shift": 5768,
+   "cagr": 129.9,
+   "dd": 76.5,
+   "params": {
+    "topLead": 82.5,
+    "backLead": 56.4,
+    "floorLead": -12.5,
+    "reentryLead": -1.7,
+    "deepLead": -64.3
+   }
+  },
+  {
+   "shift": 8822,
+   "cagr": 118.4,
+   "dd": 75.3,
+   "params": {
+    "topLead": 107.5,
+    "backLead": 41.9,
+    "floorLead": -20.7,
+    "reentryLead": -51.1,
+    "deepLead": -40.1
+   }
+  },
+  {
+   "shift": 6796,
+   "cagr": 124.1,
+   "dd": 72.5,
+   "params": {
+    "topLead": 124.7,
+    "backLead": 25.1,
+    "floorLead": 20.7,
+    "reentryLead": 24,
+    "deepLead": -28.4
+   }
+  },
+  {
+   "shift": 5226,
+   "cagr": 121.8,
+   "dd": 76.5,
+   "params": {
+    "topLead": 87.5,
+    "backLead": 8.1,
+    "floorLead": -42.3,
+    "reentryLead": 52.3,
+    "deepLead": -29.9
+   }
+  },
+  {
+   "shift": 7563,
+   "cagr": 126.2,
+   "dd": 65.2,
+   "params": {
+    "topLead": 71.9,
+    "backLead": 65.3,
+    "floorLead": 52.3,
+    "reentryLead": -31.4,
+    "deepLead": 30.4
+   }
+  },
+  {
+   "shift": 6219,
+   "cagr": 133,
+   "dd": 76.5,
+   "params": {
+    "topLead": 74.6,
+    "backLead": 26.6,
+    "floorLead": -64.3,
+    "reentryLead": -43.2,
+    "deepLead": -9999
+   }
+  },
+  {
+   "shift": 12988,
+   "cagr": 125.4,
+   "dd": 77.6,
+   "params": {
+    "topLead": 130.3,
+    "backLead": 161.6,
+    "floorLead": 49.8,
+    "reentryLead": 33.2,
+    "deepLead": 31.4
+   }
+  },
+  {
+   "shift": 14745,
+   "cagr": 139.8,
+   "dd": 76,
+   "params": {
+    "topLead": 9999,
+    "backLead": 142.4,
+    "floorLead": 38.3,
+    "reentryLead": -18.8,
+    "deepLead": 26.1
+   }
+  },
+  {
+   "shift": 11410,
+   "cagr": 121.5,
+   "dd": 76.5,
+   "params": {
+    "topLead": 9999,
+    "backLead": 93.8,
+    "floorLead": 86.2,
+    "reentryLead": -42.3,
+    "deepLead": 43.5
+   }
+  },
+  {
+   "shift": 17158,
+   "cagr": 142.9,
+   "dd": 58.8,
+   "params": {
+    "topLead": 133.6,
+    "backLead": -64.3,
+    "floorLead": 21.9,
+    "reentryLead": 13.5,
+    "deepLead": 1.1
+   }
+  },
+  {
+   "shift": 13072,
+   "cagr": 113.6,
+   "dd": 88.1,
+   "params": {
+    "topLead": 161.6,
+    "backLead": 107.5,
+    "floorLead": 66.3,
+    "reentryLead": 35.5,
+    "deepLead": 65.3
+   }
+  },
+  {
+   "shift": 8315,
+   "cagr": 93.7,
+   "dd": 88.1,
+   "params": {
+    "topLead": 99.7,
+    "backLead": 55,
+    "floorLead": -39.6,
+    "reentryLead": -59.2,
+    "deepLead": -39.6
+   }
+  }
+ ],
+ "surrogateSummary": {
+  "n": 16,
+  "min": 93.7,
+  "median": 125.4,
+  "p90": 139.5,
+  "max": 142.9
+ },
+ "seconds": 9088
+}
