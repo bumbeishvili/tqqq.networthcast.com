@@ -622,9 +622,12 @@ function eraTableHtml(m) {
   </table></div>`;
 }
 
-// Compact money: $10k, $257k, $22M, $1.3B.
+// Compact money: $10k, $257k, $22M, $1.3B, $6.5T, $24Q (quadrillion: the
+// 1953 reconstruction carries some cards there from $10k; "$24384873B" did not read).
 function fmtMoney(v) {
   if (!(v > 0)) return '—';
+  if (v >= 1e15) return '$' + (v / 1e15).toFixed(v >= 1e16 ? 0 : 1) + 'Q';
+  if (v >= 1e12) return '$' + (v / 1e12).toFixed(v >= 1e13 ? 0 : 1) + 'T';
   if (v >= 1e9) return '$' + (v / 1e9).toFixed(v >= 1e10 ? 0 : 1) + 'B';
   if (v >= 1e6) return '$' + (v / 1e6).toFixed(v >= 1e7 ? 0 : 1) + 'M';
   if (v >= 1e3) return '$' + Math.round(v / 1e3) + 'k';
@@ -663,6 +666,16 @@ function sparklineHtml(n) {
     grid += `<line x1="0" y1="${y}" x2="${W}" y2="${y}" class="sl-grid"/>`;
   }
   const start = 10000; // lump-sum starter balance
+  // The two end labels must not sit on each other: a label is about 11% of the
+  // graph's height, so when the strategy and SPY end that close, the lower one
+  // moves down (or the upper one up at the bottom edge).
+  const GAP = 12;
+  let yStrat = yPct(curve[N - 1]), ySpy = yPct(spy[spy.length - 1]);
+  if (Math.abs(yStrat - ySpy) < GAP) {
+    const upper = Math.min(yStrat, ySpy), lower = upper + GAP;
+    if (lower <= 82) { if (yStrat <= ySpy) ySpy = lower; else yStrat = lower; }
+    else { if (yStrat <= ySpy) yStrat = 82 - GAP; else ySpy = 82 - GAP; }
+  }
   return `<div class="sl-spark" data-sl-n="${n}">
     <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Strategy vs SPY, log scale 1995–2025">
       ${grid}
@@ -671,8 +684,8 @@ function sparklineHtml(n) {
     </svg>
     <span class="sl-logtag">log ⬍</span>
     <span class="sl-lbl sl-lbl-start" style="top:${yPct(start).toFixed(0)}%">${fmtMoney(start)}</span>
-    <span class="sl-lbl sl-lbl-strat" style="top:${yPct(curve[N - 1]).toFixed(0)}%">${fmtMoney(curve[N - 1])}</span>
-    <span class="sl-lbl sl-lbl-spy" style="top:${yPct(spy[spy.length - 1]).toFixed(0)}%">${fmtMoney(spy[spy.length - 1])}</span>
+    <span class="sl-lbl sl-lbl-strat" style="top:${yStrat.toFixed(0)}%">${fmtMoney(curve[N - 1])}</span>
+    <span class="sl-lbl sl-lbl-spy" style="top:${ySpy.toFixed(0)}%">${fmtMoney(spy[spy.length - 1])}</span>
     <span class="sl-years">${slYearTicks().map(y => `<b>${y}</b>`).join('')}</span>
     <span class="sl-cross"></span>
     <span class="sl-dot sl-dot-spy"></span>
