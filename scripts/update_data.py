@@ -8,7 +8,7 @@ Two modes. The default (no flags, what the cron runs) is an incremental
 refresh: replace the post-IPO tail of the eight price TSVs with fresh
 yfinance bars, copy the committed pre-IPO synthesized prefix through
 untouched, never touch FRED. --rebuild runs the full synthesis below.
---refresh-rates re-pulls the FRED TSVs (three rate files + nfci.tsv); nothing else does.
+--refresh-rates re-pulls the FRED TSVs (three rate files; nfci.tsv only gains new weeks); nothing else does.
 --high-low-history rewrites the high/low files' pre-launch rows (QQQ from
 ^NDX bars, TQQQ derived from QQQ's) from the committed price files; the
 default refresh then copies those rows through like the price files' prefix.
@@ -241,9 +241,25 @@ high_low_history = {
 # blocks scripted downloads, and FRED dropped its copy in 2022.
 # SOXL before its 2010-03-11 launch is the PHLX Semiconductor index (^SOX, Yahoo,
 # from 1994-05-04) walked backward at 3× with financing, like TQQQ from ^NDX
-# (build_soxl_prefix). No semiconductor index exists before May 1994, so the
-# file starts there; js/data.js carries the first price flat before it.
-soxl_history = {'index': '^SOX'}
+# (build_soxl_prefix). No semiconductor index with daily history exists before
+# the index's own launch in December 1993. Before ^SOX's first Yahoo day the
+# index is stood in for by Ken French's "Chips" industry portfolio: CRSP's
+# value-weighted daily return of every listed US electronic-equipment company
+# (SIC 3622, 3661-3666, 3669-3679, 3810, 3812; semiconductors are 3674),
+# dividends and delisted companies included, daily from July 1926. Its returns
+# are scaled by french_beta, the index's daily beta to it where both exist
+# (1.17 over 1994-2001, 1.10 over 2001-2010, 1.04 over 2010-2021, 1.15 since;
+# daily R² 0.79 to 0.91). So both files start on the price files' first day.
+# The stand-in is rough: its level ran 4.5 points a year under the index in
+# 1994-2001 and 4.5 over a real semiconductor fund (Fidelity Select
+# Electronics) in 1985-1994, and it is calmer than semiconductors were
+# (research/soxl-history/).
+soxl_history = {
+    'index':         '^SOX',
+    'french_zip':    'https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/ftp/49_Industry_Portfolios_daily_CSV.zip',
+    'french_column': 'Chips',
+    'french_beta':   1.15,
+}
 # SOXX before its 2001-07-13 launch is the same index less SOXX's fee, at 1x, no
 # financing (build_soxx_prefix): the 1x leg of the SOXL vs SOXX strategy, as QQQ
 # is of TQQQ vs QQQ. ^SOX is price-only, so the prefix runs about 1%/yr light.
@@ -431,6 +447,27 @@ def write_rate_tsv(path, rows):
         f.write("Date\tRate\n")
         for d, v in rows:
             f.write(f"{d.month}/{d.day}/{d.year} 16:00:00\t{v:.4f}\n")
+
+
+def append_new_readings(existing, fetched):
+    """The NFCI file with the weeks after its last row added from `fetched`;
+    no existing row is rewritten.
+
+    The Chicago Fed re-estimates the index's whole history every week: the
+    week of 2020-04-03 read 0.07 when it was published, 0.34 in 2022, 0.51 in
+    April 2025 and 0.31 in November 2026. A file replaced from FRED each week
+    lets a backtest's past credit-veto days move with the data vintage (run on
+    the April 2025 file, the NFCI veto strategy showed 82.6% a year for
+    2010-2025 instead of 88.0%). So the committed file holds, from 2011-05-20
+    (the first reading the index was published live with), each week's value
+    as first published (ALFRED, built 2026-11-10), and before that the history
+    as FRED had it that day; each run adds only newer weeks, at the value FRED
+    shows when they first appear. See research/recheck/nfci/ and
+    research/recheck/vintage/."""
+    if not existing:
+        return fetched
+    last = existing[-1][0]
+    return existing + [(d, v) for d, v in fetched if d > last]
 
 
 def walk_backward(source_pairs, anchor_date, anchor_price, leverage, expense_daily, rate_map=None, rate_spread=0.0):
@@ -786,13 +823,73 @@ def write_gld_file(gld_df):
           f"{prefix[0][0].strftime('%Y-%m-%d')} to {gld_df.index[-1].strftime('%Y-%m-%d')}")
 
 
-def build_soxl_prefix(soxl_df, days, rate_map):
-    """SOXL's rows before its launch, as [(Timestamp, close)]: ^SOX on the given
-    trading days (the QQQ file's), walked back from SOXL's first close at 3×
-    with financing at the short rate plus SOXL_SWAP_SPREAD and SOXL's fee."""
-    first_real = normalize_ts(soxl_df.index[0])
-    wanted = set(d for d in days if d <= first_real)
+def fetch_french_industry(url, column):
+    """One industry's value-weighted daily returns from Ken French's 49-industry
+    file, as [(Timestamp, return)], the return a fraction."""
+    import zipfile
+    import pandas as pd
+    req = urllib.request.Request(url, headers={'User-Agent': FRED_USER_AGENT})
+    raw = urllib.request.urlopen(req, timeout=120).read()
+    with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+        lines = archive.read(archive.namelist()[0]).decode('latin-1').splitlines()
+    start = next(i for i, line in enumerate(lines) if 'Average Value Weighted Returns' in line)
+    k = [c.strip() for c in lines[start + 1].split(',')].index(column)
+    out = []
+    for line in lines[start + 2:]:
+        parts = line.split(',')
+        day = parts[0].strip()
+        if not re.fullmatch(r'\d{8}', day):
+            break   # the value-weighted block ends at the first line that is not a day
+        value = float(parts[k])
+        if value <= -99:
+            raise ValueError(f"French {column}: no return on {day}")
+        out.append((pd.Timestamp(int(day[:4]), int(day[4:6]), int(day[6:])), value / 100.0))
+    return out
+
+
+_semis_index = {}
+
+
+def semis_index(days):
+    """The semiconductor index on the given trading days (the QQQ file's), as
+    [(Timestamp, level)]: ^SOX from its first Yahoo day, and before that a level
+    walked back from ^SOX's first close on French's Chips returns times
+    french_beta (soxl_history). A French day the price files' calendar lacks
+    (1975-02-28) is compounded into the next day the files have. Fetched once
+    per run."""
+    key = (days[0], days[-1], len(days))
+    if key in _semis_index:
+        return _semis_index[key]
+    wanted = set(days)
     sox = [(d, c) for d, c in df_to_pairs(fetch(soxl_history['index'])) if d in wanted]
+    first_day, level = sox[0]
+    chips = fetch_french_industry(soxl_history['french_zip'], soxl_history['french_column'])
+    beta = soxl_history['french_beta']
+    early_days = sorted(d for d in wanted if d <= first_day)
+    by_day = [(d, r) for d, r in chips if early_days[0] < d <= first_day]
+    early, at = [], len(by_day) - 1
+    for i in range(len(early_days) - 1, 0, -1):
+        growth, used = 1.0, 0
+        while at >= 0 and by_day[at][0] > early_days[i - 1]:
+            growth *= 1 + beta * by_day[at][1]
+            at -= 1
+            used += 1
+        if not used:
+            raise ValueError(f"French {soxl_history['french_column']}: no return between "
+                             f"{early_days[i - 1].date()} and {early_days[i].date()}")
+        level /= growth
+        early.append((early_days[i - 1], level))
+    _semis_index[key] = early[::-1] + sox
+    return _semis_index[key]
+
+
+def build_soxl_prefix(soxl_df, days, rate_map):
+    """SOXL's rows before its launch, as [(Timestamp, close)]: the semiconductor
+    index on the given trading days (the QQQ file's; semis_index), walked back
+    from SOXL's first close at 3× with financing at the short rate plus
+    SOXL_SWAP_SPREAD and SOXL's fee."""
+    first_real = normalize_ts(soxl_df.index[0])
+    sox = [(d, c) for d, c in semis_index(days) if d <= first_real]
     _, pairs = walk_backward(sox, first_real, cell(soxl_df['Close'].iloc[0]),
                              leverage=3, expense_daily=SOXL_EXPENSE_DAILY,
                              rate_map=rate_map, rate_spread=SOXL_SWAP_SPREAD)
@@ -800,11 +897,11 @@ def build_soxl_prefix(soxl_df, days, rate_map):
 
 
 def build_soxx_prefix(soxx_df, days):
-    """SOXX's rows before its launch: ^SOX on the given trading days walked back
-    from SOXX's first close at 1x less SOXX's fee."""
+    """SOXX's rows before its launch: the semiconductor index on the given
+    trading days (semis_index) walked back from SOXX's first close at 1x less
+    SOXX's fee."""
     first_real = normalize_ts(soxx_df.index[0])
-    wanted = set(d for d in days if d <= first_real)
-    sox = [(d, c) for d, c in df_to_pairs(fetch(soxl_history['index'])) if d in wanted]
+    sox = [(d, c) for d, c in semis_index(days) if d <= first_real]
     _, pairs = walk_backward(sox, first_real, cell(soxx_df['Close'].iloc[0]), leverage=1, expense_daily=SOXX_EXPENSE_DAILY)
     return pairs
 
@@ -867,12 +964,15 @@ def incremental_refresh():
     # NFCI (weekly) is a LIVE decision input for the credit-veto strategy, so
     # the cron keeps it current — unlike the historical rate files, which only
     # refresh via --refresh-rates. FRED downtime must never break the price
-    # refresh above, so any failure leaves the committed TSV untouched.
+    # refresh above, so any failure leaves the committed TSV untouched. Only
+    # weeks after the file's last row are added (append_new_readings).
     try:
         nfci = fetch_fred('NFCI', '1971-01-01', force_remote=True)
         if nfci:
-            write_rate_tsv(os.path.join(data_dir, 'nfci.tsv'), nfci)
-            print(f"  nfci.tsv: {len(nfci)} weekly rows, through {nfci[-1][0].strftime('%Y-%m-%d')}")
+            nfci_path = os.path.join(data_dir, 'nfci.tsv')
+            nfci_rows = append_new_readings(read_rate_tsv(nfci_path), nfci)
+            write_rate_tsv(nfci_path, nfci_rows)
+            print(f"  nfci.tsv: {len(nfci_rows)} weekly rows, through {nfci_rows[-1][0].strftime('%Y-%m-%d')}")
     except Exception as e:
         print(f"  nfci.tsv: FRED unreachable ({e}); leaving committed TSV untouched")
 
@@ -892,9 +992,10 @@ _argp.add_argument('--rebuild', action='store_true',
 _argp.add_argument('--refresh-rates', action='store_true',
                    help='Re-fetch FRED DFF + TB3MS + NFCI from the network and '
                         'overwrite data/fed-funds-effective.tsv + data/t-bill-3mo.tsv + '
-                        'data/short-rates.tsv + data/nfci.tsv. Use to refresh the '
-                        'committed rate/signal data; not needed for synthesis '
-                        '(historical rates do not change).')
+                        'data/short-rates.tsv; data/nfci.tsv only gains the weeks '
+                        'after its last row (its history is never rewritten). Use to '
+                        'refresh the committed rate/signal data; not needed for '
+                        'synthesis (historical rates do not change).')
 _argp.add_argument('--high-low-history', action='store_true',
                    help='Rewrite the high/low files with their pre-launch rows '
                         '(QQQ from ^NDX bars, TQQQ from QQQ at 3x; see '
@@ -902,13 +1003,15 @@ _argp.add_argument('--high-low-history', action='store_true',
                         'Nothing else is touched.')
 _argp.add_argument('--soxl-history', action='store_true',
                    help='Rewrite synthetic-soxl.tsv: SOXL\'s real closes plus its '
-                        'pre-launch rows from the PHLX Semiconductor index at 3× '
+                        'pre-launch rows from the PHLX Semiconductor index at 3×, '
+                        'and before the index from Ken French\'s Chips industry '
                         '(see soxl_history), on the committed QQQ file\'s trading '
                         'days and short rates. Nothing else is touched.')
 _argp.add_argument('--soxx-history', action='store_true',
                    help='Rewrite synthetic-soxx.tsv: SOXX\'s real closes plus its '
                         'pre-launch rows from the PHLX Semiconductor index at 1x '
-                        'less its fee, on the committed QQQ file\'s trading days.')
+                        'less its fee, and before the index from Ken French\'s '
+                        'Chips industry, on the committed QQQ file\'s trading days.')
 _argp.add_argument('--gold-history', action='store_true',
                    help='Rewrite synthetic-gld.tsv: GLD\'s real closes plus its '
                         'pre-launch rows from gold prices (see gold_history), on '
@@ -974,7 +1077,8 @@ dff_pairs       = fetch_fred('DFF',   DFF_START,  fallback_path=os.path.join(bas
 tbms_pairs      = fetch_fred('TB3MS', TBMS_START, fallback_path=os.path.join(basedir, DATA_DIR, 't-bill-3mo.tsv'),           force_remote=_args.refresh_rates)  # monthly 1934+
 # Chicago Fed NFCI (weekly, 1971+). Not a synthesis input — it feeds the
 # NFCI-credit-veto strategy in the app (js/data.js aligns it to trading days
-# with a 7-day publication lag). Refreshed alongside the rate files.
+# with a 7-day publication lag). Refreshed alongside the rate files, by adding
+# the weeks after the committed file's last row (append_new_readings).
 nfci_pairs      = fetch_fred('NFCI',  '1971-01-01', fallback_path=os.path.join(basedir, DATA_DIR, 'nfci.tsv'),               force_remote=_args.refresh_rates)  # weekly 1971+
 combined_rates  = build_combined_rates(dff_pairs, tbms_pairs)
 rate_map        = dict(combined_rates)                      # Timestamp → percent
@@ -1169,7 +1273,7 @@ else:
 qqq_days = [parse_tsv_date(s) for s, _ in qqq_prefix_rows] + [normalize_ts(d) for d in qqq_df.index]
 gld_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_gld_prefix(gld_df, qqq_days)]
 
-# ---- SOXL: real from 2010-03-11, 3× ^SOX with financing back to 1994-05-04 ----
+# ---- SOXL: real from 2010-03-11, 3× the semiconductor index with financing before (semis_index) ----
 soxl_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxl_prefix(soxl_df, qqq_days, rate_map)]
 soxx_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxx_prefix(soxx_df, qqq_days)]
 
@@ -1214,6 +1318,7 @@ build_high_low_files(real_by_ticker, fetch_high_low_indexes())
 write_rate_tsv(os.path.join(data_dir, 'fed-funds-effective.tsv'), dff_pairs)
 write_rate_tsv(os.path.join(data_dir, 't-bill-3mo.tsv'),          tbms_pairs)
 write_rate_tsv(os.path.join(data_dir, 'short-rates.tsv'),         combined_rates)
+nfci_pairs = append_new_readings(read_rate_tsv(os.path.join(data_dir, 'nfci.tsv')), nfci_pairs)
 write_rate_tsv(os.path.join(data_dir, 'nfci.tsv'),                nfci_pairs)
 print(f"  fed-funds-effective.tsv: {len(dff_pairs)} daily rows, {dff_pairs[0][0].strftime('%Y-%m-%d')} to {dff_pairs[-1][0].strftime('%Y-%m-%d')}")
 print(f"  t-bill-3mo.tsv:          {len(tbms_pairs)} monthly rows, {tbms_pairs[0][0].strftime('%Y-%m-%d')} to {tbms_pairs[-1][0].strftime('%Y-%m-%d')}")

@@ -2205,6 +2205,16 @@ CODE[44] = `{
     const log = [];
     const px = data[p.asset] || data.tqqq;
     const W = Math.max(2, p.window || 250);
+    // Memory before the entry: the rules run over the WARM days before it on a
+    // notional account, unlogged, so the first day holds what a strategy that
+    // had been running all along would hold, with a crash exit, a count of closes under the line or a credit veto carried in.
+    // Until 2026-11-10 the rules started blank at the entry: an entry inside a
+    // sold-out stretch bought at once, and about one sampled entry day in six
+    // of 2010-2024 held something else for a while. Two windows of memory
+    // already hold what a memory over the whole history holds on every entry
+    // day tested from 1975 to 2024; three leave room.
+    const entryIdx = p.startIdx, entryInitial = p.initial, WARM = 3 * W;
+    p = Object.assign({}, p, { startIdx: Math.max(0, entryIdx - WARM), initial: entryInitial > 0 ? entryInitial : 1 });
     const over = (p.overPct || 0) / 100;
     const exitB = (p.exitPct || 0) / 100;
     const cost = (p.tradeCost || 0) / 100;
@@ -2280,6 +2290,7 @@ CODE[44] = `{
 
     let cash = p.initial, shares = 0, held = "cash";
     let state = "normal", invested = p.initial, feeTotal = 0;
+    let statePrev = "normal", stateIdx = p.startIdx;   // the close the price rules' state last changed at
     let med = 0, medC = 0, above = 0, aboveC = 0, zone = "normal";
     let sigM = 0, sigC = 0;
     let minAC = Infinity, maxAC = -Infinity;
@@ -2338,6 +2349,7 @@ ${SELL_HELD_TO_COVER}
           else state = "normal";
         } else if (sigC > pExit) state = "normal";
         zone = state === "over" ? "overextended" : state === "normal" ? "normal" : "crash";
+        if (state !== statePrev) { statePrev = state; stateIdx = i; }
         // The one-way credit veto: only ever a reason to be in cash.
         const nfAbove = nfciTh !== 999 && isFinite(nfNow) && nfNow > nfciTh;
         if (!vetoCycle) vetoOn = nfAbove;
@@ -2388,11 +2400,22 @@ ${SELL_HELD_TO_COVER}
       if (inCrash) stintLen++;
       if (wasCrash && !inCrash) { stints.push(stintLen); stintLen = 0; }
       feeTotal += fee;
+      if (i < entryIdx) continue;   // memory only: nothing before the entry is logged
+      if (i === entryIdx) {
+        // The account starts at this close: the initial amount (and a contribution dated today) in what
+        // the rules hold now, less the cost of buying it.
+        const pxE = priceOf(held, i), inFund = held !== "cash" && pxE > 0 ? shares * pxE : 0, total = inFund + cash;
+        const scale = total > 0 ? (entryInitial + contributed) / total : 0;
+        fee = inFund * scale * cost; shares = pxE > 0 ? (inFund * scale - fee) / pxE : 0; cash *= scale;
+        invested = entryInitial + contributed; feeTotal = fee;
+        stints = []; stintLen = inCrash ? 1 : 0; peakPx = px[i]; peakDate = data.dates[i]; ddNow = 0; maxDdSeen = 0; vetoDays = vetoOn ? 1 : 0; vetoWindows = vetoOn ? 1 : 0;
+        note = (held === "cash" ? "In cash" : "Holding " + held.toUpperCase()) + " at the entry: " + (vetoOn ? "NFCI " + nfNow.toFixed(2) + " > " + nfciTh + " — credit veto" : (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(1) + "% vs line — " + zone + (stateIdx < entryIdx ? ", since " + data.dates[stateIdx] + ", before the entry" : ""));
+      }
       const medPlot = mainRsi ? (sigM > 0 ? px[i] * 50 / sigM : 0) : med;
       const hp = priceOf(held, i);
       const stockVal = shares * hp;
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (i === p.startIdx) action = "start";
+      if (i === entryIdx) action = "start";
 ${END_ROW_ACTION}
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
@@ -2498,11 +2521,23 @@ ${END_ROW_ACTION}
 // and one-trade-per-day are #44's. With exitPct -28, slopeGate 20, belowGate
 // 10 and bbPct Off it reproduces #44 row for row (checked across 22,984 rows
 // when it was written; tests/library-withdrawals.cjs does not cover that).
-// The defaults are the best fit on Q1 2010 to Q4 2025, 2009-12-31 to
-// 2025-12-31 (2026-10-29, six searches, 286,000 runs of this code, scratchpad
-// r5/bb-fit.cjs): sell line +10% (above the center), 4 closes, buy-back -32%
-// with all the money; 100.8% a year against 91.8% for the earlier -3 / 5 /
-// -34 / half.
+// From 2026-10-29 to 2026-11-10 the defaults were the best fit on Q1 2010 to
+// Q4 2025 (six searches, 286,000 runs of this code, scratchpad r5/bb-fit.cjs):
+// sell line +10% (above the center), 4 closes, buy-back -32% with all the
+// money, 100.8% a year against 91.8% for the earlier -3 / 5 / -34 / half. The
+// recheck of 2026-11-10 (research/recheck/) found what that
+// fit rested on: with the sell line above the center, a correction's low
+// usually stays above the center too, the line half way from the center to
+// the low then lies under the price, and the buy-back comes after the closes
+// in a row whatever they are (36 of 44 buy-backs in 2010-2025, none at the
+// sell line), with the sell line off until a close back above it. With that
+// path closed the fit makes 105.8%, and in 2026, out of the fit, it made 18%
+// while its own nearby settings made 57% at the median. The defaults are
+// back at the user's -3 / 5 / -34 (2026-10-21), keeping the whole-money buy
+// at the line: the rules then do what the card says, the worst nearby
+// setting makes 97% instead of 89%, and the Monday version makes 114.7%
+// against 118.9% for the fit (116.8% before the Monday rule took every down
+// Monday).
 CODE[45] = `{
   name: "SQQQ stretch, sell line + crash buy-back",
   params: [
@@ -2522,18 +2557,18 @@ CODE[45] = `{
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
     { section: "Sell line — leave when it breaks down" },
-    { id: "exitPct", label: "Level vs center line (%)", tip: "Sell on the first close under this level. Negative is below the center line, positive above it.", text: "Sell on the first close under a level {} from the line.", unit: "%", default: 10, options:
+    { id: "exitPct", label: "Level vs center line (%)", tip: "Sell on the first close under this level. Negative is below the center line, positive above it.", text: "Sell on the first close under a level {} from the line.", unit: "%", default: -3, options:
       Array.from({ length: 201 }, (_, k) => +(20 - 0.5 * k).toFixed(1)) },
     { id: "crashAsset", label: "Then hold", tip: "What to hold after selling, until the strategy buys back.", text: "Then hold {} until it buys back.", default: "cash", options: [
       { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
       { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
       { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
-    { id: "confirmDays", label: "Buy back after closes above line", tip: "Closes in a row above the line before buying back. Selling needs one.", text: "Buy back after {} closes in a row above the line.", default: 4, options:
+    { id: "confirmDays", label: "Buy back after closes above line", tip: "Closes in a row above the line before buying back. Selling needs one.", text: "Buy back after {} closes in a row above the line.", default: 5, options:
       Array.from({ length: 100 }, (_, k) => 1 + k) },
-    { id: "dipReentry", label: "Re-enter a correction", tip: "How far the price must climb from its low toward the center line before buying back. 0% waits for the sell line.", text: "In a correction, buy back {} of the way from its low.", unit: "%", default: 50, options:
+    { id: "dipReentry", label: "Re-enter a correction", tip: "Where the re-entry line sits between the center line and the correction's low. 25% is a quarter of the way down from the center line, 100% is the low itself. 0% waits for the sell line.", text: "In a correction, buy back above a line {} of the way from the center line down to its low.", unit: "%", default: 50, options:
       Array.from({ length: 101 }, (_, k) => k) },
     { section: "Buy-back line — after a crash, re-enter here instead of waiting for the sell line; it sells again below it" },
-    { id: "bbPct", label: "Below line (%)", tip: "How far under the center line counts as a crash.", text: "A crash is a close {} from the line.", unit: "%", default: -32, options:
+    { id: "bbPct", label: "Below line (%)", tip: "How far under the center line counts as a crash.", text: "A crash is a close {} from the line.", unit: "%", default: -34, options:
       [{ value: 999, label: "Off" }].concat(Array.from({ length: 141 }, (_, k) => +(-80 + 0.5 * k).toFixed(1))) },
     { id: "bbSlice", label: "Buy a slice at the line right away", tip: "Bought at the first close under the line. The rest waits for the closes above it. 0% buys nothing there.", text: "At the first close under it, buy back with {} of the money.", unit: "%", default: 100, options:
       Array.from({ length: 101 }, (_, k) => k) },
@@ -2563,6 +2598,16 @@ CODE[45] = `{
     const log = [];
     const px = data[p.asset] || data.tqqq;
     const W = Math.max(2, p.window || 250);
+    // Memory before the entry: the rules run over the WARM days before it on a
+    // notional account, unlogged, so the first day holds what a strategy that
+    // had been running all along would hold, with a sale, a marked crash, a slice or a count of closes carried in.
+    // Until 2026-11-10 the rules started blank at the entry: an entry inside a
+    // sold-out stretch bought at once, and about one sampled entry day in six
+    // of 2010-2024 held something else for a while. Two windows of memory
+    // already hold what a memory over the whole history holds on every entry
+    // day tested from 1975 to 2024; three leave room.
+    const entryIdx = p.startIdx, entryInitial = p.initial, WARM = 3 * W;
+    p = Object.assign({}, p, { startIdx: Math.max(0, entryIdx - WARM), initial: entryInitial > 0 ? entryInitial : 1 });
     const over = (p.overPct || 0) / 100;
     const exitB = (p.exitPct || 0) / 100;
     const cost = (p.tradeCost || 0) / 100;
@@ -2621,14 +2666,17 @@ CODE[45] = `{
     // when the price has climbed all the way back, every such re-entry since
     // 2010 bought higher than it sold; the corrections that bottomed between
     // 10% and 34% under the center cost the most, because nothing let the
-    // strategy back in before the line. dipF puts the re-entry line part of
-    // the way back from the correction's low toward the center instead
-    // (never below the buy-back line, whose own rule governs deeper falls).
+    // strategy back in before the line. dipF puts the re-entry line at that
+    // share of the low's depth under the center instead: 0.25 a quarter of the
+    // way down from the center, 1 the low itself (never below the buy-back
+    // line, whose own rule governs deeper falls). The setting's words said
+    // "of the way from its low" until 2026-11-10, which is the mirror image
+    // at every value but 50.
     // Such a buy-back behaves like a crash buy-back: the buy-back line is the
     // sell line until the sell line is reclaimed. 0 = the sell line, as before.
     const dipF = Math.max(0, Math.min(1, (+p.dipReentry || 0) / 100));
-    const dipText = Math.round(dipF * 100) + "% of the way back";
-    // sellArmed: the normal sell line is live. A buy-back switches it off until the price has closed
+    const dipText = Math.round((1 - dipF) * 100) + "% of the way back";
+    // sellArmed: the normal sell line is live. A buy-back made under it switches it off until the price has closed
     // back above that line; until then the buy-back line is the sell line, so a close back under it
     // sells again. bbArmed: while sold out, the price has closed at or below the buy-back line.
     let sellArmed = true, bbArmed = false;
@@ -2645,6 +2693,7 @@ CODE[45] = `{
 
     let cash = p.initial, shares = 0, held = "cash";
     let state = "normal", invested = p.initial, feeTotal = 0;
+    let statePrev = "normal", stateIdx = p.startIdx;   // the close the state last changed at
     let med = 0, above = 0, zone = "normal";
     let sigM = 0;
     let stints = [], inCrash = false, stintLen = 0;
@@ -2687,10 +2736,11 @@ ${SELL_HELD_TO_COVER}
           else state = "normal";
           if (was === "normal" && state === "over") why = "closed above " + overTxt;
           if (was === "over" && state === "normal") why = "closed back under " + overTxt;
-        } else if (bbArmed && aboveBB >= confirmDays) { state = "normal"; sellArmed = false; why = closesTxt + " above " + bbTxt; }   // crash buy-back: in early, the normal sell on hold
-        else if (aboveRe >= confirmDays) { state = "normal"; sellArmed = pReenter >= pExit * 0.999999; why = closesTxt + " above " + (sellArmed ? exitTxt : "the re-entry line"); }   // below the sell line: a buy-back, with the buy-back line as the sell line
+        } else if (bbArmed && aboveBB >= confirmDays) { state = "normal"; sellArmed = sigM >= pExit; why = closesTxt + " above " + bbTxt; }   // crash buy-back: in early, the normal sell on hold unless this close is already back above it
+        else if (aboveRe >= confirmDays) { const atSellLine = pReenter >= pExit * 0.999999; state = "normal"; sellArmed = atSellLine || sigM >= pExit; why = closesTxt + " above " + (atSellLine ? exitTxt : "the re-entry line"); }   // below the sell line: a buy-back, with the buy-back line as the sell line
         bbArmed = state === "crashCash" && bbPct !== 999 && (bbArmed || sigM <= pBuyBack);
         zone = state === "over" ? "overextended" : state === "normal" ? "between lines" : "sold";
+        if (state !== statePrev) { statePrev = state; stateIdx = i; }
         const belowNow = sigM <= pBuyBack;
         if (sliceF > 0 && state === "crashCash") {
           if (belowNow && !belowPrev && sliceN < sliceCap) trArmed = true;
@@ -2742,11 +2792,22 @@ ${SELL_HELD_TO_COVER}
       if (inCrash) stintLen++;
       if (wasCrash && !inCrash) { stints.push(stintLen); stintLen = 0; }
       feeTotal += fee;
+      if (i < entryIdx) continue;   // memory only: nothing before the entry is logged
+      if (i === entryIdx) {
+        // The account starts at this close: the initial amount (and a contribution dated today) in what
+        // the rules hold now, less the cost of buying it.
+        const pxE = priceOf(held, i), inFund = held !== "cash" && pxE > 0 ? shares * pxE : 0, total = inFund + cash;
+        const scale = total > 0 ? (entryInitial + contributed) / total : 0;
+        fee = inFund * scale * cost; shares = pxE > 0 ? (inFund * scale - fee) / pxE : 0; cash *= scale;
+        invested = entryInitial + contributed; feeTotal = fee;
+        stints = []; stintLen = inCrash ? 1 : 0; peakPx = px[i]; peakDate = data.dates[i]; ddNow = 0; maxDdSeen = 0;
+        note = (held === "cash" ? "In cash" : "Holding " + nm(held)) + " at the entry: " + zone + (tr ? ", with the slice bought at the buy-back line" : "") + (stateIdx < entryIdx ? ", since " + data.dates[stateIdx] + ", before the entry" : "");
+      }
       const medPlot = mainRsi ? (sigM > 0 ? px[i] * 50 / sigM : 0) : med;
       const hp = priceOf(held, i);
       const stockVal = shares * hp;
 ${WEEKLY_MONTH_END_SNIPPET}
-      if (i === p.startIdx) action = "start";
+      if (i === entryIdx) action = "start";
 ${END_ROW_ACTION}
       if (contributed !== 0 || logDay || action !== "hold") {
         log.push({
@@ -2914,7 +2975,7 @@ CODE[47] = `{
     // option-curves.cjs, floor-bars.cjs).
     { id: "lookbackDays", label: "Lookback (trading days)", tip: "How many trading days of buy & hold growth are compared: TQQQ's against QQQ's. 252 is about a year.", text: "Compare TQQQ's growth with QQQ's over the last {} trading days.", default: 550, options:
       [252, 260, 280, 300, 315, 320, 340, 360, 378].concat(Array.from({ length: 4 }, (_, k) => 380 + 20 * k), [441, 460, 462, 469, 476, 480, 483, 490, 497, 500, 504], Array.from({ length: 82 }, (_, k) => 511 + k), [595, 600, 602, 609, 616, 620, 623, 630, 637, 640, 644, 651, 658, 660, 665, 672, 680, 693, 700, 720, 740, 756, 760, 780, 800, 819], Array.from({ length: 4 }, (_, k) => 820 + 20 * k), [882], Array.from({ length: 6 }, (_, k) => 900 + 20 * k), [1008]) },
-    { id: "startAvgDays", label: "Start averaged over ± (days)", tip: "Example: with a 550-day lookback and ±65, the start price is the average close from 615 to 485 days ago, so one day's price can't decide the lead. At 0 it is the close 550 days ago.", text: "Average the start price over ±{} days.", default: 65, options:
+    { id: "startAvgDays", label: "Start averaged over ± (days)", tip: "Example: with a 550-day lookback and ±65, the start price is the geometric average of the closes from 615 to 485 days ago, so one day's price can't decide the lead. At 0 it is the close 550 days ago.", text: "Average the start price over ±{} days.", default: 65, options:
       Array.from({ length: 201 }, (_, k) => k) },
     { section: "Ceiling — step aside" },
     { id: "topLead", label: "TQQQ ahead by at least (%)", tip: "TQQQ's growth over the lookback against QQQ's: 90 means TQQQ grew 1.9 times as much.", text: "Step aside when TQQQ is {} ahead of QQQ.", unit: "%", default: 125, options:
@@ -3348,21 +3409,25 @@ function withTurnaroundMonday(base, spec) {
     const tmLevel = (arr, i) => (tmHL && arr[i] > 0 ? arr[i] : data[tmSig][i]);
     const tmLevelName = (arr, i, word) => (tmHL && arr[i] > 0 ? "the prior day's " + word : "the prior close");
     const tmIn = new Uint8Array(p.endIdx + 1);   // 1 = the rule is in a trade at that close
+    const tmMonday = new Uint8Array(p.endIdx + 1);   // 1 = a Monday close under the level, the rule's entry signal
     for (let i = p.startIdx, inT = false; i <= p.endIdx; i++) {
       const c = data[tmSig][i], prev = i > 0 ? data[tmSig][i - 1] : 0;
       const wd = ((Math.floor(Date.parse(data.dates[i]) / 86400000) + 4) % 7 + 7) % 7;   // 1 = Monday (1970-01-01 was a Thursday)
       if (c > 0 && prev > 0) { if (inT) { if (c > tmLevel(tmHigh, i - 1)) inT = false; } else if (wd === 1 && c < tmLevel(tmLow, i - 1)) inT = true; }
-      tmIn[i] = inT ? 1 : 0;
+      tmIn[i] = inT ? 1 : 0; tmMonday[i] = wd === 1 && c > 0 && prev > 0 && c < tmLevel(tmLow, i - 1) ? 1 : 0;
     }
     let tmActive = false, tmSince = "", tmWhy = "", tmKept = false;
     // What to hold today: the rules' choice, or the fund while a trade opened in their cash is open.
     // A trade starts at the Monday close on money in cash, or on the fund the rules are selling
     // that close (kept instead of sold); money in another fund would need a two-day switch.
+    // Every Monday close under the level counts, as the card says. Until 2026-11-10 one was skipped
+    // when the signal fund had not closed over its exit level since an earlier down Monday (the
+    // rule's own trade still open): three Mondays since 2010 for buy-back, one for the 1983 fit.
     const tmHold = (i, want) => {
       tmWhy = ""; tmKept = false;
       if (want !== "cash") { tmActive = false; return want; }
       if (tmActive && !tmIn[i]) { tmActive = false; tmWhy = "Turnaround Monday exit, " + tmSigName + " closed above " + tmLevelName(tmHigh, i - 1, "high"); }
-      else if (!tmActive && (held === "cash" || held === tmFund) && tmIn[i] && !(i > p.startIdx && tmIn[i - 1])) {
+      else if (!tmActive && (held === "cash" || held === tmFund) && tmIn[i] && (tmMonday[i] === 1 || !(i > p.startIdx && tmIn[i - 1]))) {
         tmActive = true; tmSince = data.dates[i]; tmKept = held === tmFund;
         const under = tmLevelName(tmLow, i - 1, "low");
         tmWhy = tmKept ? "Kept " + tmFund.toUpperCase() + ": the rules sold, but " + tmSigName + " closed a Monday under " + under
@@ -3448,8 +3513,7 @@ CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Mond
 // 2026-11-05, scratchpad soxl/recheck.cjs). Built from #50's text at load,
 // as #50 is built from #47, so a change to either reaches it.
 //   - A contribution buys SOXL at the close it arrives while the rules
-//     themselves hold TQQQ. A Monday trade is not that, and before the SOXL
-//     data starts (May 1994) contributions go to the strategy.
+//     themselves hold TQQQ. A Monday trade is not that.
 //   - When the rules sell TQQQ for SQQQ, the pile is sold once SQQQ is
 //     actually bought, at the next close, and its money reaches the strategy
 //     the close after, bought like any deposit: 15 of the +55% line's signals
@@ -3511,7 +3575,7 @@ function withSoxlPile(base, spec) {
     // in, what was put in, and the handover in flight. "rally" below is the
     // rules' own choice of TQQQ, a Monday trade aside.
     const pileOn = p.soxlPile !== false, pileConfirm = (p.pileHandover || "confirmed") === "confirmed", pileWait = (p.pileFloor || "wait") === "wait";
-    const SOXL_FROM = "1994-05-04";   // the semiconductor index starts here; js/data.js holds SOXL's first price flat before it
+    const SOXL_FROM = "1953-01-02";   // the SOXL and SOXX files' first day. Until 10 November 2026 they began on 1994-05-04 (the index's first day), and this gate kept the rule off before it
     const soxlAt = (i) => data.soxl && dates[i] >= SOXL_FROM ? (data.soxl[i] || 0) : 0;
     let pileSh = 0, pileCash = 0, pilePut = 0, pileDeposits = 0, pileAwait = false, rallyPrev = false, pileTransfer = 0;
     const holdings = [];   // daily control points, the pile included, for the app's revaluation (drawdown, cards)
@@ -3706,6 +3770,22 @@ CODE[52] = withSoxlPile(CODE[50], { name: "SOXL, TQQQ VS QQQ, Mon Turns" });
 // place (js/saved-configs.js customParamOptionsWithCurrent). The prices
 // before 2010 are reconstructed, and the user's rule is to judge a strategy
 // on 2010 onward: the card gives both periods.
+// Six of the fitted values were moved on 2026-11-10, after the recheck
+// (research/recheck/; the user: "do the improvements too"),
+// for steadiness at about a point and a half of CAGR a year on 2010-2025:
+//   - re-entry 35% for 10 closes (65% for 44 was fitted). It never fired since
+//     2010, where both floor breaks ended with a deep buy; it decides what
+//     happens when a deep buy is missed, and the fitted pair then waits out
+//     most of the recovery (128% a year instead of 149% with the deep buy at
+//     -34). The same holdings as before on every day from 2005.
+//   - deep buy at -30.5 (-32.5): both deep buys since 2010 fired within a
+//     point of the level (2020-03-20 at -33.43, the low of that crash;
+//     2022-09-30 at -33.45), and at -33.5 the 2020 one never happens.
+//   - lookback 546, start averaged over +-60 days, back at 28% (543, 65, 34):
+//     the worst result one small step away goes from 143% to 149%, the
+//     drawdown from 48.3% to 45.7%.
+// The floor stays at 6: at 7 it would have sold on 2026-11-05, when the lead
+// closed at 6.04.
 function withDefaults(base, spec) {
   let t = base.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
   for (const [id, value] of Object.entries(spec.defaults)) {
@@ -3719,7 +3799,7 @@ function withDefaults(base, spec) {
   return t;
 }
 CODE[53] = withDefaults(CODE[52], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: {
-  lookbackDays: 543, topLead: 123, topDays: 61, backLead: 34, floorLead: 6, floorHold: "sqqq", reentryLead: 65, reentryCloses: 44, deepLead: -32.5,
+  lookbackDays: 546, startAvgDays: 60, topLead: 123, topDays: 61, backLead: 28, floorLead: 6, floorHold: "sqqq", reentryLead: 35, reentryCloses: 10, deepLead: -30.5,
   overPct: 58.2, overWindow: 236, sqqqMaxDays: 18, deepGuard: 52, nfciVeto: 0.75, soxlLeadEnter: -33, soxlLeadExit: 101 } });
 
 // #54 — SOXL, TQQQ, QQQ - spread start (the user, 2026-11-09: "i want strategy,
@@ -3747,7 +3827,7 @@ function withSpreadStart(base) {
   // The TQQQ-vs-QQQ lead: its settings' words, the ±W block setting becomes the spread.
   t = once(t, `tip: "How many trading days of buy & hold growth are compared: TQQQ's against QQQ's. 252 is about a year.", text: "Compare TQQQ's growth with QQQ's over the last {} trading days."`,
     `tip: "Where the start weight peaks: this many trading days back. 252 is about a year.", text: "Compare TQQQ's growth with QQQ's from a start centred {} trading days back."`, 'the lookback setting');
-  t = once(t, `    { id: "startAvgDays", label: "Start averaged over ± (days)", tip: "Example: with a 550-day lookback and ±65, the start price is the average close from 615 to 485 days ago, so one day's price can't decide the lead. At 0 it is the close 550 days ago.", text: "Average the start price over ±{} days.", default: 65, options:
+  t = once(t, `    { id: "startAvgDays", label: "Start averaged over ± (days)", tip: "Example: with a 550-day lookback and ±65, the start price is the geometric average of the closes from 615 to 485 days ago, so one day's price can't decide the lead. At 0 it is the close 550 days ago.", text: "Average the start price over ±{} days.", default: 65, options:
       Array.from({ length: 201 }, (_, k) => k) },
 `, `    { id: "startSpreadPct", label: "Start spread (± % of the lookback)", tip: "The start price is an average of past closes weighted like a triangle: most weight at the lookback, falling in a straight line to nothing this far either side of it. Example: a 500-day lookback with 50% counts the closes from 750 to 250 days ago, the one 500 back most. No single day decides the lead.", text: "Spread the start over ±{} of the lookback, the closes nearest its centre counting most.", unit: "%", default: 75, options:
       Array.from({ length: 100 }, (_, k) => 1 + k) },

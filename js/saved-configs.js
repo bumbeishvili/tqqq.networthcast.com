@@ -644,15 +644,18 @@ data.gld   : daily closing price of GLD   (SPDR Gold Shares, gold bullion). Real
              fill 1953 to June 1968 and 1999 to August 2000, so those stretches have no daily swings.
 data.soxl  : daily closing price of SOXL  (3x semiconductors, Direxion Daily Semiconductor Bull 3x). Real from
              2010-03-11, SOXL's first trading day; before that the PHLX Semiconductor index (^SOX) at 3x with
-             financing, back to 1994-05-04, where that index starts. Before that the first price is carried
-             flat: no semiconductor index exists, so nothing there is a return.
+             financing, back to 1994-05-04, where that index starts. From 1953 to then a stand-in carries it:
+             the daily return of all listed US electronic-equipment companies (Ken French's "Chips" industry)
+             times 1.15. That stretch is rough: treat a result that rests on SOXL before 1994 as a sketch.
 data.soxx  : daily closing price of SOXX  (iShares Semiconductor ETF, 1x). Real from 2001-07-13, SOXX's first
              trading day; before that the PHLX Semiconductor index (^SOX) less SOXX's fee, back to 1994-05-04,
-             where that index starts. Before that the first price is carried flat.
+             where that index starts; from 1953 to then the same stand-in as SOXL's, at 1x.
 data.nfci  : Chicago Fed National Financial Conditions Index, weekly since 1971, forward-filled onto
              trading days with a 7-day publication lag (no look-ahead). NOT a price: a z-score-like
              level where above 0 = tighter-than-average financial conditions, above +0.5 = credit
-             stress. NaN before 1971 — ALWAYS guard with isFinite() before comparing.
+             stress. From May 2011 each reading is the value first published (the Chicago Fed revises
+             the history every week; the file is never rewritten), and none of them is above 0.07.
+             NaN before 1971 — ALWAYS guard with isFinite() before comparing.
 data.tqqqHigh, data.tqqqLow, data.qqqHigh, data.qqqLow, data.spyHigh, data.spyLow : each day's
              high and low of that fund, on the same scale as its closes. Real bars only: NaN
              before TQQQ's 2010-02-11, QQQ's 1999-03-10 and SPY's 1993-01-29. Guard with

@@ -231,10 +231,10 @@ function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily
   // A fund with no close on a day gets the nearest one it has: the last known
   // close after a day it lags (the hourly refresh lands one file at a time;
   // a lagging GLD file drew it at -100% on 2026-11-04), and the first known
-  // close before its history starts (synthetic-soxl.tsv and synthetic-soxx.tsv
-  // begin May 4, 1994; data/README.md). So a 0 reaches an engine only for a
-  // fund with no data at all, and a price before a fund's first row is flat,
-  // never 0.
+  // close before its history starts (no committed file needs that since
+  // synthetic-soxl.tsv and synthetic-soxx.tsv reached 1953 on 2026-11-10;
+  // data/README.md). So a 0 reaches an engine only for a fund with no data at
+  // all, and a price before a fund's first row is flat, never 0.
   for (const key of ['spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx']) {
     let last = 0;
     for (const row of result) { if (row[key] > 0) last = row[key]; else if (last > 0) row[key] = last; }
