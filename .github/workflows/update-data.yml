@@ -100,7 +100,13 @@ jobs:
           git add 'data/*.tsv' 'data/intraday/*.tsv' data/last-updated.txt
           # Commit message stays ET so the nine same-day commits are told
           # apart at a glance in git log.
-          git commit -m "Refresh market data $(TZ=America/New_York date '+%Y-%m-%d %H:%M %Z')"
+          subject="Refresh market data $(TZ=America/New_York date '+%Y-%m-%d %H:%M %Z')"
+          # A fund split: the refresh added a row to data/splits.tsv
+          # (scripts/split_guard.py). It goes first in the subject so it
+          # stands out in the log: "SPLIT SOXX 3-for-1 (2026-11-05). Refresh …".
+          splits="$(git diff --cached -U0 -- data/splits.tsv | { grep '^+[A-Z]' || true; } | cut -c2- | awk -F'\t' '{printf "%s%s %s (%s)", (NR > 1 ? ", " : ""), $1, $3, $2}')"
+          if [ -n "$splits" ]; then subject="SPLIT $splits. $subject"; fi
+          git commit -m "$subject"
           # Another run may have pushed while this one was fetching.
           git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
           git push

@@ -107,6 +107,7 @@ Usage:
     python3 scripts/update_data.py --refresh-rates    # re-pull FRED rate TSVs
     python3 scripts/update_data.py --rebuild          # full synthesis from scratch
     python3 scripts/update_data.py --gold-history     # rewrite synthetic-gld.tsv only
+    python3 scripts/update_data.py --split-registry   # add every split Yahoo lists to data/splits.tsv
 """
 import bisect
 import csv
@@ -117,6 +118,8 @@ import sys
 import time
 import urllib.request
 from datetime import timedelta
+
+from split_guard import RECENT_DAYS, note_splits, plan_refresh
 
 try:
     import yfinance as yf
@@ -188,6 +191,10 @@ DFF_START   = '1954-07-01'
 TBMS_START  = '1934-01-01'
 
 DATA_DIR = 'data'
+# Every split of every fund: Fund, Day, Split, Noted. The refresh adds a row
+# when it meets a split (yahoo_splits), and the workflow names a new row in the
+# commit subject. Reasons and rules: scripts/split_guard.py.
+SPLIT_REGISTRY = 'splits.tsv'
 
 # How FRED requests name themselves (fetch_fred). FRED serves this and
 # Python's default label; it stalls a bare "Mozilla/5.0" until timeout.
@@ -930,11 +937,26 @@ def write_soxl_file(soxl_df):
           f"{prefix[0][0].strftime('%Y-%m-%d')} to {soxl_df.index[-1].strftime('%Y-%m-%d')}")
 
 
+def yahoo_splits(ticker):
+    """Every split Yahoo lists for `ticker`, oldest first, as (day, shares
+    ratio: 3.0 for a 3-for-1, 0.2 for a 1-for-5 reverse). Each one that
+    data/splits.tsv has no row for is added to it."""
+    listed = [(normalize_ts(day), float(shares)) for day, shares in yf.Ticker(ticker).splits.items()]
+    stamp = time.strftime('found %Y-%m-%d %H:%M UTC', time.gmtime())
+    days = [(f'{day:%Y-%m-%d}', shares) for day, shares in listed]
+    for fund, day, split, _ in note_splits(os.path.join(basedir, DATA_DIR, SPLIT_REGISTRY), ticker, days, stamp):
+        print(f"  !! SPLIT {fund} {split} on {day}: added to {SPLIT_REGISTRY}")
+    return listed
+
+
 def incremental_refresh():
     """Default daily-cron path. The synthesized pre-IPO prefix of each TSV
-    is permanent and lives in the committed file; we only need to refresh
-    the post-IPO real-data tail with fresh yfinance bars (and pick up any
-    Yahoo backfill corrections to existing real rows).
+    lives in the committed file; we only need to refresh the post-IPO
+    real-data tail with fresh yfinance bars (and pick up any Yahoo backfill
+    corrections to existing real rows). The prefix follows whatever factor
+    Yahoo applied to the history since the last run (a dividend), and a split
+    is carried through the day Yahoo's history takes to settle: plan_refresh
+    in split_guard.py.
 
     No rate-file FRED pulls, no ^NDX, no ^SOX, no synthesis logic — those are
     bootstrap-only concerns (use --rebuild). Daily runs touch the ETF TSVs
@@ -950,11 +972,26 @@ def incremental_refresh():
             print(f"  {filename}: yfinance returned no rows; leaving TSV untouched")
             continue
         first_real = normalize_ts(real_df.index[0])
-        existing = read_price_tsv(path)
-        prefix_pairs = [(d, c) for d, c in existing if d < first_real]
-        write_price_tsv(path, prefix_pairs, real_df)
+        fresh = df_to_pairs(real_df)
+
+        def recent_split():
+            # A second request, made only when the history looks unusual. If it
+            # fails the rows are written as served, and the log says why.
+            try:
+                listed = yahoo_splits(ticker)
+            except Exception as e:
+                print(f"  !! {ticker}: Yahoo's split list did not load ({e})")
+                return None
+            recent = [s for s in listed if 0 <= (fresh[-1][0] - s[0]).days <= RECENT_DAYS]
+            return recent[-1] if recent else None
+
+        plan = plan_refresh(read_price_tsv(path), fresh, recent_split)
         last = real_df.index[-1].strftime('%Y-%m-%d')
-        print(f"  {filename}: {len(prefix_pairs)} preserved + {len(real_df)} real, through {last}")
+        if plan.note:
+            print(f"  !! {ticker}: {plan.note}")
+        if plan.kept is not None:
+            write_price_tsv(path, plan.kept, real_df.iloc[plan.start:])
+            print(f"  {filename}: {len(plan.kept)} kept + {len(real_df) - plan.start} from Yahoo, through {last}")
         if ticker in high_low:
             hl_path = os.path.join(data_dir, high_low[ticker])
             hl_prefix = [r for r in read_high_low_tsv(hl_path) if r[0] < first_real]
@@ -1017,7 +1054,17 @@ _argp.add_argument('--gold-history', action='store_true',
                         'pre-launch rows from gold prices (see gold_history), on '
                         'the committed QQQ file\'s trading days. Nothing else is '
                         'touched.')
+_argp.add_argument('--split-registry', action='store_true',
+                   help='Add to data/splits.tsv every split Yahoo lists for '
+                        'every fund that the file has no row for. Run it when '
+                        'a fund is added. Nothing else is touched.')
 _args = _argp.parse_args()
+
+if _args.split_registry:
+    for ticker, _ in tickers:
+        print(f"  {ticker}: {len(yahoo_splits(ticker))} splits listed")
+    print("Done.")
+    sys.exit(0)
 
 if _args.high_low_history:
     build_high_low_files({t: fetch(t) for t in high_low}, fetch_high_low_indexes())

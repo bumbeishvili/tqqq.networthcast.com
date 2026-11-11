@@ -54,6 +54,7 @@ The most-asked question about this dataset. The copy-paste answer:
 | **t-bill-3mo.tsv** | Monthly, January 1934 onward. | None. FRED series `TB3MS`. The pre-Fed-Funds-market short-rate proxy for 1934–1953. |
 | **short-rates.tsv** | Daily, January 2, 1934 onward. | Derived: `DFF` where it exists, `TB3MS` forward-filled where it doesn't. The only rate file the synthesis reads. |
 | **nfci.tsv** | Weekly, January 8, 1971 onward. | None. FRED series `NFCI` — the Chicago Fed National Financial Conditions Index, a 105-input composite where above 0 means tighter-than-average conditions.  It feeds the NFCI-credit-veto strategy in the app, which aligns it to trading days with a 7-day publication lag. **Rows are written once and never rewritten** (since November 10, 2026). The Chicago Fed re-estimates the whole history every week: the week of April 3, 2020 read 0.07 when published, 0.34 in 2022, 0.51 in April 2025 and 0.31 in November 2026, and a file replaced from FRED each week let a backtest's past credit-veto days move with the vintage (on the April 2025 file the NFCI veto + Turnaround Monday strategy showed 82.6 % a year for 2010–2025 instead of 88.0 %). So from May 20, 2011, the first reading the index was published live with, each row is the value as first published, read from ALFRED as it stood on the Friday the app starts using it (803 of 807 on the Friday after the week's end; the other four came out one or two weeks late, around Hurricane Sandy in 2012 and the year-end holidays of 2019 and 2022); before that the rows are FRED's history as of November 10, 2026. The daily cron (failure-tolerant) and `--refresh-rates` only add the weeks after the file's last row. No first-published reading since 2011 is above 0.07. |
+| **splits.tsv** | Every split of every fund: `Fund`, `Day`, `Split` (`3-for-1`, `1-for-5 reverse`), `Noted`. 33 rows from Yahoo's list as of November 10, 2026. | None. The price files are already adjusted for every split in it. The daily refresh adds a row when it meets a new split, and that run's commit subject starts with `SPLIT`, for example `SPLIT SOXX 3-for-1 (2026-11-05). Refresh market data …`. See "Splits and dividends" under Auto-refresh. |
 
 Yahoo's `^NDX` history starts in 1985, which is also when the Nasdaq-100 index itself began. `scripts/update_data.py` reaches further back by merging a local `^ndx_d.csv` from Stooq, and **that file is not committed to this repo**. Without it, `read_ndx_csv()` returns nothing and a from-scratch `--rebuild` stops where Yahoo stops. The 1953-onward history in the committed TSVs was generated while the CSV was present.
 
@@ -191,7 +192,7 @@ Date	Rate               ← rate files (Rate column, value in % per year)
 
 `.github/workflows/update-data.yml` fires hourly on weekdays (`30 13-22 * * 1-5`) and gates each fire to 09:00–17:30 ET, so nine runs land per trading day: one at the open, seven through the session, one after the close. Each run executes `scripts/update_data.py` in its default incremental mode and commits `data/*.tsv` only when the bytes changed, which makes holidays a no-op.
 
-Incremental mode touches the **ten price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, copies the committed pre-IPO prefix through verbatim, and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
+Incremental mode touches the **ten price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, keeps the committed pre-IPO prefix (times whatever factor Yahoo applied to the fund's history since the last run, see below), and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
 
 ```bash
 python3 scripts/update_data.py --refresh-rates      # re-pull DFF + TB3MS from FRED
@@ -200,9 +201,20 @@ python3 scripts/update_data.py --gold-history       # rebuild synthetic-gld.tsv 
 python3 scripts/update_data.py --soxl-history       # rebuild synthetic-soxl.tsv (real SOXL plus its 3× ^SOX prefix)
 python3 scripts/update_data.py --soxx-history       # rebuild synthetic-soxx.tsv (real SOXX plus its ^SOX prefix)
 python3 scripts/update_data.py --rebuild            # full re-synthesis; needs ^ndx_d.csv for pre-1985
+python3 scripts/update_data.py --split-registry     # add every split Yahoo lists to splits.tsv; run it when a fund is added
 ```
 
 So the rate files lag the price files. Check the last row of `short-rates.tsv` before you rely on a recent rate; as of this writing it trails the price files by about three months.
+
+### Splits and dividends
+
+Yahoo re-scales a fund's whole adjusted history when the fund pays a dividend (by about 0.1 %) or splits (by the split's ratio). The refresh handles both in `scripts/split_guard.py`:
+
+- **Dividend.** The reconstructed rows before the fund's launch are multiplied by the same factor Yahoo applied, so the fund's first real day keeps meeting them.
+- **Split.** For about a day after a split, Yahoo's history is not in one piece. On SOXX's 3-for-1 of November 5, 2026 it served, in turn, the new price on the old history (a false −68 % day), an unevenly adjusted history, three recent rows back on the old basis (a false +189 % and −70 %), and the right history the next morning. On such a day the refresh keeps the file's own rows before the split day, multiplied once by the split's price factor, and takes only Yahoo's rows from the split day on. It goes back to Yahoo's history when that agrees with the file's again.
+- **The mark.** A split is added to `splits.tsv` and named at the start of that run's commit subject.
+
+A split-sized move with no split in Yahoo's list is written as served, with a line in the run's log. `tests/split-guard-replay.py` replays the SOXX day from this repo's history.
 
 Found a bug in the synthesis? Open an issue, or send a PR against `scripts/update_data.py`.
 
