@@ -204,6 +204,18 @@ function computeDayChange(todayVal, ydayVal) {
   if (typeof ydayVal !== 'number' || !isFinite(ydayVal) || ydayVal <= 0) return null;
   return { pct: (todayVal - ydayVal) / ydayVal * 100, abs: todayVal - ydayVal };
 }
+// The change between two readings of a line that can sit at or under zero
+// (the real account's Profit, a `_signed` line), where zero and a loss are
+// real values, not missing data. The dollars always; the percent against the
+// size of the starting value, so its sign is the move's direction (−$2K to
+// +$3K is +250%), and none from a start of exactly zero. From a start above
+// zero it is computeDayChange's figure.
+function computeSignedChange(endVal, startVal) {
+  if (typeof endVal !== 'number' || !isFinite(endVal)) return null;
+  if (typeof startVal !== 'number' || !isFinite(startVal)) return null;
+  const abs = endVal - startVal;
+  return { pct: startVal === 0 ? null : abs / Math.abs(startVal) * 100, abs };
+}
 // The day-change badge's figures: the percent alone, "+1.2%" (the desktop
 // widget, after its portfolio value), or with the dollars, "+1.2% · +$1.23K"
 // (js/chart.js's end labels, in parentheses).

@@ -530,12 +530,15 @@ function formatRangeDuration(fromDate, toDate) {
 // (nothing to show), and a line missing/non-finite/<=0 data at either
 // endpoint is skipped too (same guard computeDayChange already uses for the
 // day-change badge — reused directly here since the math is identical, just
-// start/end instead of yesterday/today).
+// start/end instead of yesterday/today). A line that can sit at or under zero
+// (`_signed`, the real account's Profit) keeps its change there too: a loss
+// at either end is a value, and it used to drop the line from the readout
+// (the user, 2026-11-11: "percentage change is not visible for profit line").
 function computeRangeChangeByIdx(c, startIdx, endIdx) {
   const out = {};
   c.data.datasets.forEach((ds, i) => {
     if (!ds || ds._isShift || !c.isDatasetVisible(i)) return;
-    const delta = computeDayChange(ds.data[endIdx], ds.data[startIdx]);
+    const delta = (ds._signed ? computeSignedChange : computeDayChange)(ds.data[endIdx], ds.data[startIdx]);
     if (delta) out[i] = delta;
   });
   return out;
@@ -3692,15 +3695,18 @@ function render() {
         // The % draws in a bigger font than the bracket part — it's the
         // number that actually answers "how much did this move," the bracket
         // is supporting detail.
-        const pctSign = delta.pct >= 0 ? '+' : '-';
-        const pctText = `${pctSign}${fmtRangePct(Math.abs(delta.pct))}%`;
+        // The sign is the move's direction. A line that started at exactly $0
+        // (the real account's Profit on its first day) has no percent, so its
+        // pill shows the bracket alone, in the same column as the others'.
+        const up = delta.abs >= 0, pctSign = up ? '+' : '-';
+        const pctText = delta.pct == null ? '' : `${pctSign}${fmtRangePct(Math.abs(delta.pct))}%`;
         const [fromStr, toStr] = fmtRangeMoneyPair(v1, v2);
         const restText = ` (${fromStr} → ${toStr}, ${pctSign}${fmtRangeMoney(Math.abs(delta.abs))})`;
         cx.font = RANGE_PCT_FONT;
         const pctW = cx.measureText(pctText).width;
         cx.font = RANGE_REST_FONT;
         const restW = cx.measureText(restText).width;
-        items.push({ my: (py1 + py2) / 2, pctText, pctW, restText, restW, tw: pctW + restW, color, pos: delta.pct >= 0 });
+        items.push({ my: (py1 + py2) / 2, pctText, pctW, restText, restW, tw: pctW + restW, color, pos: up });
       }
 
       // Pass 2: de-overlap the label Y positions, then draw the pills.
