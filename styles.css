@@ -3426,6 +3426,9 @@
     height: 100%;
     cursor: ew-resize;
     z-index: 5;
+    /* A finger dragging it resizes the panel (js/controls.js); without this
+       the browser takes the drag for a scroll and the divider never moves. */
+    touch-action: none;
     /* The visible 1px accent line is drawn with a pseudo so the hit area can
        stay a comfortable 8px wide without showing an 8px bar. */
   }
@@ -3453,8 +3456,10 @@
      (dragging it wouldn't mean anything against the screen edge) is hidden.
      Must come AFTER the base .strategy-panel-content rule above: equal
      specificity means source order decides, and a media query earlier in the
-     file does NOT win against a later plain rule just because it's scoped. */
-  @media (max-width: 900px) {
+     file does NOT win against a later plain rule just because it's scoped.
+     Under 680px only: from there up the panel docks beside the chart
+     (js/chart.js's PANEL_DOCK_MQ, the same line). */
+  @media (max-width: 679px) {
     .strategy-panel-content { width: 100vw; max-width: 100vw; }
     .strategy-panel-resizer { display: none; }
   }
@@ -3512,6 +3517,21 @@
   }
   body.panel-docked .strategy-panel-resizer:hover::before,
   body.panel-docked .strategy-panel-content.is-resizing .strategy-panel-resizer::before { opacity: 0; }
+  /* Under a finger the divider's grab area reaches 10px past each edge of
+     the gap, and the grip is longer; the line and the grip stay in the gap's
+     middle. */
+  @media (hover: none) and (pointer: coarse) {
+    body.panel-docked .strategy-panel-resizer {
+      right: calc(-11px - var(--layout-gap));
+      width: calc(var(--layout-gap) + 20px);
+    }
+    body.panel-docked .strategy-panel-resizer::after { right: calc(var(--layout-gap) / 2 + 9px); }
+    body.panel-docked .strategy-panel-resizer::before {
+      right: calc(var(--layout-gap) / 2 + 8px);
+      height: 56px;
+      margin-top: -28px;
+    }
+  }
   /* While the divider is dragged, a transparent sheet over the page keeps
      the resize cursor and stops the charts under the pointer from showing
      their hover readouts. The drag itself listens on the document. */

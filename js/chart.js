@@ -1716,15 +1716,17 @@ function closeStrategyPanel() {
   if (openKey && typeof render === 'function') render();
   applyPanelEmphasis(); // restore all lines to full width/opacity
 }
-// Wider than 900px the open panel docks: it moves into .layout as the first
+// From 680px wide the open panel docks: it moves into .layout as the first
 // column, beside the chart, instead of floating over the page, so its signal
 // chart and the main chart can be read and used together (styles.css,
 // body.panel-docked). The controls card it replaces hides, and the card's
 // contribution controls move into the header's free space so the money stays
-// adjustable. At 900px and less the panel stays an overlay: a split would
-// leave neither side readable. Each moved element leaves a comment node in
-// its usual spot, and undocking puts it back there.
-const PANEL_DOCK_MQ = window.matchMedia('(min-width: 901px)');
+// adjustable. The line was 901px until 2026-11-11: on a fold phone's inner
+// screen (700 to 900px wide) the panel then covered the whole page with
+// nothing to drag. Under 680px, a phone, the panel stays a full-width
+// overlay: a split would leave neither side readable. Each moved element
+// leaves a comment node in its usual spot, and undocking puts it back there.
+const PANEL_DOCK_MQ = window.matchMedia('(min-width: 680px)');
 const _panelDockSpots = new Map();
 function _dockMove(el, parent, before) {
   const spot = document.createComment(`#${el.id} sits here while the strategy panel is not docked`);

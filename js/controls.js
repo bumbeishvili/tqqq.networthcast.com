@@ -347,6 +347,15 @@ document.addEventListener('focusin',   positionInfoTip);
 const PANEL_WIDTH_KEY = '9sig-panel-width';
 const PANEL_MIN_W = 280;
 const PANEL_CHART_MIN_W = 400;
+// At 900px and less (a fold phone's inner screen, a tablet held upright; the
+// panel docks from 680px, js/chart.js's PANEL_DOCK_MQ) the layout cannot give
+// the chart 400px beside a 280px panel. The chart keeps a phone's width there,
+// which its narrow layout is made for (at 295px the legend chips and the
+// period controls ran into each other), and the panel opens at just under
+// half: two phone-wide panes.
+const PANEL_NARROW_MQ = window.matchMedia('(max-width: 900px)');
+const PANEL_NARROW_CHART_MIN_W = 360;
+const PANEL_NARROW_DEFAULT_SHARE = 0.45;
 // Until the divider is dragged, and again for each new custom strategy
 // (resetPanelWidth), the panel takes this share of the layout.
 const PANEL_DEFAULT_SHARE = 0.25;
@@ -357,8 +366,10 @@ let _panelWidthPref = null;
 function applyPanelWidth(w = _panelWidthPref) {
   const layout = document.querySelector('.layout');
   if (!layout) return w;
-  const max = layout.clientWidth - parseFloat(getComputedStyle(layout).columnGap) - PANEL_CHART_MIN_W;
-  const want = w != null ? w : layout.clientWidth * PANEL_DEFAULT_SHARE;
+  const narrow = PANEL_NARROW_MQ.matches;
+  const chartMin = narrow ? PANEL_NARROW_CHART_MIN_W : PANEL_CHART_MIN_W;
+  const max = layout.clientWidth - parseFloat(getComputedStyle(layout).columnGap) - chartMin;
+  const want = w != null ? w : layout.clientWidth * (narrow ? PANEL_NARROW_DEFAULT_SHARE : PANEL_DEFAULT_SHARE);
   const clamped = Math.round(Math.max(PANEL_MIN_W, Math.min(max, want)));
   layout.style.setProperty('--panel-w', clamped + 'px');
   return clamped;
@@ -380,34 +391,41 @@ function resetPanelWidth() {
   } catch (e) {}
   applyPanelWidth();
 
-  let startX = 0, startW = 0, dragging = false;
+  // Pointer events, captured by the divider: one path for a mouse, a finger
+  // and a pen, and the drag keeps reaching the divider wherever the pointer
+  // goes. It listened for the mouse alone until 2026-11-11, so a touch screen
+  // could not move it (the user, on a fold phone). The divider's
+  // touch-action: none (styles.css) keeps the browser from taking the drag
+  // for a scroll.
+  let startX = 0, startW = 0, dragId = null;
   const onMove = (e) => {
-    if (!dragging) return;
+    if (e.pointerId !== dragId) return;
     _panelWidthPref = applyPanelWidth(startW + (e.clientX - startX));
     // The legend above the chart can re-wrap at the new width, which moves
     // the chart's bottom edge.
     fitChartHeight();
     e.preventDefault();
   };
-  const onUp = () => {
-    if (!dragging) return;
-    dragging = false;
+  const onUp = (e) => {
+    if (e.pointerId !== dragId) return;
+    dragId = null;
     content.classList.remove('is-resizing');
     document.body.classList.remove('panel-resizing');
-    document.removeEventListener('mousemove', onMove);
-    document.removeEventListener('mouseup', onUp);
-    try { localStorage.setItem(PANEL_WIDTH_KEY, String(_panelWidthPref)); } catch (e) {}
+    try { localStorage.setItem(PANEL_WIDTH_KEY, String(_panelWidthPref)); } catch (err) {}
   };
-  resizer.addEventListener('mousedown', (e) => {
-    dragging = true;
+  resizer.addEventListener('pointerdown', (e) => {
+    if (dragId !== null) return;   // a second finger while one is dragging
+    dragId = e.pointerId;
+    resizer.setPointerCapture(e.pointerId);
     startX = e.clientX;
     startW = content.getBoundingClientRect().width;
     content.classList.add('is-resizing');
     document.body.classList.add('panel-resizing');
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
     e.preventDefault();
   });
+  resizer.addEventListener('pointermove', onMove);
+  resizer.addEventListener('pointerup', onUp);
+  resizer.addEventListener('pointercancel', onUp);
   // Keep within bounds if the window shrinks.
   window.addEventListener('resize', () => applyPanelWidth());
 })();
