@@ -3903,6 +3903,109 @@ CODE[54] = withDefaults(withSpreadStart(CODE[52]), { name: "SOXL, TQQQ, QQQ - sp
   lookbackDays: 600, startSpreadPct: 25, topLead: 97.1, backLead: 78.7, floorLead: 56.8, reentryLead: 92.5, deepLead: 32.5,
   soxlLeadDays: 500, soxlStartSpreadPct: 25, soxlLeadEnter: 27.4, soxlLeadExit: 33.9 } });
 
+// Big days in #48, #49, #50 and #53 (the user, 2026-11-11: "Lets integrate both, if its cash and
+// fell or rose do the buy or sell and sell and buy on another day and continue strategy", after
+// the study of TQQQ's one-day moves, scratchpad spike/):
+//   - a rise of 15% or more in a day: a fund the rules hold is sold at that close;
+//   - a fall of 15% or more while the rules hold cash: the fund is bought at that close.
+// Either lasts one day. At the next close the rules' own choice is held again, so the sale is
+// bought back and the buy is sold, each a trade of its own day.
+// 15% is the user's level. TQQQ moved that much on 9 days each way since 2010; it fell the day
+// after 7 of the 9 rises (five in March 2020, all down) and rose the day after 7 of the 9 falls.
+// Lump sum, Q1 2010 to Q4 2025: #48 88.0% a year to 99.4%, #49 114.7% to 120.2%, #50 139.6% to
+// 144.9%, #53 176.0% to 182.9% with the rise rule alone. In #53 the fall rule cost three points
+// (179.8% with both), so it ships Off there. On the reconstructed prices before 2010 neither rule
+// adds anything: after 66 rises of 15% or more TQQQ fell the next day 37 times, and from 1953
+// to 2025 the four make 24.1%, 28.3%, 26.4% and 45.5% a year against 24.5%, 28.8%, 25.7% and
+// 44.6% (the fall rule alone loses in all four there, the rise rule alone gains in all four).
+// A rise of 8.5% to 10% fits 2010-2025 better (12 to 21 points) and is left to the dropdown: all
+// of that came from March 2020, the same search on wrong days found as much without it, and it
+// cost 6 to 57 points of 2026.
+//
+// Each entry is its own finished text with these additions, made at load after #52 and #54 are
+// built from #50, so those two stay as they were:
+//   - the two settings and a column;
+//   - bigDay, run on the holding the rules and the Monday rule settled on, so neither rule's own
+//     state sees it;
+//   - the trade's note and chart panel (the price panel), on its day and on the day back;
+//   - on the dashboard a Big days card, and today's call on a day the rule acted.
+// Every insertion point must appear exactly once in the text, as in withTurnaroundMonday.
+function withBigDay(base, spec) {
+  const once = (text, find, repl, what) => {
+    const at = text.indexOf(find);
+    if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withBigDay(${spec.name}): ${what} must appear exactly once in the text`);
+    return text.slice(0, at) + repl + text.slice(at + find.length);
+  };
+  const options = '[{ value: 0, label: "Off" }].concat(Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)))';   // 5% to 60% in halves
+  const params = `    { section: "Big days" },
+    { id: "bigRise", label: "Sell for a day after a rise of (%)", tip: "At the close of such a day the fund held is sold, and the rules' choice is bought back at the next close. TQQQ fell the day after 7 of its 9 rises of 15% or more since 2010, five of them in March 2020.", text: "After TQQQ rises {} or more in a day, sell and buy back at the next close.", unit: "%", default: ${spec.rise}, options:
+      ${options} },
+    { id: "bigDrop", label: "In cash, buy for a day after a fall of (%)", tip: "Only while the rules hold cash: ${spec.fundText} is bought at the close of such a day and sold at the next close. TQQQ rose the day after 7 of its 9 falls of 15% or more since 2010.", text: "In cash, buy ${spec.fundText} after ${spec.fundText === "TQQQ" ? "it" : "TQQQ"} falls {} or more in a day, and sell at the next close.", unit: "%", default: ${spec.drop}, options:
+      ${options} },
+`;
+  const setup = `    // Big days (the Big days settings), on TQQQ's move from the prior close. After a rise of
+    // bigUp% or more a fund the rules hold is sold at that close; after a fall of bigDown% or
+    // more, while the rules hold cash, the fund is bought. Either lasts one day: the next
+    // close holds the rules' own choice again.
+    const bigUp = +p.bigRise || 0, bigDown = +p.bigDrop || 0;
+    const bigMoveAt = (i) => i > 0 && data.tqqq[i - 1] > 0 && data.tqqq[i] > 0 ? (data.tqqq[i] / data.tqqq[i - 1] - 1) * 100 : null;
+    let bigWhy = "", bigAt = -1, bigWas = "", bigBought = false;   // bigWhy: the rule acted at this close; bigAt, bigWas: its last day and TQQQ's move then
+    const bigDay = (i, want) => {
+      const m = bigMoveAt(i);
+      bigWhy = ""; bigBought = false;
+      if (m === null) return want;
+      const sells = bigUp > 0 && m >= bigUp && (${spec.long}), buys = bigDown > 0 && -m >= bigDown && want === "cash";
+      if (!sells && !buys) return want;
+      bigAt = i; bigWas = (m >= 0 ? "+" : "−") + Math.abs(m).toFixed(1) + "%"; bigBought = buys;
+      bigWhy = sells ? "TQQQ rose " + m.toFixed(1) + "% today (" + bigUp + "% or more): out until the next close"
+        : "TQQQ fell " + (-m).toFixed(1) + "% today (" + bigDown + "% or more): in " + String(${spec.fund}).toUpperCase() + " until the next close";
+      return sells ? "cash" : ${spec.fund};
+    };
+    // The day after: a trade then is the way back to the rules' own choice.
+    const bigAfter = (i) => (bigAt === i - 1 && !bigWhy ? "the day after TQQQ's " + bigWas + " day" : "");
+${spec.panel ? `    const bigPanel = (i, t) => (bigWhy || bigAfter(i) ? ${spec.panel} : t);   // its trades are marked in the price panel\n` : ''}`;
+  const dashboard = `    // Big days on the dashboard: its card, and today's call on a day the rule acted.
+    if (res.signals && ((+p.bigRise || 0) > 0 || (+p.bigDrop || 0) > 0)) {
+      const up = +p.bigRise || 0, down = +p.bigDrop || 0, e = p.endIdx, row = res.log[res.log.length - 1] || {};
+      const move = e > 0 && data.tqqq[e - 1] > 0 && data.tqqq[e] > 0 ? (data.tqqq[e] / data.tqqq[e - 1] - 1) * 100 : null;
+      const acted = !!row.bigDay, inFund = row.held !== "CASH";
+      res.signals.cards = (res.signals.cards || []).concat([{ label: "Big days", icon: "activity", tone: acted ? (inFund ? "good" : "bad") : "",
+        value: acted ? (inFund ? "In for a day" : "Out for a day") : "Waiting",
+        sub: "TQQQ " + (move === null ? "n/a" : (move >= 0 ? "+" : "−") + Math.abs(move).toFixed(1) + "%") + " today; "
+          + [up > 0 ? "sells for a day at +" + up + "%" : "", down > 0 ? "in cash, buys for a day at −" + down + "%" : ""].filter(Boolean).join(", "),
+        tip: "After a one-day rise this large the fund held is sold until the next close. After a fall this large, while the rules hold cash, the fund is bought until the next close." }]);
+      if (acted && res.signals.decision) {
+        const d = res.signals.decision;
+        res.signals.decision = Object.assign({}, d, { action: inFund ? "Hold " + row.held + " until the next close" : "Cash until the next close", note: row.note || d.note, tone: inFund ? "good" : "bad",
+          reasons: (d.reasons || []).concat([{ name: "Big days", val: "TQQQ " + row.bigDay, tag: (inFund ? "in" : "out") + " · one day", lean: inFund ? "buy" : "cash" }]) });
+      }
+    }
+`;
+  let t = once(base, '    { section: "Execution & costs" },\n', params + '    { section: "Execution & costs" },\n', 'the costs section');
+  t = once(t, '  columns: [\n', '  columns: [\n    { key: "bigDay", label: "Big day", tip: "TQQQ\'s move on a day the Big days rule sold or bought for one day. Blank on other days." },\n', 'the columns list');
+  t = once(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', 'the main loop');
+  t = once(t, '        log.push({\n', '        log.push({\n          bigDay: bigWhy ? bigWas : null,\n', 'the log row');
+  for (const [find, repl, what] of spec.hooks) t = once(t, find, repl, what);
+  if (!t.endsWith('    return res;\n  }\n}')) throw new Error(`withBigDay(${spec.name}): the text must end with its dashboard`);
+  return t.slice(0, -'    return res;\n  }\n}'.length) + dashboard + '    return res;\n  }\n}';
+}
+// The stretch engines (#50, #53): the holding, the trade's panel and its reason.
+const BIG_DAY_STRETCH = { fund: '"tqqq"', fundText: 'TQQQ', long: 'want === "tqqq" || want === "soxl"', panel: 'PRICE' };
+const BIG_DAY_REASON = ['const reason = (i, w) => ', 'const reason = (i, w) => bigWhy ? bigWhy : (bigAfter(i) ? bigAfter(i) + "; " : "") + ownReason(i, w);\n    const ownReason = (i, w) => ', 'the trade reason'];
+CODE[48] = withBigDay(CODE[48], { name: "NFCI veto + Turnaround Monday", rise: 15, drop: 15, fund: 'p.asset', fundText: 'the fund', long: 'want === p.asset', hooks: [
+  ['        want = tmHold(i, want);\n', '        want = tmHold(i, want);\n        want = bigDay(i, want);\n', 'the holding decision'],
+  ['            fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);\n', '            fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);\n            if (bigWhy) { note = bigWhy; fired = null; } else if (bigAfter(i)) { note = bigAfter(i) + "; " + note; fired = null; }\n', 'the trade panel'] ] });
+CODE[49] = withBigDay(CODE[49], { name: "Buy-back + Turnaround Monday", rise: 15, drop: 15, fund: 'p.asset', fundText: 'the fund', long: 'want === p.asset', hooks: [
+  ['        if (tmWhy && !why) why = tmWhy;\n', '        if (tmWhy && !why) why = tmWhy;\n        want = bigDay(i, want);\n        if (bigBought) _frac = 1;   // the whole account, as a Monday trade\n        if (bigWhy) { why = bigWhy; sliceNote = ""; }   // a slice bought into a fund already held (a Monday trade, a big-day buy) left its note waiting for the next trade\n        else if (bigAfter(i)) why = bigAfter(i) + (why ? "; " + why : "");\n', 'the holding decision'] ] });
+CODE[50] = withBigDay(CODE[50], { name: "TQQQ vs QQQ + Turnaround Monday", rise: 15, drop: 15, ...BIG_DAY_STRETCH, hooks: [
+  ['      const want = tmHold(i, capSq(i, wantNow(i)));\n', '      const want = bigDay(i, tmHold(i, capSq(i, wantNow(i))));\n', 'the holding decision'],
+  ['      const trigger = tmPanel(triggerAt(i));\n', '      const trigger = bigPanel(i, tmPanel(triggerAt(i)));\n', 'the trade panel'],
+  BIG_DAY_REASON ] });
+CODE[53] = withBigDay(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", rise: 15, drop: 0, ...BIG_DAY_STRETCH, hooks: [
+  ['      if (soxlOn) want = "soxl";\n', '      if (soxlOn) want = "soxl";\n      want = bigDay(i, want);\n', 'the holding decision'],
+  ['      const trigger = soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i));\n', '      const trigger = bigPanel(i, soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i)));\n', 'the trade panel'],
+  BIG_DAY_REASON ] });
+
 // ===== #55 Seasonal TQQQ, #56 Donchian breakout + ATR stop (the user, 2026-11-09:
 // "let's include 2x4", from a search for leveraged-fund strategies the library
 // lacked: a calendar rule and a price-channel trend rule, both new mechanisms
