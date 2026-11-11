@@ -3927,7 +3927,10 @@ CODE[54] = withDefaults(withSpreadStart(CODE[52]), { name: "SOXL, TQQQ, QQQ - sp
 //   - the two settings and a column;
 //   - bigDay, run on the holding the rules and the Monday rule settled on, so neither rule's own
 //     state sees it;
-//   - the trade's note and chart panel (the price panel), on its day and on the day back;
+//   - the trade's note, on its day and on the day back;
+//   - a chart panel of its own, since 2026-11-11 (the user: "also want it for big drops"; until
+//     then the trades were marked in the price panel and the rule had no line): TQQQ's move
+//     from the prior close against the levels that are on, each with its price for the day;
 //   - on the dashboard a Big days card, and today's call on a day the rule acted.
 // Every insertion point must appear exactly once in the text, as in withTurnaroundMonday.
 function withBigDay(base, spec) {
@@ -3963,7 +3966,30 @@ function withBigDay(base, spec) {
     };
     // The day after: a trade then is the way back to the rules' own choice.
     const bigAfter = (i) => (bigAt === i - 1 && !bigWhy ? "the day after TQQQ's " + bigWas + " day" : "");
-${spec.panel ? `    const bigPanel = (i, t) => (bigWhy || bigAfter(i) ? ${spec.panel} : t);   // its trades are marked in the price panel\n` : ''}`;
+    // Its chart panel: TQQQ's move from the prior close against the levels that are on. Its
+    // trades, the day and the day back, are marked there; another rule's (t) in its own.
+    const BIG_PANEL = "Big days";
+    const bigPanel = (i, t) => (bigWhy || bigAfter(i) ? BIG_PANEL : t);
+    // A day's chart row for that panel. Each level is a price too, fixed for the day: the prior close moved by the level.
+    const bigChartRow = (i) => {
+      const prior = i > 0 && data.tqqq[i - 1] > 0 ? data.tqqq[i - 1] : null;
+      return {
+        bigMove: bigMoveAt(i), bigClose: data.tqqq[i] > 0 ? data.tqqq[i] : null,
+        bigRiseLine: bigUp > 0 ? bigUp : null, bigRisePx: bigUp > 0 && prior ? prior * (1 + bigUp / 100) : null,
+        bigDropLine: bigDown > 0 ? -bigDown : null, bigDropPx: bigDown > 0 && prior ? prior * (1 - bigDown / 100) : null
+      };
+    };
+`;
+  // The panel's lines, placed before credit stress, which has never traded since 2010 (panels stack from the most trades to the fewest).
+  const chartLines = `    // Big days on the chart: a panel of its own while a level is on.
+    if (res.lines && ((+p.bigRise || 0) > 0 || (+p.bigDrop || 0) > 0)) {
+      const big = [{ key: "bigMove", label: "TQQQ close vs prior close", unit: "%", group: "Big days", priceKey: "bigClose" }];
+      if ((+p.bigRise || 0) > 0) big.push({ key: "bigRiseLine", label: "Sell for a day", unit: "%", group: "Big days", priceKey: "bigRisePx" });
+      if ((+p.bigDrop || 0) > 0) big.push({ key: "bigDropLine", label: "In cash, buy for a day", unit: "%", group: "Big days", priceKey: "bigDropPx" });
+      const at = res.lines.findIndex(l => l.group === "Credit stress (NFCI)");
+      res.lines = at < 0 ? res.lines.concat(big) : res.lines.slice(0, at).concat(big, res.lines.slice(at));
+    }
+`;
   const dashboard = `    // Big days on the dashboard: its card, and today's call on a day the rule acted.
     if (res.signals && ((+p.bigRise || 0) > 0 || (+p.bigDrop || 0) > 0)) {
       const up = +p.bigRise || 0, down = +p.bigDrop || 0, e = p.endIdx, row = res.log[res.log.length - 1] || {};
@@ -3984,17 +4010,19 @@ ${spec.panel ? `    const bigPanel = (i, t) => (bigWhy || bigAfter(i) ? ${spec.p
   let t = once(base, '    { section: "Execution & costs" },\n', params + '    { section: "Execution & costs" },\n', 'the costs section');
   t = once(t, '  columns: [\n', '  columns: [\n    { key: "bigDay", label: "Big day", tip: "TQQQ\'s move on a day the Big days rule sold or bought for one day. Blank on other days." },\n', 'the columns list');
   t = once(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', 'the main loop');
-  t = once(t, '        log.push({\n', '        log.push({\n          bigDay: bigWhy ? bigWas : null,\n', 'the log row');
+  t = once(t, '        log.push({\n', '        log.push({\n          bigDay: bigWhy ? bigWas : null,\n          ...bigChartRow(i),\n', 'the log row');
+  // A row's panel when the rule acted or is on its way back: after the Monday rule's, before the entry's own (which names the same panel when it traded).
+  t = once(t, '          ...(tmWhy ? { firedBy: tmPanel(null) } : {}),\n', '          ...(tmWhy ? { firedBy: tmPanel(null) } : {}),\n          ...(bigWhy || bigAfter(i) ? { firedBy: BIG_PANEL } : {}),\n', 'the Monday rule\'s panel');
   for (const [find, repl, what] of spec.hooks) t = once(t, find, repl, what);
   if (!t.endsWith('    return res;\n  }\n}')) throw new Error(`withBigDay(${spec.name}): the text must end with its dashboard`);
-  return t.slice(0, -'    return res;\n  }\n}'.length) + dashboard + '    return res;\n  }\n}';
+  return t.slice(0, -'    return res;\n  }\n}'.length) + chartLines + dashboard + '    return res;\n  }\n}';
 }
 // The stretch engines (#50, #53): the holding, the trade's panel and its reason.
-const BIG_DAY_STRETCH = { fund: '"tqqq"', fundText: 'TQQQ', long: 'want === "tqqq" || want === "soxl"', panel: 'PRICE' };
+const BIG_DAY_STRETCH = { fund: '"tqqq"', fundText: 'TQQQ', long: 'want === "tqqq" || want === "soxl"' };
 const BIG_DAY_REASON = ['const reason = (i, w) => ', 'const reason = (i, w) => bigWhy ? bigWhy : (bigAfter(i) ? bigAfter(i) + "; " : "") + ownReason(i, w);\n    const ownReason = (i, w) => ', 'the trade reason'];
 CODE[48] = withBigDay(CODE[48], { name: "NFCI veto + Turnaround Monday", rise: 15, drop: 15, fund: 'p.asset', fundText: 'the fund', long: 'want === p.asset', hooks: [
   ['        want = tmHold(i, want);\n', '        want = tmHold(i, want);\n        want = bigDay(i, want);\n', 'the holding decision'],
-  ['            fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);\n', '            fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);\n            if (bigWhy) { note = bigWhy; fired = null; } else if (bigAfter(i)) { note = bigAfter(i) + "; " + note; fired = null; }\n', 'the trade panel'] ] });
+  ['            fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);\n', '            fired = tmPanel(vetoMoved && (vetoOn || !nfAbove) ? CREDIT : null);\n            if (bigWhy) note = bigWhy; else if (bigAfter(i)) note = bigAfter(i) + "; " + note;\n            fired = bigPanel(i, fired);\n', 'the trade panel'] ] });
 CODE[49] = withBigDay(CODE[49], { name: "Buy-back + Turnaround Monday", rise: 15, drop: 15, fund: 'p.asset', fundText: 'the fund', long: 'want === p.asset', hooks: [
   ['        if (tmWhy && !why) why = tmWhy;\n', '        if (tmWhy && !why) why = tmWhy;\n        want = bigDay(i, want);\n        if (bigBought) _frac = 1;   // the whole account, as a Monday trade\n        if (bigWhy) { why = bigWhy; sliceNote = ""; }   // a slice bought into a fund already held (a Monday trade, a big-day buy) left its note waiting for the next trade\n        else if (bigAfter(i)) why = bigAfter(i) + (why ? "; " + why : "");\n', 'the holding decision'] ] });
 CODE[50] = withBigDay(CODE[50], { name: "TQQQ vs QQQ + Turnaround Monday", rise: 15, drop: 15, ...BIG_DAY_STRETCH, hooks: [
@@ -4005,6 +4033,240 @@ CODE[53] = withBigDay(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", rise: 15, 
   ['      if (soxlOn) want = "soxl";\n', '      if (soxlOn) want = "soxl";\n      want = bigDay(i, want);\n', 'the holding decision'],
   ['      const trigger = soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i));\n', '      const trigger = bigPanel(i, soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i)));\n', 'the trade panel'],
   BIG_DAY_REASON ] });
+
+// Whether the US stock market trades on a date ("YYYY-MM-DD"): a weekday that is not one of the
+// exchange's holidays as they stand (Juneteenth from 2022). A holiday on a Sunday closes the
+// Monday after; one on a Saturday closes the Friday before, New Year's Day excepted. Meant for
+// the days after the data's last row: the data itself says which earlier days traded, unscheduled
+// closures included. A real function so there is one readable copy; a strategy embeds its source
+// (MARKET_DAY_SNIPPET), since the sandbox evals each strategy in isolation.
+function usMarketDay(ymd) {
+  const date = new Date(ymd + "T00:00:00Z"), weekday = date.getUTCDay();
+  if (weekday === 0 || weekday === 6) return false;
+  const y = date.getUTCFullYear(), m = date.getUTCMonth() + 1, day = date.getUTCDate();
+  // A holiday with a fixed date: on a Sunday it closes the Monday, on a Saturday the Friday (when fridayToo).
+  const fixed = (month, dayOfMonth, fridayToo) => {
+    const falls = new Date(Date.UTC(y, month - 1, dayOfMonth)).getUTCDay();
+    return m === month && day === (falls === 0 ? dayOfMonth + 1 : falls === 6 && fridayToo ? dayOfMonth - 1 : dayOfMonth);
+  };
+  const nth = (k, dow) => weekday === dow && day > 7 * (k - 1) && day <= 7 * k;   // the k-th such weekday of the month
+  if (fixed(1, 1, false) || fixed(7, 4, true) || fixed(12, 25, true) || (y >= 2022 && fixed(6, 19, true))) return false;   // New Year's Day, Independence Day, Christmas, Juneteenth
+  if ((m === 1 && nth(3, 1)) || (m === 2 && nth(3, 1)) || (m === 9 && nth(1, 1)) || (m === 11 && nth(4, 4))) return false;   // Martin Luther King Jr. Day, Washington's Birthday, Labor Day, Thanksgiving
+  if (m === 5 && weekday === 1 && day > 24) return false;   // Memorial Day, the last Monday of May
+  // Good Friday, two days before Easter Sunday (the Gregorian computus, Meeus's form).
+  const a = y % 19, b = Math.floor(y / 100), c = y % 100;
+  const h = (19 * a + b - Math.floor(b / 4) - Math.floor((b - Math.floor((b + 8) / 25) + 1) / 3) + 15) % 30;
+  const l = (32 + 2 * (b % 4) + 2 * Math.floor(c / 4) - h - (c % 4)) % 7, q = Math.floor((a + 11 * h + 22 * l) / 451);
+  const easter = Date.UTC(y, Math.floor((h + l - 7 * q + 114) / 31) - 1, (h + l - 7 * q + 114) % 31 + 1);
+  const goodFriday = new Date(easter - 2 * 86400000);
+  return !(goodFriday.getUTCMonth() + 1 === m && goodFriday.getUTCDate() === day);
+}
+const MARKET_DAY_SNIPPET = `    ${usMarketDay.toString().replace(/\n/g, '\n    ')}`;
+
+// Month-end dip in #53 (the user, 2026-11-11: "Let's only integrate month-end strategy into fit
+// strategy", after that day's search for calendar rules, scratchpad hidden/):
+//   - at the close of the 5th to last trading day of a month, with TQQQ 30% to under 50% below
+//     its highest close of the last 252 trading days, a window opens;
+//   - while it is open and the rules hold cash, TQQQ is held;
+//   - at the close of the next month's first trading day the rules' own choice is held again.
+// On TQQQ alone the window made 6.1% a trade on 64 trades since 1985 (77% of them up; 7.6% on 19
+// since 2010, 5.5% on 45 in 1985-2009) against 2% to 3% for the same hold started on any day at
+// that depth, and nothing with the month end moved six days or more either way. On 1953-1984 it
+// made 0.7% a trade on 67: the bounce sat about three days later then. Deeper than 50% the trade
+// lost over 20 points a year in 1998-2009 in the first-page strategies, hence the band's far edge;
+// from 28% to 35% the near edge gives the same result, at 25% most of it is gone.
+// Lump sum, Q1 2010 to Q4 2025: #53 182.9% a year to 192.9% with the same 45.7% drawdown (2010-17
+// 104% to 108%, 2018-25 293% to 311%), from six trades, all up, 10.0% on average: four bought
+// (August 2011, January to March 2022) and two kept when the rules sold inside an open window
+// (August 2015, November 2018). 2026 to 10 November: no trade, 384% either way. From 1953 to 2025
+// 45.5% a year to 48.0%; 1985-2009 60.4% to 63.4%. Nearby on 2010-2025: the 4th to last day
+// 189.8%, the 6th 186.8%, sold on day 2 191.8%; near edge 28% or 35% 192.9%, 25% 183.9%; far edge
+// 45% 192.9%, 60% 190.7%, none 188.0% with a 54.1% drawdown (scratchpad monthend/numbers.cjs).
+//
+// The entry is its own finished text with these additions, made at load after withBigDay:
+//   - the four settings and a column;
+//   - at the top of run(), `dip`: the closes the window is open at, read from the dates and prices
+//     alone (so a start inside a window holds what the running strategy held), with the market
+//     calendar for the days of the data's last month still to come;
+//   - monthEndDip, run on the holding the rules and the Monday rule settled on and before Big
+//     days, so a rise that sells for a day sells this TQQQ too;
+//   - the trade's note, and a "keep" row when the rules sell TQQQ inside an open window;
+//   - a chart panel of its own: TQQQ against its 1-year high, in %, with the band's two edges
+//     and the prices they sit at; the rule's trades are marked there;
+//   - on the dashboard a Month-end dip card, and today's call while its trade is open.
+// Every insertion point must appear exactly once in the text, as in withTurnaroundMonday. The
+// text must be a stretch engine with the Monday and Big days rules in (it reads held, tmKept,
+// PRICE, ownReason and bigAfter).
+function withMonthEndDip(base, spec) {
+  const once = (text, find, repl, what) => {
+    const at = text.indexOf(find);
+    if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withMonthEndDip(${spec.name}): ${what} must appear exactly once in the text`);
+    return text.slice(0, at) + repl + text.slice(at + find.length);
+  };
+  const params = `    { section: "Month-end dip", tip: "Trades the rules' idle cash at the turn of the month. On TQQQ alone this trade made 6.1% each time on 64 trades since 1985, and 0.7% on 67 before 1985." },
+    { id: "dipDay", label: "Buy on trading day (from the month's end)", tip: "Counted back from the month's last trading day. Off turns the rule off.", text: "In cash, buy TQQQ at the close of the {} trading day of a month.", default: ${spec.day}, options:
+      [{ value: 0, label: "Off" }, { value: 1, label: "last" }].concat(Array.from({ length: 9 }, (_, k) => ({ value: k + 2, label: (k + 2) + (k === 0 ? "nd" : k === 1 ? "rd" : "th") + " to last" }))) },
+    { id: "dipUnder", label: "Under the 1-year high by at least (%)", tip: "TQQQ's close against its highest close of the last 252 trading days, read at the buying close.", text: "Only when TQQQ is at least {} under its 1-year high.", unit: "%", default: ${spec.under}, options:
+      Array.from({ length: 121 }, (_, k) => +(0.5 * k).toFixed(1)) },
+    { id: "dipUnderMax", label: "But less than (%)", tip: "This far under or deeper, the rule stays out. Past 50% the same trade lost in 1998-2009, in the two long bear markets.", text: "Not when it is {} or more under it.", unit: "%", default: ${spec.underMax}, options:
+      Array.from({ length: 161 }, (_, k) => +(20 + 0.5 * k).toFixed(1)) },
+    { id: "dipSellDay", label: "Sell on trading day (of the next month)", tip: "The trade is sold at this trading day's close. A fund the rules want before then is bought as usual.", text: "Sell at the close of trading day {} of the next month.", default: ${spec.sellDay}, options:
+      [1, 2, 3, 4, 5] },
+`;
+  const windows = `    // Month-end dip (the Month-end dip settings): the closes its window is open at, read from the
+    // dates and prices alone. A window opens at the close of the dipDay-th to last trading day of a
+    // month when TQQQ is dipUnder% to under dipUnderMax% below its highest close of the last 252
+    // trading days, and closes at the close of trading day dipSellDay of the next month. The data
+    // says which days traded; past its last row the market calendar does.
+${MARKET_DAY_SNIPPET}
+    const dip = (function () {
+      const dates = data.dates, n = dates.length, T = data.tqqq;
+      const day = Math.round(+p.dipDay || 0), under = p.dipUnder == null ? 30 : +p.dipUnder, underMax = p.dipUnderMax == null ? 50 : +p.dipUnderMax;
+      const sellDay = Math.max(1, Math.round(+p.dipSellDay || 1));
+      const open = new Uint8Array(n), since = new Int32Array(n).fill(-1);   // open[i]: the window is open at close i; since[i]: the close it opened at
+      const monthOf = (i) => dates[i].slice(0, 7);
+      // The k-th market day after a date, by the calendar.
+      const marketDayAfter = (ymd, k) => {
+        const d = new Date(ymd + "T00:00:00Z"); let s = ymd;
+        while (k > 0) { d.setUTCDate(d.getUTCDate() + 1); s = d.toISOString().slice(0, 10); if (usMarketDay(s)) k--; }
+        return s;
+      };
+      // Trading days of the data's last month still to come after its last row.
+      let ahead = 0;
+      for (let s = marketDayAfter(dates[n - 1], 1); s.slice(0, 7) === monthOf(n - 1); s = marketDayAfter(s, 1)) ahead++;
+      // How far TQQQ's close sits under its highest close of the last 252 trading days, in %.
+      const underHigh = (i) => { let high = 0; for (let q = Math.max(0, i - 251); q <= i; q++) if (T[q] > high) high = T[q]; return high > 0 ? (1 - T[i] / high) * 100 : NaN; };
+      // The data's rows [first, last] of the month holding row i.
+      const rowsOfMonth = (i) => {
+        let first = i, last = i;
+        while (first > 0 && monthOf(first - 1) === monthOf(i)) first--;
+        while (last + 1 < n && monthOf(last + 1) === monthOf(i)) last++;
+        return [first, last];
+      };
+      // The row a month's window would open at, from the month's last row in the data: past the data's end while that day is still to come.
+      const entryRow = (last) => last + (last === n - 1 ? ahead : 0) - (day - 1);
+      // The date of a row, or by the calendar when the row lies past the data's end.
+      const dateOfRow = (row) => (row <= n - 1 ? dates[row] : marketDayAfter(dates[n - 1], row - (n - 1)));
+      if (day > 0) {
+        let [first, last] = rowsOfMonth(Math.max(0, p.startIdx - 45));   // far enough back for a window open at the start
+        while (first <= p.endIdx) {
+          const at = entryRow(last);
+          if (at >= first && at <= last) {
+            const u = underHigh(at);
+            if (u >= under && u < underMax) for (let i = at; i < last + sellDay && i < n; i++) { open[i] = 1; since[i] = at; }
+          }
+          if (last + 1 >= n) break;
+          [first, last] = rowsOfMonth(last + 1);
+        }
+      }
+      const dayName = day === 1 ? "last" : day + (day === 2 ? "nd" : day === 3 ? "rd" : "th") + " to last";
+      const sellName = sellDay === 1 ? "the next month's first trading day" : "trading day " + sellDay + " of the next month";
+      // The day a window opened at row \`at\` is sold: trading day sellDay of the next month.
+      const sellDate = (at) => { const last = rowsOfMonth(at)[1]; return dateOfRow(last + (last === n - 1 ? ahead : 0) + sellDay); };
+      // What a trade's note says of the window open at close i.
+      const windowWhy = (i) => {
+        const at = since[i], u = underHigh(at).toFixed(0);
+        return (at === i ? "TQQQ is " + u + "% under its 1-year high on the " + dayName + " trading day of the month"
+          : "TQQQ was " + u + "% under its 1-year high on " + dates[at] + ", the " + dayName + " trading day of the month") + "; held until the close of " + sellDate(at);
+      };
+      const exitWhy = "Month-end dip exit, " + (sellDay === 1 ? "the month's first trading day" : "trading day " + sellDay + " of the month");
+      // For the dashboard at close e: the open window and its selling day, or the next close the rule looks at and the prices that buy there.
+      const status = (e) => {
+        if (open[e]) return { open: true, since: dates[since[e]], sells: sellDate(since[e]) };
+        const last = rowsOfMonth(e)[1], at = entryRow(last);
+        let next;
+        if (at > e) next = dateOfRow(at);   // still to come this month
+        else if (last + 1 < n) next = dateOfRow(entryRow(rowsOfMonth(last + 1)[1]));   // the next month has rows in the data
+        else {   // the next month lies wholly past the data: its market days by the calendar
+          const days = [];
+          for (let s = marketDayAfter(dates[n - 1], ahead + 1), month = s.slice(0, 7); s.slice(0, 7) === month; s = marketDayAfter(s, 1)) days.push(s);
+          next = days[Math.max(0, days.length - day)];
+        }
+        const now = underHigh(e), high = T[e] / (1 - now / 100);
+        return { open: false, next, now, fromPx: high * (1 - underMax / 100), toPx: high * (1 - under / 100) };
+      };
+      return { day, under, underMax, sellDay, open, since, dayName, sellName, underHigh, windowWhy, exitWhy, status };
+    })();
+`;
+  const setup = `    // Month-end dip at this close (the windows are \`dip\`, at the top of run): while a window is
+    // open and the rules hold cash, TQQQ is held. Run before Big days, so a rise that sells for a
+    // day sells this TQQQ too.
+    let dipWhy = "", dipOut = false, dipOn = false, dipLeft = false, dipKept = false, dipKeptWhy = "";   // dipWhy: the rule's reason for a trade at this close; dipOut: its window closed; dipOn: it wants TQQQ; dipLeft: a fund is sold for it; dipKept: it held a sale off
+    const monthEndDip = (i, want) => {
+      const was = dipOn, open = dip.open[i] === 1;
+      dipWhy = ""; dipOut = false; dipLeft = false; dipKept = false;
+      dipOn = open && want === "cash";
+      if (dipOn) {
+        if (held !== "tqqq") { dipWhy = "Month-end dip, " + dip.windowWhy(i); dipLeft = held !== "cash"; }
+        else if (!was) { dipKept = true; dipKeptWhy = "Kept TQQQ: the rules sold, but the month-end window is open (" + dip.windowWhy(i) + ")"; }
+        return "tqqq";
+      }
+      if (was && !open && want === "cash") { dipOut = true; dipWhy = dip.exitWhy; }   // the window closed with the rules still in cash: sold at this close
+      if (was && tmKept) tmWhy = (open ? "Turnaround Monday takes over the month-end trade: " : "Kept TQQQ: the month-end trade ended, but ") + tmSigName + " closed a Monday under " + tmLevelName(tmLow, i - 1, "low");
+      return want;
+    };
+    // Its chart panel: TQQQ against its 1-year high, in % (0 at the high), with the band's two
+    // edges. Its trades are marked there; another rule's (t) in its own.
+    const DIP_PANEL = "Month-end dip";
+    const dipPanel = (t) => (dipWhy ? DIP_PANEL : t);
+    // A day's chart row for that panel. Each edge is a price too: the 1-year high less the edge.
+    const dipChartRow = (i) => {
+      if (!(dip.day > 0)) return {};
+      const u = dip.underHigh(i), high = u === u ? data.tqqq[i] / (1 - u / 100) : null, far = dip.underMax < 100;
+      return {
+        dipUnderLine: u === u ? -u : null,
+        dipFromLine: -dip.under, dipFromPx: high ? high * (1 - dip.under / 100) : null,
+        dipToLine: far ? -dip.underMax : null, dipToPx: far && high ? high * (1 - dip.underMax / 100) : null
+      };
+    };
+`;
+  // The panel's lines, placed before credit stress like the Big days panel (after it: withBigDay ran first).
+  const chartLines = `    // Month-end dip on the chart: a panel of its own while the rule is on.
+    if (res.lines && dip.day > 0) {
+      const own = [{ key: "dipUnderLine", label: "TQQQ vs 1-year high", unit: "%", group: "Month-end dip", priceKey: "assetPrice" },
+        { key: "dipFromLine", label: "Buys from", unit: "%", group: "Month-end dip", priceKey: "dipFromPx" }];
+      if (dip.underMax < 100) own.push({ key: "dipToLine", label: "Buys down to", unit: "%", group: "Month-end dip", priceKey: "dipToPx" });
+      const at = res.lines.findIndex(l => l.group === "Credit stress (NFCI)");
+      res.lines = at < 0 ? res.lines.concat(own) : res.lines.slice(0, at).concat(own, res.lines.slice(at));
+    }
+`;
+  const dashboard = `    // Month-end dip on the dashboard: its card, and today's call while its trade is open.
+    if (res.signals && dip.day > 0) {
+      const row = res.log[res.log.length - 1] || {}, s = dip.status(p.endIdx), inTrade = s.open && !!row.dipTrade && row.held === "TQQQ";
+      const band = dip.under + "% to " + dip.underMax + "% under its 1-year high";
+      res.signals.cards = (res.signals.cards || []).concat([{ label: "Month-end dip", icon: "clock", tone: inTrade ? "good" : "",
+        value: inTrade ? "In a trade" : s.open ? "Window open" : "Waiting",
+        sub: inTrade ? "TQQQ since " + row.dipTrade + ", sells at the close of " + s.sells
+          : s.open ? "until the close of " + s.sells + "; " + (row.held === "CASH" ? "TQQQ is bought at the next close" : row.held + " is held already")
+          : "next check " + s.next + ": in cash, buys TQQQ at " + (dip.underMax < 100 ? s.fromPx.toFixed(2) + " to " + s.toPx.toFixed(2) : s.toPx.toFixed(2) + " or less") + "; now " + (s.now === s.now ? s.now.toFixed(0) + "% under its high" : "n/a"),
+        tip: "Trades the idle cash at the turn of the month: buys TQQQ at the close of the " + dip.dayName + " trading day of a month when it is " + band + ", and sells at the close of " + dip.sellName + "." }]);
+      if (inTrade && res.signals.decision) {
+        const d = res.signals.decision;
+        res.signals.decision = { action: "Hold TQQQ", note: "Month-end dip trade since " + row.dipTrade + ", sold at the close of " + s.sells + "; the rules themselves are in cash", tone: "good",
+          reasons: (d.reasons || []).concat([{ name: "Month-end dip", val: "open since " + row.dipTrade, tag: "in · TQQQ", lean: "buy" }]) };
+      }
+    }
+`;
+  let t = once(base, '    { section: "Execution & costs" },\n', params + '    { section: "Execution & costs" },\n', 'the costs section');
+  t = once(t, '  columns: [\n', '  columns: [\n    { key: "dipTrade", label: "Month-end trade", tip: "The day the open Month-end dip window opened, while the rule holds TQQQ. Blank otherwise." },\n', 'the columns list');
+  t = once(t, '  run(data, p) {\n', '  run(data, p) {\n' + windows, 'the run method');
+  t = once(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', 'the main loop');
+  t = once(t, '          bigDay: bigWhy ? bigWas : null,\n', '          bigDay: bigWhy ? bigWas : null,\n          dipTrade: dipOn ? dates[dip.since[i]] : null,\n          ...dipChartRow(i),\n', 'the log row');
+  t = once(t, '          ...(tmWhy ? { firedBy: tmPanel(null) } : {}),\n', '          ...(tmWhy ? { firedBy: tmPanel(null) } : {}),\n          ...(dipKept ? { firedBy: DIP_PANEL } : {}),\n', 'the kept sale\'s panel');
+  t = once(t, '      if (tmKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + tmWhy : tmWhy; }   // a sale the Monday trade held off\n',
+    '      if (tmKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + tmWhy : tmWhy; }   // a sale the Monday trade held off\n'
+    + '      if (dipKept) { if (action === "hold") action = "keep"; note = note ? note + "; " + dipKeptWhy : dipKeptWhy; }   // a sale the month-end window held off\n', 'the kept sale');
+  t = once(t, '      want = bigDay(i, want);\n', '      want = monthEndDip(i, want);\n      want = bigDay(i, want);\n', 'the holding decision');
+  t = once(t, '      const trigger = bigPanel(i, soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i)));\n', '      const trigger = dipPanel(bigPanel(i, soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i))));\n', 'the trade panel');
+  // A trade's reason: Big days' own on its day; the month-end rule's on its buy (after what the rules sold a fund for) and on its exit (before why the rules hold cash); else the rules'.
+  t = once(t, 'const reason = (i, w) => bigWhy ? bigWhy : (bigAfter(i) ? bigAfter(i) + "; " : "") + ownReason(i, w);\n',
+    'const reason = (i, w) => bigWhy ? bigWhy : !dipWhy ? ruleReason(i, w) : dipOut ? dipWhy + "; " + ruleReason(i, w)\n'
+    + '      : (bigAfter(i) ? bigAfter(i) + "; " : "") + (dipLeft ? ownReason(i, "cash") + "; " : "") + dipWhy;\n'
+    + '    const ruleReason = (i, w) => (bigAfter(i) ? bigAfter(i) + "; " : "") + ownReason(i, w);\n', 'the trade reason');
+  if (!t.endsWith('    return res;\n  }\n}')) throw new Error(`withMonthEndDip(${spec.name}): the text must end with its dashboard`);
+  return t.slice(0, -'    return res;\n  }\n}'.length) + chartLines + dashboard + '    return res;\n  }\n}';
+}
+CODE[53] = withMonthEndDip(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", day: 5, under: 30, underMax: 50, sellDay: 1 });
 
 // ===== #55 Seasonal TQQQ, #56 Donchian breakout + ATR stop (the user, 2026-11-09:
 // "let's include 2x4", from a search for leveraged-fund strategies the library

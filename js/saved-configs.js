@@ -813,7 +813,7 @@ which timing fired. A rule with no line is a bug. Declare them as lines:
     { key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: "TQQQ vs QQQ" }, { key: "ceiling", label: "Ceiling", unit: "%", group: "TQQQ vs QQQ" }
   A later group draws at a quarter of the first panel's height with up to three lines, taller with
   more; tall: true on one of its lines draws it at full height (a second fund's price over its
-  relative pricing, say). Max 6 lines per group, 6 groups.
+  relative pricing, say). Max 6 lines per group, 8 groups.
   priceKey: "floorPx" on a line names the price its level sits at, logged under that key: the chart
   writes it in brackets after the line's name, "Floor ($50.22)", so an order can be set at it. For a
   level relative to another fund (TQQQ's lead over QQQ) log the close the two reach together, QQQ
@@ -1156,7 +1156,7 @@ function customWorkerMain() {
   // median and its overextension threshold). Toggled from the strategy's
   // panel like 9sig's Holding/Target/Cash. Same sanitize-to-primitives rule
   // as readColumns; capped so a runaway declaration can't flood the chart:
-  // 6 lines a group, 6 groups (a group is a panel of its own, see LINES).
+  // 6 lines a group, 8 groups (a group is a panel of its own, see LINES).
   // Dollar lines for the main chart, beside the strategy's own line (series in the
   // prompt): { key, label, dash: "dot" | "dash" | "dashdot" }, at most 6.
   function readSeries(raw) {
@@ -1192,7 +1192,7 @@ function customWorkerMain() {
         if (typeof l.priceKey === 'string' && l.priceKey.trim()) line.priceKey = l.priceKey.trim().slice(0, 40);   // the log key with the level's price, shown in brackets (see LINES in the prompt)
       }
       var g = line.group || '';
-      if (!(g in perGroup)) { if (groups >= 6) continue; perGroup[g] = 0; groups++; }   // 6 panels: SOXL, TQQQ VS QQQ, Mon Turns draws price, lead, SOXL price, SOXL lead, Monday and NFCI
+      if (!(g in perGroup)) { if (groups >= 8) continue; perGroup[g] = 0; groups++; }   // 8 panels: the 1983 fit draws price, lead, Monday, SOXL price, SOXL lead, Big days, Month-end dip and NFCI
       if (perGroup[g] >= 6) continue;
       perGroup[g]++;
       out.push(line);
