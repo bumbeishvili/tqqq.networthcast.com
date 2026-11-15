@@ -3536,6 +3536,20 @@ CODE[50] = withTurnaroundMonday(CODE[47], { name: "TQQQ vs QQQ + Turnaround Mond
 //     96 / 272; 22 SOXL stretches against 41; out of SOXL since 2026-04-09, so it
 //     held TQQQ through the October 2026 semiconductor crash. The price rules
 //     stay as settings. Every SOXL rule loses to plain TQQQ before 2010.
+//     Each setting of the section shows only under the conditions that read
+//     it (the user, 2026-11-15, at "far under" showing under the lead rule).
+//   - The lead's start is one close, where the TQQQ lead's is averaged over
+//     ± days. Averaging it was built and taken out again on 2026-11-15 (the
+//     user: "why don't we have this averaging thing for soxl"). The exit has
+//     fired on one-day spikes of the lead as the start passes a crash low: it
+//     left SOXL 22 days into the April-August 2010 fall and before April
+//     2004-January 2005 (SOXL -58.5%). Averaging flattens the spikes. In #53
+//     any ±3 days or more lifts the 2010-2025 drawdown from 45.7% to 60.6%;
+//     refit at lookbacks 330 to 380 (46,080 runs) the steadiest averaged
+//     settings made 190.9-191.6% a year against 192.9%, and 43.9% against
+//     52.9% on 1984-2009. A lookback moved a day at a time over ±10 days
+//     moves #53 between 182.8% and 193.9% here; the same on the TQQQ lead
+//     without its averaging is 113% to 164%, which is what that one is for.
 // $100K + $4K a month from each of 199 month-end starts since March 2010:
 // $1M reached sooner than with every contribution in the strategy in 102
 // starts, later in 11, the same day in 67; the contributions are worth 6%
@@ -3551,17 +3565,17 @@ function withSoxlPile(base, spec) {
   const params = `    { section: "SOXL instead of TQQQ" },
     { id: "soxlWhen", label: "Hold SOXL instead of TQQQ", tip: "While the rules hold TQQQ, the account holds SOXL instead under this condition. The lead rule (SOXL's growth against SOXX's over the lookback, held from a close under the entry level until one over the exit level) made the most on 2010-2025 and was out of SOXL before the 2026 crash; the two price rules and Always made less, and every rule lost to plain TQQQ in 2003-2007.", text: "Hold SOXL instead of TQQQ {}.", default: "lead", options: [
       { value: "never", label: "never" }, { value: "lead", label: "while SOXL's lead over SOXX is low" }, { value: "drawdown", label: "while SOXL is far under its high" }, { value: "belowAvg", label: "while SOXL is below its average" }, { value: "always", label: "always" } ] },
-    { id: "soxlLeadDays", label: "Lead lookback (trading days)", tip: "How many trading days of growth are compared: SOXL's against SOXX's. 380 is about 18 months; 350 to 450 all beat the price rules since 2010.", text: "The lead is SOXL's growth against SOXX's over the last {} trading days.", default: 380, options:
+    { id: "soxlLeadDays", label: "Lead lookback (trading days)", tip: "How many trading days of growth are compared: SOXL's against SOXX's. 380 is about 18 months; 350 to 450 all beat the price rules since 2010.", text: "The lead is SOXL's growth against SOXX's over the last {} trading days.", when: { soxlWhen: "lead" }, default: 380, options:
       [60, 80, 100, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 310, 320, 330, 340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460, 470, 480, 490, 500, 525, 550, 575, 600, 625, 650, 675, 700, 725, 750] },
-    { id: "soxlLeadEnter", label: "Hold SOXL at lead under (%)", tip: "The first close with the lead under this holds SOXL. 0 means SOXL has grown no more than SOXX over the lookback; negative means it is behind.", text: "Hold SOXL from the first close with the lead under {}.", unit: "%", default: -15, options:
+    { id: "soxlLeadEnter", label: "Hold SOXL at lead under (%)", tip: "The first close with the lead under this holds SOXL. 0 means SOXL has grown no more than SOXX over the lookback; negative means it is behind.", text: "Hold SOXL from the first close with the lead under {}.", unit: "%", when: { soxlWhen: "lead" }, default: -15, options:
       Array.from({ length: 25 }, (_, k) => -80 + 5 * k) },
-    { id: "soxlLeadExit", label: "Back to TQQQ at lead over (%)", tip: "The first close with the lead over this goes back to TQQQ. The gap to the entry level keeps a lead hovering around one line from switching every few days.", text: "Back to TQQQ at the first close with the lead over {}.", unit: "%", default: 90, options:
+    { id: "soxlLeadExit", label: "Back to TQQQ at lead over (%)", tip: "The first close with the lead over this goes back to TQQQ. The gap to the entry level keeps a lead hovering around one line from switching every few days.", text: "Back to TQQQ at the first close with the lead over {}.", unit: "%", when: { soxlWhen: "lead" }, default: 90, options:
       Array.from({ length: 93 }, (_, k) => -60 + 5 * k) },   // −60% to 400% in 5s (the user, 2026-11-06: "so lead can go up to 400%")
-    { id: "soxlDrop", label: "Far under the high (%)", tip: "How far under its highest close of the window SOXL has to be for the rule to hold it. 40 to 70 all beat TQQQ alone since 2010; 50 is the plateau's middle.", text: "Far under means {} under the highest close of the window.", unit: "%", default: 50, options:
+    { id: "soxlDrop", label: "Far under the high (%)", tip: "How far under its highest close of the window SOXL has to be for the rule to hold it. 40 to 70 all beat TQQQ alone since 2010; 50 is the plateau's middle.", text: "Far under means {} under the highest close of the window.", unit: "%", when: { soxlWhen: "drawdown" }, default: 50, options:
       Array.from({ length: 11 }, (_, k) => 20 + 5 * k) },
-    { id: "soxlWindow", label: "Window (trading days)", tip: "The window of closes the high and the average are taken over. 250 is about a year.", text: "The high and the average cover the last {} trading days.", default: 225, options:
+    { id: "soxlWindow", label: "Window (trading days)", tip: "The window of closes the high and the average are taken over. 250 is about a year.", text: "The high and the average cover the last {} trading days.", when: { soxlWhen: ["drawdown", "belowAvg"] }, default: 225, options:
       [60, 90, 120, 150, 175, 200, 225, 250, 275, 300, 350, 400, 500] },
-    { id: "soxlConfirm", label: "Switch in", tip: "At once: the day SOXL closes that far under its high, even while it is still falling; that is where the 2010-2025 edge was. Waiting for SOXL to climb back above its average keeps only a few points of it and no longer beats random dates, but sits out a crash that keeps going, like July to November 2026.", text: "Switch in {}.", default: 0, options: [
+    { id: "soxlConfirm", label: "Switch in", tip: "At once: the day SOXL closes that far under its high, even while it is still falling; that is where the 2010-2025 edge was. Waiting for SOXL to climb back above its average keeps only a few points of it and no longer beats random dates, but sits out a crash that keeps going, like July to November 2026.", text: "Switch in {}.", when: { soxlWhen: ["lead", "drawdown", "belowAvg"] }, default: 0, options: [
       { value: 0, label: "at once" }, { value: 10, label: "only once SOXL is back above its 10-day average" }, { value: 20, label: "only once SOXL is back above its 20-day average" }, { value: 50, label: "only once SOXL is back above its 50-day average" }, { value: 100, label: "only once SOXL is back above its 100-day average" }, { value: 200, label: "only once SOXL is back above its 200-day average" } ] },
     { section: "Contributions in SOXL" },
     { id: "soxlPile", label: "Contributions buy SOXL", tip: "Yes: a contribution buys SOXL while the rules hold TQQQ, and the pile goes into the strategy when they switch to SQQQ. No: every contribution goes into the strategy at once, as in TQQQ vs QQQ + Turnaround Monday.", text: "Contributions buy SOXL while the rules hold TQQQ: {}.", type: "bool", default: true, options: [
@@ -3866,7 +3880,7 @@ function withSpreadStart(base) {
     `tip: "Where SOXL's start weight peaks: this many trading days back. 380 is about 18 months.", text: "The lead is SOXL's growth against SOXX's from a start centred {} trading days back."`, 'the SOXL lookback setting');
   t = once(t, `, 675, 700, 725, 750] },
 `, `, 675, 700, 725, 750] },
-    { id: "soxlStartSpreadPct", label: "SOXL start spread (± % of the lookback)", tip: "SOXL's and SOXX's start prices are averages of past closes weighted like a triangle: most weight at the lead lookback, falling in a straight line to nothing this far either side of it.", text: "Spread SOXL's start over ±{} of its lookback.", unit: "%", default: 25, options:
+    { id: "soxlStartSpreadPct", label: "SOXL start spread (± % of the lookback)", tip: "SOXL's and SOXX's start prices are averages of past closes weighted like a triangle: most weight at the lead lookback, falling in a straight line to nothing this far either side of it.", text: "Spread SOXL's start over ±{} of its lookback.", unit: "%", when: { soxlWhen: "lead" }, default: 25, options:
       Array.from({ length: 100 }, (_, k) => 1 + k) },
 `, 'the SOXL lookback options');
   t = once(t, `    const soxlLead = new Float64Array(n).fill(NaN), soxlBase = new Float64Array(n).fill(NaN);   // soxlBase: the SOXL price at a lead of 0% today
