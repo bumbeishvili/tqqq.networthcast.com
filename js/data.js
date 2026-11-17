@@ -59,7 +59,7 @@ function minutesBeforeClose(lastDate, fetchedAt) {
 // agree with the file's close before that day, or the two are on different
 // adjustment bases (a split, as SOXX on 2026-11-05) and the fund keeps the file's
 // price. The intraday page keeps its own copy of the URL (experiments/tqqq-intraday.html).
-const QUOTES_PROXY = 'https://tqqq-quotes.dato-developer.workers.dev';
+const QUOTES_PROXY = 'https://tqqq-quotes.infoicy.workers.dev';
 const LIVE_FUNDS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'];
 const LIVE_PREV_CLOSE_TOLERANCE = 0.03;
 // Outside the regular session a quote carries `extended`: the fund's latest
