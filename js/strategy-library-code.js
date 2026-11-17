@@ -2994,6 +2994,28 @@ CODE[47] = `{
     // beat it in 86% of 105 nearby settings (scratchpad r12/, r10/).
     { id: "floorHold", label: "Held after the break", tip: "What is held while the floor is broken.", text: "Hold {} after the break.", default: "cash", options: [
       { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" } ] },
+    // The way back (the user, 2026-11-17: "If I set 12% instead of 6 ... almost
+    // always will have catastrophic performance when the tqqq/qqq ratio dips a
+    // bit bellow it"). A break that reverses is undone: within the window, the
+    // closes in a row at the level above the floor go back to TQQQ. In #53 at
+    // every floor from 0 to 20, 2010-2025: 130-196% a year as it was (SQQQ, no
+    // way back; drawdown up to 57%, 67% with 2026; 2026 to 16 November down
+    // 11% at floors 11-12), 162-190% with cash alone, 173-188% with cash and
+    // 20 days / 2 points / 3 closes (drawdown 49% at most, 2026 up 192% at the
+    // worst floor). Windows of 10 to 60 days, 0 to 3 points and 1 to 5 closes
+    // keep the worst floor's result between 166% and 180%. Only with cash: with
+    // SQQQ after the break the same rule whipsawed (drawdown 59-71%). It costs
+    // where the floor was right: #53 at its floor 6 makes 187.7% against
+    // 192.9%, from March 2020's SQQQ and May 2022 (436 variants at 31 floors,
+    // scratchpad floor/). The Fit button leaves the three alone: it scores
+    // return at one floor, where insurance only costs. Off unless an entry
+    // sets it.
+    { id: "floorBackDays", label: "Way back within (days)", tip: "A break that reverses within this many days is undone: TQQQ is bought back without waiting for the re-entry lead. Works with cash after the break.", text: "Go back to TQQQ if the lead recovers within {} days of the break.", when: { floorHold: "cash" }, fit: false, default: 0, options:
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 120 }, (_, k) => 1 + k)) },
+    { id: "floorBackOver", label: "Recovered at (points over the floor)", tip: "How far above the floor the lead has to close to count as recovered. With a floor of 6% and 2 points, that is a lead of 8%.", text: "Recovered means {} points or more above the floor.", when: { floorHold: "cash", floorBackDays: Array.from({ length: 120 }, (_, k) => 1 + k) }, fit: false, default: 2, options:
+      Array.from({ length: 21 }, (_, k) => 0.5 * k) },
+    { id: "floorBackCloses", label: "Recovered for (closes in a row)", tip: "How many closes in a row at the recovered level buy TQQQ back. One close reacts to a single bounce; three wait for it to hold.", text: "It has to hold there for {} closes in a row.", when: { floorHold: "cash", floorBackDays: Array.from({ length: 120 }, (_, k) => 1 + k) }, fit: false, default: 3, options:
+      Array.from({ length: 10 }, (_, k) => 1 + k) },
     { id: "reentryLead", label: "Back at lead ≥ (%)", tip: "TQQQ is bought again after the closes in a row below at or above this lead.", text: "Buy TQQQ back once the lead is {} or more.", unit: "%", default: 25, options:
       Array.from({ length: 151 }, (_, k) => -70 + k) },
     { id: "reentryCloses", label: "Closes in a row", tip: "How many closes in a row at or above the re-entry lead buy TQQQ again.", text: "It has to stay there for {} closes in a row.", default: 5, options:
@@ -3039,6 +3061,9 @@ CODE[47] = `{
     const topOn = top < 9999, topHold = p.topHold || "sqqq", topDays = +p.topDays || 0;
     const floor = p.floorLead == null ? 5 : +p.floorLead, floorOn = floor > -9999, floorHold = p.floorHold || "sqqq";
     const reentry = p.reentryLead == null ? 25 : +p.reentryLead, closesNeeded = Math.max(1, +p.reentryCloses || 5);
+    // The way back from a break that reverses: within backDays of it, backNeeded closes in a row at backLevel or more buy TQQQ back. Cash after the break only.
+    const backDays = floorOn && floorHold === "cash" ? Math.max(0, Math.round(+p.floorBackDays || 0)) : 0;
+    const backLevel = floor + (p.floorBackOver == null ? 2 : +p.floorBackOver), backNeeded = Math.max(1, Math.round(+p.floorBackCloses || 3));
     const deep = p.deepLead == null ? -30 : +p.deepLead, deepOn = floorOn && deep > -9999;
     const over = (+p.overPct || 0) / 100, OW = +p.overWindow || 250;
     const cost = (p.tradeCost || 0) / 100;
@@ -3082,19 +3107,25 @@ CODE[47] = `{
     const leadTxt = (x) => x === x ? (x >= 0 ? x.toFixed(0) + "% ahead" : (-x).toFixed(0) + "% behind") : "n/a";
     // State on the lead: "in" (TQQQ), "top" (stepped aside at the ceiling),
     // "brk" (floor broken), "deep" (bought back far behind).
-    let state = "in", days = 0, closes = 0, why = "", whyIdx = -1, deepPx = 0, deepPaused = false, releasedAt = -1;
+    let state = "in", days = 0, closes = 0, backCloses = 0, why = "", whyIdx = -1, deepPx = 0, deepPaused = false, releasedAt = -1;
+    // The way back is open on the closes after a break up to backDays of them (days counts the closes since the state changed).
+    const backOpen = () => backDays > 0 && state === "brk" && days < backDays;
+    // For the chart and the level list: the closes still needed, and whether the days left in the window can hold them.
+    const backLeft = () => backNeeded - backCloses, backLive = () => backOpen() && backLeft() <= backDays - days;
     const advance = (i) => {
       const v = lead[i];
       if (!(v === v)) return;
       const prev = state, now = "TQQQ is " + leadTxt(v);
       if (state === "in") {
         if (topOn && v >= top) { state = "top"; why = now + ", at or past the ceiling (" + top + "%)"; }
-        else if (floorOn && v < floor) { state = "brk"; closes = 0; why = now + ", under the floor (" + floor + "%)"; }
+        else if (floorOn && v < floor) { state = "brk"; closes = 0; backCloses = 0; why = now + ", under the floor (" + floor + "%)"; }
       } else if (state === "top") {
-        if (floorOn && v < floor) { state = "brk"; closes = 0; why = now + ", under the floor (" + floor + "%)"; }
+        if (floorOn && v < floor) { state = "brk"; closes = 0; backCloses = 0; why = now + ", under the floor (" + floor + "%)"; }
         else if (band ? v <= back : v < top) { state = "in"; why = now + (band ? ", at or under " + back + "%" : ", under the ceiling (" + top + "%)"); }
       } else if (state === "brk") {
+        backCloses = backOpen() && v >= backLevel ? backCloses + 1 : 0;
         if (deepOn && v <= deep) { state = "deep"; deepPx = T[i]; deepPaused = false; why = now + ", at or past the deep buy (" + deep + "%)"; }
+        else if (backCloses >= backNeeded) { state = "in"; why = backNeeded + (backNeeded > 1 ? " closes in a row" : " close") + " at " + backLevel + "% or more within " + backDays + " days of the break"; }
         else { closes = v >= reentry ? closes + 1 : 0; if (closes >= closesNeeded) { state = "in"; why = closesNeeded + (closesNeeded > 1 ? " closes in a row" : " close") + " at " + reentry + "% or more"; } }
       } else {
         if (topOn && v >= top) { state = "top"; why = now + ", at or past the ceiling (" + top + "%)"; }
@@ -3196,6 +3227,10 @@ CODE[47] = `{
       if (topOn && (state === "in" || state === "deep")) add("Ceiling (" + leadLbl(top) + ")", crossAt(i, top), "up", holdsT ? "sell" : "", "a close above it steps aside to " + lbl(topHold));
       if (topOn && band && state === "top") add("Back at (" + leadLbl(back) + ")", crossAt(i, back), "down", "buy", "a close under it buys TQQQ");
       if (floorOn && state === "in") add("Floor (" + leadLbl(floor) + ")", crossAt(i, floor), "down", holdsT ? "sell" : "", "a close under it sells to " + lbl(floorHold));
+      if (backLive()) {
+        const left = backLeft(), span = backDays - days;
+        add("Way back (" + leadLbl(backLevel) + ")", crossAt(i, backLevel), "up", "buy", left + (backCloses > 0 ? " more" : "") + (left > 1 ? " closes in a row" : " close") + " above it within " + span + (span > 1 ? " days" : " day") + (left > 1 ? " buy TQQQ" : " buys TQQQ"));
+      }
       if (floorOn && state === "brk") add("Re-entry (" + leadLbl(reentry) + ")", crossAt(i, reentry), "up", "buy", closesNeeded + (closesNeeded > 1 ? " closes" : " close") + " above it buy TQQQ");
       if (deepOn && state === "brk") add("Deep buy (" + leadLbl(deep) + ")", crossAt(i, deep), "down", "buy", "a close under it buys TQQQ");
       if (dGuard && state === "deep" && !deepPaused) add("Deep buy guard (−" + Math.round(dGuard * 100) + "%)", deepPx * (1 - dGuard), "down", holdsT ? "sell" : "", "a close under it sells to cash");
@@ -3207,14 +3242,15 @@ CODE[47] = `{
     // with the credit veto. Each line is on every day its data allows, so none
     // breaks. A rule with two levels draws the one that fires from the current
     // state: the ceiling's back-at lead while stepped aside, the floor's
-    // re-entry lead while out after a break, and while a deep buy is held its
+    // re-entry lead while out after a break (the way back's level while its
+    // window can still be met: it fires first), and while a deep buy is held its
     // guard, as the lead at which TQQQ would close that far under the price
     // paid. Each trade then sits where a panel's first line crosses the line
     // that fired it.
     const chartRow = (i) => {
       const med = rel[i] === rel[i] ? T[i] / (1 + rel[i]) : null, led = lead[i] === lead[i];
       const out = state === "brk" || deepPaused, nf = data.nfci ? data.nfci[i] : NaN;
-      const ceilingLead = topOn && led ? (state === "top" && band ? back : top) : null, floorLead = floorOn && led ? (out ? reentry : floor) : null;
+      const ceilingLead = topOn && led ? (state === "top" && band ? back : top) : null, floorLead = floorOn && led ? (backLive() ? backLevel : out ? reentry : floor) : null;
       const deepLead = deepOn && led ? (state === "deep" && dGuard && !deepPaused ? (deepPx * (1 - dGuard) / atLead(i, 0) - 1) * 100 : deep) : null;
       return {
         assetPrice: T[i] > 0 ? T[i] : null,
@@ -3813,7 +3849,8 @@ function withDefaults(base, spec) {
   return t;
 }
 CODE[53] = withDefaults(CODE[52], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: {
-  lookbackDays: 546, startAvgDays: 60, topLead: 123, topDays: 61, backLead: 28, floorLead: 6, floorHold: "sqqq", reentryLead: 35, reentryCloses: 10, deepLead: -30.5,
+  // The floor holds cash with the way back since 2026-11-17 (the user: "I'd want the fix"); SQQQ after the break was the fitted value.
+  lookbackDays: 546, startAvgDays: 60, topLead: 123, topDays: 61, backLead: 28, floorLead: 6, floorHold: "cash", floorBackDays: 20, floorBackOver: 2, floorBackCloses: 3, reentryLead: 35, reentryCloses: 10, deepLead: -30.5,
   overPct: 58.2, overWindow: 236, sqqqMaxDays: 18, deepGuard: 52, nfciVeto: 0.75, soxlLeadEnter: -33, soxlLeadExit: 101 } });
 
 // #54 — SOXL, TQQQ, QQQ - spread start (the user, 2026-11-09: "i want strategy,
