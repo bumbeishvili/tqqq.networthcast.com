@@ -96,6 +96,55 @@ function moneyWeightedCAGR(initial, monthly, annualRaise, startDate, endDate, ye
   return tc > 0 ? (Math.pow(finalValue / tc, 1 / years) - 1) * 100 : 0;
 }
 
+// The same money-weighted annual return, for a caller that solves many windows
+// of one contribution stream (the analytics years-held chart: every start year
+// × every number of years held). The contributions come as plain arrays, so a
+// longer window only reads further into them, and the search steps by Newton's
+// method from `guess` inside the bisection's own bracket, halving it whenever a
+// step would leave it. It works on logs: the log of the contributions' grown
+// value is close to a straight line in the log of the yearly growth factor, so
+// a handful of passes over the flows land where the bisection above needs
+// about fifty. Unlike the bisection it stays finite on a 50-year window with a
+// large value, where the bisection's low bracket end overflows.
+//   times[k], amounts[k]: the first `count` contributions — years from the
+//     start and dollars paid in. All amounts must be >= 0 (money in): then the
+//     contributions' grown value only rises with the rate and the root is single.
+//   finalValue: the portfolio's value `years` after the start.
+// Returns a percentage, or null when there is none: no positive final value,
+// nothing paid in, or no root inside the bracket.
+function moneyWeightedReturnOfContributions(times, amounts, count, finalValue, years, guess) {
+  if (!(finalValue > 0) || !(years > 0)) return null;
+  // At a yearly growth factor of e^x: the contributions grown to the window's
+  // end, and the dollar-weighted average of how long each one grew — the slope
+  // of that total's log in x.
+  const grownAt = (x) => {
+    let total = 0, weighted = 0;
+    for (let k = 0; k < count; k++) {
+      const span = years - times[k];
+      const grown = amounts[k] * Math.exp(x * span);
+      total += grown;
+      weighted += grown * span;
+    }
+    return { total, span: weighted / total };
+  };
+  let lo = Math.log(1 - 0.999999), hi = Math.log(1 + 1000);
+  if (!(grownAt(lo).total < finalValue && grownAt(hi).total > finalValue)) return null; // no root in the bracket
+  const target = Math.log(finalValue);
+  const start = Math.log(1 + guess);
+  let x = (start > lo && start < hi) ? start : Math.log(1.1);
+  for (let i = 0; i < 100; i++) {
+    const { total, span } = grownAt(x);
+    const miss = Math.log(total) - target;
+    if (Math.abs(miss) < 1e-12) break;
+    if (miss > 0) hi = x; else lo = x;
+    const newton = x - miss / span;
+    const next = (newton > lo && newton < hi) ? newton : (lo + hi) / 2;
+    if (Math.abs(next - x) < 1e-14) break;
+    x = next;
+  }
+  return (Math.exp(x) - 1) * 100;
+}
+
 // Max drawdown (fraction 0..1) of a portfolio revalued at every daily close.
 // Reconstructed from rebalance "control points": between consecutive controls
 // the holding (`shares` of the underlying) and `cash` are constant, so portfolio
@@ -199,5 +248,5 @@ function buildCustomDDControls(log) {
 
 // Node test harness export (no-op in the browser).
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, computeDailyMaxDrawdown, computeDailyMaxDrawdownMulti, buildCustomDDControls, nineSigDDControls };
+  module.exports = { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, moneyWeightedReturnOfContributions, computeDailyMaxDrawdown, computeDailyMaxDrawdownMulti, buildCustomDDControls, nineSigDDControls };
 }

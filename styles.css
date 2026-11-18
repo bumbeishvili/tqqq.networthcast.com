@@ -608,7 +608,19 @@
   .panel-head h2 {
     margin-bottom: 0;
   }
-  #analytics-toggle {
+  /* "advanced analytics": the dropdown that opens the chart windows (the
+     comparison grid, CAGR by years held). A native <details> like the header's
+     Resources menu, which lends it the list's look (.resources-list). */
+  .analytics-menu {
+    position: relative;
+    margin-left: auto;
+  }
+  .analytics-menu summary {
+    list-style: none;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     background: none;
     border: 1px dashed var(--border);
     color: var(--text-muted);
@@ -620,10 +632,14 @@
     cursor: pointer;
     transition: border-color 0.15s, color 0.15s;
   }
-  #analytics-toggle:hover {
+  .analytics-menu summary::-webkit-details-marker { display: none; }
+  .analytics-menu summary:hover,
+  .analytics-menu[open] summary {
     border-color: var(--accent);
     color: var(--accent-text);
   }
+  /* Its chevron is the resources menu's (copied in by index.html) and flips the same way. */
+  .analytics-menu[open] summary svg { transform: rotate(180deg); }
 
   .modal {
     position: fixed;
@@ -1675,6 +1691,170 @@
     justify-content: center;
     color: var(--text-muted);
     font-size: calc(11px * var(--ui-scale));
+  }
+  /* Years-held window ("CAGR by years held"; js/years-held.js,
+     js/years-held-chart.js). Its frame is the analytics modal's; these are its
+     own parts. */
+  /* The lines in its sentence: a chip per line (colour, name, remove), then
+     the dropdown that adds one. */
+  .yh-lines {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px 6px;
+  }
+  .yh-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px 2px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--surface);
+    color: var(--text);
+    font: 700 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
+  }
+  .yh-swatch {
+    flex: none;
+    width: 18px;
+    border-top: 3px solid;
+    border-radius: 2px;
+  }
+  /* Why a chip has no line (a strategy that brings its own deposits). */
+  .yh-chip-note {
+    font-weight: 500;
+    font-size: calc(10px * var(--ui-scale));
+    color: var(--text-muted);
+  }
+  .yh-chip-remove {
+    border: 0;
+    background: none;
+    padding: 0 4px;
+    color: var(--text-muted);
+    font: inherit;
+    font-size: calc(14px * var(--ui-scale));
+    line-height: 1;
+    cursor: pointer;
+  }
+  .yh-chip-remove:hover { color: var(--accent-text); }
+  .yh-add { display: inline-flex; }
+  /* Left out of a downloaded image (downloadChartImage hides them for the shot). */
+  [data-capture="skip"][hidden] { display: none; }
+  /* Its chart area: the plot, which takes the height the window leaves. */
+  .years-held-wrap {
+    width: 100%;
+    height: 100%;
+    min-height: 380px;
+    box-sizing: border-box;
+    padding: 12px 14px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .years-held-plot {
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .years-held-svg {
+    display: block;
+    /* Drawn at the plot's measured width; never wider than the plot is now. */
+    max-width: 100%;
+    height: auto;
+    /* A finger on the plot moves the crosshair; a vertical drag still scrolls. */
+    touch-action: pan-y;
+  }
+  .years-held-svg text {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: calc(10px * var(--ui-scale));
+    fill: var(--text-muted);
+  }
+  .years-held-svg .grid-line { stroke: rgba(56, 56, 116, 0.1); stroke-width: 1; }
+  .years-held-svg .grid-line.is-zero { stroke: rgba(56, 56, 116, 0.45); }
+  .years-held-svg .series-line {
+    stroke-width: 2;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+  }
+  /* Name and value at a line's end, in the text colour: the line it sits on says which it is. */
+  .years-held-svg .end-label { font-weight: 600; fill: var(--text); }
+  /* The × after a line's label takes that line off the chart. */
+  .years-held-svg .end-label-remove { cursor: pointer; }
+  .years-held-svg .end-label-remove-mark { font-size: calc(13px * var(--ui-scale)); }
+  .years-held-svg .end-label-remove:hover .end-label-remove-mark { fill: var(--accent-text); }
+  /* A dragged range (drawRangeSelect), in the main chart's drag-to-select look. */
+  .years-held-svg { user-select: none; -webkit-user-select: none; }
+  .years-held-svg .range-band { fill: rgba(134, 118, 255, 0.12); }
+  .years-held-svg .range-edge { stroke: rgba(134, 118, 255, 0.5); stroke-width: 1; }
+  .years-held-svg .range-pill-box { fill: rgba(255, 255, 255, 0.92); stroke: rgba(134, 118, 255, 0.6); stroke-width: 1; }
+  .years-held-svg .range-pill-text { fill: #5b4fc4; font-weight: 600; font-size: calc(9px * var(--ui-scale)); }
+  .years-held-svg .range-chord { stroke-width: 1.5; stroke-dasharray: 4 3; }
+  .years-held-svg .range-dot { stroke: #fff; stroke-width: 1.5; }
+  .years-held-svg .range-label-box { fill: rgba(255, 255, 255, 0.92); stroke-width: 1; }
+  .years-held-svg .range-lead { font-weight: 700; font-size: calc(10px * var(--ui-scale)); }
+  .years-held-svg .range-rest { font-weight: 600; font-size: calc(8px * var(--ui-scale)); }
+  .years-held-svg .range-label.is-up text { fill: var(--green-text); }
+  .years-held-svg .range-label.is-down text { fill: var(--red-text); }
+  .years-held-svg .cross { stroke: rgba(122, 122, 166, 0.7); stroke-width: 1; stroke-dasharray: 3 3; }
+  .years-held-svg .hover-dot { stroke: var(--surface); stroke-width: 1.5; }
+  /* Its tooltip: a grid with a row per line and a column per stat. Not a
+     <table>: the page's table styles (header band, cell borders, uppercase)
+     do not belong here. */
+  .yh-tt-grid {
+    display: grid;
+    grid-template-columns: minmax(64px, 1fr) repeat(4, max-content);
+    column-gap: 18px;
+    margin-top: 8px;
+    font-family: 'Open Sans', sans-serif;
+    font-variant-numeric: tabular-nums;
+    line-height: calc(20px * var(--ui-scale));
+  }
+  .yh-tt-grid > * {
+    min-width: 0;
+    padding: 6px 0;
+  }
+  /* A hairline over every row of values (the cells after the five headers). */
+  .yh-tt-grid > :nth-child(n + 6) { border-top: 1px solid var(--border); }
+  .yh-tt-head {
+    padding-top: 0;
+    text-align: right;
+    font-size: calc(10px * var(--ui-scale));
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+  .yh-tt-head.is-drawn { color: var(--text); font-weight: 700; }
+  .yh-tt-name {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: calc(12px * var(--ui-scale));
+    font-weight: 600;
+    color: var(--text);
+  }
+  /* The swatch rides the middle of the name's first line. */
+  .yh-tt-name .yh-swatch { margin-top: calc(9px * var(--ui-scale)); }
+  .yh-tt-name-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .yh-tt-value {
+    text-align: right;
+    white-space: nowrap;
+    font-size: calc(12px * var(--ui-scale));
+    color: var(--text);
+  }
+  /* The median: the value the hovered point on the line shows. */
+  .yh-tt-value.is-drawn {
+    font-size: calc(14px * var(--ui-scale));
+    font-weight: 700;
+  }
+  /* The start year behind a best or a worst, under the number. */
+  .yh-tt-value small {
+    display: block;
+    font-size: calc(10px * var(--ui-scale));
+    line-height: 1.2;
+    color: var(--text-muted);
   }
   .heatmap-table .cell-val {
     display: block;
@@ -3901,7 +4081,8 @@
      overflow:auto clipping — otherwise tooltips near the body's top edge
      render behind the panel header. */
   .info-icon[data-tip]:hover::after,
-  .info-icon[data-tip]:focus::after {
+  .info-icon[data-tip]:focus::after,
+  .info-tip-measure {
     content: attr(data-tip);
     position: fixed;
     left: var(--tip-left, 50%);
@@ -3930,9 +4111,25 @@
     box-shadow: var(--shadow-md);
   }
 
+  /* The tooltip's stand-in for measuring (js/controls.js infoTipHeight): the
+     same box and type as the ::after above, off screen and unseen. */
+  .info-tip-measure {
+    left: -9999px;
+    top: 0;
+    transform: none;
+    visibility: hidden;
+  }
+  /* With no room above the icon the tooltip hangs below it (positionInfoTip
+     sets data-tip-below and puts --tip-top at the icon's bottom edge). */
+  .info-icon[data-tip-below][data-tip]:hover::after,
+  .info-icon[data-tip-below][data-tip]:focus::after {
+    transform: translate(-50%, 0);
+  }
+
   /* Strategy-library ⓘ: more room, since a full rule set is several lines. */
   .info-icon[data-tip-wide][data-tip]:hover::after,
-  .info-icon[data-tip-wide][data-tip]:focus::after {
+  .info-icon[data-tip-wide][data-tip]:focus::after,
+  .info-tip-measure[data-tip-wide] {
     max-width: 380px;
     font-size: calc(11.5px * var(--ui-scale));
     padding: 8px 11px;
@@ -4623,7 +4820,8 @@
     border-color: var(--accent);
   }
   .resources-menu[open] summary svg { transform: rotate(180deg); }
-  .resources-list {
+  .resources-list,
+  .analytics-menu-list {
     position: absolute;
     top: calc(100% + 6px);
     right: 0;
@@ -4635,8 +4833,19 @@
     box-shadow: 0 8px 24px rgba(20, 30, 50, 0.12);
     z-index: 50;
   }
-  .resources-list a {
-    display: block;
+  .analytics-menu-list button {
+    width: 100%;
+    border: 0;
+    background: none;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .resources-list a,
+  .analytics-menu-list button {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     padding: 8px 10px;
     border-radius: 6px;
     color: var(--text);
@@ -4644,7 +4853,23 @@
     text-decoration: none;
     white-space: nowrap;
   }
-  .resources-list a:hover {
+  /* The icon before a dropdown item: a drawing from images/icons/ shown through
+     a mask, so it wears the item's own colour, hover included. */
+  .menu-icon {
+    flex: none;
+    width: calc(16px * var(--ui-scale));
+    height: calc(16px * var(--ui-scale));
+    background: currentColor;
+    -webkit-mask: var(--icon) center / contain no-repeat;
+    mask: var(--icon) center / contain no-repeat;
+  }
+  .menu-icon--comparison-grid { --icon: url("images/icons/comparison-grid.svg"); }
+  .menu-icon--years-held      { --icon: url("images/icons/years-held.svg"); }
+  .menu-icon--intraday        { --icon: url("images/icons/intraday.svg"); }
+  .menu-icon--ninesig         { --icon: url("images/icons/ninesig.svg"); }
+  .menu-icon--sma             { --icon: url("images/icons/sma.svg"); }
+  .resources-list a:hover,
+  .analytics-menu-list button:hover {
     background: rgba(134, 118, 255, 0.12);
     color: var(--accent-text);
   }

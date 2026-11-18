@@ -320,6 +320,25 @@ function updateDeployAvailability() {
 // and the tooltip would appear hidden behind the panel header. We also
 // clamp the horizontal anchor by the tooltip's worst-case half-width so
 // it can't spill past either viewport edge.
+// The tooltip opens above its icon. An icon near the top of the window (the
+// one in the years-held window's sentence) has no room there, so its tooltip
+// opens below instead ([data-tip-below], styles.css). The tooltip is a
+// ::after and has no box before it shows, so its height is read off a hidden
+// element that wears the tooltip's own styles (.info-tip-measure shares the
+// ::after's rules in styles.css) and holds the same text.
+function infoTipHeight(icon) {
+  let probe = document.getElementById('info-tip-measure');
+  if (!probe) {
+    probe = document.createElement('div');
+    probe.id = 'info-tip-measure';
+    probe.className = 'info-tip-measure';
+    probe.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(probe);
+  }
+  probe.textContent = icon.getAttribute('data-tip');
+  probe.toggleAttribute('data-tip-wide', icon.hasAttribute('data-tip-wide'));
+  return probe.offsetHeight;
+}
 function positionInfoTip(e) {
   const icon = e.target.closest && e.target.closest('.info-icon[data-tip]');
   if (!icon) return;
@@ -332,7 +351,9 @@ function positionInfoTip(e) {
   let cx = r.left + r.width / 2;
   if (maxCx > minCx) cx = Math.max(minCx, Math.min(maxCx, cx));
   icon.style.setProperty('--tip-left', cx + 'px');
-  icon.style.setProperty('--tip-top',  (r.top - 6) + 'px');
+  const below = r.top - 6 - infoTipHeight(icon) < PAD;
+  icon.toggleAttribute('data-tip-below', below);
+  icon.style.setProperty('--tip-top',  (below ? r.bottom + 6 : r.top - 6) + 'px');
 }
 document.addEventListener('mouseover', positionInfoTip);
 document.addEventListener('focusin',   positionInfoTip);
@@ -940,6 +961,25 @@ async function shareConfig() {
   }
   if (typeof analyticsYearMax !== 'undefined' && analyticsYearMax != null) {
     params.set('amp', String(analyticsYearMax));
+  }
+  // The years-held window (js/years-held.js): open or not, its lines (a saved
+  // strategy by its position, like the analytics keys above) and its start years.
+  if (typeof isYearsHeldOpen === 'function' && isYearsHeldOpen()) {
+    params.set('ym', '1');
+  }
+  if (typeof yearsHeldKeys !== 'undefined' && yearsHeldKeys.length) {
+    const sharedLines = yearsHeldKeys.map(shareAnalyticsKey).filter(Boolean);
+    if (sharedLines.length) params.set('yk', sharedLines.join(','));
+  }
+  if (typeof yearsHeldYearMin !== 'undefined' && yearsHeldYearMin != null) {
+    params.set('yn', String(yearsHeldYearMin));
+  }
+  if (typeof yearsHeldYearMax !== 'undefined' && yearsHeldYearMax != null) {
+    params.set('yx', String(yearsHeldYearMax));
+  }
+  // What its lines show, unless it is the median.
+  if (typeof yearsHeldMeasure !== 'undefined' && yearsHeldMeasure !== 'median') {
+    params.set('ys', yearsHeldMeasure);
   }
 
   // A pinned chart range-selection (drag-to-select, held with Shift so it

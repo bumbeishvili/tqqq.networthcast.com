@@ -826,6 +826,24 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
   // caller supplies one, otherwise the formula materialized once. See
   // buildFormulaSchedule's own comment (js/simulate.js).
   const schedule = opts.schedule || buildFormulaSchedule(monthly, annualRaise, qSlice[0][0], qSlice[qSlice.length - 1][0]);
+  // The schedule's dates by calendar month: 'YYYY-MM' -> the distinct dates
+  // listed in it that are trading days, ascending. Each listed transaction is
+  // applied on its own date (applyContribForMonth below, and applyMonth in
+  // every buy & hold line), so a month's dates are asked for at every month of
+  // the run, once per line. They are indexed here once: filtering the whole
+  // list on each ask made a long run quadratic — a 73-year run with monthly
+  // deposits took 100 ms, 99% of it in those filters.
+  const scheduleDatesByMonth = new Map();
+  if (typeof daily !== 'undefined' && daily && typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx && schedule.list) {
+    for (const r of schedule.list) {
+      if (!dailyDateToIdx.has(r.date)) continue;
+      const month = r.date.slice(0, 7);
+      if (!scheduleDatesByMonth.has(month)) scheduleDatesByMonth.set(month, new Set());
+      scheduleDatesByMonth.get(month).add(r.date);
+    }
+    for (const [month, dates] of scheduleDatesByMonth) scheduleDatesByMonth.set(month, [...dates].sort());
+  }
+  const NO_SCHEDULE_DATES = [];
 
   const log = [];
   // Quarter-end value snapshots for the chart, used ONLY when the rebalance
@@ -992,12 +1010,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
         // then add new money; new money doesn't retroactively earn growth
         // from earlier in the month it arrived).
         investedCompounded *= (1 + baselineMonthlyRate);
-        const canWalkDaily = typeof daily !== 'undefined' && daily &&
-          typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx;
-        const datesThisMonth = (canWalkDaily && schedule.list && schedule.list.length)
-          ? [...new Set(schedule.list.filter(r => r.date.slice(0, 7) === monthKey).map(r => r.date))]
-              .filter(d => dailyDateToIdx.has(d)).sort()
-          : [];
+        const datesThisMonth = scheduleDatesByMonth.get(monthKey) || NO_SCHEDULE_DATES;
         if (datesThisMonth.length) {
           const key = COL_TO_DAILY_KEY[ulCol];
           for (const d of datesThisMonth) {
@@ -1197,8 +1210,6 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
       });
       weekCursor = uptoExclusive;
     };
-    const canWalkDaily = typeof daily !== 'undefined' && daily &&
-      typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx;
     // Same fix as the main 9sig loop's applyContribForMonth: a real
     // transaction schedule applies EACH transaction in this calendar month at
     // its own exact date/price, not the month's aggregate at one date — a
@@ -1207,10 +1218,7 @@ function simulate(initial, monthly, annualRate, entryIdx, exitIdx, annualRaise, 
     const applyMonth = (mRow) => {
       const mEndDate = mRow[0];
       const monthKey = mEndDate.slice(0, 7);
-      const datesThisMonth = (canWalkDaily && schedule.list && schedule.list.length)
-        ? [...new Set(schedule.list.filter(r => r.date.slice(0, 7) === monthKey).map(r => r.date))]
-            .filter(d => dailyDateToIdx.has(d)).sort()
-        : [];
+      const datesThisMonth = scheduleDatesByMonth.get(monthKey) || NO_SCHEDULE_DATES;
       if (datesThisMonth.length) {
         for (const d of datesThisMonth) {
           catchUpWeeklyBH(d);

@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- SMA: a jagged price over its smooth moving average (the dashed line). -->
+  <path d="M3 15l4-6 4 5 4.5-8 3 4L21 6"/>
+  <path d="M3 19.5c6-.5 11-2.5 18-7" stroke-dasharray="0.5 3.6"/>
+</svg>

@@ -231,6 +231,18 @@
   const asRaw = params.get('as'), abRaw = params.get('ab');
   if (asRaw && !asRaw.startsWith('cfg:')) analyticsStrategy = asRaw;
   if (abRaw && !abRaw.startsWith('cfg:')) analyticsBaseline = abRaw;
+  // The years-held window's start years; its lines (yk) may name saved
+  // strategies by position and are resolved with as/ab further below.
+  const ykRaw = params.get('yk');
+  if (Object.hasOwn(YEARS_HELD_MEASURES, params.get('ys') || '')) yearsHeldMeasure = params.get('ys');
+  if (params.get('yn')) {
+    const v = parseInt(params.get('yn'), 10);
+    if (Number.isFinite(v) && v > 0) yearsHeldYearMin = v;
+  }
+  if (params.get('yx')) {
+    const v = parseInt(params.get('yx'), 10);
+    if (Number.isFinite(v) && v > 0) yearsHeldYearMax = v;
+  }
   if (params.get('act')) {
     const v = parseAmount(params.get('act'));
     if (Number.isFinite(v) && v > 0) analyticsCustomTarget = v;
@@ -337,6 +349,10 @@
     const resolved = resolveAnalyticsCfgKey(abRaw);
     if (resolved) analyticsBaseline = resolved;
   }
+  if (ykRaw) {
+    // Each line once: the window keys its numbers and its drawing by line.
+    yearsHeldKeys = [...new Set(ykRaw.split(',').map(k => k.startsWith('cfg:') ? resolveAnalyticsCfgKey(k) : k).filter(Boolean))];
+  }
 
   // Real transaction history (js/transactions.js) — a share link's `txz`/`tx`
   // wins over localStorage, same precedence as the `scz`/`sc` saved-configs
@@ -441,6 +457,8 @@
     // what would have happened live anyway.
     toggleAnalytics({ skipAutoPick: !!(asRaw || abRaw) });
   }
+  // The years-held window, with the link's lines when it carried any.
+  if (params.get('ym') === '1') toggleYearsHeld();
 
   // A pinned chart range-selection (js/chart.js's drag-to-select, held with
   // Shift so it stays visible). Shared as exact dates rather than label

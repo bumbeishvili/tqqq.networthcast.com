@@ -33,7 +33,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=538">
+<link rel="stylesheet" href="styles.css?v=539">
 </head>
 <body>
 
@@ -44,15 +44,15 @@
        and .nojekyll (added to skip the pointless build step) removed it. -->
   <p id="data-through" hidden><a href="https://github.com/bumbeishvili/tqqq.networthcast.com/blob/main/data/README.md" target="_blank" rel="noopener">Data</a> last fetched <span id="data-fetched-at"></span></p>
   <div class="header-actions">
-    <details class="resources-menu" id="resources-menu">
+    <details class="resources-menu dropdown-menu" id="resources-menu">
       <summary title="Standalone pages built on the same data" aria-label="Resources">
         <span class="resources-label">Resources</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </summary>
       <div class="resources-list">
-        <a href="experiments/tqqq-intraday.html" target="_blank" rel="noopener">TQQQ intraday</a>
-        <a href="experiments/9sig-overfit-explorer.html" target="_blank" rel="noopener">9sig overfit explorer</a>
-        <a href="experiments/sma-overfit-explorer.html" target="_blank" rel="noopener">SMA overfit explorer</a>
+        <a href="experiments/tqqq-intraday.html" target="_blank" rel="noopener"><span class="menu-icon menu-icon--intraday" aria-hidden="true"></span>TQQQ intraday</a>
+        <a href="experiments/9sig-overfit-explorer.html" target="_blank" rel="noopener"><span class="menu-icon menu-icon--ninesig" aria-hidden="true"></span>9sig overfit explorer</a>
+        <a href="experiments/sma-overfit-explorer.html" target="_blank" rel="noopener"><span class="menu-icon menu-icon--sma" aria-hidden="true"></span>SMA overfit explorer</a>
       </div>
     </details>
     <a href="https://github.com/bumbeishvili/tqqq.networthcast.com" target="_blank" rel="noopener" class="github-link" id="github-link" title="View source on GitHub" aria-label="View source on GitHub">
@@ -69,22 +69,35 @@
   <div id="share-toast">Link copied to clipboard</div>
 </div>
 <script>
-  // <details> stays open until clicked again; close the resources menu when
-  // the click lands anywhere else so it behaves like a dropdown.
+  // <details> stays open until clicked again; close a dropdown menu (the
+  // resources menu, the advanced analytics menu) when the click lands anywhere
+  // else, or on one of its buttons, so it behaves like a dropdown.
   document.addEventListener('click', (event) => {
-    const menu = document.getElementById('resources-menu');
-    if (menu.open && !menu.contains(event.target)) menu.open = false;
+    const picked = event.target.closest('details.dropdown-menu button');
+    for (const menu of document.querySelectorAll('details.dropdown-menu[open]')) {
+      if (!menu.contains(event.target) || menu.contains(picked)) menu.open = false;
+    }
+  });
+  // The advanced analytics dropdown wears the resources menu's chevron: one
+  // drawing, copied once the page is parsed, so the two cannot drift apart.
+  document.addEventListener('DOMContentLoaded', () => {
+    const chevron = document.querySelector('#resources-menu summary svg');
+    document.querySelector('#analytics-menu summary').append(chevron.cloneNode(true));
   });
 </script>
 
 <div class="layout">
   <div class="panel">
     <div class="panel-head">
-      <!-- Heading text removed by request; the empty h2 stays as the flex
-           spacer that keeps `justify-content: space-between` pushing the
-           analytics button to the right edge. -->
-      <h2></h2>
-      <button id="analytics-toggle" onclick="toggleAnalytics()">analytics grid</button>
+      <!-- Heading text removed by request. One dropdown at the right edge opens
+           the chart windows; it works as the header's Resources menu does. -->
+      <details class="analytics-menu dropdown-menu" id="analytics-menu">
+        <summary title="Charts over every start year">advanced analytics</summary>
+        <div class="analytics-menu-list">
+          <button type="button" id="analytics-toggle" onclick="toggleAnalytics()" title="Every start year by years held, as a heatmap against a comparison"><span class="menu-icon menu-icon--comparison-grid" aria-hidden="true"></span>comparison grid</button>
+          <button type="button" id="years-held-toggle" onclick="toggleYearsHeld()" title="The median CAGR for each number of years held, a line per strategy"><span class="menu-icon menu-icon--years-held" aria-hidden="true"></span>CAGR by years held</button>
+        </div>
+      </details>
     </div>
 
     <!-- The contribution controls (mode toggle, sliders, transaction summary)
@@ -306,6 +319,58 @@
     </div>
   </div>
   <div id="heatmap-tooltip" class="heatmap-tooltip" hidden></div>
+</div>
+
+<!-- Years-held window (js/years-held.js): one line per chosen strategy, the
+     median CAGR for each number of years held. Built from the analytics modal's
+     parts; the two icon buttons take their icons from that modal's at load. -->
+<div id="years-held-modal" class="modal" hidden>
+  <div class="modal-backdrop" onclick="toggleYearsHeld()"></div>
+  <div class="modal-content">
+    <div class="modal-body">
+      <div class="analytics-chart">
+        <div class="analytics-chart-header">
+          <div class="analytics-chart-title-row">
+            <div class="analytics-actions-left">
+              <button type="button" class="modal-icon-btn" id="years-held-share" onclick="shareConfig()" title="Copy share link" aria-label="Share"></button>
+              <button type="button" class="modal-icon-btn" id="years-held-download" onclick="downloadYearsHeld()" title="Download as image" aria-label="Download"></button>
+            </div>
+            <div class="analytics-sentence" id="years-held-sentence">
+              <!-- Which CAGR of the start years the lines show; js/years-held.js fills the options. -->
+              <select id="years-held-measure" class="analytics-strat-select" title="Which CAGR of the start years each point shows"></select>
+              <span class="as-text">CAGR by years held</span>
+              <!-- What a point is; js/years-held.js writes the tip, with the start years of the last build. -->
+              <span class="info-icon" id="years-held-info" tabindex="0" data-tip-wide data-capture="skip" data-tip="">ⓘ</span>
+              <span class="as-text">of</span>
+              <span id="years-held-lines" class="yh-lines"></span>
+              <span class="as-text">, with the entry amount of</span>
+              <span id="years-held-initial-slot" class="as-slot"></span>
+              <span class="as-text">and monthly investment of</span>
+              <span id="years-held-monthly-slot" class="as-slot"></span>
+              <span class="as-text">increasing yearly by</span>
+              <span id="years-held-raise-slot" class="as-slot"></span>
+              <span class="as-text">, for start years</span>
+              <span class="period-dual-range" id="years-held-year-range">
+                <span class="period-dual-range-fill" id="years-held-year-range-fill"></span>
+                <input type="range" id="years-held-year-min-input" min="2000" max="2026" step="1" value="2000">
+                <input type="range" id="years-held-year-max-input" min="2000" max="2026" step="1" value="2026">
+              </span>
+              <span id="years-held-year-range-display" class="analytics-baseline-pct-display">2000&ndash;2026</span>
+            </div>
+            <div class="analytics-chart-actions">
+              <button type="button" class="modal-close" onclick="toggleYearsHeld()" aria-label="Close">×</button>
+            </div>
+          </div>
+          <div class="analytics-progress" id="years-held-progress" hidden>
+            <div class="analytics-progress-track"><div class="analytics-progress-bar" id="years-held-progress-bar"></div></div>
+            <span id="years-held-progress-text">0 / 0</span>
+          </div>
+        </div>
+        <div id="years-held-chart" class="heatmap-wrap"></div>
+      </div>
+    </div>
+  </div>
+  <div id="years-held-tooltip" class="heatmap-tooltip" hidden></div>
 </div>
 
 <!-- Strategy Library modal (read-only catalog; strategy-library.js) -->
@@ -1378,21 +1443,23 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=538"></script>
-<script src="js/utils.js?v=538"></script>
-<script src="js/simulate.js?v=538"></script>
-<script src="js/metrics.js?v=538"></script>
-<script src="js/chart.js?v=538"></script>
-<script src="js/controls.js?v=538"></script>
-<script src="js/date-picker.js?v=538"></script>
-<script src="js/transactions.js?v=538"></script>
-<script src="js/analytics.js?v=538"></script>
-<script src="js/preview-dropdown.js?v=538"></script>
-<script src="js/signal-chart.js?v=538"></script>
-<script src="js/saved-configs.js?v=538"></script>
-<script src="js/strategy-library-code.js?v=538"></script>
-<script src="js/strategy-library.js?v=538"></script>
-<script src="js/init.js?v=538"></script>
+<script src="js/data.js?v=539"></script>
+<script src="js/utils.js?v=539"></script>
+<script src="js/simulate.js?v=539"></script>
+<script src="js/metrics.js?v=539"></script>
+<script src="js/chart.js?v=539"></script>
+<script src="js/controls.js?v=539"></script>
+<script src="js/date-picker.js?v=539"></script>
+<script src="js/transactions.js?v=539"></script>
+<script src="js/analytics.js?v=539"></script>
+<script src="js/years-held-chart.js?v=539"></script>
+<script src="js/years-held.js?v=539"></script>
+<script src="js/preview-dropdown.js?v=539"></script>
+<script src="js/signal-chart.js?v=539"></script>
+<script src="js/saved-configs.js?v=539"></script>
+<script src="js/strategy-library-code.js?v=539"></script>
+<script src="js/strategy-library.js?v=539"></script>
+<script src="js/init.js?v=539"></script>
 
 </body>
 </html>

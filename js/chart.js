@@ -4258,6 +4258,7 @@ function render() {
   refreshAllLegends();
 
   if (typeof refreshAnalytics === 'function') refreshAnalytics();
+  if (typeof refreshYearsHeld === 'function') refreshYearsHeld();
 
   fitChartHeight();
 }

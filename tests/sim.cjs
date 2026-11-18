@@ -49,7 +49,7 @@ function install(prices) { // prices: 24 monthly numbers (tqqq=qqq=spy=qld=sso=s
 })();
 
 // metrics.js is a pure module — load it directly for the IRR / daily-drawdown tests.
-const { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, computeDailyMaxDrawdown } = require('../js/metrics.js');
+const { computeMoneyWeightedReturn, buildContributionFlows, moneyWeightedCAGR, moneyWeightedReturnOfContributions, computeDailyMaxDrawdown } = require('../js/metrics.js');
 
 const A = []; let pass = true;
 const ck = (n, c, e) => { if (!c) { pass = false; A.push('  FAIL  ' + n + (e ? '   ' + e : '')); } else A.push('  ok    ' + n); };
@@ -260,6 +260,41 @@ ck('moneyWeightedCAGR(lump, no DCA) == simple CAGR (1000→2000 / 2y ≈ 41.42%)
   const mw = moneyWeightedCAGR(1000, 100, 0, start, end, yrs, finalV, monthlyData, tc);
   const simpleCagr = (Math.pow(finalV / tc, 1 / yrs) - 1) * 100;
   ck('moneyWeightedCAGR(DCA, rising) > simple end/contributed CAGR', mw > simpleCagr, 'mw ' + mw.toFixed(2) + ' vs simple ' + simpleCagr.toFixed(2));
+})();
+
+// The windowed solver (the analytics years-held chart) finds the bisection's
+// root: hand cases, then 2,000 random monthly-saver streams, each solved at
+// every whole year of its length from a deliberately poor first guess.
+ck('windowed IRR: 100 @t0 → 110 @t1 = 10%', approx(moneyWeightedReturnOfContributions([0], [100], 1, 110, 1, 0.5), 10, 1e-6));
+ck('windowed IRR: two 100 deposits → 231 @t2 = 10%', approx(moneyWeightedReturnOfContributions([0, 1], [100, 100], 2, 231, 2), 10, 1e-6));
+ck('windowed IRR: only the first `count` deposits are read', approx(moneyWeightedReturnOfContributions([0, 1, 2], [100, 100, 9999], 2, 231, 2), 10, 1e-6));
+ck('windowed IRR: no final value → null', moneyWeightedReturnOfContributions([0], [100], 1, 0, 1) === null);
+ck('windowed IRR: nothing paid in → null', moneyWeightedReturnOfContributions([0], [0], 1, 50, 1) === null);
+ck('windowed IRR: total loss to ~0 → strongly negative', moneyWeightedReturnOfContributions([0], [100], 1, 1, 1) < -90);
+(function () {
+  let seed = 7; const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296; };
+  let worstVsBisection = 0, worstResidual = 0, compared = 0, solved = 0, noRoot = 0, onlyWindowed = 0, onlyBisection = 0;
+  for (let c = 0; c < 2000; c++) {
+    const years = 1 + Math.floor(rnd() * 50), initial = rnd() < 0.3 ? 0 : Math.round(rnd() * 100000), monthly = Math.round(rnd() * 2000) + 1;
+    const times = [0], amounts = [initial];
+    for (let m = 1; m <= years * 12; m++) { times.push(m / 12); amounts.push(monthly * Math.pow(1.03, Math.floor(m / 12))); }
+    const paid = amounts.reduce((s, a) => s + a, 0);
+    for (let y = 1; y <= years; y++) {
+      const count = 1 + y * 12, finalValue = paid * (y / years) * Math.pow(10, rnd() * 5 - 2.5);   // from a 99.7% loss to a 300-fold gain
+      const flows = times.slice(0, count).map((t, k) => ({ t, cf: -amounts[k] })).concat({ t: y, cf: finalValue });
+      const slow = computeMoneyWeightedReturn(flows), fast = moneyWeightedReturnOfContributions(times, amounts, count, finalValue, y, rnd() * 4 - 0.9);
+      if (fast == null) { if (slow == null) noRoot++; else onlyBisection++; continue; }
+      // The rate must grow the contributions to the final value, whatever the bisection says.
+      let grown = 0; for (let k = 0; k < count; k++) grown += amounts[k] * Math.pow(1 + fast / 100, y - times[k]);
+      worstResidual = Math.max(worstResidual, Math.abs(grown / finalValue - 1)); solved++;
+      // The bisection's low bracket end overflows on long windows with large values and it gives up there.
+      if (slow == null) { onlyWindowed++; continue; }
+      worstVsBisection = Math.max(worstVsBisection, Math.abs(slow - fast)); compared++;
+    }
+  }
+  ck('windowed IRR grows the contributions to the final value on ' + solved + ' random windows', worstResidual < 1e-8, 'largest relative miss ' + worstResidual);
+  ck('windowed IRR == bisection IRR on the ' + compared + ' windows the bisection solves', worstVsBisection < 1e-4 && onlyBisection === 0,   // points: the bisection stops on a dollar tolerance, so the two differ in the sixth decimal
+    'largest difference ' + worstVsBisection + ' points; no root in either ' + noRoot + ', windowed only ' + onlyWindowed + ', bisection only ' + onlyBisection);
 })();
 
 // ----- #3 daily-sampled max drawdown -----

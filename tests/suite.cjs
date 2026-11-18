@@ -308,6 +308,7 @@ async function run() {
       return filled === tds.length && prog && prog.hasAttribute('hidden');
     }, { timeout: 60000 });
   };
+  await page.click('#analytics-menu summary');   // the grid opens from the "advanced analytics" dropdown
   await page.click('#analytics-toggle');
   await page.waitForSelector('#analytics-modal:not([hidden])');
   await waitHeatmap();

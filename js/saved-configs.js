@@ -1283,6 +1283,24 @@ function customWorkerMain() {
       var res = mod.run(DATA, p);
       var rawLog = Array.isArray(res) ? res : (res && Array.isArray(res.log) ? res.log : null);
       if (!rawLog) throw new Error('Your function must return an array of { date, value } (or { log: [...] }).');
+      // A caller that reads only each row's value asks for that alone
+      // (answer: 'values' — the analytics windows' pooled runs). A full-history
+      // answer is megabytes of rows, holdings and lines, and the main thread
+      // unpacks answers one at a time, so the whole answer made a pool of
+      // workers little faster than one. The rows kept are the ones the full
+      // answer's log keeps: a primitive date, a numeric value.
+      if (msg.answer === 'values') {
+        var values = [];
+        for (var vi = 0; vi < rawLog.length; vi++) {
+          var vr = rawLog[vi]; if (!vr || vr.date == null) continue;
+          var vd = typeof vr.date;
+          if ((vd === 'number' || vd === 'string' || vd === 'boolean') && typeof vr.value === 'number') values.push({ date: vr.date, value: vr.value });
+        }
+        // Whether the strategy brings its own money rides along: the caller
+        // must know those values answer to deposits of the strategy's own.
+        self.postMessage({ reqId: msg.reqId, log: values, money: mod.money === 'own' ? 'own' : null });
+        return;
+      }
       var log = [];
       for (var li = 0; li < rawLog.length; li++) {
         var row = rawLog[li]; if (!row || row.date == null) continue;
@@ -3404,6 +3422,8 @@ const _fitNotes = {};
 
 // Sandbox workers sharing a job queue; run() resolves with the worker's
 // message, or null when the run failed, timed out or the pool was closed.
+// run(code, globals, rawParams, answer): answer 'values' asks the worker for
+// each row's date and value alone (see customWorkerMain).
 function fitPool() {
   const size = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
   const data = buildCustomData();
@@ -3418,13 +3438,13 @@ function fitPool() {
       const timer = setTimeout(() => { slot.w.terminate(); slot.w = spawn(); slot.finish(null); }, FIT_JOB_TIMEOUT_MS);
       slot.finish = (msg) => { clearTimeout(timer); slot.finish = null; job.resolve(msg); pump(); };
       slot.w.onmessage = (e) => { if (e.data && e.data.reqId === reqId && slot.finish) slot.finish(e.data.error ? null : e.data); };
-      slot.w.postMessage({ type: 'run', reqId, code: job.code, globals: job.globals, rawParams: job.rawParams });
+      slot.w.postMessage({ type: 'run', reqId, code: job.code, globals: job.globals, rawParams: job.rawParams, answer: job.answer });
     }
   };
   return {
-    run: (code, globals, rawParams) => new Promise(resolve => {
+    run: (code, globals, rawParams, answer) => new Promise(resolve => {
       if (closed) { resolve(null); return; }
-      queue.push({ code, globals, rawParams, resolve });
+      queue.push({ code, globals, rawParams, answer, resolve });
       pump();
     }),
     close: () => {

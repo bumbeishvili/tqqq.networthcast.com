@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#000" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- CAGR by years held: two axes and a line that falls, then flattens. -->
+  <path d="M4 4v16h16"/>
+  <path d="M8 6.5c2 5.5 5 8 11.5 9"/>
+</svg>
