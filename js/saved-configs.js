@@ -725,7 +725,8 @@ log makes a useless table: fill in everything that applies, because each key bec
   Use stable key names (assetPrice, parkPrice) rather than ticker-specific ones, since the ticker is
   a dropdown.
 - Number formatting follows the key name: a key containing "price" prints as a price, "share" as a
-  share count, "pct" as a percentage, anything else as dollars. Name keys accordingly.
+  share count, "pct" as a percentage, anything else as dollars. Name keys accordingly. A key you
+  also draw as a chart line with unit: "%" or unit: "num" (see lines below) prints in that unit.
 
 action vocabulary (lowercase, exactly these words; the app draws chart markers and filters from them):
   "start"        — the opening snapshot on your first simulated day
@@ -3812,21 +3813,28 @@ function toggleCustomLogEase(hide) {
   if (body) body.querySelectorAll('.custom-log-wrap').forEach(w => w.classList.toggle('hide-dca', _customLogHideEase));
 }
 
-// Format one cell by key name: "price" → a price, "share"/"unit"/"qty" → a share
-// count, "pct"/"percent" → a percentage, anything else numeric → dollars. The
-// build prompt spells this rule out, so strategies name their keys for it.
-function fmtCustomLogCell(k, v) {
+const fmtLogSignedPercent = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
+
+// Format one cell. A key the strategy also draws as a chart line in percent or
+// as a plain reading (`unit`: "%" or "num", e.g. a lead, an RSI, the NFCI)
+// prints in that unit. Otherwise by key name: "price" → a price,
+// "share"/"unit"/"qty" → a share count, "pct"/"percent" → a percentage,
+// anything else numeric → dollars. The build prompt spells this rule out, so
+// strategies name their keys for it.
+function fmtCustomLogCell(k, v, unit) {
   if (v == null || v === '') return '';
   const lk = String(k).toLowerCase();
   if (lk === 'date') return (typeof fmtLogDate === 'function') ? fmtLogDate(String(v)) : _escHtml(v);
   if (typeof v === 'boolean') return v ? 'yes' : 'no';
   if (typeof v === 'number') {
     if (!Number.isFinite(v)) return '—';
+    if (unit === '%') return fmtLogSignedPercent(v);
+    if (unit === 'num') return (v < 0 ? '−' : '') + String(+Math.abs(v).toFixed(2));
     // Price-like keys keep per-share precision — that covers the indicator
     // levels a strategy logs alongside the price it compared them against.
     if (/price|sma|ema|median|avg|mean/.test(lk)) return v > 0 ? ((typeof fmtLogPrice === 'function') ? fmtLogPrice(v) : '$' + v.toFixed(2)) : '—';
     if (lk.includes('share') || lk.includes('unit') || lk.includes('qty')) return (typeof fmtLogShares === 'function') ? fmtLogShares(v) : String(+v.toFixed(2));
-    if (lk.includes('pct') || lk.includes('percent')) return (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
+    if (lk.includes('pct') || lk.includes('percent')) return fmtLogSignedPercent(v);
     if ((lk.includes('contrib') || lk.includes('deposit') || lk === 'fee') && v === 0) return '';
     return (typeof fmtFull === 'function') ? fmtFull(Math.round(v)) : String(Math.round(v));
   }
@@ -3837,8 +3845,11 @@ function fmtCustomLogCell(k, v) {
 // rows, a tooltip on every column header, colour-coded actions with the gain
 // since the previous row, checkboxes to collapse contribution / ease-in rows,
 // and trade rows wired to their chart marker (data-mkey, handled in chart.js).
-function buildCustomLogTableHtml(log, columns) {
+// `lines` are the chart lines the strategy declared: a key drawn in percent or
+// as a plain reading prints that way in the table too.
+function buildCustomLogTableHtml(log, columns, lines) {
   if (!log || !log.length) return '';
+  const lineUnit = Object.fromEntries((lines || []).filter(ln => ln && (ln.unit === '%' || ln.unit === 'num')).map(ln => [ln.key, ln.unit]));
   // Column metadata: built-ins, overridden by whatever the strategy declared.
   const meta = {};
   for (const k in CUSTOM_LOG_COLS) meta[k] = CUSTOM_LOG_COLS[k];
@@ -3890,7 +3901,7 @@ function buildCustomLogTableHtml(log, columns) {
     const cls = hasMarker ? 'log-row-mk' : kind === 'contribution' ? 'log-row-contrib' : kind === 'ease' ? 'log-row-dca' : '';
     const trAttr = (cls ? ` class="${cls}"` : '') + (hasMarker ? ` data-mkey="${i}"` : '');
     const cells = keys.map(k => {
-      if (k !== 'action') return `<td>${fmtCustomLogCell(k, row ? row[k] : null)}</td>`;
+      if (k !== 'action') return `<td>${fmtCustomLogCell(k, row ? row[k] : null, lineUnit[k])}</td>`;
       // Action cell: the strategy's own label, coloured by kind, with the gain
       // since the previous row — the same treatment the SMA log gives it.
       const label = (typeof customActionLabel === 'function') ? customActionLabel(row && row.action) : _escHtml((row && row.action) || '');
@@ -4088,7 +4099,7 @@ function renderCustomPanelBody(cfgId) {
   const _cLog = (window._customLogs || {})[cfgId] || [];
   html += buildCustomSignalMetricsHtml((window._customSignals || {})[cfgId] || null,
                                        _cLog.length ? _cLog[_cLog.length - 1].date : null);
-  html += buildCustomLogTableHtml(_cLog, (window._customColumns || {})[cfgId] || null);
+  html += buildCustomLogTableHtml(_cLog, (window._customColumns || {})[cfgId] || null, auxLines);
   // Its explanation with the current settings (`explain`), after the log as the 9sig panel had it.
   const explain = (window._customExplain || {})[cfgId];
   if (!err && explain) html += buildExplainHtml(explain);

@@ -35,13 +35,13 @@ const STRATEGY_LIBRARY = [
   { n: 6, name: 'Alvarez composite', formerNames: ['Alvarez UPRO/TQQQ composite'], tag: 'composite', runnable: false, needs: 'VIX',
     rules: 'Monthly. Gates: VIX≤25 · S&P>200-day MA · VWO mom>0 · BND mom>0. All true → 50% UPRO+50% TQQQ. 1–2 false → 50% QQQ+50% SPY. 3–4 false → 100% TLT.',
     here: '—', reported: '24.4% CAR · −54% DD (2010–2023)', src: 'ALV' },
-  { n: 7, name: 'Antonacci dual momentum', formerNames: ['Antonacci Dual Momentum → LETF sleeve (GEM)'], tag: 'momentum', runnable: true,
+  { n: 7, name: 'Bare dual momentum', formerNames: ['Antonacci dual momentum', 'Antonacci Dual Momentum → LETF sleeve (GEM)'], tag: 'momentum', runnable: true,
     rules: 'Each month end, pick the stronger of SPY and QQQ over 430 trading days. Enter: it beat T-bills → SPY if SPY led, TQQQ if QQQ led. Exit: it did not → GLD. Switch: sell today, buy tomorrow. Freq: monthly.',
     here: '—', reported: 'Widely-cited momentum framework; LETF amplifies premium + whipsaw · T-bills here are the cash interest setting · defaults fitted to 2010–2025 and rounded: 41.5% a year, max drawdown 70% (published settings: 30.1%, 76%)', src: 'QP' },
   { n: 8, name: 'Siegel 200-day ±1% band', tag: 'origin', runnable: true,
     rules: 'Signal: SPY vs its 145-day average with a ±3.5% band. Enter: SPY closes 3.5% above → TQQQ. Exit: SPY closes 3.5% below → cash. Freq: daily.',
     here: '—', reported: 'Origin of the whipsaw-buffer idea (DJIA 1886–2006) · defaults fitted to 2010–2025 and rounded: 37.7% a year, max drawdown 59% (published settings: 27.8%, 66%)', src: 'F' },
-  { n: 10, name: 'QQQ 200-day → TQQQ', formerNames: ['QQQ 200-day → TQQQ (matched index, cash park)'], tag: 'app', runnable: true,
+  { n: 10, name: 'Bare trend line', formerNames: ['QQQ 200-day → TQQQ', 'QQQ 200-day → TQQQ (matched index, cash park)'], tag: 'app', runnable: true,
     rules: 'Signal: QQQ vs its 160-day median → trade TQQQ. Enter: above → TQQQ. Exit: below → cash. Freq: daily.',
     here: '32.8% / −55.9%', reported: "The app's canonical SMA config · defaults fitted to 2010–2025 and rounded: 36.7% a year, max drawdown 55% (published settings: 30.2%, 56%)", src: 'F·BH' },
   { n: 12, name: 'SSO/SHY 200-day rotation', formerNames: ['SSO/SHY 200-day own-price rotation (2×)'], tag: 'app', runnable: true,
@@ -65,10 +65,10 @@ const STRATEGY_LIBRARY = [
   { n: 18, name: '40-week SMA crossover', formerNames: ['40-week SMA crossover → TQQQ'], tag: 'crossover', runnable: true,
     rules: 'Signal: QQQ’s weekly close vs its 495-day median. Enter: above → TQQQ. Exit: below → cash. Freq: weekly.',
     here: '—', reported: '+2,800% (Petrou comparison window) · defaults fitted to 2010–2025 and rounded: 35.7% a year, max drawdown 72% (published settings: 31.3%, 62%)', src: 'MACD' },
-  { n: 19, name: 'Golden cross 50/200', formerNames: ['Golden / Death Cross 50/200'], tag: 'crossover', runnable: true,
+  { n: 19, name: 'Bare golden cross', formerNames: ['Golden cross 50/200', 'Golden / Death Cross 50/200'], tag: 'crossover', runnable: true,
     rules: 'Enter: QQQ’s 75-day median crosses above its 335-day median → TQQQ. Exit: it crosses below → cash. Freq: daily.',
     here: '35.6% / −69.9%', reported: 'Classic MA-crossover; slower than price-vs-200 · defaults fitted to 2010–2025 and rounded: 43.1% a year, max drawdown 70% (published settings: 32.1%, 70%)', src: 'GS' },
-  { n: 20, name: 'Volatility targeting', formerNames: ['Volatility targeting (scale leverage to target vol)'], tag: 'risk', runnable: true,
+  { n: 20, name: 'Bare volatility targeting', formerNames: ['Volatility targeting', 'Volatility targeting (scale leverage to target vol)'], tag: 'risk', runnable: true,
     rules: 'Each month, hold the share of TQQQ that makes the holding swing about 65% a year, measured over the last 10 days; the rest in cash. Freq: monthly.',
     here: '—', reported: 'Reduces tail risk without binary exits (QuantConnect) · defaults fitted to 2010–2025 and rounded: 42.6% a year, max drawdown 75% (published settings: 26.3%, 38%)', src: 'QC' },
   { n: 21, name: 'VIX-scaled leverage ladder', tag: 'risk', runnable: false, needs: 'VIX',
@@ -88,7 +88,7 @@ const STRATEGY_LIBRARY = [
     here: '39.5% / −58.7%', reported: '+6.91% avg holding QQQ vs bonds in downturns; app-implemented · defaults fitted to 2010–2025 and rounded: 41.3% a year, max drawdown 59% (published settings: 36.6%, 59%)', src: 'HW' },
   // --- hand-picked (tag 'picked'): my own, not from a published write-up. No
   // `src`, so the card title renders as plain text instead of a dead link. ---
-  { n: 26, name: 'Median overextension 250d', tag: 'picked', runnable: true,
+  { n: 26, name: 'Bare overextension', formerNames: ['Median overextension 250d'], tag: 'picked', runnable: true,
     rules: 'Signal: traded fund vs the MEDIAN of its own last 250 closes. Exit: price > 55% above the median → park (cash by default). Enter: any time it is not. Freq: daily. Overextension filter only — there is no downside rule, so it holds all the way through every crash.',
     here: '62.4% / −79.1%', reported: 'Hand-picked; numbers are this app’s own backtest, not an external claim' },
   { n: 39, name: 'SSO overheat exit', formerNames: ['Overheat exit \u2014 SSO signal (sell when stretched)'], tag: 'picked', runnable: true,
@@ -227,17 +227,88 @@ STRATEGY_LIBRARY.push({
 // library lacked): a calendar rule and a price-channel trend rule, neither mechanism present before.
 // Defaults fitted to 2010-2025 (js/strategy-library-code.js); the published settings' numbers are in the card.
 STRATEGY_LIBRARY.push({
-  n: 55, name: 'Seasonal TQQQ', tag: 'academic', runnable: true, src: 'HAL',
+  n: 55, name: 'Bare seasonal', formerNames: ['Seasonal TQQQ'], tag: 'academic', runnable: true, src: 'HAL',
   rules: 'Hold TQQQ by the calendar, decided at each close from the calendar alone: TQQQ while tomorrow is inside the window, cash (or QQQ) outside it.\n\nThe season: from the first trading day of October to the last trading day of July, out for August and September. The published form is the Halloween indicator, November to April.\nThe turn of the month: TQQQ through the last trading day of each month and the first three of the next.\n\nA switch between TQQQ and QQQ takes two days: sell at one close, buy at the next.',
   here: '\u2014',
   reported: 'Bouman and Jacobsen (2002): November to April beat May to October in 36 of 37 markets since 1970; Lakonishok and Smidt (1988): the last and first few trading days carry most of a month\u2019s return. On TQQQ, $100K lump sum: the Halloween months November to April with cash made 15.3% a year 2010\u20132025 (max drawdown 70%), with QQQ outside the window 25.1% (71%); the turn of the month, last 1 and first 3 days, 9.2% (39%); buy & hold TQQQ 39.6% (82%). Defaults fitted to 2010\u20132025 over every start and end month pair and both parking choices: October to July with cash, 43.3% a year, max drawdown 75%; 2010\u201317 46.6%, 2018\u201325 39.4%; 2026 to date \u221217%; on the reconstruction, 1983\u20132009 6.0% and 1953\u20131982 13.8%. The fit says little more than "stay in except August and September": 10 months of 12 in TQQQ, 33 trades in 16 years. The turn pattern\u2019s own fit ran to "nearly every day in", so its defaults stay the published 1 and 3.' },
 {
-  n: 56, name: 'Donchian breakout + ATR stop', tag: 'crossover', runnable: true, src: 'TRT',
+  n: 56, name: 'Bare Donchian breakout', formerNames: ['Donchian breakout + ATR stop'], tag: 'crossover', runnable: true, src: 'TRT',
   rules: 'Buy TQQQ when it closes above its highest close of the last 15 days. Sell when it closes under its lowest close of the last 100 days, or under a trailing stop a set number of average daily moves below its highest close since the buy (off by default). Cash while out.\n\nThe channels and the average move read closes only, so the rule is the same on every day of the chart. Its position before the Entry is replayed, so a moved Entry inside a trend starts long.',
   here: '\u2014',
   reported: 'The Turtle rules (Dennis and Eckhardt, 1983; Curtis Faith, Way of the Turtle): buy a 20- or 55-day breakout, exit a 10- or 20-day low or a stop two true ranges below the peak. On TQQQ at the close, $100K lump sum, 2010\u20132025: 55/20 with a 3-move stop 3.0% a year (max drawdown 39%), 55/20 without the stop 13.1% (46%), 20/10 with a 2-move stop 9.2% (41%); buy & hold TQQQ 39.6% (82%). Defaults fitted to 2010\u20132025 over the option grids (coarse, then every option around the best): a 15-day breakout, a 100-day exit, no stop, 37.6% a year, max drawdown 81%; 2010\u201317 36.1%, 2018\u201325 38.2%; 2026 to date \u221211%; on the reconstruction, 1983\u20132009 12.5% and 1953\u20131982 19.4%. Every stop setting cut the return: the stop sells TQQQ\u2019s ordinary swings. 31 trades in 16 years.' });
 // The user (2026-11-09): the two sit at the top of the catalog's second page, after the first eight.
 STRATEGY_LIBRARY.splice(8, 0, ...STRATEGY_LIBRARY.splice(STRATEGY_LIBRARY.length - 2, 2));
+
+// #57-#60, the bare entries (the user, 2026-11-20: "I want the bare strategies to be added separately
+// in strategy library, and add bare in their naming ... the idea is to explore simplest form of them
+// and see how they are working in current market"): one rule of the picked strategies each, with
+// nothing around it (js/strategy-library-code.js bareStrategy). Pushed after the move above, so they
+// stay together at the end of the catalog. Numbers: this app's backtest,
+// $100K lump sum, Q1 2010 to Q4 2025, then 2026 to 18 November.
+// The same day the user asked for the basic rules of every library strategy as bare entries ("in some
+// case you might just need to rename"): #7, #10, #19, #20, #26, #55 and #56 above were one rule
+// already and took "Bare" into their names where they stand; #61-#70 below are the rules that existed
+// only inside bigger strategies (numbers to 19 November 2026).
+// Three of the first four can hold another fund in place of cash (the user, 2026-11-20: "have an option to
+// keep other, like qqq, or gld"); their cards end with this line.
+const bareOtherFundRules = 'As a setting, QQQ, GLD or another fund is held in place of cash. A switch between two funds sells at one close and buys at the next.';
+STRATEGY_LIBRARY.push(
+  { n: 57, name: 'Bare Turnaround Monday', tag: 'bare', runnable: true,
+    rules: 'Hold cash. When TQQQ closes a Monday under the prior day’s low, buy TQQQ. Sell at the first close above the prior day’s high.\n\n' + bareOtherFundRules,
+    here: '—',
+    reported: 'The Turnaround Monday rule that the “+ Turnaround Monday” strategies trade in their idle cash, here on its own. Q1 2010 to Q4 2025, cash at 4% a year: 28.5% a year (max drawdown 32%, worst 12 months −17%) against 40.0% (82%) for buy & hold TQQQ; 24.1% with cash earning nothing. In TQQQ on 12% of days: 151 trades, 79% of them up, TQQQ +2.6% a trade. 2010–17 26.1%, 2018–25 30.8%. January to 18 November 2026: up 26.5%, 9 trades, 7 up. With the prior close as both levels: 27.6% a year (29%), 301 trades, 75% up, +1.3% a trade, 2026 up 3.5%. With another buying day, same years: Tuesday 26.1% (47%), Wednesday 17.7% (53%), Thursday 7.5% (55%), Friday 16.0% (51%). With QQQ held between trades the purchase comes a day after the Monday, and a trade over by then is skipped: 21.4% a year (42%), 117 trades, +1.7% a trade, against 18.7% for QQQ alone; with both legs at one close 34.5% (36%). With GLD: 19.0% (31%). On the reconstructed prices 1985–2009: 35.1% a year with an 80% drawdown.' },
+  { n: 58, name: 'Bare credit veto', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ. Go to cash while credit stress (the Chicago Fed’s NFCI) is above 0.4, and buy back when it is at or under it. Each weekly reading is used a week after its week ends.\n\n' + bareOtherFundRules,
+    here: '—',
+    reported: 'The credit rule of NFCI veto and the strategies built on it, here on its own. The index last read above 0.4 in August 2009 and its highest since 2010 is 0.07 (April 2020, as first published), so from 2010 this is buy & hold TQQQ: 40.0% a year, max drawdown 82%, no trade through 18 November 2026. With the level at 0 it was out once, 3 to 17 April 2020, while TQQQ rose 57%: 36.1% a year. At −0.3 it was out 9 times and TQQQ fell during one: 31.6% (70%). Where it earned its place, on the reconstructed prices: 2007–2009 32.0% a year (max drawdown 32%) against −25.0% (95%) for TQQQ held; 1971–2009 5.9% a year against −2.2%.' },
+  { n: 59, name: 'Bare month-end dip', tag: 'bare', runnable: true,
+    rules: 'Hold cash. At the close of the 5th to last trading day of a month, buy TQQQ if it is 30% to 50% under its 1-year high. Sell at the close of the next month’s first trading day.\n\n' + bareOtherFundRules,
+    here: '—',
+    reported: 'The Month-end dip rule of SOXL, TQQQ, QQQ - 1983 fit, here on its own. Q1 2010 to Q4 2025, cash at 4% a year: 12.8% a year (max drawdown 23%) against 40.0% (82%) for buy & hold TQQQ; 8.5% with cash earning nothing. In TQQQ on 2% of days: 19 trades, 17 up, TQQQ +7.6% a trade. 2010–17 11.4%, 2018–25 14.1%. The last trade: 24 April to 1 May 2025, +8.9%. January to 18 November 2026: no trade. With QQQ held between trades: 23.8% a year (34%) against 18.7% for QQQ alone, the 19 trades +6.9% each, bought a day later; with GLD 15.8% (46%) against 8.5% for GLD alone. On the reconstructed prices 1985–2009: 13.5% a year (27%).' },
+  { n: 60, name: 'Bare big days', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ. After it rises 15% or more in a day, sell and buy back at the next close.\n\nAs a setting, the other half: hold cash, and after TQQQ falls 15% or more in a day, buy it and sell at the next close.',
+    here: '—',
+    reported: 'The Big days rule of the “+ Turnaround Monday” strategies and SOXL, TQQQ, QQQ - 1983 fit, here on its own. Q1 2010 to Q4 2025: 47.6% a year (max drawdown 83%) against 40.0% (82%) for buy & hold TQQQ. Nine sales: TQQQ fell the next day after seven of them and moved −8.3% on average over the nine. Five of the nine were in March 2020; with those five undone, 40.5%. 2010–17 47.8%, the same as TQQQ (no such day); 2018–25 47.5% against 32.6%. The last sale: 9 April 2025 (+35.2%, then −12.3%). January to 18 November 2026: no such day. The other half, from cash: 6.9% a year with cash at 4% (2.8% with cash earning nothing), 7 trades, 5 up, TQQQ +7.5% a trade; in 2026 one, bought on 5 November after −18.9%, +3.5% the next day.' },
+  { n: 61, name: 'Bare crash exit', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ. Sell to cash when it closes 28% under its 250-day median while the median is rising less than 20% a year and it has closed under the median 10 days in a row. Buy back at the first close above that level.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The crash exit of NFCI veto and Overextension + crash exit, here on its own. Q1 2010 to Q4 2025: 45.5% a year (max drawdown 70%, worst 12 months −48%) against 40.0% (82%) for buy & hold TQQQ. Out 5 times; TQQQ fell during one, and moved −6.7% on average while out. 2010–17 45.7%, 2018–25 45.2%. The last time out ended on 20 January 2023. January to 19 November 2026: in TQQQ throughout, −6.5%.' },
+  { n: 62, name: 'Bare sell line', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ. Sell on the first close 3% under its 250-day median. Buy back after five closes in a row above that line.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The sell line of SQQQ stretch + buy-back, here on its own, without its earlier way back after deep corrections and without its buy-back line. Q1 2010 to Q4 2025: 35.1% a year (max drawdown 53%, worst 12 months −39%) against 40.0% (82%) for buy & hold TQQQ. Sold 19 times; TQQQ fell during two, and moved +5.5% on average while sold. 2010–17 31.3%, 2018–25 39.1%. January to 19 November 2026: −2.7% against −6.5%; sold since 2 November.' },
+  { n: 63, name: 'Bare buy-back line', tag: 'bare', runnable: true,
+    rules: 'Hold cash. Buy TQQQ at the first close 34% under its 250-day median. Sell at the first close above the sell line, 3% under the median.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The buy-back line of SQQQ stretch + buy-back as a trade of its own. There it only acts while the sell line has sold, and the TQQQ it buys is kept; here the trade ends at the first close back above the sell line, the stretch the buy-back adds. Without that strategy’s stop on the buy. Q1 2010 to Q4 2025, cash at 4% a year: 16.5% a year (max drawdown 62%) against 40.0% (82%) for buy & hold TQQQ. In TQQQ on 9% of days: 6 trades, 5 up, TQQQ +43.2% a trade. 2010–17 9.1%, 2018–25 24.3%. The last trade ended on 14 May 2025. January to 19 November 2026: no trade.' },
+  { n: 64, name: 'Bare ceiling', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ. When its lead over QQQ, counted from their average price 1.9 to 2.4 years ago, reaches 123%, step aside to cash. Go back once the lead is down to 28%.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The ceiling of SOXL, TQQQ, QQQ - 1983 fit, with its settings, here on its own. The full strategy holds SQQQ for a set number of days at the ceiling; here it is cash unless another fund is picked. Q1 2010 to Q4 2025: 67.2% a year (max drawdown 70%, worst 12 months −52%) against 40.0% (82%) for buy & hold TQQQ. Aside 5 times; TQQQ fell during all five, by 40.1% on average. 2010–17 60.1%, 2018–25 74.6%. The last time aside ended on 8 April 2025. January to 19 November 2026: in TQQQ throughout, −6.5%.' },
+  { n: 65, name: 'Bare floor', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ. When its lead over QQQ, counted from their average price 1.9 to 2.4 years ago, falls under 6%, sell to cash. Buy back after 10 closes in a row at 35% or more, or within 20 days after 3 closes in a row at 8% or more.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The floor of SOXL, TQQQ, QQQ - 1983 fit, with its settings and its way back, here on its own: no deep buy, no Monday or month-end trades in the cash. Q1 2010 to Q4 2025: 20.7% a year (max drawdown 85%, worst 12 months −75%) against 40.0% (82%) for buy & hold TQQQ. Sold 4 times; TQQQ rose during all four, by 96.6% on average: alone, the floor waits out most of each recovery. 2010–17 40.2%, 2018–25 3.8%. January to 19 November 2026: −6.5%; the floor broke on 19 November.' },
+  { n: 66, name: 'Bare deep buy', tag: 'bare', runnable: true,
+    rules: 'Hold cash. Once TQQQ’s lead over QQQ, counted from their average price 1.9 to 2.4 years ago, has fallen under 6%, buy TQQQ at the first close with the lead at −30.5% or lower. Sell once the lead is back at 35%.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The deep buy of SOXL, TQQQ, QQQ - 1983 fit as a trade of its own. There it only acts while the floor is broken, and the TQQQ it buys is kept; here the trade ends once the lead is back at the re-entry level, the stretch the deep buy adds. Without that strategy’s guard on the buy. Q1 2010 to Q4 2025, cash at 4% a year: 24.8% a year (max drawdown 43%, worst 12 months −18%) against 40.0% (82%) for buy & hold TQQQ. In TQQQ on 19% of days: 3 trades, all up, TQQQ +198% a trade. 2010–17 9.1%, 2018–25 42.7%. The last trade ended on 3 July 2024. January to 19 November 2026: no trade; armed since the floor broke on 19 November.' },
+  { n: 67, name: 'Bare SOXL lead', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ. Hold SOXL instead from the first close with SOXL’s lead over SOXX, its growth over 380 trading days against SOXX’s, under −33% until the first close with it over 101%. A switch sells at one close and buys at the next.',
+    here: '\u2014',
+    reported: 'The “SOXL instead of TQQQ” rule of SOXL, TQQQ, QQQ - 1983 fit, with its settings, here on its own. Q1 2010 to Q4 2025: 53.0% a year (max drawdown 87%, worst 12 months −85%) against 40.0% (82%) for buy & hold TQQQ. In SOXL 5 times; SOXL did better than TQQQ over three of them, by 27.9% on average over the five. 2010–17 55.0%, 2018–25 51.0%. January to 19 November 2026: up 172.2% against −6.5%; in TQQQ since 7 May.' },
+  { n: 68, name: 'Bare RSI overheat', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ. When QQQ’s RSI(10) reaches 85, sell to cash. Buy back once it is under 60.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The overheat exit and cool gate of 200-day SMA + RSI, also in the SMA panel and Composer TQQQ-RSI with other numbers, here on its own. Q1 2010 to Q4 2025: 44.0% a year (max drawdown 82%) against 40.0% (82%) for buy & hold TQQQ. Out 13 times; TQQQ fell during ten, and moved −3.2% on average while out. 2010–17 50.8%, 2018–25 37.6%. January to 19 November 2026: −2.1% against −6.5%.' },
+  { n: 69, name: 'Bare RSI(2) dip-buy', tag: 'bare', runnable: true,
+    rules: 'Hold cash. Buy TQQQ when QQQ’s RSI(2) drops under 20. Sell once it is over 95.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The entry and exit of Connors RSI(2) dip-buy without its trend filter. Q1 2010 to Q4 2025, cash at 4% a year: 42.9% a year (max drawdown 69%, worst 12 months −58%) against 40.0% (82%) for buy & hold TQQQ. In TQQQ on 65% of days: 135 trades, 78% up, TQQQ +5.1% a trade. 2010–17 32.7%, 2018–25 53.8%. January to 19 November 2026: −26.2% against −6.5%.' },
+  { n: 70, name: 'Bare MACD', tag: 'bare', runnable: true,
+    rules: 'Hold TQQQ while QQQ’s MACD (12, 26, 9) is above its signal line and above zero. Cash otherwise.\n\n' + bareOtherFundRules,
+    here: '\u2014',
+    reported: 'The signal of Petrou weekly MACD without its trailing stop. Q1 2010 to Q4 2025, cash at 4% a year: 20.9% a year (max drawdown 38%, worst 12 months −36%) against 40.0% (82%) for buy & hold TQQQ. In TQQQ on 43% of days: 144 trades, 47% up, TQQQ +2.3% a trade. 2010–17 15.8%, 2018–25 26.2%. January to 19 November 2026: up 45.0% against −6.5%.' });
 
 const STRATEGY_SRC_LINKS = {
   HAL: 'https://papers.ssrn.com/sol3/papers.cfm?abstract_id=76248',
