@@ -4361,6 +4361,157 @@ ${MONTH_END_LINES_SNIPPET}      const at = res.lines.findIndex(l => l.group === 
 }
 CODE[53] = withMonthEndDip(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", day: 5, under: 30, underMax: 50, sellDay: 1 });
 
+// ===== #53: a bear exit in place of the floor (the user, 2026-11-20: "can't we
+// use nfci strategy rule, where we only sell in prolonged bear markets", then
+// "ok do it"). That day the lead closed in on the floor and the floor's sale of
+// 30 March 2026, at the user's floor of 11%, had missed a 41% rise in two
+// weeks; nothing tested could tell a floor break that goes on from one that
+// reverses (about 900 variants), and the asks were a simpler strategy with no
+// more drawdown.
+//
+// The exit is the price exit of the NFCI strategy (#44), on this strategy's
+// own median: sold from the first close a set share under the median, while
+// the median has risen less than a set rate over three months and TQQQ has
+// closed under it a set number of days in a row; bought back at the first
+// close above that level.
+//
+// It ships at the user's settings (2026-11-21: "review and push with these
+// settings"): 26% under the median, the median lower than three months before
+// (a rise under 0% a year), 10 closes under it. Since 2010 that has been out
+// once, 27 April 2022 to 19 January 2023; not in March 2020, March 2026 or
+// November 2026.
+//
+// Q1 2010 to Q4 2025, nothing else changed: 196.9% a year with a 47.1%
+// drawdown against 187.7% and 45.7% with the floor as committed, and 180.3%
+// and 69.0% with no floor at all. At the NFCI strategy's own 28% / 20% / 10:
+// 193.7% and 47.1%. Over 200 settings of the exit (level 18% to 36%, window
+// 200 to 300, rate 10% to 40%): 157% to 197%, median 183%. The 90 nearest the
+// shipped ones (level 22% to 30%, rate -10% to 20%, 5 to 15 closes) make 178%
+// to 197%, median 187%, with drawdowns of 47% to 54%: the shipped values are
+// the top of their neighbourhood, so expect its middle. The rate has to stay
+// at 20% or under. What it gives up: a fast crash is held through (its deepest
+// fall is March 2020, 47% in eight days), one bear market carries its
+// evidence, and before 2010 the floor and the deep buy did more (1983-2025:
+// 76.9% a year against 87.8%).
+//
+// The floor, its way back, the re-entry, the deep buy and its guard leave #53
+// with their settings; the bare floor and the bare deep buy keep the rules as
+// they were, lifted from the text before this change.
+const FIT_WITH_FLOOR = CODE[53];
+const BEAR_LEVELS_SRC = 'Array.from({ length: 111 }, (_, k) => 5 + 0.5 * k)';
+function withBearExit(base, spec) {
+  const once = (text, find, repl, what) => {
+    const at = text.indexOf(find);
+    if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`withBearExit(${spec.name}): ${what} must appear exactly once in the text`);
+    return text.slice(0, at) + repl + text.slice(at + find.length);
+  };
+  const FLOOR_SECTION = '    { section: "Floor — sell the breakdown" },\n';
+  const params = `    { section: "Bear market — sell the long decline", tip: "Sells only in a prolonged fall: TQQQ far under its median, the median no longer rising, days in a row under it. A fast crash is held through." },
+    { id: "bearUnder", label: "Sell at (% under the median)", tip: "The median is the overextended line's own. TQQQ is bought back at the first close above this level.", text: "Sell to cash when TQQQ closes {} under its median.", unit: "%", default: ${JSON.stringify(spec.under)}, options:
+      [{ value: 0, label: "Off" }].concat(${BEAR_LEVELS_SRC}) },
+    { id: "bearSlope", label: "Only if the median rises under (% a year)", tip: "The median's rise over the last three months, as a yearly rate. A median still climbing means the fall is young.", text: "Only while that median has risen less than {} a year.", unit: "%", when: { bearUnder: ${BEAR_LEVELS_SRC} }, default: ${JSON.stringify(spec.slope)}, options:
+      [{ value: 999, label: "any amount" }].concat(Array.from({ length: 101 }, (_, k) => -20 + k)) },
+    { id: "bearCloses", label: "Only after closes under the median", tip: "Closes in a row under the median before the sale can happen.", text: "And only after {} closes in a row under it.", when: { bearUnder: ${BEAR_LEVELS_SRC} }, default: ${JSON.stringify(spec.closes)}, options:
+      Array.from({ length: 61 }, (_, k) => k) },
+`;
+  const settings = `    // The bear exit: cash while TQQQ sits bearUnder under its median in a long decline (the loop after the median's).
+    const bearUnder = (+p.bearUnder || 0) / 100, bearOn = bearUnder > 0;
+    const bearSlope = p.bearSlope == null ? 999 : +p.bearSlope, bearCloses = Math.max(0, Math.round(+p.bearCloses || 0));
+`;
+  const state = `    // The bear exit at each close, from the start of the memory window: sold from the
+    // first close under the level (the median less bearUnder) while the exit is armed,
+    // back in at the first close above the level. Armed: the median has risen less
+    // than bearSlope a year over the last BEAR_SLOPE_DAYS closes, and TQQQ has closed
+    // under the median bearCloses times in a row.
+    const BEAR_SLOPE_DAYS = 63, BEAR_PANEL = "Bear exit";   // BEAR_PANEL: the chart panel of what arms the exit
+    const bearGated = bearOn && bearSlope < 999;   // 999 is "any amount": no limit on the median's rise
+    const medianAt = (i) => i >= 0 && rel[i] === rel[i] ? T[i] / (1 + rel[i]) : 0;
+    const bearLevel = (i) => medianAt(i) * (1 - bearUnder);
+    // The median's rise over those closes as a yearly rate, in percent; 0 until there is an earlier median to compare with.
+    const medianSlope = (i) => { const now = medianAt(i), was = medianAt(i - BEAR_SLOPE_DAYS); return now > 0 && was > 0 ? (Math.pow(now / was, 252 / BEAR_SLOPE_DAYS) - 1) * 100 : 0; };
+    // The same for the chart, blank until there is an earlier median.
+    const medianRise = (i) => medianAt(i) > 0 && medianAt(i - BEAR_SLOPE_DAYS) > 0 ? medianSlope(i) : null;
+    const bear = new Uint8Array(n), bearArmed = new Uint8Array(n);
+    if (bearOn) {
+      let sold = false, under = 0;
+      for (let i = 0; i <= p.endIdx; i++) {
+        const median = medianAt(i);
+        if (!(median > 0)) continue;
+        under = T[i] < median ? under + 1 : 0;
+        bearArmed[i] = medianSlope(i) < bearSlope && under >= bearCloses ? 1 : 0;
+        if (!sold) sold = bearArmed[i] === 1 && T[i] < bearLevel(i);
+        else if (T[i] > bearLevel(i)) sold = false;
+        bear[i] = sold ? 1 : 0;
+      }
+    }
+`;
+  const bearName = '"Bear exit (−" + Math.round(bearUnder * 100) + "%)"';
+  let t = once(base, FLOOR_SECTION, params + FLOOR_SECTION, 'the floor section');
+  // No floor: the lead's lower rules (floor, way back, re-entry, deep buy) never act.
+  t = once(t, '    const floor = p.floorLead == null ? 5 : +p.floorLead, floorOn = floor > -9999, floorHold = p.floorHold || "sqqq";\n',
+    '    const floor = -9999, floorOn = false, floorHold = "cash";   // no floor here: the bear exit sells instead\n', 'the floor setting');
+  t = once(t, '    const dGuard = (+p.deepGuard || 0) / 100, nfTh = +p.nfciVeto || 0;\n', '    const dGuard = (+p.deepGuard || 0) / 100, nfTh = +p.nfciVeto || 0;\n' + settings, 'the defence settings');
+  t = once(t, '    if (over > 0 || dGuard) {\n', '    if (over > 0 || dGuard || bearOn) {\n', 'the median loop');
+  t = once(t, '    const leadTxt = (x) =>', state + '    const leadTxt = (x) =>', 'the lead wording');
+  t = once(t, '      if (w === "tqqq" && vetoNow) w = "cash";\n      return { w, base, overNow, vetoNow };\n',
+    '      if (w === "tqqq" && vetoNow) w = "cash";\n'
+    + '      // The bear exit: cash through a long decline, whatever the lead says.\n'
+    + '      const bearNow = bear[i] === 1;\n'
+    + '      if (w === "tqqq" && bearNow) w = "cash";\n'
+    + '      return { w, base, overNow, vetoNow, bearNow };\n', 'the choice of holding');
+  t = once(t, '        : d.vetoNow !== y.vetoNow ? CREDIT : d.overNow ? PRICE : LEAD;\n', '        : d.bearNow !== y.bearNow ? PRICE : d.vetoNow !== y.vetoNow ? CREDIT : d.overNow ? PRICE : LEAD;\n', 'the panel a trade is marked in');
+  t = once(t, 'in: "between the floor and the ceiling"', 'in: "under the ceiling"', 'the zone wording');
+  t = once(t, '      : nfTh && data.nfci && data.nfci[i] > nfTh && (state === "in" || state === "deep") ?',
+    '      : bear[i] === 1 && (state === "in" || state === "deep") ? "bear exit, TQQQ " + (-rel[i] * 100).toFixed(0) + "% under its " + OW + "-day median in a long decline; back above " + bearLevel(i).toFixed(2)\n'
+    + '      : nfTh && data.nfci && data.nfci[i] > nfTh && (state === "in" || state === "deep") ?', 'the credit veto\'s reason');
+  t = once(t, '      if (topOn && (state === "in" || state === "deep")) add("Ceiling (" + leadLbl(top) + ")"',
+    '      if (bearOn && med) {\n'
+    + '        if (bear[i] === 1) add(' + bearName + ', bearLevel(i), "up", wantsT ? "buy" : "", "a close above it ends the bear exit");\n'
+    + '        else add(' + bearName + ', bearLevel(i), "down", holdsT && bearArmed[i] === 1 ? "sell" : "", bearArmed[i] === 1 ? "a close under it sells to cash" : "not armed: it sells only in a long decline");\n'
+    + '      }\n'
+    + '      if (topOn && (state === "in" || state === "deep")) add("Ceiling (" + leadLbl(top) + ")"', 'the ceiling level');
+  t = once(t, '        overLine: over > 0 && med ? med * (1 + over) : null,\n',
+    '        overLine: over > 0 && med ? med * (1 + over) : null,\n        bearLine: bearOn && med ? bearLevel(i) : null, bearOut: bear[i] === 1 ? 1 : null,\n'
+    + '        medianRise: bearGated ? medianRise(i) : null, bearRiseLimit: bearGated ? bearSlope : null,\n', 'the chart row');
+  t = once(t, '      : lifted("vetoNow") && w === "tqqq" ?',
+    '      : lifted("bearNow") && w === "tqqq" ? "bear exit over, TQQQ closed back above " + bearLevel(i).toFixed(2) + ", " + Math.round(bearUnder * 100) + "% under its " + OW + "-day median; " + stretchNow(i)\n'
+    + '      : lifted("vetoNow") && w === "tqqq" ?', 'the reason for a buy after the credit veto');
+  t = once(t, '    if (over > 0 || dGuard) lines.push({ key: "medianPrice"', '    if (over > 0 || dGuard || bearOn) lines.push({ key: "medianPrice"', 'the median line');
+  t = once(t, '    if (over > 0) lines.push({ key: "overLine", label: "Overextended (+" + Math.round(over * 100) + "%)", group: PRICE });\n',
+    '    if (over > 0) lines.push({ key: "overLine", label: "Overextended (+" + Math.round(over * 100) + "%)", group: PRICE });\n'
+    + '    if (bearOn) lines.push({ key: "bearLine", label: ' + bearName + ', group: PRICE });\n'
+    // What arms the exit, in a panel of its own under the price: the median's rise against the limit it has to be under.
+    + '    if (bearGated) lines.push({ key: "medianRise", label: OW + "-day median\'s rise a year", unit: "%", group: BEAR_PANEL }, { key: "bearRiseLimit", label: "Bear exit only under", unit: "%", group: BEAR_PANEL });\n', 'the overextended line');
+  t = once(t, 'value: (floorOn ? floor + "%" : "—") + " / " + (topOn ? top + "%" : "—"), sub: "floor · ceiling"', 'value: topOn ? top + "%" : "—", sub: "ceiling"', 'the levels card');
+  t = once(t, 'tip: "The leads that sell TQQQ: the floor below, the ceiling above."', 'tip: "The lead at which the money steps aside from TQQQ."', 'the levels card\'s tip');
+  return once(t, '    if (nearest) cards.push({ label: "Nearest signal"',
+    '    if (bearOn) cards.push({ label: "Bear exit", value: bear[e] === 1 ? "Sold" : bearArmed[e] === 1 ? "Armed" : "Waiting",\n'
+    + '      sub: bear[e] === 1 ? "back above " + bearLevel(e).toFixed(2) : "sells under " + bearLevel(e).toFixed(2) + (bearArmed[e] === 1 ? "" : medianSlope(e) < bearSlope ? ", after " + bearCloses + " closes under the median" : ", once the median stops rising"),\n'
+    + '      icon: "shield", tone: bear[e] === 1 ? "bad" : "good",\n'
+    + '      tip: "Sells in a long decline only: TQQQ " + Math.round(bearUnder * 100) + "% under its " + OW + "-day median, the median no longer rising." });\n'
+    + '    if (nearest) cards.push({ label: "Nearest signal"', 'the nearest-signal card');
+}
+// A strategy without some of its base's settings and sections: their entries leave the params list,
+// each with the comment above it. The caller makes sure the rules behind them are off.
+function withoutSettings(base, spec) {
+  const withoutIds = spec.ids.reduce((text, id) => {
+    const head = '\n    { id: "' + id + '", ', at = text.indexOf(head);
+    if (at < 0 || text.indexOf(head, at + 1) >= 0) throw new Error(`withoutSettings(${spec.name}): the setting ${id} must appear exactly once in the text`);
+    // The entry runs to the next setting, section or comment; the comment lines right above it are its own.
+    const before = text.slice(0, at).replace(/(?:\n    \/\/[^\n]*)+$/, '');
+    const next = /\n    (?:\{ |\/\/ )|\n  \],/.exec(text.slice(at + 1));
+    if (!next) throw new Error(`withoutSettings(${spec.name}): the setting ${id} has no end in the text`);
+    return before + text.slice(at + 1 + next.index);
+  }, base);
+  return spec.sections.reduce((text, section) => {
+    const line = '    { section: "' + section + '" },\n', at = text.indexOf(line);
+    if (at < 0 || text.indexOf(line, at + 1) >= 0) throw new Error(`withoutSettings(${spec.name}): the section ${section} must appear exactly once in the text`);
+    return text.slice(0, at) + text.slice(at + line.length);
+  }, withoutIds);
+}
+CODE[53] = withoutSettings(withBearExit(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", under: 26, slope: 0, closes: 10 }),
+  { name: "SOXL, TQQQ, QQQ - 1983 fit", ids: ["floorLead", "floorHold", "floorBackDays", "floorBackOver", "floorBackCloses", "reentryLead", "reentryCloses", "deepLead", "deepGuard"], sections: ["Floor — sell the breakdown"] });
+
 // ===== #55 Seasonal TQQQ, #56 Donchian breakout + ATR stop (the user, 2026-11-09:
 // "let's include 2x4", from a search for leveraged-fund strategies the library
 // lacked: a calendar rule and a price-channel trend rule, both new mechanisms
@@ -5068,7 +5219,7 @@ ${STRETCH_STATE_SNIPPET}
     const leadAt = (i) => (lead[i] === lead[i] ? lead[i] : null);
     const leadSays = (i) => (lead[i] === lead[i] ? "TQQQ is " + leadTxt(lead[i]) : "no lead yet");
     const LEAD_PANEL = "TQQQ vs QQQ";`;
-const BARE_LEAD_PARAMS = [hostParam(CODE[53], "lookbackDays"), hostParam(CODE[53], "startAvgDays")];
+const BARE_LEAD_PARAMS = [hostParam(FIT_WITH_FLOOR, "lookbackDays"), hostParam(FIT_WITH_FLOOR, "startAvgDays")];
 const BARE_LEAD_COLUMN = `    { key: "lead", label: "Lead", tip: "TQQQ's growth over the lookback against QQQ's, in percent: 100 means TQQQ grew twice as much." },`;
 
 // #64 Bare ceiling: aside from the first close with the lead at or over the ceiling until the first
@@ -5076,7 +5227,7 @@ const BARE_LEAD_COLUMN = `    { key: "lead", label: "Lead", tip: "TQQQ's growth 
 // out holding is a setting, cash unless picked.
 CODE[64] = bareStrategy({
   name: "Bare ceiling",
-  params: BARE_LEAD_PARAMS.concat([withoutOff(hostParam(CODE[53], "topLead")), hostParam(CODE[53], "backLead")]).join('\n'),
+  params: BARE_LEAD_PARAMS.concat([withoutOff(hostParam(FIT_WITH_FLOOR, "topLead")), hostParam(FIT_WITH_FLOOR, "backLead")]).join('\n'),
   park: { label: "Held while aside", tip: "What the money is in while stepped aside.", text: "While aside hold {}." },
   columns: BARE_LEAD_COLUMN,
   rest: '"tqqq"',
@@ -5097,9 +5248,9 @@ CODE[64] = bareStrategy({
 // recovered, by the closes in a row at the re-entry level or by #53's way back. No deep buy.
 CODE[65] = bareStrategy({
   name: "Bare floor",
-  params: BARE_LEAD_PARAMS.concat([withoutOff(hostParam(CODE[53], "floorLead")),
-    hostParam(CODE[53], "floorBackDays", { tip: "A break that reverses within this many days is undone: TQQQ is bought back without waiting for the re-entry lead." }, ["floorHold"]), hostParam(CODE[53], "floorBackOver", {}, ["floorHold"]), hostParam(CODE[53], "floorBackCloses", {}, ["floorHold"]),
-    hostParam(CODE[53], "reentryLead"), hostParam(CODE[53], "reentryCloses")]).join('\n'),
+  params: BARE_LEAD_PARAMS.concat([withoutOff(hostParam(FIT_WITH_FLOOR, "floorLead")),
+    hostParam(FIT_WITH_FLOOR, "floorBackDays", { tip: "A break that reverses within this many days is undone: TQQQ is bought back without waiting for the re-entry lead." }, ["floorHold"]), hostParam(FIT_WITH_FLOOR, "floorBackOver", {}, ["floorHold"]), hostParam(FIT_WITH_FLOOR, "floorBackCloses", {}, ["floorHold"]),
+    hostParam(FIT_WITH_FLOOR, "reentryLead"), hostParam(FIT_WITH_FLOOR, "reentryCloses")]).join('\n'),
   park: { label: "Held after the break", tip: "What the money is in while the floor is broken.", text: "After the break hold {}." },
   columns: BARE_LEAD_COLUMN,
   rest: '"tqqq"',
@@ -5126,15 +5277,15 @@ CODE[65] = bareStrategy({
 CODE[66] = bareStrategy({
   name: "Bare deep buy",
   params: BARE_LEAD_PARAMS.concat([
-    withoutOff(hostParam(CODE[53], "floorLead", { text: "The deep buy is armed once TQQQ's lead falls under {}.", tip: "The floor of the full strategy: it sells there, and a deep buy can follow while it stays broken." })),
-    withoutOff(hostParam(CODE[53], "deepLead", { text: "Then buy TQQQ at the first close with the lead at {} or lower.", tip: "Negative means TQQQ is behind QQQ." })),
-    hostParam(CODE[53], "reentryLead", { text: "Sell once the lead is back at {} or more.", tip: "Where the full strategy counts the lead as recovered and its other rules hold TQQQ anyway." })]).join('\n'),
+    withoutOff(hostParam(FIT_WITH_FLOOR, "floorLead", { text: "The deep buy is armed once TQQQ's lead falls under {}.", tip: "The floor of the full strategy: it sells there, and a deep buy can follow while it stays broken." })),
+    withoutOff(hostParam(FIT_WITH_FLOOR, "deepLead", { text: "Then buy TQQQ at the first close with the lead at {} or lower.", tip: "Negative means TQQQ is behind QQQ." })),
+    hostParam(FIT_WITH_FLOOR, "reentryLead", { text: "Sell once the lead is back at {} or more.", tip: "Where the full strategy counts the lead as recovered and its other rules hold TQQQ anyway." })]).join('\n'),
   park: BARE_PARK_BETWEEN_TRADES,
   columns: BARE_LEAD_COLUMN,
   rest: '"cash"',
   panel: 'LEAD_PANEL',
   setup: bareLeadSetup(`    // The deep buy on its own: the ceiling is off; the floor runs, with #53's way back and closes, to say when a deep buy can be made.`,
-    { topLead: 9999, floorHold: "cash", floorBackDays: hostDefault(CODE[53], "floorBackDays"), floorBackOver: hostDefault(CODE[53], "floorBackOver"), floorBackCloses: hostDefault(CODE[53], "floorBackCloses"), reentryCloses: hostDefault(CODE[53], "reentryCloses") }),
+    { topLead: 9999, floorHold: "cash", floorBackDays: hostDefault(FIT_WITH_FLOOR, "floorBackDays"), floorBackOver: hostDefault(FIT_WITH_FLOOR, "floorBackOver"), floorBackCloses: hostDefault(FIT_WITH_FLOOR, "floorBackCloses"), reentryCloses: hostDefault(FIT_WITH_FLOOR, "reentryCloses") }),
   rule: `      const want = stateAt[i] === 3 ? "tqqq" : "cash";
       const why = said.get(i) || leadSays(i) + (stateAt[i] === 3 ? ", deep buy held" : stateAt[i] === 2 ? ", armed: the floor is broken" : "");`,
   row: `          lead: leadAt(i), deepLine: lead[i] === lead[i] ? deep : null, soldLine: lead[i] === lead[i] ? reentry : null,`,
@@ -5151,7 +5302,7 @@ CODE[66] = bareStrategy({
 // it over the exit level. The lead loop is theirs (withSoxlPile); the settings are #53's.
 CODE[67] = bareStrategy({
   name: "Bare SOXL lead",
-  params: [hostParam(CODE[53], "soxlLeadDays", { tip: "How many trading days of growth are compared: SOXL's against SOXX's. 380 is about 18 months." }, ["soxlWhen"]), hostParam(CODE[53], "soxlLeadEnter", {}, ["soxlWhen"]), hostParam(CODE[53], "soxlLeadExit", {}, ["soxlWhen"])].join('\n'),
+  params: [hostParam(FIT_WITH_FLOOR, "soxlLeadDays", { tip: "How many trading days of growth are compared: SOXL's against SOXX's. 380 is about 18 months." }, ["soxlWhen"]), hostParam(FIT_WITH_FLOOR, "soxlLeadEnter", {}, ["soxlWhen"]), hostParam(FIT_WITH_FLOOR, "soxlLeadExit", {}, ["soxlWhen"])].join('\n'),
   out: '"soxl"',
   trips: { price: 'data.soxl[i] / T[i]', up: true, word: "won", label: "Times in SOXL", lastLabel: "In SOXL, last year",
     tip: "Each stretch out of TQQQ and in SOXL is one time. The second line: the share of them where SOXL did better than TQQQ over the stretch, and SOXL's average move against TQQQ's, before costs." },

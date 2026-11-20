@@ -68,6 +68,8 @@
   .switch input:checked+.track{background:var(--accent)}
   .switch input:checked+.track::after{transform:translateX(14px)}
   .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
+  .switch.unavailable{opacity:.5;cursor:default}
+  .switches{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
   #chart{position:relative;min-height:520px}
   /* ?embed=widget (the desktop widget page, widget.html): the chart alone,
@@ -165,11 +167,18 @@
   <a class="back-link" href="../">← Back to the backtesting platform</a>
   <div class="panel">
     <div class="toolbar">
-      <label class="switch" id="similar-switch">
-        <input type="checkbox" id="toggle-similar">
-        <span class="track"></span>
-        <span class="switch-label">Similar days only</span>
-      </label>
+      <div class="switches">
+        <label class="switch" id="similar-switch">
+          <input type="checkbox" id="toggle-similar">
+          <span class="track"></span>
+          <span class="switch-label">Similar days only</span>
+        </label>
+        <label class="switch" id="trend-switch">
+          <input type="checkbox" id="toggle-trend">
+          <span class="track"></span>
+          <span class="switch-label">Similar trends only</span>
+        </label>
+      </div>
       <div class="metric" data-metric="open" title="Open vs the previous session's close. Drag across the bars to keep only days in that range. Double-click to clear.">
         <div class="metric-head"><span class="metric-name">Open</span><span class="metric-range"></span></div>
         <svg class="metric-hist" height="28"></svg>
@@ -198,11 +207,12 @@
 const EMBED = new URLSearchParams(location.search).get('embed') === 'widget';
 if (EMBED) document.documentElement.classList.add('embed');
 // Embedded, the widget's settings stand in for the saved ones (similar=1|0,
-// from=YYYY-MM-DD with the end at the latest day, log=1|0, linear unless set)
-// and nothing is saved back, so the widget never changes how this page opens
-// on its own.
+// trend=1|0, from=YYYY-MM-DD with the end at the latest day, log=1|0, linear
+// unless set) and nothing is saved back, so the widget never changes how this
+// page opens on its own.
 const EMBED_QUERY = new URLSearchParams(location.search);
 const EMBED_SIMILAR = EMBED && EMBED_QUERY.has('similar') ? EMBED_QUERY.get('similar') === '1' : null;
+const EMBED_TREND = EMBED && EMBED_QUERY.has('trend') ? EMBED_QUERY.get('trend') === '1' : null;
 const EMBED_FROM = EMBED ? EMBED_QUERY.get('from') : null;
 const EMBED_LOG = EMBED ? EMBED_QUERY.get('log') === '1' : null;
 // The desktop widget's local copy of this page reads the live site's files
@@ -339,9 +349,40 @@ function buildDays(rows) {
       points,
       openVsPrevPct: points[0].pct,
       closeVsPrevPct: last.pct,
+      close: last.close,
       complete: last.minute === SESSION_CLOSE_MIN,
     };
   });
+}
+
+// The market state a day opened in, read off the closes before it, so it is
+// known before the open:
+//   trend       'up' when the prior close is above the average of the
+//               TREND_DAYS closes before it, else 'down';
+//   volatility  the average absolute close-to-close move over the
+//               VOLATILITY_DAYS sessions before, sorted into thirds of every
+//               day in the file: 'low', 'mid' or 'high'.
+// A day without enough days before it has no state (null).
+const TREND_DAYS = 50;
+const VOLATILITY_DAYS = 20;
+function withMarketState(days) {
+  const usualMove = days.map((_, k) => k < VOLATILITY_DAYS ? null : d3.mean(days.slice(k - VOLATILITY_DAYS, k), d => Math.abs(d.closeVsPrevPct)));
+  const known = d3.sort(usualMove.filter(v => v !== null));
+  const lowUnder = d3.quantileSorted(known, 1 / 3), highFrom = d3.quantileSorted(known, 2 / 3);
+  return days.map((day, k) => ({
+    ...day,
+    marketState: k < TREND_DAYS + 1 ? null : {
+      trend: days[k - 1].close > d3.mean(days.slice(k - 1 - TREND_DAYS, k - 1), d => d.close) ? 'up' : 'down',
+      volatility: usualMove[k] >= highFrom ? 'high' : usualMove[k] < lowUnder ? 'low' : 'mid',
+    },
+  }));
+}
+
+// Same-trend filter: the days that opened in the reference day's market
+// state. The reference is the latest day, as for the similar-days filter.
+function sameTrendDays(days, reference) {
+  const { trend, volatility } = reference.marketState;
+  return days.filter(d => d === reference || (d.marketState && d.marketState.trend === trend && d.marketState.volatility === volatility));
 }
 
 // Mean and median of every day's % at each minute of the session.
@@ -1188,9 +1229,11 @@ function setupPeriodSlider(allDays, onChange) {
 // With nothing saved, or when localStorage is missing or throws (private
 // mode, blocked storage), the switch takes its default.
 const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
+const TREND_STORAGE_KEY = 'tqqq-intraday-trend';
 const LOG_SCALE_STORAGE_KEY = 'tqqq-intraday-log-scale';
 function readSavedSwitch(key, fallback = false) {
   if (key === SIMILAR_STORAGE_KEY && EMBED_SIMILAR !== null) return EMBED_SIMILAR;
+  if (key === TREND_STORAGE_KEY && EMBED_TREND !== null) return EMBED_TREND;
   if (key === LOG_SCALE_STORAGE_KEY && EMBED_LOG !== null) return EMBED_LOG;
   try {
     const saved = localStorage.getItem(key);
@@ -1308,6 +1351,24 @@ function setupSimilarFilter(onChange) {
   return state;
 }
 
+// Same-trend control: the toggle, off until switched on. Its tooltip says
+// what counts as the same trend and names the latest day's. A latest day
+// with too little history before it has no state to match, so the toggle is
+// switched off and greyed.
+function setupTrendFilter(latest, onChange) {
+  const marketState = latest.marketState;
+  const state = { on: !!marketState && readSavedSwitch(TREND_STORAGE_KEY, false) };
+  d3.select('#trend-switch').classed('unavailable', !marketState).attr('title', marketState
+    ? `Days that opened like today: TQQQ ${marketState.trend === 'up' ? 'above' : 'below'} its ${TREND_DAYS}-day average, ${marketState.volatility} volatility over the ${VOLATILITY_DAYS} days before.`
+    : `Needs ${TREND_DAYS + 1} days of history.`);
+  d3.select('#toggle-trend').property('checked', state.on).property('disabled', !marketState).on('change', function () {
+    state.on = this.checked;
+    writeSavedSwitch(TREND_STORAGE_KEY, state.on);
+    onChange();
+  });
+  return state;
+}
+
 // One chart for the page's life; every load, first or refresh, rebuilds the
 // controls and data around it. The controls read their saved state on each
 // setup, so a refresh keeps the period, the brushes and the toggle as they
@@ -1402,7 +1463,7 @@ function loadData() {
     loadLiveQuote(),
   ]).then(([history, today, quotes]) => {
     chart.extended(extendedPrint(quotes));
-    const allDays = buildDays(mergeTodayRows(history, today));
+    const allDays = withMarketState(buildDays(mergeTodayRows(history, today)));
     const allPct = allDays.flatMap(d => d.points.map(p => p.pct));
     // The y extent only ever grows, so a refresh never rescales the plot.
     chart.yLimit(Math.max(chart.yLimit() || 0, Math.ceil(Math.max(-d3.min(allPct), d3.max(allPct)))));
@@ -1410,7 +1471,9 @@ function loadData() {
     let periodDays = allDays;
 
     const refresh = () => {
-      const filtered = metric.filter(periodDays);
+      const inRange = metric.filter(periodDays);
+      // The state to match is the latest day's, whatever the period and the histograms keep.
+      const filtered = trend.on ? sameTrendDays(inRange, allDays[allDays.length - 1]) : inRange;
       let days = filtered, cutoff = null, reference = null;
       if (similar.on) {
         reference = filtered[filtered.length - 1];
@@ -1427,6 +1490,7 @@ function loadData() {
     const guarded = () => { if (ready) refresh(); };
     const metric = setupMetricFilters(allDays, latestId, guarded);
     const similar = setupSimilarFilter(guarded);
+    const trend = setupTrendFilter(allDays[allDays.length - 1], guarded);
     setupPeriodSlider(allDays, days => { periodDays = days; guarded(); });
     ready = true;
     refresh();
