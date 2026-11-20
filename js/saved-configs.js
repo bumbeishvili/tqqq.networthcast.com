@@ -210,7 +210,7 @@ function customHistoryLog(cfg) {
 function customSignalChartView(cfg, displayLog) {
   const detail = customDetailLog(cfg);
   const main = detail && detail.length ? detail : displayLog;
-  if (!main.length) return { log: main, home: null, holdings: null };
+  if (!main.length) return { log: main, home: null, holdings: null, runs: null };
   const home = { t0: Date.parse(main[0].date), t1: Date.parse(main[main.length - 1].date) };
   const history = customHistoryLog(cfg);
   const before = history ? history.filter(r => r.date < main[0].date) : [];
@@ -221,7 +221,18 @@ function customSignalChartView(cfg, displayLog) {
   const mainHoldings = detailSlot && detailSlot.log === main ? detailSlot.holdings : ((window._customResults || {})[cfg.id] || {}).holdings;
   const beforeHoldings = history && historySlot && historySlot.log === history && historySlot.holdings ? historySlot.holdings.filter(e => e.date < main[0].date) : [];
   const holdings = mainHoldings ? beforeHoldings.concat(mainHoldings) : null;
-  return { log: before.concat(main), home, holdings };
+  // The two runs the log joins, for the chart's own return over a dragged
+  // range (js/signal-chart.js's _miniRunReturn): the history run counts up to
+  // the main run's first day, the main run from there.
+  const runs = before.length ? [{ rows: history, until: main[0].date }, { rows: main }] : [{ rows: main }];
+  return { log: before.concat(main), home, holdings, runs };
+}
+// A code strategy's signal chart for the panel, `width` px wide: that view,
+// drawn. The panel's first draw and the chart's own redraw both come here,
+// so both hand the chart the same log, home view, holdings and runs.
+function customSignalChartHtml(cfg, lines, width) {
+  const view = customSignalChartView(cfg, (window._customLogs || {})[cfg.id] || []);
+  return buildCustomLinesChartHtml(cfg, lines, view.log, width, { home: view.home, holdings: view.holdings, runs: view.runs });
 }
 
 // The strategy over a range dragged on the panel's signal chart (its tooltip,
@@ -269,8 +280,7 @@ function redrawPanelSignalChart() {
     const cfg = savedConfigs.find(c => c.id === id);
     const auxLines = (window._customLines || {})[id] || [];
     if (!cfg || !auxLines.length) return;
-    const view = customSignalChartView(cfg, (window._customLogs || {})[id] || []);
-    html = buildCustomLinesChartHtml(cfg, auxLines, view.log, body.clientWidth, { home: view.home, holdings: view.holdings });
+    html = customSignalChartHtml(cfg, auxLines, body.clientWidth);
   } else {
     const signal = nativeSignalChart(_currentPanelIdx);
     if (!signal) return;
@@ -4089,9 +4099,8 @@ function renderCustomPanelBody(cfgId) {
   // labels hides that line.
   const auxLines = (window._customLines || {})[cfgId] || null;
   if (auxLines && auxLines.length) {
-    const auxView = customSignalChartView(cfg, (window._customLogs || {})[cfgId] || []);
     html += `<div class="strategy-panel-section-label" style="margin-top:14px">Signal chart</div>
-      ${buildCustomLinesChartHtml(cfg, auxLines, auxView.log, body.clientWidth, { home: auxView.home, holdings: auxView.holdings })}`;
+      ${customSignalChartHtml(cfg, auxLines, body.clientWidth)}`;
   }
 
   // Live signal dashboard (whatever the strategy reported in `signals`), then

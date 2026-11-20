@@ -491,7 +491,10 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // The log and, when the run returned them, its per-day holdings: the
   // tooltip reads what is held at a day from them (_miniHoldingAt).
   const holdings = opts && Array.isArray(opts.holdings) && opts.holdings.length ? opts.holdings : null;
-  const chartData = { series: series.filter(s => !s.hidden), panels, t0, t1, T0, T1, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home, log, holdings };
+  // The runs the log joins, for the strategy's own return over a dragged
+  // range (_miniRunReturn): one run, unless the host joined two (opts.runs).
+  const runs = opts && Array.isArray(opts.runs) && opts.runs.length ? opts.runs : [{ rows: log }];
+  const chartData = { series: series.filter(s => !s.hidden), panels, t0, t1, T0, T1, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home, log, holdings, runs };
   window._miniCharts[cfg.id] = chartData;
   window._miniChartHover = chartData;
 
@@ -842,12 +845,42 @@ function _miniFmtReadout(unit, v) { return unit === '$' ? _miniFmtExact(v) : _mi
 // parenthesis is dropped ("Overextended (+55%)" reads "Overextended") so the
 // brackets never nest.
 // `hot` is the line nearest the cursor: its entry is bold, a level in full ink.
-// The latest entry of a date-sorted array (log rows, holdings) at or before a day.
+// The index of the last entry of a date-sorted array (log rows, holdings) at
+// or before a day; -1 when none is.
+function _miniLastIdxAt(arr, d) {
+  let lo = -1, hi = arr.length - 1;
+  while (lo < hi) { const m = (lo + hi + 1) >> 1; if (arr[m].date <= d) lo = m; else hi = m - 1; }
+  return lo;
+}
+// That entry itself, or null.
 function _miniLatestAt(arr, d) {
-  if (!arr || !arr.length || arr[0].date > d) return null;
-  let lo = 0, hi = arr.length - 1;
-  while (hi - lo > 1) { const m = (lo + hi) >> 1; if (arr[m].date <= d) lo = m; else hi = m; }
-  return arr[hi].date <= d ? arr[hi] : arr[lo];
+  const i = arr ? _miniLastIdxAt(arr, d) : -1;
+  return i < 0 ? null : arr[i];
+}
+// The strategy's own return over a dragged range, in percent: how the money
+// that followed the run this chart draws grew from the range's first day to
+// its last, with deposits and withdrawals taken out (a row's growth is its
+// value less what came in that day, over the row before; a row before any
+// money was in adds none). A chart that joins two runs (data.runs: the
+// panel's history run up to the main run's first day, then the main run)
+// chains each run's part of the range. Null when a row in the range carries
+// no value or no invested total, as a built-in panel's rows do: the readout
+// then has no such row.
+function _miniRunReturn(data, from, to) {
+  const hasMoney = r => typeof r.value === 'number' && typeof r.invested === 'number';
+  let growth = 1, steps = 0;
+  for (const run of data.runs) {
+    const rows = run.rows, end = run.until && run.until < to ? run.until : to;
+    const last = _miniLastIdxAt(rows, end);
+    // From the last row at or before the range's first day, or the run's first row when it starts later.
+    for (let j = Math.max(0, _miniLastIdxAt(rows, from)) + 1; j <= last; j++) {
+      const before = rows[j - 1], row = rows[j];
+      if (!hasMoney(before) || !hasMoney(row)) return null;
+      if (before.value > 0) growth *= (row.value - (row.invested - before.invested)) / before.value;
+      steps++;
+    }
+  }
+  return steps ? (growth - 1) * 100 : null;
 }
 function _miniPriceAt(fund, d) {
   const i = typeof dailyDateToIdx !== 'undefined' && dailyDateToIdx ? dailyDateToIdx.get(d) : null;
@@ -944,37 +977,111 @@ function _miniRangeSimShow(key) {
   const shown = window._miniRangeShown, tip = document.getElementById('mini-chart-tip');
   const slot = tip && shown && shown.key === key ? tip.querySelector('.mct-sim') : null;
   if (!slot) return;
-  slot.outerHTML = _miniRangeSimHtml(_miniRangeSims.get(key));
-  _miniPlaceTip(tip, shown.at);
+  slot.outerHTML = _miniRangeSimHtml(_miniRangeSims.get(key), shown.from);
+  _miniPlaceTip(tip, shown.at, shown.avoid);
 }
-// The run's rows, in the main chart's terms: what the portfolio grew to, what
-// went in, the profit, then the strategy's CAGR and deepest drawdown.
-function _miniRangeSimHtml(sim) {
-  const head = '<div class="mct-ev-head">Strategy over this range</div>';
+const _miniSigned = (v, txt) => `<b class="${v >= 0 ? 'mct-pos' : 'mct-neg'}">${v >= 0 ? '+' : '−'}${txt}</b>`;
+const _miniSimRow = (k, v) => `<div class="mct-sim-row"><span>${k}</span>${v}</div>`;
+// The fresh start's rows, in the main chart's terms: what the portfolio grew
+// to, what went in, the profit, then the strategy's CAGR and deepest
+// drawdown. Its heading names the day it starts on, since it is another run
+// than the one the chart draws.
+function _miniRangeSimHtml(sim, from) {
+  const head = `<div class="mct-ev-head">If started on ${fmtLogDate(from)}</div>`;
   if (sim === undefined) return `<div class="mct-sim">${head}<div class="mct-sim-wait">Running…</div></div>`;
   if (!sim) return `<div class="mct-sim">${head}<div class="mct-sim-wait">The strategy did not run for this range.</div></div>`;
-  const signed = (v, txt) => `<b class="${v >= 0 ? 'mct-pos' : 'mct-neg'}">${v >= 0 ? '+' : '−'}${txt}</b>`;
-  const row = (k, v) => `<div class="mct-sim-row"><span>${k}</span>${v}</div>`;
-  const rows = [row('Portfolio', `<b>${fmtFull(sim.value)}</b>`)];
+  const rows = [_miniSimRow('Portfolio', `<b>${fmtFull(sim.value)}</b>`)];
   if (sim.invested != null) {
     const profit = sim.value - sim.invested;
-    rows.push(row('Invested', `<b>${fmtFull(sim.invested)}</b>`));
-    rows.push(row('Profit', signed(profit, fmtFull(Math.abs(profit)) + (sim.invested > 0 ? ` · ${Math.abs(profit / sim.invested * 100).toFixed(1)}%` : ''))));
+    rows.push(_miniSimRow('Invested', `<b>${fmtFull(sim.invested)}</b>`));
+    rows.push(_miniSimRow('Profit', _miniSigned(profit, fmtFull(Math.abs(profit)) + (sim.invested > 0 ? ` · ${Math.abs(profit / sim.invested * 100).toFixed(1)}%` : ''))));
   }
-  rows.push(row('CAGR', signed(sim.cagr, `${Math.abs(sim.cagr).toFixed(1)}%`)));
-  rows.push(row('Max drawdown', `<b class="mct-neg">${sim.maxDD > 0 ? '−' : ''}${sim.maxDD.toFixed(1)}%</b>`));
+  rows.push(_miniSimRow('CAGR', _miniSigned(sim.cagr, `${Math.abs(sim.cagr).toFixed(1)}%`)));
+  rows.push(_miniSimRow('Max drawdown', `<b class="mct-neg">${sim.maxDD > 0 ? '−' : ''}${sim.maxDD.toFixed(1)}%</b>`));
   return `<div class="mct-sim">${head}${rows.join('')}</div>`;
 }
-function _miniPlaceTip(tip, e) {
+// A dragged range's block under the lines' changes. First the strategy as
+// the chart's own run traded it: its return over the range (_miniRunReturn).
+// Then, where a host runs it (`fresh`), the same strategy started on the
+// range's first day with the main chart's money. The two can differ: the
+// fresh start's money arrives in cash at that close, so it can take a trade
+// the run on screen, still in another fund that day, could not (the user,
+// 2026-11-20: "why does strategy says 10% gain, don't we keep cash in here").
+function _miniRangeBlockHtml(data, from, to, fresh) {
+  const own = _miniRunReturn(data, from, to);
+  let ownHtml = '';
+  if (own != null) {
+    const digits = Math.abs(own) < 1 ? 2 : 1, shown = +own.toFixed(digits) || 0;   // || 0: never "−0.00%"
+    ownHtml = '<div class="mct-ev-head">Strategy over this range</div>' + _miniSimRow('Return', _miniSigned(shown, `${Math.abs(shown).toFixed(digits)}%`));
+  }
+  const freshHtml = fresh ? _miniRangeSimHtml(_miniRangeSimFor(data.cfgId, from, to), from) : '';
+  return ownHtml || freshHtml ? `<div class="mct-range">${ownHtml}${freshHtml}</div>` : '';
+}
+// The tooltip's place: right of the cursor and under it, on the other side
+// where the window ends. `avoid` holds boxes in window pixels that must stay
+// uncovered (a dragged range's change badges, _miniRangeBadges).
+const MINI_TIP = { edge: 8, right: 14, left: 12, under: 12, over: 10, gap: 6 };   // px: room kept to the window's edge, to the cursor on each side, and to a box to avoid
+function _miniPlaceTip(tip, e, avoid) {
   tip.removeAttribute('hidden');
-  let left = e.clientX + 14, top = e.clientY + 12;
-  if (left + tip.offsetWidth > window.innerWidth - 8) left = e.clientX - tip.offsetWidth - 12;
-  if (top + tip.offsetHeight > window.innerHeight - 8) top = e.clientY - tip.offsetHeight - 10;
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let left = e.clientX + MINI_TIP.right, top = e.clientY + MINI_TIP.under;
+  if (left + w > window.innerWidth - MINI_TIP.edge) left = e.clientX - w - MINI_TIP.left;
+  if (top + h > window.innerHeight - MINI_TIP.edge) top = e.clientY - h - MINI_TIP.over;
   // A tall readout (a band with many trades) may not fit either side of the
   // cursor; keep it on screen rather than letting its top run off.
-  top = Math.max(8, Math.min(top, window.innerHeight - tip.offsetHeight - 8));
+  top = Math.max(MINI_TIP.edge, Math.min(top, window.innerHeight - h - MINI_TIP.edge));
+  if (avoid && avoid.length) ({ left, top } = _miniTipClearOf(avoid, e, w, h, top));
   tip.style.left = left + 'px';
   tip.style.top = top + 'px';
+}
+// A place for a tooltip of w by h px that covers none of the boxes. Beside
+// them at the cursor's height (`top`): right of them all or left of them all,
+// whichever side is nearer the cursor, so the tooltip lands on the cursor's
+// outer side of a dragged range. Where the window has no room on either
+// side: under them all or over them all. Where it has none there either (a
+// window smaller than the tooltip and the boxes together): the one of those
+// four, moved inside the window, that covers the least of them.
+function _miniTipClearOf(avoid, e, w, h, top) {
+  const { edge, gap } = MINI_TIP, maxLeft = window.innerWidth - edge - w, maxTop = window.innerHeight - edge - h;
+  const box = { left: Math.min(...avoid.map(r => r.left)), right: Math.max(...avoid.map(r => r.right)), top: Math.min(...avoid.map(r => r.top)), bottom: Math.max(...avoid.map(r => r.bottom)) };
+  const inside = (v, max) => Math.max(edge, Math.min(v, max));
+  const nearest = (places) => places.filter(p => p.left >= edge && p.left <= maxLeft && p.top >= edge && p.top <= maxTop).sort((a, b) => a.away - b.away)[0];
+  const right = Math.max(e.clientX + MINI_TIP.right, box.right + gap), leftSide = Math.min(e.clientX - MINI_TIP.left - w, box.left - gap - w);
+  const beside = [{ left: right, top, away: right - e.clientX }, { left: leftSide, top, away: e.clientX - leftSide - w }];
+  const x = inside(e.clientX + MINI_TIP.right, maxLeft);
+  const under = Math.max(e.clientY + MINI_TIP.under, box.bottom + gap), over = Math.min(e.clientY - MINI_TIP.over - h, box.top - gap - h);
+  const stacked = [{ left: x, top: under, away: under - e.clientY }, { left: x, top: over, away: e.clientY - over - h }];
+  const clear = nearest(beside) || nearest(stacked);
+  if (clear) return clear;
+  // (No d3 here: the widget page loads this file without it.)
+  const covered = (p) => avoid.reduce((sum, r) => sum + Math.max(0, Math.min(p.left + w, r.right) - Math.max(p.left, r.left)) * Math.max(0, Math.min(p.top + h, r.bottom) - Math.max(p.top, r.top)), 0);
+  return beside.concat(stacked).map(p => ({ left: inside(p.left, maxLeft), top: inside(p.top, maxTop) })).map(p => ({ ...p, covered: covered(p) })).sort((a, b) => a.covered - b.covered)[0];
+}
+// A dragged range's change badges: one at the middle of each panel's chord
+// (`readings`: the panel's first line with its points at the range's ends,
+// xA and xB), naming the line and how far it moved. Each is at a fixed pixel
+// size (hence the divisions by k), pushed apart when chords run close
+// together and kept inside the plot, and with more than one panel inside the
+// chord's own panel. `box` is the badge's outline in the chart's own units.
+function _miniRangeBadges(data, readings, xA, xB) {
+  const k = data.k, fs = 7 / k, ch = fs * 0.6, lh = 10 / k, padX = 3 / k;
+  const yAt = (s, v) => _miniPanelY(data.panels[s.panel], v);
+  return data.panels.flatMap((P, p) => {
+    const own = readings.filter(s => s.panel === p).map(s => {
+      const move = _miniRangeMove(s.unit, s.p0.v, s.p1.v);
+      return { y: (yAt(s, s.p0.v) + yAt(s, s.p1.v)) / 2 - lh / 2, move, label: s.label };
+    }).sort((a, b) => a.y - b.y);
+    for (let i = 1; i < own.length; i++) if (own[i].y - own[i - 1].y < lh) own[i].y = own[i - 1].y + lh;
+    if (data.panels.length > 1) for (let i = own.length - 1; i >= 0; i--) {
+      const max = i === own.length - 1 ? P.bottom - lh * 0.3 : own[i + 1].y - lh;
+      if (own[i].y > max) own[i].y = max;
+    }
+    return own;
+  }).map(m => {
+    const tw = (m.label.length + 1 + m.move.text.length) * ch;
+    const xM = Math.max(data.padL + tw / 2 + padX, Math.min(data.W - data.padR - tw / 2 - padX, (xA + xB) / 2));
+    return { ...m, fs, xM, box: { x: xM - tw / 2 - padX, y: m.y - lh * 0.72, w: tw + 2 * padX, h: lh } };
+  });
 }
 // A trade as a person would say it: "Buy TQQQ", "Sell TQQQ", "Sell TQQQ → SQQQ"
 // when the proceeds were parked, "Buy TQQQ (from SQQQ)" when a buy left another
@@ -1240,6 +1347,7 @@ document.addEventListener('mousemove', (e) => {
     // Chords and their badges for each panel's first line, its reading; the
     // levels are listed in the readout.
     const readings = data.panels.map((_, p) => spans.find(s => s.panel === p)).filter(Boolean);
+    const badges = _miniRangeBadges(data, readings, xA, xB);
     g.innerHTML = `<rect x="${xA.toFixed(1)}" y="${data.padT}" width="${(xB - xA).toFixed(1)}" height="${(plotBottom - data.padT).toFixed(2)}" fill="rgba(134,118,255,0.10)"/>`
       + `<line x1="${xA.toFixed(1)}" y1="${data.padT}" x2="${xA.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
       + `<line x1="${xB.toFixed(1)}" y1="${data.padT}" x2="${xB.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
@@ -1249,33 +1357,15 @@ document.addEventListener('mousemove', (e) => {
             <circle cx="${xA.toFixed(1)}" cy="${y0}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>
             <circle cx="${xB.toFixed(1)}" cy="${y1}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>`;
         }).join('')
-      // Each chord's midpoint gets a badge naming the line and its % change,
-      // green/red by sign, at a fixed pixel size (hence the divisions by k),
-      // pushed apart when chords run close together and kept inside the plot,
-      // and with more than one panel inside the chord's own panel.
-      + (() => {
-          const k = data.k, fs = 7 / k, ch = fs * 0.6, lh = 10 / k, padX = 3 / k;
-          const mids = data.panels.flatMap((P, p) => {
-            const own = readings.filter(s => s.panel === p).map(s => {
-              const move = _miniRangeMove(s.unit, s.p0.v, s.p1.v);
-              return { y: (yAt(s, s.p0.v) + yAt(s, s.p1.v)) / 2 - lh / 2, move, label: s.label };
-            }).sort((a, b) => a.y - b.y);
-            for (let i = 1; i < own.length; i++) if (own[i].y - own[i - 1].y < lh) own[i].y = own[i - 1].y + lh;
-            if (data.panels.length > 1) for (let i = own.length - 1; i >= 0; i--) {
-              const max = i === own.length - 1 ? P.bottom - lh * 0.3 : own[i + 1].y - lh;
-              if (own[i].y > max) own[i].y = max;
-            }
-            return own;
-          });
-          return mids.map(m => {
-            const pctTxt = m.move.text;
-            const col = m.move.up ? '#00b929' : '#dc2626';
-            const tw = (m.label.length + 1 + pctTxt.length) * ch;
-            const xM = Math.max(data.padL + tw / 2 + padX, Math.min(data.W - data.padR - tw / 2 - padX, (xA + xB) / 2));
-            return `<rect x="${(xM - tw / 2 - padX).toFixed(1)}" y="${(m.y - lh * 0.72).toFixed(1)}" width="${(tw + 2 * padX).toFixed(1)}" height="${lh.toFixed(2)}" rx="${(3 / k).toFixed(2)}" fill="#fff" stroke="${col}" stroke-width="${(0.8 / k).toFixed(2)}"/>
-              <text x="${xM.toFixed(1)}" y="${m.y.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${fs.toFixed(2)}" font-weight="600"><tspan fill="rgba(56,56,116,0.85)">${_escHtml(m.label)} </tspan><tspan fill="${col}" font-weight="700">${pctTxt}</tspan></text>`;
-          }).join('');
-        })();
+      // Each chord's midpoint gets a badge naming the line and its % change, green/red by sign.
+      + badges.map(m => {
+          const col = m.move.up ? '#00b929' : '#dc2626';
+          return `<rect x="${m.box.x.toFixed(1)}" y="${m.box.y.toFixed(1)}" width="${m.box.w.toFixed(1)}" height="${m.box.h.toFixed(2)}" rx="${(3 / data.k).toFixed(2)}" fill="#fff" stroke="${col}" stroke-width="${(0.8 / data.k).toFixed(2)}"/>
+              <text x="${m.xM.toFixed(1)}" y="${m.y.toFixed(1)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${m.fs.toFixed(2)}" font-weight="600"><tspan fill="rgba(56,56,116,0.85)">${_escHtml(m.label)} </tspan><tspan fill="${col}" font-weight="700">${m.move.text}</tspan></text>`;
+        }).join('');
+    // The badges' boxes in window pixels: the tooltip keeps clear of them.
+    const svgBox = svg.getBoundingClientRect(), px = svgBox.width / data.W;
+    const avoid = badges.map(m => ({ left: svgBox.left + m.box.x * px, right: svgBox.left + (m.box.x + m.box.w) * px, top: svgBox.top + m.box.y * px, bottom: svgBox.top + (m.box.y + m.box.h) * px }));
     const simKey = _miniRangeSimHost ? _miniRangeSimKey(data.cfgId, lo.d, hi.d) : null;
     // Each reading from the range's start to its end, coloured by direction,
     // and its levels at the end; the chords' badges carry the moves.
@@ -1284,9 +1374,9 @@ document.addEventListener('mousemove', (e) => {
       + _miniPanelRows(data, spans,
           s => `<span class="mct-from">${_miniFmtReadout(s.unit, s.p0.v)} →</span> <b class="${s.p1.v >= s.p0.v ? 'mct-pos' : 'mct-neg'}">${_miniFmtReadout(s.unit, s.p1.v)}</b>`,
           s => _miniFmtReadout(s.unit, s.p1.v))
-      + (simKey ? _miniRangeSimHtml(_miniRangeSimFor(data.cfgId, lo.d, hi.d)) : '');
-    _miniPlaceTip(tip, e);
-    window._miniRangeShown = { cfgId: data.cfgId, key: simKey, at: { clientX: e.clientX, clientY: e.clientY } };
+      + _miniRangeBlockHtml(data, lo.d, hi.d, !!simKey);
+    _miniPlaceTip(tip, e, avoid);
+    window._miniRangeShown = { cfgId: data.cfgId, key: simKey, from: lo.d, at: { clientX: e.clientX, clientY: e.clientY }, avoid };
     window._miniHoverActive = true;
     return;
   }

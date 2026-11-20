@@ -3855,8 +3855,13 @@ CODE[52] = withSoxlPile(CODE[50], { name: "SOXL, TQQQ VS QQQ, Mon Turns" });
 //   - lookback 546, start averaged over +-60 days, back at 28% (543, 65, 34):
 //     the worst result one small step away goes from 143% to 149%, the
 //     drawdown from 48.3% to 45.7%.
-// The floor stays at 6: at 7 it would have sold on 2026-11-05, when the lead
-// closed at 6.04.
+// The floor is 0 since 2026-11-20 (the user: "set 0% as default floor for
+// 1983 fit strategy"), the day after the fitted 6 sold TQQQ with the lead at
+// 3%: at 0 that close keeps TQQQ. On 2010-2025 it makes 184.4% a year with a
+// 49.0% drawdown against 187.7% and 45.7% at 6 (the March 2020 break comes on
+// the 12th, three days later: 2020 up 938% against 1,153%); floors 2 to 5
+// make 186.8%. The bare floor and the bare deep buy (#65, #66) read their
+// floor from here and follow.
 function withDefaults(base, spec) {
   let t = base.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
   for (const [id, value] of Object.entries(spec.defaults)) {
@@ -3871,7 +3876,7 @@ function withDefaults(base, spec) {
 }
 CODE[53] = withDefaults(CODE[52], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: {
   // The floor holds cash with the way back since 2026-11-17 (the user: "I'd want the fix"); SQQQ after the break was the fitted value.
-  lookbackDays: 546, startAvgDays: 60, topLead: 123, topDays: 61, backLead: 28, floorLead: 6, floorHold: "cash", floorBackDays: 20, floorBackOver: 2, floorBackCloses: 3, reentryLead: 35, reentryCloses: 10, deepLead: -30.5,
+  lookbackDays: 546, startAvgDays: 60, topLead: 123, topDays: 61, backLead: 28, floorLead: 0, floorHold: "cash", floorBackDays: 20, floorBackOver: 2, floorBackCloses: 3, reentryLead: 35, reentryCloses: 10, deepLead: -30.5,
   overPct: 58.2, overWindow: 236, sqqqMaxDays: 18, deepGuard: 52, nfciVeto: 0.75, soxlLeadEnter: -33, soxlLeadExit: 101 } });
 
 // #54 — SOXL, TQQQ, QQQ - spread start (the user, 2026-11-09: "i want strategy,

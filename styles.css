@@ -3329,8 +3329,10 @@
   /* Drag-range readout: the end value coloured by direction. */
   #mini-chart-tip .mct-pos { color: var(--green, #00b929); }
   #mini-chart-tip .mct-neg { color: var(--red-text, #dc2626); }
-  /* The strategy run over a dragged range, under the lines' changes. */
-  #mini-chart-tip .mct-sim { margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(134, 118, 255, 0.3); }
+  /* A dragged range's block under the lines' changes: the strategy's own
+     return, then the same strategy started fresh on the range's first day. */
+  #mini-chart-tip .mct-range { margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(134, 118, 255, 0.3); }
+  #mini-chart-tip .mct-sim-row + .mct-sim { margin-top: 4px; }
   #mini-chart-tip .mct-sim-row { display: flex; gap: 6px; line-height: 1.6; }
   #mini-chart-tip .mct-sim-row b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: auto; padding-left: 12px; }
   #mini-chart-tip .mct-sim-wait { font-size: calc(10.5px * var(--ui-scale)); color: var(--text-muted); }
