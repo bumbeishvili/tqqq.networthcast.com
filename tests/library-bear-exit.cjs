@@ -81,11 +81,20 @@ const NFCI_EXIT = { ...fitDefaults, bearUnder: 28, bearSlope: 20, bearCloses: 10
   const log = run(FIT).log, on = log.filter(row => row.bearOut === 1);
   ck('the exit was on through most of 2022', on.filter(row => row.date.startsWith('2022')).length > 150, on.filter(row => row.date.startsWith('2022')).length + ' closes');
   ck('the exit stayed off in the crash of March 2020', !on.some(row => row.date.startsWith('2020-03')));
-  // Idle cash is traded for a day or two by Turnaround Monday, Big days and the month-end dip.
+  // Idle cash is traded for a few days at a time by Turnaround Monday, Big days and the month-end dip, which
+  // holds TQQQ over each month end of a long decline: a stretch in a fund is days long, never weeks.
   const invested = on.filter(row => row.held !== 'CASH');
-  ck('while it is on, the money is in cash but for short trades of the idle cash', invested.length < on.length / 4 && invested.every(row => row.held === 'TQQQ'), `${invested.length} of ${on.length} closes in a fund: ${[...new Set(invested.map(row => row.held))].join(', ')}`);
-  // At the NFCI strategy's numbers the exit comes on several times, some of them while a fund is held.
-  const traded = run(FIT, NFCI_EXIT).log;
+  const LONGEST_IDLE_TRADE = 10;   // closes: a month-end dip (five) with a Monday trade on either side
+  const stretches = log.reduce((runs, row) => {
+    if (row.bearOut === 1 && row.held !== 'CASH') runs[runs.length - 1]++; else if (runs[runs.length - 1] > 0) runs.push(0);
+    return runs;
+  }, [0]);
+  ck('while it is on, the money is in cash but for short trades of the idle cash',
+    invested.length < on.length / 2 && invested.every(row => row.held === 'TQQQ') && Math.max(...stretches) <= LONGEST_IDLE_TRADE,
+    `${invested.length} of ${on.length} closes in a fund: ${[...new Set(invested.map(row => row.held))].join(', ')}; longest stretch ${Math.max(...stretches)} closes`);
+  // At the NFCI strategy's numbers the exit comes on several times, some of them while a fund is held. With SOXL
+  // left out, so the buy at its end is TQQQ's own: a SOXL buy gives SOXL's lead as its reason.
+  const traded = run(FIT, { ...NFCI_EXIT, soxlWhen: 'never' }).log;
   const sale = traded.find(row => row.action === 'sell' && /bear exit/.test(row.note));
   ck('a sale names the bear exit', !!sale, sale ? sale.date + ' ' + sale.note : 'none');
   const back = traded.find(row => row.action === 'buy' && /bear exit over/.test(row.note));

@@ -3526,6 +3526,37 @@ function fitBetween(sp, picked) {
   return [...out].map(fitStored);
 }
 
+// ---- Round fit ----
+// The user (2026-11-21): "add option for fit, but in rounded numbers". Each
+// goal has a second menu entry that runs the same search over round values
+// only, by the rule the library's defaults were rounded with (2026-11-04):
+// from 10 up a multiple of 5; under 10 a whole number, or a half where the
+// setting's list has decimals; under 1 only 0 or 0.5. A value is judged by the
+// number it stands for (space[].number); a named choice ("Off", a fund,
+// Yes/No) has none and stays in the search.
+const FIT_ROUND = { label: 'round numbers', tip: 'The same search on round values only: multiples of 5 from 10 up, whole or half numbers below.' };
+const fitGoalLabel = (goal, round) => FIT_GOALS[goal].label + (round ? ', ' + FIT_ROUND.label : '');
+function fitIsRound(x, halves) {
+  const a = Math.abs(x);
+  if (a >= 10) return a % 5 === 0;
+  if (a >= 1) return Number.isInteger(a) || (halves && a % 0.5 === 0);
+  return a === 0 || a === 0.5;
+}
+// The first number in an option's text ("26%", "above 10", "1 quarter"), or null for one that reads as a word.
+const fitShownNumber = (text) => { const m = /-?\d+(?:\.\d+)?/.exec(String(text).replace('−', '-')); return m ? +m[0] : null; };
+// One setting of a round fit: its round values and named choices, the round
+// values between its options, and snap(v), the round value nearest to one that
+// is not round. The search starts from the snapped values, so every setting
+// ends on a round one. A setting with no round value keeps the value it has.
+function fitRoundSetting(s) {
+  const halves = s.values.some(v => { const x = s.number(v); return x != null && !Number.isInteger(x); });
+  const keeps = (v) => { const x = s.number(v); return x == null || fitIsRound(x, halves); };
+  const values = s.values.filter(keeps);
+  const numbers = values.filter(v => s.number(v) != null);
+  const snap = (v) => (keeps(v) || !numbers.length) ? v : d3.least(numbers, c => Math.abs(s.number(c) - s.number(v)));
+  return Object.assign({}, s, { values, between: v => s.between(v).filter(keeps), snap });
+}
+
 // The drawdown goal's hurdle: buy & hold of the fund the strategy holds most
 // in its current run, with the chart's money (the bar previews' B&H finals).
 function fitHurdle(cfg) {
@@ -3574,11 +3605,10 @@ function fitShowProgress() {
 // the settings it may change: { id, values, between(v) } with each setting's
 // candidate values and the values between the options next to a pick (none
 // for a built-in <select>, which can only hold its options). measure(values)
-// resolves to { final, dd } or null. cur holds every setting and ends on the
-// search's picks.
+// resolves to { final, dd } or null. cur holds every setting, is where the
+// search starts, and ends on the search's picks. Resolves to the best result.
 async function fitSearch(state, space, cur, measure, goal, hurdleFinal) {
-  const start = await measure(Object.assign({}, cur));
-  let best = start, stage = goal, ddCap = Infinity;
+  let best = await measure(Object.assign({}, cur)), stage = goal, ddCap = Infinity;
   // One setting tries its values with the others held; the best stays.
   const sweep = async (s, values) => {
     const tries = values.filter(v => String(v) !== String(cur[s.id]));
@@ -3616,16 +3646,19 @@ async function fitSearch(state, space, cur, measure, goal, hurdleFinal) {
     Object.assign(state, { stage: 2, phase: 'rounds', round: 1, done: 0, total: 0 });
     await search();
   }
-  return { start, best };
+  return best;
 }
 // One fit from start to the result note: runs the search, sets what it found
-// (job.apply), and writes the change list.
+// (job.apply), and writes the change list. job.round makes it a round fit.
 async function fitRun(job) {
   const state = _fit = { key: job.key, goal: job.goal, stage: 1, stages: job.goal === 'dd' ? 2 : 1, phase: 'rounds', round: 1, done: 0, total: 0, stopped: false, close: job.close };
   delete _fitNotes[job.key];
   render();
   const before = Object.assign({}, job.cur);
-  const { start, best } = await fitSearch(state, job.space, job.cur, job.measure, job.goal, job.hurdle && job.hurdle.final);
+  const start = await job.measure(Object.assign({}, before));
+  const space = job.round ? job.space.map(fitRoundSetting) : job.space;
+  if (job.round) space.forEach(s => { job.cur[s.id] = s.snap(job.cur[s.id]); });
+  const best = await fitSearch(state, space, job.cur, job.measure, job.goal, job.hurdle && job.hurdle.final);
   job.close();
   _fit = null;
   if (state.stopped) { render(); return; }
@@ -3636,7 +3669,7 @@ async function fitRun(job) {
   // Each changed setting, old → new, as its dropdown reads (the user: "a quick summary of what changed").
   const changes = changed.map(s => ({ label: s.label, from: s.text(before[s.id]), to: s.text(job.cur[s.id]) }));
   if (changed.length) job.apply(job.cur, changed);
-  _fitNotes[job.key] = { text: fitNoteText(job.goal, job.cagrOf, start, best, job.hurdle, changed.length), changes };
+  _fitNotes[job.key] = { text: fitNoteText(job.goal, !!job.round, job.cagrOf, start, best, job.hurdle, changed.length), changes };
   render();
 }
 // Runs each distinct setting combination once per fit.
@@ -3651,7 +3684,7 @@ function fitNoHurdle(key, fund) {
   render();
 }
 // Fit for a code strategy (runs in the sandbox worker pool).
-async function runCustomFit(cfgId, goal) {
+async function runCustomFit(cfgId, goal, round) {
   const cfg = savedConfigs.find(c => c.id === cfgId), ctx = window._customCtx;
   if (_fit || !cfg || !cfg.code || !ctx) return;
   const schema = getCustomSchema(cfg);
@@ -3666,10 +3699,16 @@ async function runCustomFit(cfgId, goal) {
   const globals = computeCustomGlobals(cfg, ctx), pool = fitPool();
   const cur = {};
   schema.forEach(sp => { if (sp && sp.id != null) cur[sp.id] = fitStored(customParamValue(cfg, sp)); });
+  // The number a value stands for: a plain numeric option's own value, a number between the options, or null for a named choice.
+  const numberOf = (sp) => {
+    const options = new Map(customParamOptions(sp).map(o => [String(o.value), typeof o.value === 'number' && String(o.label) === String(o.value) ? o.value : null]));
+    const between = (v) => typeof v === 'string' && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
+    return v => options.has(String(v)) ? options.get(String(v)) : between(v);
+  };
   await fitRun({
-    key: cfgId, goal, hurdle, cur, close: pool.close,
+    key: cfgId, goal, round, hurdle, cur, close: pool.close,
     space: params.map(sp => ({ id: sp.id, label: fitLabel(schema, sp), values: customParamOptions(sp).map(o => fitStored(o.value)),
-      between: v => fitBetween(sp, v), text: v => customOptionLabel(sp, v) })),
+      between: v => fitBetween(sp, v), text: v => customOptionLabel(sp, v), number: numberOf(sp) })),
     measure: fitMemo(new Map(), p => pool.run(cfg.code, globals, p).then(fitScore)),
     cagrOf: f => cfgMoneyWeightedCAGR(ctx, f),
     apply: (values, changed) => {
@@ -3688,7 +3727,7 @@ const FIT_YIELD_MS = 25;
 // Stop. Which selects it may change, their names and one run's result come
 // from js/preview-dropdown.js (window.previewFit), which owns those engines'
 // option previews.
-async function runNativeFit(type, goal) {
+async function runNativeFit(type, goal, round) {
   const pf = window.previewFit, key = 'panel:' + type;
   if (_fit || !FIT_PANELS[type] || !pf) return;
   const selects = pf.selects(type).map(id => document.getElementById(id)).filter(el => el && !el.disabled && el.options.length > 1);
@@ -3709,9 +3748,10 @@ async function runNativeFit(type, goal) {
   }));
   const optionText = (el, v) => { const o = Array.from(el.options).find(x => x.value === String(v)); return o ? o.textContent.trim() : String(v); };
   await fitRun({
-    key, goal, hurdle, cur, close: () => {},
+    key, goal, round, hurdle, cur, close: () => {},
+    // A select's value can be in another unit than its text ("1 quarter" is 3 months), so a round fit goes by the text.
     space: selects.map(el => ({ id: el.id, label: pf.name(el.id), values: Array.from(el.options).filter(o => !o.disabled).map(o => o.value),
-      between: () => [], text: v => optionText(el, v) })),
+      between: () => [], text: v => optionText(el, v), number: v => fitShownNumber(optionText(el, v)) })),
     measure: fitMemo(new Map(), runOne),
     cagrOf: f => window._mwCagrOfFinal(f),
     apply: (values) => {
@@ -3720,7 +3760,7 @@ async function runNativeFit(type, goal) {
     },
   });
 }
-function runFit(key, goal) { return key.startsWith('panel:') ? runNativeFit(key.slice(6), goal) : runCustomFit(key, goal); }
+function runFit(key, goal, round) { return key.startsWith('panel:') ? runNativeFit(key.slice(6), goal, round) : runCustomFit(key, goal, round); }
 
 // A setting's name for the change list: its section's head ("Ceiling" of
 // "Ceiling — step aside") and its label without the unit in brackets, so two
@@ -3741,20 +3781,21 @@ function buildFitNoteHtml(note) {
   return `<div class="fit-note">${_escHtml(note.text)}${list}</div>`;
 }
 // The result line under Settings: what moved, on the chart's period.
-function fitNoteText(goal, cagrOf, start, best, hurdle, nChanged) {
+function fitNoteText(goal, round, cagrOf, start, best, hurdle, nChanged) {
   if (!best) return 'The runs failed, so nothing changed.';
   const cagr = (r) => cagrOf(r.final).toFixed(1) + '%';
   const dd = (r) => (r.dd * 100).toFixed(1) + '%';
-  if (goal === 'dd' && !(best.final > hurdle.final)) return `No setting beat buy & hold ${hurdle.fund.toUpperCase()} (${cagr(hurdle)} a year) here, so nothing changed.`;
-  if (!nChanged) return `${FIT_GOALS[goal].label}: the current settings are already the best found.`;
+  const inRound = round ? ` in ${FIT_ROUND.label}` : '';
+  if (goal === 'dd' && !(best.final > hurdle.final)) return `No setting${inRound} beat buy & hold ${hurdle.fund.toUpperCase()} (${cagr(hurdle)} a year) here, so nothing changed.`;
+  if (!nChanged) return `${fitGoalLabel(goal, round)}: the current settings are already the best found.`;
   const moved = `CAGR ${start ? cagr(start) + ' → ' : ''}${cagr(best)}, max drawdown ${start ? dd(start) + ' → ' : ''}${dd(best)}`;
   const changed = `${nChanged} setting${nChanged > 1 ? 's' : ''} changed`;
-  if (goal === 'cagr') return `${FIT_GOALS.cagr.label}: ${changed}. ${moved}.`;
+  if (goal === 'cagr') return `${fitGoalLabel(goal, round)}: ${changed}. ${moved}.`;
   const bh = `buy & hold ${hurdle.fund.toUpperCase()} (${cagr(hurdle)} a year)`;
   // Settings under the hurdle climb to it first, so the drawdown can grow.
   return start && !(start.final > hurdle.final)
-    ? `The current settings don't beat ${bh}. The lowest drawdown that does, and the highest CAGR at it, ${changed}: ${moved}.`
-    : `${FIT_GOALS.dd.label} that still beats ${bh}, and the highest CAGR at it, ${changed}: ${moved}.`;
+    ? `The current settings don't beat ${bh}. The lowest drawdown${inRound} that does, and the highest CAGR at it, ${changed}: ${moved}.`
+    : `${FIT_GOALS.dd.label}${inRound} that still beats ${bh}, and the highest CAGR at it, ${changed}: ${moved}.`;
 }
 
 // The Fit button beside "Reset to default"; a running search shows its progress and stops on click.
@@ -3768,8 +3809,9 @@ function openFitMenu(btn, key) {
   closeFitMenu();
   const menu = document.createElement('div');
   menu.className = 'pdrop-popup fit-menu';
-  menu.innerHTML = Object.keys(FIT_GOALS).map(k =>
-    `<div class="fit-menu-item" data-fit-goal="${k}"><b>${_escHtml(FIT_GOALS[k].label)}</b><span>${_escHtml(FIT_GOALS[k].tip)}</span></div>`).join('');
+  // Each goal, then the same goal on round values.
+  menu.innerHTML = Object.keys(FIT_GOALS).flatMap(k => [false, true].map(round =>
+    `<div class="fit-menu-item" data-fit-goal="${k}"${round ? ' data-fit-round' : ''}><b>${_escHtml(fitGoalLabel(k, round))}</b><span>${_escHtml(round ? FIT_ROUND.tip : FIT_GOALS[k].tip)}</span></div>`)).join('');
   document.body.appendChild(menu);
   positionCpPopup(menu, btn);
   menu.style.maxHeight = '';
@@ -4321,7 +4363,7 @@ document.addEventListener('click', (e) => {
   if (resetCustom) { resetCustomToDefaults(resetCustom.getAttribute('data-custom-reset')); return; }
   // Fit: the button opens the goal menu, or stops a running search; a menu item starts one.
   const fitGoal = e.target.closest('[data-fit-goal]');
-  if (fitGoal && _fitMenu) { const key = _fitMenu.key; closeFitMenu(); runFit(key, fitGoal.getAttribute('data-fit-goal')); return; }
+  if (fitGoal && _fitMenu) { const key = _fitMenu.key; closeFitMenu(); runFit(key, fitGoal.getAttribute('data-fit-goal'), fitGoal.hasAttribute('data-fit-round')); return; }
   const fitBtn = e.target.closest('[data-fit-key]');
   if (fitBtn) {
     if (_fit && _fit.key === fitBtn.getAttribute('data-fit-key')) { _fit.stopped = true; _fit.close(); return; }

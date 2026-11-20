@@ -4375,11 +4375,12 @@ CODE[53] = withMonthEndDip(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", day: 
 // closed under it a set number of days in a row; bought back at the first
 // close above that level.
 //
-// It ships at the user's settings (2026-11-21: "review and push with these
+// It shipped at the user's settings (2026-11-21: "review and push with these
 // settings"): 26% under the median, the median lower than three months before
 // (a rise under 0% a year), 10 closes under it. Since 2010 that has been out
 // once, 27 April 2022 to 19 January 2023; not in March 2020, March 2026 or
-// November 2026.
+// November 2026. The round fit at the end of this section moved them the same
+// day to 30%, 20% and 15; the figures here are at 26%, 0% and 10.
 //
 // Q1 2010 to Q4 2025, nothing else changed: 196.9% a year with a 47.1%
 // drawdown against 187.7% and 45.7% with the floor as committed, and 180.3%
@@ -4511,6 +4512,24 @@ function withoutSettings(base, spec) {
 }
 CODE[53] = withoutSettings(withBearExit(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", under: 26, slope: 0, closes: 10 }),
   { name: "SOXL, TQQQ, QQQ - 1983 fit", ids: ["floorLead", "floorHold", "floorBackDays", "floorBackOver", "floorBackCloses", "reentryLead", "reentryCloses", "deepLead", "deepGuard"], sections: ["Floor — sell the breakdown"] });
+
+// ===== #53: the round fit (the user, 2026-11-21: "publish fit with these") =====
+// The defaults are the user's own result of the Fit button's "Best CAGR, round
+// numbers", run twice on their copy, the second time on a history from the
+// 1980s to date: every fitted number is a round one. Twenty settings moved
+// from the values above. Q1 2010 to Q4 2025: 196.8% a year with a 51.9%
+// drawdown (May to August 2010) against 196.9% and 47.1% before; 2026 to 19
+// November up 586% against 319%, inside the fitted period; 1983-2025 82.0%
+// against 76.9%. The bear exit is out in February 2016, December 2018 to
+// January 2019 and April 2022 to January 2023, and the Month-end dip, now up
+// to 85% under the high, buys TQQQ over each month end of such a decline. The
+// bare entries read theirs from FIT_WITH_FLOOR and stay as they were. The card
+// (js/strategy-library.js) carries the same numbers.
+const FIT_ROUND_DEFAULTS = {
+  lookbackDays: 540, topLead: 125, topDays: 20, backLead: 35, bearUnder: 30, bearSlope: 20, bearCloses: 15,
+  overPct: 55, overWindow: 255, sqqqMaxDays: 15, nfciVeto: 0.5, soxlLeadDays: 420, soxlLeadEnter: -20, soxlLeadExit: 195,
+  pileFloor: "join", bigRise: 10, bigDrop: 25, dipDay: 4, dipUnder: 35, dipUnderMax: 85 };
+CODE[53] = withDefaults(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: FIT_ROUND_DEFAULTS });
 
 // ===== #55 Seasonal TQQQ, #56 Donchian breakout + ATR stop (the user, 2026-11-09:
 // "let's include 2x4", from a search for leveraged-fund strategies the library
