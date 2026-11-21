@@ -258,6 +258,8 @@ function _miniWedgePath(x, y, r, a, b) {
 // Without it the chart rests at the full range. A line
 // may set its own color, a unit ('%' or 'num'), a group (the panel it draws
 // in, MINI_PANEL), tall: true (that panel at full height), and in the
+// keep: true (data that may stay flat, such as the money put in: never left
+// out of the hover readout as a fixed level), and in the
 // compact layout a badge: { text, color },
 // on the row above its name while the latest date is on screen.
 function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
@@ -304,7 +306,10 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
         broken = false;
       } else broken = true;
     }
-    if (pts.length > 1) all.push({ key: ln.key, label: ln.label, color: colors[i], pts, badge: ln.badge || null, unit: spec.unit, spec, hidden });
+    // `fixed`: the same value on every day the line has one, a setting drawn
+    // as a line ("Sell for a day 10%"); the hover readout leaves such a level
+    // out. A line declared keep: true is data, never a setting, flat or not.
+    if (pts.length > 1) all.push({ key: ln.key, label: ln.label, color: colors[i], pts, fixed: ln.keep !== true && pts.every(p => p.v === pts[0].v), badge: ln.badge || null, unit: spec.unit, spec, hidden });
   });
   window._miniChartHover = null;
   if (!all.length) return '';
@@ -372,7 +377,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     let to = s.pts.length - 1; while (to > 0 && s.pts[to - 1].t >= t1) to--;
     const pts = s.pts.slice(from, to + 1), inWindow = pts.filter(p => p.t >= t0 && p.t <= t1);
     const endPt = inWindow.length ? inWindow[inWindow.length - 1] : pts[pts.length - 1];
-    return { key: s.key, label: s.label, color: s.color, pts, scalePts: inWindow.length ? inWindow : pts, endPt, shown: inWindow.length > 0, partial: endPt.t < t1 - endTol, badge: atEnd ? s.badge : null, unit: s.unit, panel: s.panel, hidden: s.hidden };
+    return { key: s.key, label: s.label, color: s.color, pts, scalePts: inWindow.length ? inWindow : pts, endPt, shown: inWindow.length > 0, partial: endPt.t < t1 - endTol, badge: atEnd ? s.badge : null, unit: s.unit, panel: s.panel, hidden: s.hidden, fixed: s.fixed };
   }).filter(s => s.pts.length > 1);
   if (!series.length) return '';
   // Right gutter: the value column, then the name column beside it (both
@@ -838,13 +843,6 @@ function _miniXAt(data, t) {
 function _miniFmtExact(v) { return v >= 1000 ? fmt(v) : '$' + v.toFixed(2); }
 // A value in a readout: exact dollars, else as its panel reads it.
 function _miniFmtReadout(unit, v) { return unit === '$' ? _miniFmtExact(v) : _miniFmtValue(unit, v); }
-// A readout's rows, one per panel in panel order: the panel's first line (the
-// price or reading its levels are compared with), then in brackets the
-// panel's other lines, the levels it is moving toward. `value` formats the
-// first line's part, `level` each bracketed one. A level's own closing
-// parenthesis is dropped ("Overextended (+55%)" reads "Overextended") so the
-// brackets never nest.
-// `hot` is the line nearest the cursor: its entry is bold, a level in full ink.
 // The index of the last entry of a date-sorted array (log rows, holdings) at
 // or before a day; -1 when none is.
 function _miniLastIdxAt(arr, d) {
@@ -887,15 +885,19 @@ function _miniPriceAt(fund, d) {
   const px = i != null ? daily[i][fund] : null;
   return px > 0 ? px : null;
 }
-// What the strategy holds at a day, for the tooltip (the user, 2026-11-06:
-// "say what we are holding currently, ticker and how much"): from the run's
-// per-day holdings when it returned them (the engine-based and multi-fund
-// entries), else from the latest log row at or before the day: the documented
-// row (held, shares, cash), or an older row that names what the whole value
-// sits in (held and value, with share for "TQQQ + CASH"). Each fund's worth is
-// its shares at that day's close in the site's data; cash is named when it is
-// more than pennies of the total. Empty when the log says nothing.
-function _miniHoldingAt(data, d, label = 'Holding') {
+// What the strategy holds at a day, by name, for the tooltip ("Holding TQQQ",
+// "Holding TQQQ · cash"; the user, 2026-11-21: "just keep holding x"): from
+// the run's per-day holdings when it returned them (the engine-based and
+// multi-fund entries), else from the latest log row at or before the day: the
+// documented row (held, shares, cash), or an older row that names what the
+// whole value sits in (held and value, with share for "TQQQ + CASH"). Each
+// fund's worth is its shares at that day's close in the site's data. A fund
+// or the cash is named when it is at least MINI_HOLD_MIN_SHARE of the total,
+// so pennies beside the whole account are not called a holding; a fund the
+// site has no price for that day is named as it is. Empty when the log says
+// nothing.
+const MINI_HOLD_MIN_SHARE = 0.005;
+function _miniHoldingAt(data, d) {
   let parts, cash;
   const at = _miniLatestAt(data.holdings, d);
   if (at) { parts = Object.entries(at.h).filter(([, sh]) => sh > 0); cash = at.cash > 0 ? at.cash : 0; }
@@ -912,22 +914,60 @@ function _miniHoldingAt(data, d, label = 'Holding') {
       parts = funds.length && part > 0 ? [[funds[0], row.value * part / px]] : []; cash = row.value * (1 - part);
     } else return '';
   }
-  const priced = parts.map(([fund, sh]) => ({ fund, sh, worth: _miniPriceAt(fund, d) ? sh * _miniPriceAt(fund, d) : null }));
-  const total = priced.reduce((s, p) => s + (p.worth || 0), 0) + cash;
-  const sharesTxt = n => (n >= 100 ? Math.round(n).toLocaleString('en-US') : n.toFixed(2));
-  const items = priced.map(p => `<b>${_escHtml(p.fund.toUpperCase())}</b> ${sharesTxt(p.sh)} sh${p.worth != null ? ` · ${fmtFull(p.worth)}` : ''}`);
-  if (cash >= 1 && (!priced.length || cash >= 0.005 * total)) items.push(`${priced.length ? '' : '<b>cash</b> '}${priced.length ? 'cash ' : ''}${fmtFull(cash)}`);
-  return items.length ? `<div class="mct-hold">${label} ${items.join(' · ')}</div>` : '';
+  const priced = parts.map(([fund, sh]) => ({ fund, worth: _miniPriceAt(fund, d) ? sh * _miniPriceAt(fund, d) : null }));
+  const least = MINI_HOLD_MIN_SHARE * (priced.reduce((s, p) => s + (p.worth || 0), 0) + cash);
+  const names = priced.filter(p => p.worth == null || p.worth >= least).map(p => p.fund.toUpperCase());
+  if (cash >= 1 && cash >= least) names.push('cash');
+  return names.length ? `<div class="mct-hold">Holding ${names.map(n => `<b>${_escHtml(n)}</b>`).join(' · ')}</div>` : '';
 }
+// A readout's rows, one per panel in panel order: the panel's first line (the
+// price or reading its levels are compared with), then, where `level` is
+// given, the panel's other lines in brackets, the levels it is moving toward.
+// `value` formats the first line's part, `level` each bracketed one. A level's
+// own closing parenthesis is dropped ("Overextended (+55%)" reads
+// "Overextended") so the brackets never nest.
+// `hot` is the line nearest the cursor: its entry is bold, a level in full ink.
 function _miniPanelRows(data, items, value, level, hot) {
   const mark = (it, html) => (it === hot ? `<span class="mct-hot">${html}</span>` : html);
   return data.panels.map((_, p) => {
     const own = items.filter(it => it.panel === p);
     if (!own.length) return '';
-    const levels = own.slice(1).map(it => mark(it, `${_escHtml(it.label.replace(/\s*\([^()]*\)$/, ''))} ${level(it)}`)).join(' · ');
+    const levels = level ? own.slice(1).map(it => mark(it, `${_escHtml(it.label.replace(/\s*\([^()]*\)$/, ''))} ${level(it)}`)).join(' · ') : '';
     return `<div class="mct-row"><span class="mct-dot" style="background:${own[0].color}"></span>`
       + `<span>${mark(own[0], `${_escHtml(own[0].label)} ${value(own[0])}`)}${levels ? ` <span class="mct-levels">(${levels})</span>` : ''}</span></div>`;
   }).join('');
+}
+// A value's height on its line's own panel.
+const _miniLineY = (data, s, v) => _miniPanelY(data.panels[s.panel], v);
+// A day's readout: the crosshair with a dot on every line (`marks`, svg) and
+// the tooltip's part (`html`): the date, what is held, then each panel's
+// reading and the levels that move with the day. A level that never moves
+// (`fixed`) is left out: its value is on the chart's own label. `day` is
+// { t, d }: its time and its date as logged. `cy` is the cursor's height: the listed line nearest it, within the panel it is over,
+// is bold; null for a readout under hovered trades, where no line is.
+function _miniDayReadout(data, day, cy) {
+  const cx = _miniXAt(data, day.t).toFixed(1);
+  const hits = data.series.map(s => ({ ...s, pt: _miniPtAt(s.pts, day.t), reading: s === data.series.find(o => o.panel === s.panel) })).filter(h => h.pt);
+  const listed = hits.filter(h => h.reading || !h.fixed);
+  const over = cy == null ? -1 : data.panels.findIndex(P => cy >= P.top && cy <= P.bottom);
+  const hot = listed.filter(h => h.panel === over).sort((a, b) => Math.abs(_miniLineY(data, a, a.pt.v) - cy) - Math.abs(_miniLineY(data, b, b.pt.v) - cy))[0] || null;
+  return {
+    marks: `<line x1="${cx}" y1="${data.padT}" x2="${cx}" y2="${data.H - data.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
+      + hits.map(h => `<circle cx="${cx}" cy="${_miniLineY(data, h, h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join(''),
+    html: `<div class="mct-date">${_escHtml(fmtLogDate(day.d))}</div>`
+      + _miniHoldingAt(data, day.d)
+      + _miniPanelRows(data, listed, h => `<b>${_miniFmtReadout(h.unit, h.pt.v)}</b>`, h => _miniFmtReadout(h.unit, h.pt.v), hot),
+  };
+}
+// The day hovered trades are read on: the day of the trade nearest the
+// cursor, so the readout is always of a day one of them happened (at full
+// range the day under the cursor itself can be weeks from a band's trades).
+// It is the trade's own day as logged, whether or not the chart's first line
+// has a point there. `items` are the trades the tooltip lists.
+function _miniTradesDay(svg, e, data, items) {
+  const t = _miniTimeAtX(data, _miniCursorX(svg, e, data));
+  const nearest = items.reduce((a, b) => (Math.abs(b.t - t) < Math.abs(a.t - t) ? b : a));
+  return { t: nearest.t, d: nearest.date };
 }
 function _miniHoverGroup(svg) {
   let g = svg.querySelector('.mini-hover');
@@ -938,84 +978,14 @@ function _miniHoverGroup(svg) {
   }
   return g;
 }
-// --- the strategy over a dragged range ---------------------------------------
-// While a range is dragged or pinned, the tooltip also shows the strategy run
-// from the range's first day to its last, from the host's run(cfgId, from, to)
-// (js/saved-configs.js's strategy panel; the widget registers none). One run
-// at a time: while one is out the newest range waits and the ones dragged
-// past in between are skipped, so a fast drag never queues a backlog. Results
-// live for one drag, so a change of settings between drags is never answered
-// from an older run.
-let _miniRangeSimHost = null;
-function setMiniRangeSim(run) { _miniRangeSimHost = run; }
-let _miniRangeSims = new Map(), _miniRangeSimBusy = false, _miniRangeSimWanted = null;
-function _miniRangeSimKey(cfgId, from, to) { return `${cfgId}|${from}|${to}`; }
-// The run for a range: its result, null when it failed, undefined while running.
-function _miniRangeSimFor(cfgId, from, to) {
-  const key = _miniRangeSimKey(cfgId, from, to);
-  if (!_miniRangeSims.has(key)) { _miniRangeSimWanted = { key, cfgId, from, to }; _miniRangeSimPump(); }
-  return _miniRangeSims.get(key);
-}
-function _miniRangeSimPump() {
-  if (_miniRangeSimBusy || !_miniRangeSimWanted) return;
-  const job = _miniRangeSimWanted, cache = _miniRangeSims;
-  _miniRangeSimWanted = null;
-  if (cache.has(job.key)) { _miniRangeSimPump(); return; }
-  _miniRangeSimBusy = true;
-  // Through a promise, so a host that throws fails this run instead of
-  // leaving the queue busy for good.
-  Promise.resolve().then(() => _miniRangeSimHost(job.cfgId, job.from, job.to))
-    .then(result => cache.set(job.key, result), () => cache.set(job.key, null))
-    .finally(() => {
-      _miniRangeSimBusy = false;
-      if (cache === _miniRangeSims) _miniRangeSimShow(job.key);
-      _miniRangeSimPump();
-    });
-}
-// A finished run fills its row block in the tooltip, if that range is still shown.
-function _miniRangeSimShow(key) {
-  const shown = window._miniRangeShown, tip = document.getElementById('mini-chart-tip');
-  const slot = tip && shown && shown.key === key ? tip.querySelector('.mct-sim') : null;
-  if (!slot) return;
-  slot.outerHTML = _miniRangeSimHtml(_miniRangeSims.get(key), shown.from);
-  _miniPlaceTip(tip, shown.at, shown.avoid);
-}
-const _miniSigned = (v, txt) => `<b class="${v >= 0 ? 'mct-pos' : 'mct-neg'}">${v >= 0 ? '+' : '−'}${txt}</b>`;
-const _miniSimRow = (k, v) => `<div class="mct-sim-row"><span>${k}</span>${v}</div>`;
-// The fresh start's rows, in the main chart's terms: what the portfolio grew
-// to, what went in, the profit, then the strategy's CAGR and deepest
-// drawdown. Its heading names the day it starts on, since it is another run
-// than the one the chart draws.
-function _miniRangeSimHtml(sim, from) {
-  const head = `<div class="mct-ev-head">If started on ${fmtLogDate(from)}</div>`;
-  if (sim === undefined) return `<div class="mct-sim">${head}<div class="mct-sim-wait">Running…</div></div>`;
-  if (!sim) return `<div class="mct-sim">${head}<div class="mct-sim-wait">The strategy did not run for this range.</div></div>`;
-  const rows = [_miniSimRow('Portfolio', `<b>${fmtFull(sim.value)}</b>`)];
-  if (sim.invested != null) {
-    const profit = sim.value - sim.invested;
-    rows.push(_miniSimRow('Invested', `<b>${fmtFull(sim.invested)}</b>`));
-    rows.push(_miniSimRow('Profit', _miniSigned(profit, fmtFull(Math.abs(profit)) + (sim.invested > 0 ? ` · ${Math.abs(profit / sim.invested * 100).toFixed(1)}%` : ''))));
-  }
-  rows.push(_miniSimRow('CAGR', _miniSigned(sim.cagr, `${Math.abs(sim.cagr).toFixed(1)}%`)));
-  rows.push(_miniSimRow('Max drawdown', `<b class="mct-neg">${sim.maxDD > 0 ? '−' : ''}${sim.maxDD.toFixed(1)}%</b>`));
-  return `<div class="mct-sim">${head}${rows.join('')}</div>`;
-}
-// A dragged range's block under the lines' changes. First the strategy as
-// the chart's own run traded it: its return over the range (_miniRunReturn).
-// Then, where a host runs it (`fresh`), the same strategy started on the
-// range's first day with the main chart's money. The two can differ: the
-// fresh start's money arrives in cash at that close, so it can take a trade
-// the run on screen, still in another fund that day, could not (the user,
-// 2026-11-20: "why does strategy says 10% gain, don't we keep cash in here").
-function _miniRangeBlockHtml(data, from, to, fresh) {
+// A dragged range's last row, under the lines' changes: the strategy's return
+// over the range as the chart's own run traded it (_miniRunReturn). Empty
+// where that run's rows carry no money, as a built-in panel's do.
+function _miniRangeReturnHtml(data, from, to) {
   const own = _miniRunReturn(data, from, to);
-  let ownHtml = '';
-  if (own != null) {
-    const digits = Math.abs(own) < 1 ? 2 : 1, shown = +own.toFixed(digits) || 0;   // || 0: never "−0.00%"
-    ownHtml = '<div class="mct-ev-head">Strategy over this range</div>' + _miniSimRow('Return', _miniSigned(shown, `${Math.abs(shown).toFixed(digits)}%`));
-  }
-  const freshHtml = fresh ? _miniRangeSimHtml(_miniRangeSimFor(data.cfgId, from, to), from) : '';
-  return ownHtml || freshHtml ? `<div class="mct-range">${ownHtml}${freshHtml}</div>` : '';
+  if (own == null) return '';
+  const digits = Math.abs(own) < 1 ? 2 : 1, shown = +own.toFixed(digits) || 0;   // || 0: never "−0.00%"
+  return `<div class="mct-range"><span>Strategy return</span><b class="${shown >= 0 ? 'mct-pos' : 'mct-neg'}">${shown >= 0 ? '+' : '−'}${Math.abs(shown).toFixed(digits)}%</b></div>`;
 }
 // The tooltip's place: right of the cursor and under it, on the other side
 // where the window ends. `avoid` holds boxes in window pixels that must stay
@@ -1065,11 +1035,10 @@ function _miniTipClearOf(avoid, e, w, h, top) {
 // chord's own panel. `box` is the badge's outline in the chart's own units.
 function _miniRangeBadges(data, readings, xA, xB) {
   const k = data.k, fs = 7 / k, ch = fs * 0.6, lh = 10 / k, padX = 3 / k;
-  const yAt = (s, v) => _miniPanelY(data.panels[s.panel], v);
   return data.panels.flatMap((P, p) => {
     const own = readings.filter(s => s.panel === p).map(s => {
       const move = _miniRangeMove(s.unit, s.p0.v, s.p1.v);
-      return { y: (yAt(s, s.p0.v) + yAt(s, s.p1.v)) / 2 - lh / 2, move, label: s.label };
+      return { y: (_miniLineY(data, s, s.p0.v) + _miniLineY(data, s, s.p1.v)) / 2 - lh / 2, move, label: s.label };
     }).sort((a, b) => a.y - b.y);
     for (let i = 1; i < own.length; i++) if (own[i].y - own[i - 1].y < lh) own[i].y = own[i - 1].y + lh;
     if (data.panels.length > 1) for (let i = own.length - 1; i >= 0; i--) {
@@ -1098,11 +1067,12 @@ function _miniMoveText(it) {
 // it, the date and the strategy's own note. A dense band lists its first
 // trades and counts the rest: the tooltip cannot scroll, and zooming in
 // splits the band anyway.
+const _miniListedTrades = group => group.items.slice(0, MINI_EVENT.maxListed);
 function _miniEventRows(group) {
-  const listed = group.items.slice(0, MINI_EVENT.maxListed), unlisted = group.items.length - listed.length;
+  const listed = _miniListedTrades(group), unlisted = group.items.length - listed.length;
   return (group.items.length > 1 ? `<div class="mct-ev-head">${group.items.length} trades in this band</div>` : '')
     + listed.map(it => `<div class="mct-ev"><span class="mct-dot" style="background:${it.color};box-shadow:0 0 0 2px ${it.ring}${it.part ? `;clip-path:${_miniWedgeClip(it.part[0], it.part[1])}` : ''}"></span>`
-        + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${_miniTradeDay(it.date)}</span>`
+        + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${_escHtml(_miniTradeDay(it.date))}</span>`
         + (it.note ? `<div class="mct-ev-note">${_escHtml(it.note)}</div>` : '')
         + (it.beforeClose != null ? `<div class="mct-ev-note mct-ev-open">Not final: the price is from ${_miniCloseGap(it.beforeClose)} before the close.</div>` : '') + `</div>`).join('')
     + (unlisted > 0 ? `<div class="mct-ev-head">and ${unlisted} more — zoom in to split this band</div>` : '');
@@ -1248,15 +1218,15 @@ document.addEventListener('pointercancel', _miniTouchEnd);
 // pans the zoomed window: the chart follows the cursor, pixel for pixel, until
 // the button is released, and stops at either end of the data (a full view has
 // nowhere to go). Without it the drag selects a range, like the main chart's:
-// while dragging, the overlay shades the span, draws each line's chord
-// between its two endpoints, and the tooltip shows every line's % change
-// with the exact from → to values. Auto-clears on release. The range drag
+// while dragging, the overlay shades the span, draws each panel's chord
+// between its reading's two endpoints, and the tooltip shows how long the
+// range is, each reading's exact from → to values and the strategy's return
+// over it. Auto-clears on release. The range drag
 // starts on the plot only: the strip above it belongs to the trade bands.
 document.addEventListener('mousedown', (e) => {
   // Any press dismisses a pinned range, as on the main chart; a press on a
-  // chart then starts its own drag. Range runs are kept for one drag only.
+  // chart then starts its own drag.
   if (window._miniPinned) _miniChartClearHover();
-  _miniRangeSims = new Map();
   const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
   const data = _miniDataOf(svg);
   if (!svg || !data || !data.series.length) return;
@@ -1315,23 +1285,24 @@ document.addEventListener('mousemove', (e) => {
   if (!svg) { if (window._miniHoverActive && !window._miniDragAnchor) _miniChartClearHover(); return; }
   const data = _miniDataOf(svg);
   if (!data || !data.series.length) return;
-  const yAt = (s, v) => _miniPanelY(data.panels[s.panel], v);   // on the line's own panel
   const plotBottom = data.H - data.padB;
   const g = _miniHoverGroup(svg);
   const tip = _miniChartTipEl();
   const drag = window._miniDragAnchor && window._miniDragCfg === data.cfgId ? window._miniDragAnchor : null;
   window._miniRangeShown = null;   // set again below while the readout is a range
 
-  // The strip above the plot is the trade layer: over a band it lists that
-  // band's trades and nothing else; off a band it shows nothing. The value
-  // hover below never mentions trades, so the two readouts stay apart.
+  // The strip above the plot is the trade layer: over a band the tooltip
+  // lists that band's trades, then a day's readout under them (the user,
+  // 2026-11-21: "I want normal hover details also to be shown"); off a band
+  // it shows nothing. The plain hover below never mentions trades.
   if (!drag && _miniCursorY(svg, e, data) < data.padT) {
     const hit = e.target.closest('.mini-zoom-reset, .mini-latest') ? null : _miniEventAt(data, _miniCursorX(svg, e, data));
     _miniHighlightEvent(svg, hit ? hit.index : -1);
-    g.innerHTML = '';
     window._miniHoverActive = true;
-    if (!hit) { tip.setAttribute('hidden', ''); return; }
-    tip.innerHTML = _miniEventRows(hit.group);
+    if (!hit) { g.innerHTML = ''; tip.setAttribute('hidden', ''); return; }
+    const day = _miniDayReadout(data, _miniTradesDay(svg, e, data, _miniListedTrades(hit.group)), null);
+    g.innerHTML = day.marks;
+    tip.innerHTML = _miniEventRows(hit.group) + day.html;
     _miniPlaceTip(tip, e);
     return;
   }
@@ -1339,20 +1310,20 @@ document.addEventListener('mousemove', (e) => {
   const anchor = _miniAnchorFromEvent(svg, e, data);
 
   if (drag && drag.t !== anchor.t) {
-    // Range mode: shaded span + per-series chords, % change in the tooltip.
+    // Range mode: shaded span + a chord per panel, the readings' moves in the tooltip.
     let lo = drag, hi = anchor;
     if (hi.t < lo.t) { lo = anchor; hi = drag; }
     const xA = _miniXAt(data, lo.t), xB = _miniXAt(data, hi.t);
     const spans = data.series.map(s => ({ ...s, p0: _miniPtAt(s.pts, lo.t), p1: _miniPtAt(s.pts, hi.t) })).filter(s => s.p0 && s.p1);
-    // Chords and their badges for each panel's first line, its reading; the
-    // levels are listed in the readout.
+    // Each panel's first line, its reading, gets a chord, a badge and a row in
+    // the readout; its levels get none.
     const readings = data.panels.map((_, p) => spans.find(s => s.panel === p)).filter(Boolean);
     const badges = _miniRangeBadges(data, readings, xA, xB);
     g.innerHTML = `<rect x="${xA.toFixed(1)}" y="${data.padT}" width="${(xB - xA).toFixed(1)}" height="${(plotBottom - data.padT).toFixed(2)}" fill="rgba(134,118,255,0.10)"/>`
       + `<line x1="${xA.toFixed(1)}" y1="${data.padT}" x2="${xA.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
       + `<line x1="${xB.toFixed(1)}" y1="${data.padT}" x2="${xB.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
       + readings.map(s => {
-          const y0 = yAt(s, s.p0.v).toFixed(1), y1 = yAt(s, s.p1.v).toFixed(1);
+          const y0 = _miniLineY(data, s, s.p0.v).toFixed(1), y1 = _miniLineY(data, s, s.p1.v).toFixed(1);
           return `<line x1="${xA.toFixed(1)}" y1="${y0}" x2="${xB.toFixed(1)}" y2="${y1}" stroke="${s.color}" stroke-width="0.5" stroke-dasharray="2,1.5"/>
             <circle cx="${xA.toFixed(1)}" cy="${y0}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>
             <circle cx="${xB.toFixed(1)}" cy="${y1}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>`;
@@ -1366,42 +1337,35 @@ document.addEventListener('mousemove', (e) => {
     // The badges' boxes in window pixels: the tooltip keeps clear of them.
     const svgBox = svg.getBoundingClientRect(), px = svgBox.width / data.W;
     const avoid = badges.map(m => ({ left: svgBox.left + m.box.x * px, right: svgBox.left + (m.box.x + m.box.w) * px, top: svgBox.top + m.box.y * px, bottom: svgBox.top + (m.box.y + m.box.h) * px }));
-    const simKey = _miniRangeSimHost ? _miniRangeSimKey(data.cfgId, lo.d, hi.d) : null;
-    // Each reading from the range's start to its end, coloured by direction,
-    // and its levels at the end; the chords' badges carry the moves.
-    tip.innerHTML = `<div class="mct-date">${fmtLogDate(lo.d)} – ${fmtLogDate(hi.d)}</div>`
-      + _miniHoldingAt(data, hi.d, 'Holding at the end')
-      + _miniPanelRows(data, spans,
-          s => `<span class="mct-from">${_miniFmtReadout(s.unit, s.p0.v)} →</span> <b class="${s.p1.v >= s.p0.v ? 'mct-pos' : 'mct-neg'}">${_miniFmtReadout(s.unit, s.p1.v)}</b>`,
-          s => _miniFmtReadout(s.unit, s.p1.v))
-      + _miniRangeBlockHtml(data, lo.d, hi.d, !!simKey);
+    // How long the range is, then each panel's reading from the range's start
+    // to its end, coloured by direction, a price with its change in percent
+    // beside it (a reading in percent already is one), then the strategy's
+    // return. The chords' badges carry the moves.
+    tip.innerHTML = `<div class="mct-date">${formatRangeDuration(lo.d, hi.d)}</div>`
+      + _miniPanelRows(data, readings, s => `<span class="mct-from">${_miniFmtReadout(s.unit, s.p0.v)} →</span> `
+          + `<b class="${s.p1.v >= s.p0.v ? 'mct-pos' : 'mct-neg'}">${_miniFmtReadout(s.unit, s.p1.v)}${s.unit === '$' ? ` (${_miniRangeMove(s.unit, s.p0.v, s.p1.v).text})` : ''}</b>`)
+      + _miniRangeReturnHtml(data, lo.d, hi.d);
     _miniPlaceTip(tip, e, avoid);
-    window._miniRangeShown = { cfgId: data.cfgId, key: simKey, from: lo.d, at: { clientX: e.clientX, clientY: e.clientY }, avoid };
+    window._miniRangeShown = { cfgId: data.cfgId };
     window._miniHoverActive = true;
     return;
   }
 
-  // A trade mark under the cursor answers for its trade instead of the values.
+  // A trade mark under the cursor: its trade, then the readout of the trade's day.
   const mark = drag ? null : _miniMarkAt(svg, e, data);
   if (mark) {
-    g.innerHTML = `<circle cx="${mark.x.toFixed(2)}" cy="${mark.y.toFixed(2)}" r="${(mark.r + 2.5 / data.k).toFixed(2)}" fill="none" stroke="${mark.item.color}" stroke-width="${(1 / data.k).toFixed(2)}"/>`;
-    tip.innerHTML = _miniEventRows({ items: [mark.item] });
+    const day = _miniDayReadout(data, _miniTradesDay(svg, e, data, [mark.item]), null);
+    g.innerHTML = day.marks + `<circle cx="${mark.x.toFixed(2)}" cy="${mark.y.toFixed(2)}" r="${(mark.r + 2.5 / data.k).toFixed(2)}" fill="none" stroke="${mark.item.color}" stroke-width="${(1 / data.k).toFixed(2)}"/>`;
+    tip.innerHTML = _miniEventRows({ items: [mark.item] }) + day.html;
     _miniPlaceTip(tip, e);
     window._miniHoverActive = true;
     return;
   }
 
-  // Plain hover: crosshair + values at the snapped day. The line nearest the
-  // cursor, within the panel the cursor is over, is bold in the readout.
-  const cx = _miniXAt(data, anchor.t), cy = _miniCursorY(svg, e, data);
-  const hits = data.series.map(s => ({ ...s, pt: _miniPtAt(s.pts, anchor.t) })).filter(h => h.pt);
-  const over = data.panels.findIndex(P => cy >= P.top && cy <= P.bottom);
-  const hot = hits.filter(h => h.panel === over).sort((a, b) => Math.abs(yAt(a, a.pt.v) - cy) - Math.abs(yAt(b, b.pt.v) - cy))[0] || null;
-  g.innerHTML = `<line x1="${cx.toFixed(1)}" y1="${data.padT}" x2="${cx.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
-    + hits.map(h => `<circle cx="${cx.toFixed(1)}" cy="${yAt(h, h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join('');
-  tip.innerHTML = `<div class="mct-date">${fmtLogDate(anchor.d)}</div>`
-    + _miniHoldingAt(data, anchor.d)
-    + _miniPanelRows(data, hits, h => `<b>${_miniFmtReadout(h.unit, h.pt.v)}</b>`, h => _miniFmtReadout(h.unit, h.pt.v), hot);
+  // Plain hover: the readout of the snapped day.
+  const day = _miniDayReadout(data, anchor, _miniCursorY(svg, e, data));
+  g.innerHTML = day.marks;
+  tip.innerHTML = day.html;
   _miniPlaceTip(tip, e);
   window._miniHoverActive = true;
 });

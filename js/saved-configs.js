@@ -235,36 +235,6 @@ function customSignalChartHtml(cfg, lines, width) {
   return buildCustomLinesChartHtml(cfg, lines, view.log, width, { home: view.home, holdings: view.holdings, runs: view.runs });
 }
 
-// The strategy over a range dragged on the panel's signal chart (its tooltip,
-// js/signal-chart.js's setMiniRangeSim): the same code and settings, entered
-// on the range's first day and left on its last, on the main chart's money —
-// its starting amount, monthly contribution and yearly raise, or a
-// transaction history re-derived for that entry the way the main chart does.
-// Resolves to the tooltip's figures (nominal dollars), or null when the run
-// fails. Invested is the log's own `invested`; a strategy that does not log
-// it gets no invested or profit rows.
-function runCustomRangeSim(cfgId, from, to) {
-  const cfg = savedConfigs.find(c => c.id === cfgId), base = window._customCtx;
-  if (!cfg || !base) return Promise.resolve(null);
-  let ctx = { ...base, entryDateOverride: from, exitDateOverride: to };
-  const eff = window._txSchedule ? txEffectiveForEntry(window._txSchedule, from, base.rate) : null;
-  if (eff) ctx = { ...ctx, initial: eff.initial, contribSchedule: eff.schedule };
-  return new Promise(resolve => postCustomJob(cfg, cfg.params || {}, computeCustomGlobals(cfg, ctx), (msg, err) => {
-    if (err || !msg || msg.error || !Array.isArray(msg.log) || !msg.log.length) { resolve(null); return; }
-    const last = msg.log[msg.log.length - 1];
-    const invested = typeof last.invested === 'number' && Number.isFinite(last.invested) ? last.invested : null;
-    const years = (Date.parse(to) - Date.parse(from)) / (365.25 * 86400000);
-    // A strategy with its own money is measured on its own deposits in the range.
-    const runCtx = msg.money === 'own' ? ownMoneyCtx(ctx, msg.log, from) : ctx;
-    const stats = customSeriesResult(msg.log, { ...runCtx, labels: [from, to], years, totalContributed: invested }, null, undefined, false, msg.holdingsDD);
-    resolve({ value: stats.end, invested, cagr: stats.cagr, maxDD: stats.maxDD });
-  }));
-}
-// Custom strategies run in the worker; the built-in SMA and 9sig panels'
-// charts run their own engines (js/chart.js's runNativeRangeSim).
-setMiniRangeSim((cfgId, from, to) => (savedConfigs.some(c => c.id === cfgId && c.type === 'custom')
-  ? runCustomRangeSim(cfgId, from, to) : runNativeRangeSim(from, to)));
-
 // The strategy panel as the signal chart's host (js/signal-chart.js): redraw
 // just the chart svg of the open panel (nothing else in the panel) from the
 // current width, log and zoom — a custom strategy's, or a built-in SMA or
@@ -3876,7 +3846,7 @@ const fmtLogSignedPercent = (v) => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(
 function fmtCustomLogCell(k, v, unit) {
   if (v == null || v === '') return '';
   const lk = String(k).toLowerCase();
-  if (lk === 'date') return (typeof fmtLogDate === 'function') ? fmtLogDate(String(v)) : _escHtml(v);
+  if (lk === 'date') return _escHtml(typeof fmtLogDate === 'function' ? fmtLogDate(String(v)) : v);
   if (typeof v === 'boolean') return v ? 'yes' : 'no';
   if (typeof v === 'number') {
     if (!Number.isFinite(v)) return '—';

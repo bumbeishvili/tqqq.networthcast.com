@@ -1511,7 +1511,7 @@ function nineSigSignalChart() {
   const lines = [{ key: 'sigHolding', label: `${UL} holding` }, { key: 'sigLine', label: 'Signal line' }];
   const i0 = dailyDateToIdx.get(log[0].date), i1 = dailyDateToIdx.get(log[log.length - 1].date);
   if (i0 == null || i1 == null) return null;
-  const rows = [];
+  const rows = [], holdings = [];
   let k = 0;
   for (let i = i0; i <= i1; i++) {
     const date = daily[i].date;
@@ -1521,8 +1521,10 @@ function nineSigSignalChart() {
     const signal = next && r.target > 0 && next.target > 0
       ? r.target * Math.pow(next.target / r.target, (Date.parse(date) - Date.parse(r.date)) / (Date.parse(next.date) - Date.parse(r.date)))
       : r.target;
-    // held, shares and cash: what the chart's tooltip names as the holding.
-    const day = { date, sigHolding: holding, sigLine: signal, held: UL, shares, cash: r.cash };
+    // What the chart's tooltip names as the holding: the fund's shares and the
+    // cash on every day, a sell's included (its row is held 'cash' below).
+    holdings.push({ date, cash: r.cash, h: { [key]: shares } });
+    const day = { date, sigHolding: holding, sigLine: signal, held: UL };
     // The rebalance's own words: "BUY $12.3K", "SELL $8.1K (30d expired)",
     // "RESET $40K (spike)". A sell's row holds cash, so the trade reads
     // "Sell TQQQ".
@@ -1543,7 +1545,7 @@ function nineSigSignalChart() {
     last.projected = true;
     last.note += `; the rebalance if the ${period.replace(/ly$/, '')} ended today`;
   }
-  return { lines, rows, home: null };
+  return { lines, rows, home: null, holdings };
 }
 // Which signal lines a base line's chart shows; a saved strategy keeps its
 // own in cfg.subShown, as a custom strategy does.
@@ -1564,26 +1566,6 @@ function nativeSignalChart(idx) {
   const built = idx === 8 ? smaSignalChart() : idx === 0 ? nineSigSignalChart() : null;
   if (!built) return null;
   return { cfg: nativeSignalCfg(idx), lines: built.lines, log: built.rows, home: built.home, holdings: built.holdings || null };
-}
-// The strategy over a range dragged on a built-in panel's signal chart (its
-// tooltip, js/signal-chart.js's setMiniRangeSim): the panel's settings through
-// the engine path a saved strategy's line takes (computeConfigSeries), entered
-// on the range's first day and left on its last, on the main chart's money,
-// re-derived for that entry when a transaction history is active, as
-// runCustomRangeSim does. The figures are the line's own: a range over the
-// whole main period reads what the panel's stats do.
-function runNativeRangeSim(from, to) {
-  const ctx = window._chartMoneyCtx, type = PANEL_KEY_BY_IDX[_currentPanelIdx];
-  if (!ctx || (type !== 'sma' && type !== '9sig')) return null;
-  const eff = window._txSchedule ? txEffectiveForEntry(window._txSchedule, from, ctx.rate) : null;
-  const s = computeConfigSeries({ id: 'panel-range-run', type, params: captureParams(type) }, {
-    ...ctx, ...(eff ? { initial: eff.initial, contribSchedule: eff.schedule } : {}),
-    labels: [from, to], years: (Date.parse(to) - Date.parse(from)) / (365.25 * 86400000),
-    entryDateOverride: from, exitDateOverride: to, entryDateForSim: from,
-    simEntryIdx: Math.max(0, quarterIdxForDate(from) - 1), exitIdx: quarterIdxForDate(to),
-    displayGrain: 'quarterly', isLatestDaySelected: false,
-  });
-  return { value: s.end, invested: s.contributed, cagr: s.cagr, maxDD: s.maxDD };
 }
 
 // Strategy detail side panel — opens when a legend chip's more-button is
@@ -2746,7 +2728,7 @@ function render() {
   // chart already does.
   const cfgCtx = {
     // rate: the Invested Compounded baseline, for re-deriving a transaction
-    // history at another entry date (the panel chart's range runs).
+    // history at another entry date (js/saved-configs.js's ownMoneyCtx).
     initial, monthly, annualRaise, rate, simEntryIdx, exitIdx, labels, years, totalContributed,
     ...((entryOverride || exitOverride) ? { entryDateOverride: entryDateForSim, exitDateOverride: exitDateForSim } : {}),
     contribSchedule,
@@ -2762,8 +2744,6 @@ function render() {
     // to build its own "yesterday" qData.
     isLatestDaySelected, prevTradingDayDate, entryDateForSim,
   };
-  // The money the built-in panels' range runs use (runNativeRangeSim).
-  window._chartMoneyCtx = cfgCtx;
   if (chart) {
     // externalTooltip (defined once, at chart creation below) is a stable
     // callback Chart.js keeps calling on every render — it can't close over

@@ -182,7 +182,7 @@
     const chart = (valueKey, valueLabel, rows) => ({
       lines: [
         { key: valueKey, label: valueLabel, badge: sessionBadge(rows[rows.length - 1][valueKey]) },
-        { key: 'invested', label: 'Invested', color: TX_INVESTED_COLOR },
+        { key: 'invested', label: 'Invested', color: TX_INVESTED_COLOR, keep: true },
         { key: 'profit', label: 'Profit', color: TX_PROFIT_COLOR },
       ],
       rows,
@@ -308,9 +308,6 @@
     $('wp-bottom').style.flexGrow = BOTTOM_PX;
   }
   setMiniChartHost(redraw);
-  // The panel's range runs need the main chart's money settings, which this
-  // page has none of: a dragged range here shows the lines' changes only.
-  setMiniRangeSim(null);
   if (_miniChartResizeObs) { _miniChartResizeObs.observe($('wp-portfolio')); _miniChartResizeObs.observe($('wp-signal')); }
   window.addEventListener('resize', reportSize);
   if (window.frameElement) relayPointerMoves(window, window.frameElement);

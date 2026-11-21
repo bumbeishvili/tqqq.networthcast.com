@@ -3257,8 +3257,7 @@
     color: var(--text-muted);
     margin-bottom: 4px;
   }
-  /* What the strategy holds at the hovered day: the fund, its shares and
-     its worth, and the cash beside it. */
+  /* What the strategy holds at the hovered day, by name. */
   #mini-chart-tip .mct-hold { color: var(--text-muted); margin: -2px 0 5px; line-height: 1.5; max-width: 340px; }
   #mini-chart-tip .mct-hold b { font-family: 'JetBrains Mono', monospace; font-weight: 600; color: var(--text); }
   /* Value readouts: a row per panel, its reading and then its levels in
@@ -3309,10 +3308,10 @@
     text-transform: uppercase; letter-spacing: .04em; margin: 2px 0;
   }
   /* A trade: what moved and its day on one line, the note wrapping under it
-     past max-width. */
+     past max-width, the day's readout rows' own (.mct-row) under it. */
   #mini-chart-tip .mct-ev {
     display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-    max-width: 280px;
+    max-width: 340px;
     line-height: 1.6; padding: 2px 0 3px;
     border-bottom: 1px dashed rgba(134, 118, 255, 0.3);
     margin-bottom: 3px;
@@ -3329,13 +3328,9 @@
   /* Drag-range readout: the end value coloured by direction. */
   #mini-chart-tip .mct-pos { color: var(--green, #00b929); }
   #mini-chart-tip .mct-neg { color: var(--red-text, #dc2626); }
-  /* A dragged range's block under the lines' changes: the strategy's own
-     return, then the same strategy started fresh on the range's first day. */
-  #mini-chart-tip .mct-range { margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(134, 118, 255, 0.3); }
-  #mini-chart-tip .mct-sim-row + .mct-sim { margin-top: 4px; }
-  #mini-chart-tip .mct-sim-row { display: flex; gap: 6px; line-height: 1.6; }
-  #mini-chart-tip .mct-sim-row b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: auto; padding-left: 12px; }
-  #mini-chart-tip .mct-sim-wait { font-size: calc(10.5px * var(--ui-scale)); color: var(--text-muted); }
+  /* A dragged range's last row, under the lines' changes: the strategy's return over it. */
+  #mini-chart-tip .mct-range { display: flex; gap: 6px; line-height: 1.6; margin-top: 6px; padding-top: 4px; border-top: 1px dashed rgba(134, 118, 255, 0.3); }
+  #mini-chart-tip .mct-range b { font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: auto; padding-left: 12px; }
   .custom-stat span { font-size: calc(9px * var(--ui-scale)); text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); }
   .custom-stat b { font-family: 'JetBrains Mono', monospace; font-size: calc(13px * var(--ui-scale)); color: var(--text); }
   .custom-stat b.positive { color: var(--green-text); }
