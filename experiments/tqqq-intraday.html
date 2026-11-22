@@ -71,7 +71,19 @@
   .switch.unavailable{opacity:.5;cursor:default}
   .switches{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
-  #chart{position:relative;min-height:520px}
+  #chart{position:relative}   /* its height is set to fit the window (fitChartToWindow) */
+  /* The weekday bars under the chart: a small block of five bars, one per
+     weekday, over the same days the chart draws. */
+  .weekday{display:flex;flex-direction:column;gap:2px;max-width:460px;margin:8px 0 6px;font-family:var(--mono);font-size:11.5px}
+  .weekday-head{display:flex;align-items:center;justify-content:space-between;gap:12px;height:20px}
+  #weekday-chart svg{display:block}
+  .weekday-zero{stroke:var(--faint);stroke-width:1}
+  .weekday-bar{fill:var(--faint);fill-opacity:.8}
+  .weekday-bar.up{fill:var(--green)} .weekday-bar.down{fill:var(--red)}
+  .weekday-value{font-family:var(--mono);font-size:10.5px;font-weight:600;text-anchor:middle;fill:var(--muted)}
+  .weekday-value.up{fill:var(--green)} .weekday-value.down{fill:var(--red)}
+  .weekday-day{font-family:var(--mono);font-size:11px;text-anchor:middle;fill:var(--muted)}
+  .weekday-count{font-family:var(--mono);font-size:10px;text-anchor:middle;fill:var(--faint)}
   /* ?embed=widget (the desktop widget page, widget.html): the chart alone,
      filling its frame. The filters and the period slider stay wired but
      hidden, so the chart shows every loaded day as it does by default. */
@@ -81,7 +93,7 @@
   /* Laid out off screen rather than display:none, so the hidden histograms
      still measure their real size when they draw. */
   .embed .toolbar{position:absolute;left:-10000px;top:0;width:900px;visibility:hidden}
-  .embed .scale-toggle{display:none}
+  .embed .scale-toggle,.embed .weekday{display:none}
   /* The widget's other two charts label at 8-9px; the embedded chart matches. */
   .embed .axis text,.embed .now-label,.embed .annotation text{font-size:9px}
   .embed .line-label,.embed .today-label,.embed .extended-label{font-size:9.5px}
@@ -200,6 +212,17 @@
     <div id="chart">
       <button type="button" class="scale-toggle" id="scale-toggle" aria-pressed="true" title="Switch the vertical axis between a symmetric log scale and a linear one">log</button>
     </div>
+    <div class="weekday" title="Each weekday's close vs the previous session's close, over the days the chart shows.">
+      <div class="weekday-head">
+        <span class="metric-name" id="weekday-name"></span>
+        <label class="switch" id="weekday-median-switch">
+          <input type="checkbox" id="toggle-weekday-median">
+          <span class="track"></span>
+          <span class="switch-label">Median</span>
+        </label>
+      </div>
+      <div id="weekday-chart"></div>
+    </div>
   </div>
 </div>
 
@@ -257,6 +280,9 @@ const MINUTES_PER_DAY = 24 * 60;
 const parseStamp = d3.timeParse('%m/%d/%Y %H:%M:%S');
 const fmtPct = (d, decimals = 2) => (d > 0 ? '+' : '') + d.toFixed(decimals) + '%';
 const fmtAxisPct = d => (d > 0 ? '+' : '') + parseFloat(d.toFixed(2)) + '%';
+// A move's tone. One that prints as 0.00% is flat, neither up nor down.
+const FLAT_PCT = 0.005;
+const toneOf = pct => pct > FLAT_PCT ? 'up' : pct < -FLAT_PCT ? 'down' : 'flat';
 // A move and the price behind it, as the today and extended-hours labels read
 // it: "+1.3% ($51.10)", the percent toned by its sign, at one decimal like the
 // site's day-change badges and the signal chart's price rows, which show the
@@ -303,7 +329,8 @@ const NOW_REFRESH_MS = 30 * 1000;
 
 // Is this day today's session, with the market open right now? Only then is
 // it drawn on its own layer; otherwise it is one line among the others.
-const isLiveDay = day => marketMinuteNow() !== null && fmtIsoDay(day.date) === marketDateNow();
+const liveMarketDate = () => marketMinuteNow() !== null ? marketDateNow() : null;   // the date of the session open right now, or null
+const isLiveDay = day => fmtIsoDay(day.date) === liveMarketDate();
 const NOW_TICK_SHARE = 0.05;             // the "now" tick spans this share of the plot height, from the top
 const LINE_LABEL_MIN_GAP = 13;           // px between the mean and median end labels
 const HOVER_LABEL_GAP = 14;              // px between stacked crosshair value labels
@@ -592,9 +619,92 @@ function similarDays(days, reference) {
   return { days: d3.sort([reference, ...kept], d => d.date), cutoff };
 }
 
-class IntradayOverlayChart {
+// What the page's charts share (the reusable-chart convention,
+// .claude/skills/d3-charts): one state object with a chainable getter/setter
+// per key, the _add() enter/exit/update helper, a width that follows the
+// container, and the svg with its margin-shifted plot group.
+class ChartBase {
+  constructor(attrs) {
+    this.getState = () => attrs;
+    this.setState = d => Object.assign(attrs, d);
+    Object.keys(attrs).forEach(key => {
+      this[key] = function (_) {
+        if (!arguments.length) return attrs[key];
+        attrs[key] = _;
+        return this;
+      };
+    });
+    this.initializeEnterExitUpdatePattern();
+  }
+
+  calculateProperties() {
+    const { marginLeft, marginTop, marginRight, marginBottom, svgWidth, svgHeight } = this.getState();
+    const calc = { chartLeftMargin: marginLeft, chartTopMargin: marginTop };
+    const chartWidth = svgWidth - marginRight - marginLeft;
+    const chartHeight = svgHeight - marginBottom - marginTop;
+    this.setState({ calc, chartWidth, chartHeight });
+  }
+
+  drawSvgAndWrappers() {
+    const { d3Container, svgWidth, svgHeight, defaultFont, calc } = this.getState();
+    const svg = d3Container._add('svg.svg-container')
+      .attr('width', svgWidth)
+      .attr('height', svgHeight)
+      .attr('font-family', defaultFont);
+    const chart = svg._add('g.chart')
+      .attr('transform', `translate(${calc.chartLeftMargin},${calc.chartTopMargin})`);
+    this.setState({ chart, svg });
+  }
+
+  initializeEnterExitUpdatePattern() {
+    d3.selection.prototype._add = function (classSelector, data, params) {
+      const container = this;
+      const split = classSelector.split('.');
+      const elementTag = split[0];
+      const className = split[1] || 'not-good';
+      const exitTransition = params?.exitTransition;
+      const enterTransition = params?.enterTransition;
+
+      let bindData = data;
+      if (typeof data === 'function') bindData = data(container.datum());
+      if (bindData && !Array.isArray(bindData)) bindData = [bindData];
+      if (!bindData) bindData = container.datum() ? d => [d] : [className];
+
+      let selection = container.selectAll(elementTag + '.' + className).data(bindData, (d, i) => {
+        if (typeof d === 'object' && d.id) return d.id;
+        return i;
+      });
+      if (exitTransition) exitTransition(selection); else selection.exit().remove();
+      const enterSelection = selection.enter().append(elementTag);
+      if (enterTransition) enterTransition(enterSelection);
+      selection = enterSelection.merge(selection);
+      selection.attr('class', className);
+      if (className === 'not-good') {
+        selection.attr('stroke', 'red').attr('stroke-width', 10);
+        selection.selectAll('title').data(['not-good']).join('title').text("You don't have a class set for this element!");
+      }
+      return selection;
+    };
+  }
+
+  setDynamicContainer() {
+    const attrs = this.getState();
+    const d3Container = d3.select(attrs.container);
+    const containerRect = d3Container.node().getBoundingClientRect();
+    if (containerRect.width > 0) attrs.svgWidth = containerRect.width;
+    const self = this;
+    d3.select(window).on('resize.' + attrs.id, function () {
+      const rect = d3Container.node().getBoundingClientRect();
+      if (rect.width > 0) attrs.svgWidth = rect.width;
+      self.render();
+    });
+    this.setState({ d3Container });
+  }
+}
+
+class IntradayOverlayChart extends ChartBase {
   constructor() {
-    const attrs = {
+    super({
       id: 'ID' + Math.floor(Math.random() * 1000000),
       svgWidth: 400,
       svgHeight: 600,
@@ -625,17 +735,7 @@ class IntradayOverlayChart {
       rangeAnchor: null,
       rangeShown: null,
       rangePinned: null,
-    };
-    this.getState = () => attrs;
-    this.setState = d => Object.assign(attrs, d);
-    Object.keys(attrs).forEach(key => {
-      this[key] = function (_) {
-        if (!arguments.length) return attrs[key];
-        attrs[key] = _;
-        return this;
-      };
     });
-    this.initializeEnterExitUpdatePattern();
   }
 
   render() {
@@ -653,14 +753,6 @@ class IntradayOverlayChart {
     this.drawHover();
     this.setState({ firstRender: false });
     return this;
-  }
-
-  calculateProperties() {
-    const { marginLeft, marginTop, marginRight, marginBottom, svgWidth, svgHeight } = this.getState();
-    const calc = { chartLeftMargin: marginLeft, chartTopMargin: marginTop };
-    const chartWidth = svgWidth - marginRight - marginLeft;
-    const chartHeight = svgHeight - marginBottom - marginTop;
-    this.setState({ calc, chartWidth, chartHeight });
   }
 
   drawScales() {
@@ -966,7 +1058,7 @@ class IntradayOverlayChart {
       if (day && !(live && day.id === todayId)) chords.push({ id: 'day', name: d3.timeFormat('%b %-d')(day.date), p0: at(day.points, lo.minute), p1: at(day.points, hi.minute) });
       for (const c of chords) {
         c.move = ((100 + c.p1.pct) / (100 + c.p0.pct) - 1) * 100;
-        c.tone = c.move > 0.005 ? 'up' : c.move < -0.005 ? 'down' : 'flat';
+        c.tone = toneOf(c.move);
         c.x0 = x(c.p0.minute); c.x1 = x(c.p1.minute); c.y0 = y(c.p0.pct); c.y1 = y(c.p1.pct);
       }
       range._add('line.range-chord', chords).attr('class', c => `range-chord ${c.id}`)
@@ -1105,61 +1197,84 @@ class IntradayOverlayChart {
     const pinned = this.getState().rangePinned;
     if (pinned) showRange(barAt(pinned.a), barAt(pinned.b), data.find(d => d.id === pinned.dayId) || null);
   }
+}
 
-  drawSvgAndWrappers() {
-    const { d3Container, svgWidth, svgHeight, defaultFont, calc } = this.getState();
-    const svg = d3Container._add('svg.svg-container')
-      .attr('width', svgWidth)
-      .attr('height', svgHeight)
-      .attr('font-family', defaultFont);
-    const chart = svg._add('g.chart')
-      .attr('transform', `translate(${calc.chartLeftMargin},${calc.chartTopMargin})`);
-    this.setState({ chart, svg });
-  }
+// The weekday bars: each weekday's usual close vs the previous session's
+// close over the days the chart draws, as their mean or their median (the
+// user, 2026-11-22: "daily bar chart (mon, tue, wed etc) average in the
+// bottom, also a switch for median"). A session still open has no close yet
+// and is left out. The day stamps are the file's calendar dates at local
+// midnight, so getDay() is the New York weekday.
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+function buildWeekdayBars(days, useMedian) {
+  const live = liveMarketDate();   // read once, not for each day: every reading builds date formatters
+  const closesByWeekday = d3.rollup(days.filter(d => fmtIsoDay(d.date) !== live), group => group.map(d => d.closeVsPrevPct), d => d.date.getDay());
+  return WEEKDAYS.map((label, k) => {
+    const closes = closesByWeekday.get(k + 1) || [];   // getDay(): 1 is Monday
+    return { id: label, label, days: closes.length, value: closes.length ? (useMedian ? d3.median(closes) : d3.mean(closes)) : null };
+  });
+}
 
-  initializeEnterExitUpdatePattern() {
-    d3.selection.prototype._add = function (classSelector, data, params) {
-      const container = this;
-      const split = classSelector.split('.');
-      const elementTag = split[0];
-      const className = split[1] || 'not-good';
-      const exitTransition = params?.exitTransition;
-      const enterTransition = params?.enterTransition;
-
-      let bindData = data;
-      if (typeof data === 'function') bindData = data(container.datum());
-      if (bindData && !Array.isArray(bindData)) bindData = [bindData];
-      if (!bindData) bindData = container.datum() ? d => [d] : [className];
-
-      let selection = container.selectAll(elementTag + '.' + className).data(bindData, (d, i) => {
-        if (typeof d === 'object' && d.id) return d.id;
-        return i;
-      });
-      if (exitTransition) exitTransition(selection); else selection.exit().remove();
-      const enterSelection = selection.enter().append(elementTag);
-      if (enterTransition) enterTransition(enterSelection);
-      selection = enterSelection.merge(selection);
-      selection.attr('class', className);
-      if (className === 'not-good') {
-        selection.attr('stroke', 'red').attr('stroke-width', 10);
-        selection.selectAll('title').data(['not-good']).join('title').text("You don't have a class set for this element!");
-      }
-      return selection;
-    };
-  }
-
-  setDynamicContainer() {
-    const attrs = this.getState();
-    const d3Container = d3.select(attrs.container);
-    const containerRect = d3Container.node().getBoundingClientRect();
-    if (containerRect.width > 0) attrs.svgWidth = containerRect.width;
-    const self = this;
-    d3.select(window).on('resize.' + attrs.id, function () {
-      const rect = d3Container.node().getBoundingClientRect();
-      if (rect.width > 0) attrs.svgWidth = rect.width;
-      self.render();
+// Five bars on a zero line, each with its value at its end, its weekday and
+// its count of days beneath. No axis: the values are on the bars.
+const WEEKDAY_VALUE_GAP = 4;             // px between a bar's end and its value
+const WEEKDAY_VALUE_CAP = 7;             // px the value's digits stand over their baseline, at 10.5px
+const WEEKDAY_VALUE_ROOM = WEEKDAY_VALUE_GAP + WEEKDAY_VALUE_CAP + 4;   // px kept at the top and the bottom of the plot for the values past the bars' ends
+const WEEKDAY_NAME_ROW = 16;             // px from the plot's bottom to the weekday names' baseline
+const WEEKDAY_COUNT_ROW = 30;            // and to the day counts' baseline
+const WEEKDAY_MIN_EXTENT_PCT = 0.05;     // least |%| the scale spans, so near-zero bars do not fill the plot
+class WeekdayBarChart extends ChartBase {
+  constructor() {
+    super({
+      id: 'ID' + Math.floor(Math.random() * 1000000),
+      svgWidth: 400,
+      svgHeight: 126,
+      marginTop: 2,
+      marginBottom: WEEKDAY_COUNT_ROW + 4,   // the weekday names, then the day counts
+      marginRight: 4,
+      marginLeft: 4,
+      container: 'body',
+      defaultFont: 'inherit',
+      data: null,               // buildWeekdayBars' rows
+      chartWidth: null,
+      chartHeight: null,
+      firstRender: true,
     });
-    this.setState({ d3Container });
+  }
+
+  render() {
+    this.setDynamicContainer();
+    this.calculateProperties();
+    this.drawSvgAndWrappers();
+    this.drawBars();
+    this.setState({ firstRender: false });
+    return this;
+  }
+
+  drawBars() {
+    const { chart, data, chartWidth, chartHeight } = this.getState();
+    const x = d3.scaleBand().domain(data.map(d => d.label)).range([0, chartWidth]).padding(0.38);
+    const shown = data.filter(d => d.value !== null);
+    const [lo, hi] = d3.extent(shown, d => d.value);
+    const y = d3.scaleLinear()
+      .domain([Math.min(-WEEKDAY_MIN_EXTENT_PCT, lo ?? 0), Math.max(WEEKDAY_MIN_EXTENT_PCT, hi ?? 0)])
+      .range([chartHeight - WEEKDAY_VALUE_ROOM, WEEKDAY_VALUE_ROOM]);
+    const tone = d => toneOf(d.value);
+    const mid = d => x(d.label) + x.bandwidth() / 2;
+
+    chart._add('line.weekday-zero').attr('x1', 0).attr('x2', chartWidth).attr('y1', y(0)).attr('y2', y(0));
+    chart._add('rect.weekday-bar', shown)
+      .attr('x', d => x(d.label)).attr('width', x.bandwidth())
+      .attr('y', d => Math.min(y(0), y(d.value))).attr('height', d => Math.abs(y(d.value) - y(0)))
+      .attr('rx', 2)
+      .classed('up', d => tone(d) === 'up').classed('down', d => tone(d) === 'down');
+    // The value sits past the bar's end: above a rise, under a fall.
+    chart._add('text.weekday-value', shown)
+      .attr('x', mid).attr('y', d => d.value >= 0 ? y(d.value) - WEEKDAY_VALUE_GAP : y(d.value) + WEEKDAY_VALUE_GAP + WEEKDAY_VALUE_CAP)
+      .classed('up', d => tone(d) === 'up').classed('down', d => tone(d) === 'down')
+      .text(d => fmtPct(tone(d) === 'flat' ? 0 : d.value));
+    chart._add('text.weekday-day', data).attr('x', mid).attr('y', chartHeight + WEEKDAY_NAME_ROW).text(d => d.label);
+    chart._add('text.weekday-count', data).attr('x', mid).attr('y', chartHeight + WEEKDAY_COUNT_ROW).text(d => `${d.days} ${d.days === 1 ? 'day' : 'days'}`);
   }
 }
 
@@ -1231,6 +1346,7 @@ function setupPeriodSlider(allDays, onChange) {
 const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
 const TREND_STORAGE_KEY = 'tqqq-intraday-trend';
 const LOG_SCALE_STORAGE_KEY = 'tqqq-intraday-log-scale';
+const WEEKDAY_MEDIAN_STORAGE_KEY = 'tqqq-intraday-weekday-median';
 function readSavedSwitch(key, fallback = false) {
   if (key === SIMILAR_STORAGE_KEY && EMBED_SIMILAR !== null) return EMBED_SIMILAR;
   if (key === TREND_STORAGE_KEY && EMBED_TREND !== null) return EMBED_TREND;
@@ -1369,12 +1485,32 @@ function setupTrendFilter(latest, onChange) {
   return state;
 }
 
+// The weekday bars' statistic: the mean, or the median with the switch on.
+// The block's name says which.
+function setupWeekdayStat(onChange) {
+  const input = d3.select('#toggle-weekday-median');
+  // With nothing saved, or storage blocked, the switch keeps what it shows: off at first, and its own state on the page's later data refreshes.
+  const state = { median: readSavedSwitch(WEEKDAY_MEDIAN_STORAGE_KEY, input.property('checked')) };
+  const showName = () => d3.select('#weekday-name').text(`${state.median ? 'Median' : 'Average'} close by weekday`);
+  input.property('checked', state.median).on('change', function () {
+    state.median = this.checked;
+    writeSavedSwitch(WEEKDAY_MEDIAN_STORAGE_KEY, state.median);
+    showName();
+    onChange();
+  });
+  showName();
+  return state;
+}
+
 // One chart for the page's life; every load, first or refresh, rebuilds the
 // controls and data around it. The controls read their saved state on each
 // setup, so a refresh keeps the period, the brushes and the toggle as they
 // were, with edge-pinned thumbs following the new data.
 const chart = new IntradayOverlayChart().container('#chart')
   .minuteOffset(localOffsetFromMarket()).zoneLabel(shortZoneName(LOCAL_TZ));
+// The weekday bars under it, over the days it draws. The desktop widget
+// shows the chart alone, so embedded they are neither shown nor drawn.
+const weekdayChart = new WeekdayBarChart().container('#weekday-chart');
 // Embedded, the chart is as tall as its frame (the width already follows the
 // container through setDynamicContainer), with no row under the axis for the
 // hidden scale button, a label gutter on the right just wide enough for the
@@ -1384,6 +1520,37 @@ if (EMBED) {
   chart.marginTop(12).marginBottom(20).marginRight(44).marginLeft(44);
   chart.svgHeight(window.innerHeight);
   window.addEventListener('resize', () => { chart.svgHeight(window.innerHeight); if (chart.data()) chart.render(); });
+}
+
+// On its own the page fits the window with no vertical scroll where it can
+// (the user, 2026-11-22: "make sure it fits 14 inch macbook vertically"): the
+// chart takes the height the rest of the page leaves, the link, the toolbar,
+// the weekday bars and the paddings, between its least and its full height.
+// In a window too short for that the chart stops at its least height and the
+// page scrolls the rest. On a phone or a tablet (a touch-first screen) the
+// chart keeps its full height and the page scrolls, as it always did: a short
+// chart that narrow crowds its notes. The window's size is the layout
+// viewport's, which a pinch zoom leaves alone.
+const CHART_FULL_HEIGHT = chart.svgHeight();
+const CHART_MIN_HEIGHT = 360;
+const TOUCH_FIRST = window.matchMedia('(pointer: coarse)').matches;
+function fitChartToWindow() {
+  const chartBox = document.getElementById('chart');
+  const rest = document.querySelector('.wrap').getBoundingClientRect().height - chartBox.getBoundingClientRect().height;
+  const room = Math.floor(document.documentElement.clientHeight - rest);
+  const height = TOUCH_FIRST ? CHART_FULL_HEIGHT : Math.max(CHART_MIN_HEIGHT, Math.min(CHART_FULL_HEIGHT, room));
+  chartBox.style.minHeight = `${height}px`;   // held before the first draw too, so the page does not jump when the chart arrives
+  chart.svgHeight(height);
+}
+if (!EMBED) {
+  // The bars' room is held before their first draw, so the first fit already counts it.
+  d3.select('#weekday-chart').style('min-height', `${weekdayChart.svgHeight()}px`);
+  fitChartToWindow();
+  // Refit when the window changes, and when the toolbar does: its controls
+  // wrap onto another row in a narrow window or once the web fonts land.
+  const refit = () => { fitChartToWindow(); if (chart.data()) chart.render(); };
+  window.addEventListener('resize', refit);
+  new ResizeObserver(refit).observe(document.querySelector('.toolbar'));
 }
 
 // Log / linear toggle for the y-axis. Log (symmetric, linear inside ±0.1%)
@@ -1485,12 +1652,14 @@ function loadData() {
         .todayId(latestId)
         .opacityCount(filtered.filter(d => d.id !== latestId).length)
         .render();
+      if (!EMBED) weekdayChart.data(buildWeekdayBars(days, weekday.median)).render();
     };
     let ready = false;                                 // one render once every control is wired
     const guarded = () => { if (ready) refresh(); };
     const metric = setupMetricFilters(allDays, latestId, guarded);
     const similar = setupSimilarFilter(guarded);
     const trend = setupTrendFilter(allDays[allDays.length - 1], guarded);
+    const weekday = setupWeekdayStat(guarded);
     setupPeriodSlider(allDays, days => { periodDays = days; guarded(); });
     ready = true;
     refresh();
