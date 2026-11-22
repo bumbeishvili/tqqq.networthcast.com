@@ -902,6 +902,13 @@ function smaLogRowInfo(smaLog, i, ulName) {
   return { label, gain, ac };
 }
 
+// Is an smaLog row a trade of the strategy's own ("Strategy trades only" keeps
+// it)? The trades the chart marks, the slices of an eased buy, and an opening
+// row that buys a fund; a contribution and the closing snapshot are neither.
+function smaRowTraded(l) {
+  return l.action in SMA_EVENT_STYLE || l.action === 'DCA-ADD' || (l.action === 'START' && logHoldsFund(l.held || l.state));
+}
+
 // Event-driven log table for the SMA strategy. Shows one row per actual
 // trade (ENTER / EXIT) — not one row per quarter — because SMA only does
 // something when the signal flips. Most quarters would just be noise.
@@ -926,7 +933,7 @@ function buildSmaLogTableHtml(smaLog) {
     const cls = hasMarker ? 'log-row-mk'
               : l.action === 'CONTRIB' ? 'log-row-contrib'
               : l.action === 'DCA-ADD' ? 'log-row-dca' : '';
-    const trAttr = (cls ? ` class="${cls}"` : '') + (hasMarker ? ` data-mkey="${i}"` : '');
+    const trAttr = logRowClassAttr(cls, smaRowTraded(l) ? LOG_TRADE_ROW : '') + (hasMarker ? ` data-mkey="${i}"` : '');
     // Fee paid on this row's trade. Sub-$1 fees keep 2 decimals; $0 shows a dash.
     const feeStr = !l.fee ? '—' : l.fee >= 1 ? fmtFull(Math.round(l.fee)) : '$' + l.fee.toFixed(2);
     // Allocation mix: what % sits in the fund you hold (primary TQQQ or the backup)
@@ -980,10 +987,11 @@ function buildSmaLogTableHtml(smaLog) {
       <input type="checkbox" onchange="toggleSmaLogEase(this.checked)" ${_smaLogHideEase ? 'checked' : ''}>
       Hide ease-in slices (${easeCount})
     </label>` : '';
+  const tradeCount = smaLog.filter(smaRowTraded).length;
   return `
-    <div class="log-section">
+    <div class="${logSectionClass(tradeCount)}">
     ${logSectionHeaderHtml('SMA Transaction Log')}
-    <div style="display:flex;gap:16px;flex-wrap:wrap">${contribToggle}${easeToggle}</div>
+    ${logTogglesRowHtml(logTradesToggleHtml(tradeCount), contribToggle, easeToggle)}
     <div class="quarter-table-wrap${_smaLogHideContrib ? ' hide-contrib' : ''}${_smaLogHideEase ? ' hide-dca' : ''}">
       <table>
         <thead>
@@ -1086,7 +1094,8 @@ function buildBuyHoldLogTableHtml(title, log, series, ulName) {
     const type = i === 0 ? 'Initial buy'
                : hasContrib ? (nm[i] > 0 ? 'Monthly investment' : 'Hold')
                : 'Latest';
-    return `<tr${i === last ? ' class="log-latest"' : ''}>
+    // Buy & hold trades once, at the start; every later purchase is new money's.
+    return `<tr${logRowClassAttr(i === last ? 'log-latest' : '', i === 0 ? LOG_TRADE_ROW : '')}>
       <td>${i}</td>
       <td>${fmtLogDate(log[i].date)}</td>
       <td>${type}${latestBadge(i === last)}</td>
@@ -1096,9 +1105,11 @@ function buildBuyHoldLogTableHtml(title, log, series, ulName) {
       <td>${fmtFull(Math.round(s.value || 0))}</td>
     </tr>`;
   }).join('');
+  const tradeCount = 1;   // the initial buy
   return `
-    <div class="log-section">
+    <div class="${logSectionClass(tradeCount)}">
     ${logSectionHeaderHtml(title)}
+    ${logTogglesRowHtml(logTradesToggleHtml(tradeCount))}
     <div class="quarter-table-wrap">
       <table>
         <thead><tr><th># <span class="info-icon" tabindex="0" data-tip="Row number in the full price history (the initial buy is 0). When there are no contributions the table collapses to just the first and last rows, so the numbers can jump.">ⓘ</span></th><th>Date</th><th>Type</th><th>New $</th><th>${ulName} Price</th><th>${ulName} Shares</th><th>Value</th></tr></thead>
@@ -1107,6 +1118,13 @@ function buildBuyHoldLogTableHtml(title, log, series, ulName) {
     </div>
     </div>
   `;
+}
+
+// Is a 9sig log row a trade of the strategy's own ("Strategy trades only"
+// keeps it)? A rebalance that sold, bought or reset after a spike, and the
+// opening purchase; a rebalance that held and the latest snapshot are neither.
+function nineSigRowTraded(l) {
+  return /^(SELL|BUY|RESET)/.test(l.action) || (l.action === 'START' && l.tqqqVal > 0);
 }
 
 function buildLogTableHtml(d) {
@@ -1121,7 +1139,7 @@ function buildLogTableHtml(d) {
     const ac = l.action.startsWith('SELL') ? 'action-sell' : l.action.startsWith('BUY') ? 'action-buy' : 'action-hold';
     const shares = l.price > 0 ? l.tqqqVal / l.price : 0;
     const type = i === 0 ? 'Initial' : 'Rebalance';
-    return `<tr${i === lastIdx ? ' class="log-latest"' : ''}>
+    return `<tr${logRowClassAttr(i === lastIdx ? 'log-latest' : '', nineSigRowTraded(l) ? LOG_TRADE_ROW : '')}>
       <td>${i}</td>
       <td>${fmtLogDate(l.date)}</td>
       <td>${type}${latestBadge(i === lastIdx)}</td>
@@ -1136,9 +1154,11 @@ function buildLogTableHtml(d) {
       <td class="${ac} log-action">${l.action}</td>
     </tr>`;
   }).join('');
+  const tradeCount = d.log.filter(nineSigRowTraded).length;
   return `
-    <div class="log-section">
+    <div class="${logSectionClass(tradeCount)}">
     ${logSectionHeaderHtml('Rebalance Log')}
+    ${logTogglesRowHtml(logTradesToggleHtml(tradeCount))}
     <div class="quarter-table-wrap">
       <table>
         <thead>

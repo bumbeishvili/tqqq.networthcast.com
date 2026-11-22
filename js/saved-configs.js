@@ -3914,14 +3914,20 @@ function buildCustomLogTableHtml(log, columns, lines) {
   const kindOf = (r) => (typeof customActionKind === 'function') ? customActionKind(r && r.action) : 'hold';
   const ACT_CLASS = { buy: 'action-buy', sell: 'action-sell', switch: 'action-switch', rebalance: 'action-rebal',
                       ease: 'action-buy', contribution: 'action-hold', start: 'action-hold', end: 'action-hold', hold: 'action-hold' };
-  let contribCount = 0, easeCount = 0;
+  // A trade of the strategy's own ("Strategy trades only" keeps it): the kinds the chart marks, the
+  // slices of an eased buy, and an opening row that holds a fund. A contribution, a snapshot and the
+  // closing row are none of these.
+  const traded = (row, kind) => kind in CUSTOM_EVENT_STYLE || kind === 'ease' || (kind === 'start' && logHoldsFund(row && row.held));
+  let contribCount = 0, easeCount = 0, tradeCount = 0;
   const body = log.map((row, i) => {
     const kind = kindOf(row);
     if (kind === 'contribution') contribCount++;
     if (kind === 'ease') easeCount++;
+    const isTrade = traded(row, kind);
+    if (isTrade) tradeCount++;
     const hasMarker = !!(typeof CUSTOM_EVENT_STYLE !== 'undefined' && CUSTOM_EVENT_STYLE[kind] && +((row || {}).value) > 0);
     const cls = hasMarker ? 'log-row-mk' : kind === 'contribution' ? 'log-row-contrib' : kind === 'ease' ? 'log-row-dca' : '';
-    const trAttr = (cls ? ` class="${cls}"` : '') + (hasMarker ? ` data-mkey="${i}"` : '');
+    const trAttr = logRowClassAttr(cls, isTrade ? LOG_TRADE_ROW : '') + (hasMarker ? ` data-mkey="${i}"` : '');
     const cells = keys.map(k => {
       if (k !== 'action') return `<td>${fmtCustomLogCell(k, row ? row[k] : null, lineUnit[k])}</td>`;
       // Action cell: the strategy's own label, coloured by kind, with the gain
@@ -3965,9 +3971,9 @@ function buildCustomLogTableHtml(log, columns, lines) {
     </label>` : '';
   const wrapCls = 'custom-log-wrap' + (_customLogHideContrib ? ' hide-contrib' : '') + (_customLogHideEase ? ' hide-dca' : '');
   return `
-    <div class="log-section">
+    <div class="${logSectionClass(tradeCount)}">
     ${logSectionHeaderHtml(`Transaction Log (${log.length} rows)`, 18)}
-    <div style="display:flex;gap:16px;flex-wrap:wrap">${contribToggle}${easeToggle}</div>
+    ${logTogglesRowHtml(logTradesToggleHtml(tradeCount), contribToggle, easeToggle)}
     <div class="${wrapCls}"><table class="custom-log"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
     ${holdSummary}
     </div>`;

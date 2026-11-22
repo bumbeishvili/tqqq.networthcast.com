@@ -3284,6 +3284,11 @@
   .custom-lines-chart .mini-ev.is-hover { fill: rgba(134, 118, 255, 0.22); }
   .custom-lines-chart .mini-ev-cap { fill: rgba(134, 118, 255, 0.22); cursor: pointer; }
   .custom-lines-chart .mini-ev-cap.is-hover { fill: rgba(134, 118, 255, 0.5); }
+  /* A band a few pixels wide (one trade, zoomed in) needs more colour to be seen at all. */
+  .custom-lines-chart .mini-ev.mini-ev-thin { fill: rgba(134, 118, 255, 0.24); }
+  .custom-lines-chart .mini-ev.mini-ev-thin.is-hover { fill: rgba(134, 118, 255, 0.36); }
+  .custom-lines-chart .mini-ev-cap.mini-ev-thin { fill: rgba(134, 118, 255, 0.5); }
+  .custom-lines-chart .mini-ev-cap.mini-ev-thin.is-hover { fill: rgba(134, 118, 255, 0.75); }
   .custom-lines-chart .mini-ev-mark { pointer-events: none; }
   body.mini-panning .custom-lines-chart { cursor: grabbing; }
   .custom-lines-chart .mini-zoom-reset { cursor: pointer; }
@@ -4249,6 +4254,9 @@
   .strategy-rules .explain-text { margin-top: 6px; }
   .strategy-rules .explain-list { margin: 4px 0 0 18px; padding: 0; }
   .fit-changes b { color: var(--text); font-weight: 600; }
+  /* "Strategy trades only", on every log table: only the rows the strategy
+     itself traded on stay (js/utils.js toggleLogTradesOnly). */
+  .log-section.trades-only tbody tr:not(.log-row-trade) { display: none; }
   /* Collapsed state: drop the monthly-contribution rows from the table. */
   .strategy-panel-body .quarter-table-wrap.hide-contrib tr.log-row-contrib { display: none; }
   /* Collapsed state: drop the ease-in "Buy more" slice rows. */

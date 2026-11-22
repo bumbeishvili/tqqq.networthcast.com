@@ -458,6 +458,45 @@ function downloadLogCsv(btn) {
   const stamp = new Date().toISOString().slice(0, 10);
   downloadTextFile(tableToCsv(table), `tqqq-${slug}-${stamp}.csv`, 'text/csv');
 }
+// "Strategy trades only": one checkbox above every log table that has trades
+// of the strategy's own. Ticked, it leaves the rows where the strategy bought
+// or sold by its rules (each table builder tags them LOG_TRADE_ROW) and drops
+// the snapshots, the contributions and what new money bought. The choice is
+// one for all log tables and holds across re-renders. The CSV download takes
+// the rows on screen, so it follows the checkbox.
+const LOG_TRADE_ROW = 'log-row-trade';
+let _logTradesOnly = false;
+function toggleLogTradesOnly(on) {
+  _logTradesOnly = !!on;
+  // Only a section with the checkbox is filtered: a log with no trades keeps its rows.
+  document.querySelectorAll('.log-trades-toggle').forEach(label => {
+    label.closest('.log-section').classList.toggle('trades-only', _logTradesOnly);
+    label.querySelector('input').checked = _logTradesOnly;
+  });
+}
+// The class of a log table's section wrapper, given how many of its rows are the strategy's trades.
+const logSectionClass = (tradeCount) => 'log-section' + (_logTradesOnly && tradeCount > 0 ? ' trades-only' : '');
+function logTradesToggleHtml(tradeCount) {
+  if (!(tradeCount > 0)) return '';
+  return `
+    <label class="log-contrib-toggle log-trades-toggle">
+      <input type="checkbox" onchange="toggleLogTradesOnly(this.checked)" ${_logTradesOnly ? 'checked' : ''}>
+      Strategy trades only (${tradeCount})
+    </label>`;
+}
+// The row of checkboxes above a log table.
+const logTogglesRowHtml = (...toggles) => `<div style="display:flex;gap:16px;flex-wrap:wrap">${toggles.join('')}</div>`;
+// A table row's class attribute from the classes that apply to it.
+function logRowClassAttr(...names) {
+  const classes = names.filter(Boolean).join(' ');
+  return classes ? ` class="${classes}"` : '';
+}
+// Does a row's Holding name a fund? An opening row that does is the strategy's first purchase.
+function logHoldsFund(held) {
+  const name = String(held == null ? '' : held).trim().toUpperCase();
+  return name !== '' && name !== 'CASH';
+}
+
 // Header row shared by every log table: the section title plus a small CSV
 // download button, right-aligned. The `.log-section` wrapper around title +
 // toggles + table is what lets downloadLogCsv() find "this table", not just
