@@ -70,6 +70,19 @@
   .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
   .switch.unavailable{opacity:.5;cursor:default}
   .switches{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px}
+  /* The ticker choice, first in the toolbar. */
+  .ticker-pick select{font:600 12.5px var(--mono);color:var(--text);background:var(--panel);border:1px solid var(--border2);border-radius:6px;padding:3px 6px;cursor:pointer}
+  .ticker-pick select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  /* A ticker whose history is not in the data: the note in the chart's place,
+     the chart, the bars and the filters of the ticker before it out of sight. */
+  .no-data{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 24px;text-align:center;font-size:13px;color:var(--muted)}
+  .no-data[hidden]{display:none}
+  .panel.no-history #chart svg,.panel.no-history .scale-toggle,.panel.no-history .weekday{display:none}
+  .panel.no-history .metric,.panel.no-history .period,.panel.no-history .switch{visibility:hidden}
+  /* Out of reach too: a brush's own rects take the pointer whatever their visibility. */
+  .panel.no-history .metric *,.panel.no-history .period *,.panel.no-history .switch *{pointer-events:none}
+  /* Embedded, the chart's box has no height of its own once the chart is hidden. */
+  .embed .no-data{position:static;height:100vh}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
   #chart{position:relative}   /* its height is set to fit the window (fitChartToWindow) */
   /* The weekday bars under the chart: a small block of five bars, one per
@@ -180,6 +193,9 @@
   <div class="panel">
     <div class="toolbar">
       <div class="switches">
+        <label class="ticker-pick" title="The fund whose days the chart draws.">
+          <select id="select-ticker" aria-label="Ticker"></select>
+        </label>
         <label class="switch" id="similar-switch">
           <input type="checkbox" id="toggle-similar">
           <span class="track"></span>
@@ -210,6 +226,7 @@
       </div>
     </div>
     <div id="chart">
+      <div class="no-data" id="no-data" hidden></div>
       <button type="button" class="scale-toggle" id="scale-toggle" aria-pressed="true" title="Switch the vertical axis between a symmetric log scale and a linear one">log</button>
     </div>
     <div class="weekday" title="Each weekday's close vs the previous session's close, over the days the chart shows.">
@@ -241,7 +258,20 @@ const EMBED_LOG = EMBED ? EMBED_QUERY.get('log') === '1' : null;
 // The desktop widget's local copy of this page reads the live site's files
 // (?data=<site root>); everywhere else the data sits one folder up.
 const DATA_ROOT = EMBED && EMBED_QUERY.get('data') ? EMBED_QUERY.get('data') : '../';
-const DATA_URL = DATA_ROOT + 'data/intraday/tqqq-5m.tsv';
+// The ticker the page shows, one of the site's funds (the quotes worker's
+// SYMBOLS, scripts/update_intraday.py's TICKERS; tests/fund-lists.cjs holds
+// the lists to each other): the one the address names (?ticker=SOXL, which is
+// also how a page embedding this one asks for a fund), else TQQQ. The address
+// is the only place it is kept, so a link always opens the fund it names and
+// the site's "TQQQ intraday" link opens TQQQ. A name the list does not hold
+// is ignored.
+const TICKERS = ['TQQQ', 'QQQ', 'SPY', 'QLD', 'SSO', 'SPXL', 'SQQQ', 'GLD', 'SOXL', 'SOXX'];
+const DEFAULT_TICKER = TICKERS[0];
+const namedTicker = (EMBED_QUERY.get('ticker') || '').toUpperCase();
+let ticker = TICKERS.includes(namedTicker) ? namedTicker : DEFAULT_TICKER;
+let drawnTicker = null;   // the fund whose days the chart holds; null until a first load is in
+// A fund's 5-minute history, one file a fund (scripts/update_intraday.py).
+const historyUrl = fund => `${DATA_ROOT}data/intraday/${fund.toLowerCase()}-5m.tsv`;
 // Today's session at 1-minute resolution from Yahoo (scripts/update_intraday_today.py).
 // The 5-minute history comes from Alpaca, whose free plan holds back the
 // latest 15 minutes; Yahoo serves the current minute, so today is drawn from
@@ -251,7 +281,8 @@ const DATA_URL = DATA_ROOT + 'data/intraday/tqqq-5m.tsv';
 // 'https://tqqq-quotes.<account>.workers.dev'), today comes from the proxy
 // instead, in the same layout, at most a minute old, polled every minute.
 const QUOTES_PROXY = 'https://tqqq-quotes.infoicy.workers.dev';
-const DATA_URL_TODAY = QUOTES_PROXY ? QUOTES_PROXY + '/bars/TQQQ?range=1d&interval=1m&format=tsv' : DATA_ROOT + 'data/intraday/tqqq-today-1m.tsv';
+// Without the proxy only TQQQ has a today file (scripts/update_intraday_today.py writes that one); another fund then draws no live session.
+const todayUrl = fund => QUOTES_PROXY ? `${QUOTES_PROXY}/bars/${fund}?range=1d&interval=1m&format=tsv` : `${DATA_ROOT}data/intraday/${fund.toLowerCase()}-today-1m.tsv`;
 const TODAY_BAR_MINUTES = 1;
 const SESSION_OPEN_MIN = 9 * 60 + 30;
 const SESSION_CLOSE_MIN = 16 * 60;
@@ -885,7 +916,7 @@ class IntradayOverlayChart extends ChartBase {
     label.attr('x', lx).attr('y', ly);
   }
 
-  // Outside the regular session the proxy's TQQQ quote carries the latest
+  // Outside the regular session the proxy's quote for the ticker carries the latest
   // pre-market or after-hours print (cloudflare/quotes/README.md). Its change
   // against the close is where the next session's line will start, so it
   // pulses at the chart's start on the axis, its label beside it (the user,
@@ -1323,21 +1354,24 @@ function setupPeriodSlider(allDays, onChange) {
   start.attr('max', last).property('value', restoreThumb(saved.start, allDays, 0, true));
   end.attr('max', last).property('value', restoreThumb(saved.end, allDays, last, false));
 
-  const apply = () => {
+  // `moved`: a thumb was dragged. Only then is the period saved: a setup on a
+  // fund with a shorter history snaps a thumb to its edge, and saving that
+  // would lose the day another fund's view had.
+  const apply = (moved) => {
     let lo = +start.property('value'), hi = +end.property('value');
     if (lo > hi) [lo, hi] = [hi, lo];
     start.property('value', lo);
     end.property('value', hi);
     fill.style('left', `${lo / last * 100}%`).style('width', `${(hi - lo) / last * 100}%`);
-    writeSavedPeriod({
+    if (moved) writeSavedPeriod({
       start: lo === 0 ? 'edge' : fmtIsoDay(allDays[lo].date),
       end: hi === last ? 'edge' : fmtIsoDay(allDays[hi].date),
     });
     onChange(allDays.slice(lo, hi + 1));
   };
-  start.on('input', apply);
-  end.on('input', apply);
-  apply();
+  start.on('input', () => apply(true));
+  end.on('input', () => apply(true));
+  apply(false);
 }
 
 // On/off switches whose state survives reloads, one localStorage key each.
@@ -1377,16 +1411,18 @@ const METRICS = {
 const METRIC_STEP = 0.1;
 const METRIC_BINS = 30;
 const HANDLE_LABEL_GAP = 6;              // px kept between a histogram's two bound labels
-const metricStorageKey = key => `tqqq-intraday-metric-${key}`;
-function readSavedRange(key) {
-  try { return JSON.parse(localStorage.getItem(metricStorageKey(key))) || {}; } catch { return {}; }
+// A fund's own ranges, since the moves differ in size; TQQQ keeps the keys it had. The fund is the one the
+// histogram was set up for, so a brush moved while another fund is loading is still saved under its own.
+const metricStorageKey = (key, fund) => `tqqq-intraday-metric-${key}${fund === DEFAULT_TICKER ? '' : '-' + fund}`;
+function readSavedRange(key, fund) {
+  try { return JSON.parse(localStorage.getItem(metricStorageKey(key, fund))) || {}; } catch { return {}; }
 }
-function writeSavedRange(key, range) {
-  try { localStorage.setItem(metricStorageKey(key), JSON.stringify(range)); } catch { /* storage unavailable */ }
+function writeSavedRange(key, fund, range) {
+  try { localStorage.setItem(metricStorageKey(key, fund), JSON.stringify(range)); } catch { /* storage unavailable */ }
 }
 
 // One brushable histogram. Returns { pass(day) } for the current range.
-function setupMetricHistogram(key, allDays, onChange) {
+function setupMetricHistogram(key, fund, allDays, onChange) {
   const block = d3.select(`.metric[data-metric="${key}"]`);
   const svg = block.select('svg.metric-hist'), rangeLabel = block.select('.metric-range');
   const round = v => +v.toFixed(1);
@@ -1437,20 +1473,20 @@ function setupMetricHistogram(key, allDays, onChange) {
       left0 = Math.max(0, Math.min(left0, left1 - widths[0] - HANDLE_LABEL_GAP));   // the upper may have hit the edge
     }
     texts.attr('x', (d, i) => i === 0 ? left0 : left1);
-    writeSavedRange(key, { lo: a > min ? a : 'edge', hi: b < max ? b : 'edge' });
+    writeSavedRange(key, fund, { lo: a > min ? a : 'edge', hi: b < max ? b : 'edge' });
     onChange();
   };
   brush.on('brush end', event => { if (event.sourceEvent || event.type === 'end') apply(event.selection); });
 
-  const saved = readSavedRange(key);
+  const saved = readSavedRange(key, fund);
   brushG.call(brush.move, [x(typeof saved.lo === 'number' ? Math.max(min, saved.lo) : min), x(typeof saved.hi === 'number' ? Math.min(max, saved.hi) : max)]);
 
   state.pass = d => { const v = METRICS[key].value(d); return v !== null && v >= state.lo && v <= state.hi; };
   return state;
 }
 
-function setupMetricFilters(allDays, latestId, onChange) {
-  const filters = Object.keys(METRICS).map(key => setupMetricHistogram(key, allDays, onChange));
+function setupMetricFilters(fund, allDays, latestId, onChange) {
+  const filters = Object.keys(METRICS).map(key => setupMetricHistogram(key, fund, allDays, onChange));
   return { filter: days => days.filter(d => d.id === latestId || filters.every(f => f.pass(d))) };
 }
 
@@ -1475,7 +1511,7 @@ function setupTrendFilter(latest, onChange) {
   const marketState = latest.marketState;
   const state = { on: !!marketState && readSavedSwitch(TREND_STORAGE_KEY, false) };
   d3.select('#trend-switch').classed('unavailable', !marketState).attr('title', marketState
-    ? `Days that opened like today: TQQQ ${marketState.trend === 'up' ? 'above' : 'below'} its ${TREND_DAYS}-day average, ${marketState.volatility} volatility over the ${VOLATILITY_DAYS} days before.`
+    ? `Days that opened like today: ${ticker} ${marketState.trend === 'up' ? 'above' : 'below'} its ${TREND_DAYS}-day average, ${marketState.volatility} volatility over the ${VOLATILITY_DAYS} days before.`
     : `Needs ${TREND_DAYS + 1} days of history.`);
   d3.select('#toggle-trend').property('checked', state.on).property('disabled', !marketState).on('change', function () {
     state.on = this.checked;
@@ -1587,7 +1623,7 @@ function mergeTodayRows(history, today) {
     .concat(today.map(r => ({ ...r, barMinutes: TODAY_BAR_MINUTES })));
 }
 
-// Outside the regular session the proxy's TQQQ quote carries `extended`, the latest
+// Outside the regular session the proxy's quote for the ticker carries `extended`, the latest
 // pre-market, after-hours or overnight print with its change against the close
 // (cloudflare/quotes/README.md): the chart pulses it at its start (drawExtended).
 // Nothing while the session runs, when the chart itself is live, or when the
@@ -1612,23 +1648,60 @@ if (EMBED) window.addEventListener('message', e => {
 function loadLiveQuote() {
   if (EMBED) return Promise.resolve(parentQuotes);
   if (!QUOTES_PROXY) return Promise.resolve(null);
-  return fetch(QUOTES_PROXY + '/quotes?symbols=TQQQ', { cache: 'no-store' })
+  return fetch(`${QUOTES_PROXY}/quotes?symbols=${ticker}`, { cache: 'no-store' })
     .then(r => { if (!r.ok) throw new Error('The quotes proxy answered HTTP ' + r.status); return r.json(); })
     .catch(err => { console.warn('Live quote unavailable:', err); return null; });
 }
 function extendedPrint(quotes) {
-  const q = quotes && quotes.quotes && quotes.quotes.TQQQ, x = q && q.extended;
+  const q = quotes && quotes.quotes && quotes.quotes[ticker], x = q && q.extended;
   if (!x || !(x.price > 0) || typeof x.changePct !== 'number' || !(x.session in EXTENDED_SESSION_NAMES)) return null;
   return { session: x.session, price: x.price, changePct: x.changePct };
 }
 
+// The ticker's name where the page shows it: the tab's title, the dropdown,
+// and the address, so a copied link opens on the same fund.
+const PAGE_TITLE = document.title.replace(DEFAULT_TICKER, '').trim();   // "intraday — every day's % path from the open"
+function showTicker() {
+  document.title = `${ticker} ${PAGE_TITLE}`;
+  d3.select('#select-ticker').property('value', ticker);
+  if (EMBED) return;
+  const address = new URL(location.href);
+  if (ticker === DEFAULT_TICKER) address.searchParams.delete('ticker'); else address.searchParams.set('ticker', ticker);
+  window.history.replaceState(null, '', address);
+}
+// The dropdown: every fund of the site. A pick is named in the address and
+// loads that fund's days; the axis extent and a kept range belong to the fund
+// left, so both are dropped.
+function setupTickerPick() {
+  d3.select('#select-ticker').on('change', function () {
+    ticker = this.value;
+    showTicker();
+    chart.yLimit(null).rangePinned(null);
+    loadData();
+  }).selectAll('option').data(TICKERS).join('option').attr('value', d => d).text(d => d);
+  showTicker();
+}
+// A fund whose history file the data does not hold, or could not be read:
+// said in the chart's place, with the charts and filters of the fund before
+// it out of sight (null: the history is in, show the page).
+function showHistoryNote(text) {
+  d3.select('.panel').classed('no-history', text !== null);
+  d3.select('#no-data').property('hidden', text === null).text(text || '');
+  if (text !== null) d3.select('#coverage').text('');
+  if (!EMBED) fitChartToWindow();   // the weekday bars' room goes and comes back with the note
+}
+
 function loadData() {
+  const asked = ticker;   // a pick made while these load wins over them
   return Promise.all([
-    d3.tsv(DATA_URL, { cache: 'no-cache' }),
+    d3.tsv(historyUrl(asked), { cache: 'no-cache' }),
     // 404 until the day's first pipeline run has written it.
-    d3.tsv(DATA_URL_TODAY, { cache: 'no-cache' }).catch(() => []),
+    d3.tsv(todayUrl(asked), { cache: 'no-cache' }).catch(() => []),
     loadLiveQuote(),
   ]).then(([history, today, quotes]) => {
+    if (asked !== ticker) return;
+    drawnTicker = asked;
+    showHistoryNote(null);
     chart.extended(extendedPrint(quotes));
     const allDays = withMarketState(buildDays(mergeTodayRows(history, today)));
     const allPct = allDays.flatMap(d => d.points.map(p => p.pct));
@@ -1656,18 +1729,27 @@ function loadData() {
     };
     let ready = false;                                 // one render once every control is wired
     const guarded = () => { if (ready) refresh(); };
-    const metric = setupMetricFilters(allDays, latestId, guarded);
+    const metric = setupMetricFilters(asked, allDays, latestId, guarded);
     const similar = setupSimilarFilter(guarded);
     const trend = setupTrendFilter(allDays[allDays.length - 1], guarded);
     const weekday = setupWeekdayStat(guarded);
     setupPeriodSlider(allDays, days => { periodDays = days; guarded(); });
     ready = true;
     refresh();
+  }, error => {
+    if (asked !== ticker) return;
+    // A refresh of the fund on screen that failed (a dropped connection) leaves its chart up; the next one asks again.
+    if (drawnTicker === asked) { console.warn(`${asked}'s 5-minute history did not refresh:`, error); return; }
+    // A fund the data refresh has not written a file for yet answers 404; the page's timer asks again each refresh.
+    showHistoryNote(/^404\b/.test(error.message)
+      ? `No 5-minute history for ${asked} in the data yet. It arrives with the next data refresh.`
+      : `${asked}'s 5-minute history did not load: ${error.message}`);
   });
 }
 
+setupTickerPick();
 loadData().then(() => {
-  setInterval(() => chart.drawNow(), NOW_REFRESH_MS);
+  setInterval(() => { if (chart.data()) chart.drawNow(); }, NOW_REFRESH_MS);   // nothing to mark until a first load has drawn the chart
   setInterval(loadData, DATA_REFRESH_MS);            // the pipeline appends bars through the day
 });
 </script>

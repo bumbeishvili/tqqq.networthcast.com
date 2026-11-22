@@ -36,7 +36,7 @@ Every start year and holding period at once, coloured against a baseline (here c
 
 ![TQQQ intraday paths](images/readme-intraday.png)
 
-[experiments/tqqq-intraday.html](experiments/tqqq-intraday.html): every session's 5-minute path since September 2023, the mean and median path, and filters by the day's open and close. Hover for the path nearest the pointer; drag across the plot for the move over that span on today's path, the mean, the median and the nearest day.
+[experiments/tqqq-intraday.html](experiments/tqqq-intraday.html): every session's 5-minute path over about three years (from September 2023 for TQQQ), for TQQQ or another of the ten funds (a dropdown, or `?ticker=SOXL` in the address), the mean and median path, the usual close by weekday, and filters by the day's open and close. Hover for the path nearest the pointer; drag across the plot for the move over that span on today's path, the mean, the median and the nearest day.
 
 ### Desktop widget
 
@@ -59,7 +59,7 @@ Every start year and holding period at once, coloured against a baseline (here c
 
 ## Updating price data
 
-The series under `data/` are TSV files: ten price files, their daily highs and lows, three short-rate files, NFCI, and TQQQ's intraday bars. See [data/README.md](data/README.md) for the format, the synthesis method, and its known biases.
+The series under `data/` are TSV files: ten price files, their daily highs and lows, three short-rate files, NFCI, and each fund's intraday bars. See [data/README.md](data/README.md) for the format, the synthesis method, and its known biases.
 
 ```bash
 # One-time setup (creates a venv and installs yfinance)
@@ -84,7 +84,7 @@ Flags cover the rest:
 
 ## Automated refresh
 
-`.github/workflows/update-data.yml` runs `scripts/update_data.py` in its default incremental mode, then `scripts/update_intraday.py --incremental` (Alpaca 5-minute bars) and `scripts/update_intraday_today.py` (today's 1-minute bars from Yahoo), and commits changed TSVs back to `main`.
+`.github/workflows/update-data.yml` runs `scripts/update_data.py` in its default incremental mode, then `scripts/update_intraday.py --incremental` (Alpaca 5-minute bars, one file a fund) and `scripts/update_intraday_today.py` (today's 1-minute bars from Yahoo), and commits changed TSVs back to `main`.
 
 - **Schedule**: hourly on weekdays, `30 13-22 * * 1-5`. That's ten fires, and a gate step drops any that falls outside 09:00–17:30 ET, leaving nine runs per trading day.
 - **DST**: GitHub cron is fixed UTC. 13:30–22:30 UTC covers 09:30–18:30 ET in summer and 08:30–17:30 ET in winter, so the gate trims one fire off whichever end the current offset pushes out. Either way the day runs 09:30 to 17:30 ET.

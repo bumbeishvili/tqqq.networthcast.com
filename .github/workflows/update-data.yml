@@ -58,11 +58,13 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: python3 scripts/update_data.py || (sleep 120 && python3 scripts/update_data.py)
 
-      # Two Alpaca requests per run (calendar + bars since the last day on
-      # disk), well inside the free plan's 200/minute. Kept independent of the
+      # Two Alpaca requests a fund per run (calendar + bars since the last day
+      # on disk) for the site's ten funds, well inside the free plan's
+      # 200/minute. A fund with no file yet gets its full three-year pull, so a
+      # new ticker fills in on its first run. Kept independent of the
       # daily prices: an Alpaca outage shows as a failed step in the log but
       # must not block committing the yfinance refresh above.
-      - name: Refresh TQQQ 5-minute bars (Alpaca)
+      - name: Refresh 5-minute bars (Alpaca)
         if: steps.gate.outputs.run == 'true'
         continue-on-error: true
         env:
@@ -83,7 +85,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet -- 'data/*.tsv' 'data/intraday/*.tsv'; then
+          # Changed files and new ones: a fund's first 5-minute file is untracked,
+          # which git diff does not see.
+          if [ -z "$(git status --porcelain -- 'data/*.tsv' 'data/intraday/*.tsv')" ]; then
             echo "No data changes."
             exit 0
           fi
