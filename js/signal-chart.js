@@ -81,10 +81,13 @@ const MINI_EYE = {
 };
 // Trade-event areas. On a window of marksWithinMs or longer the bands crowd
 // each other and each reaches halfW (viewBox units) past its trades. On a
-// shorter one, where single trades can be told apart, a band is at least minPx
-// wide on screen, a whole day once a day is wider than that, and in a stronger
-// tint while it is under thinPx (the user, 2026-11-22, at a band 2.5 px wide
-// in a 10% tint: "it did not show vertical band"). The rest in viewBox units:
+// shorter one, where single trades can be told apart, a trade's band is a line
+// minPx wide on screen, in a stronger tint while it is under thinPx (the user,
+// 2026-11-22, at a band 2.5 px wide in a 10% tint: "it did not show vertical
+// band"), and two bands keep gapPx of plot between them, so a sale and the
+// buy of the next day read as two lines (the user, the same day, at two
+// day-wide bands touching: "it should show two lines for two events"). The
+// rest in viewBox units:
 // the gap under which neighbouring trades merge into one band (two bands closer than this
 // would overlap and hide each other), the widest a merged band may grow
 // before the next trade starts a new one (on a long view, trades weeks apart
@@ -93,7 +96,7 @@ const MINI_EYE = {
 // the widest window (two years) that still shows a mark at each trade's
 // crossing — on a longer view the bands say enough and the marks would only
 // speckle the lines.
-const MINI_EVENT = { halfW: 1.2, minPx: 6, thinPx: 12, mergeX: 4, maxSpanX: 10, hoverPad: 1.5, maxListed: 8, marksWithinMs: 2 * 365.25 * 86400000 };
+const MINI_EVENT = { halfW: 1.2, minPx: 6, gapPx: 2, thinPx: 12, mergeX: 4, maxSpanX: 10, hoverPad: 1.5, maxListed: 8, marksWithinMs: 2 * 365.25 * 86400000 };
 // Marks at the trade crossings: the main chart's symbol and colour per action
 // (CUSTOM_EVENT_STYLE: buy circle, sell hexagon, switch diamond) inside a
 // light ring per asset — the asset sold on a sell, the one bought otherwise —
@@ -142,10 +145,14 @@ function _miniFmtValue(unit, v) {
   if (unit === 'num') return String(+v.toFixed(Math.abs(v) < 10 ? 2 : 1));
   return _miniFmtPrice(v);
 }
-// How far a price moved over a dragged range, in percent.
-function _miniRangeMove(v0, v1) {
-  const d = v0 > 0 ? (v1 / v0 - 1) * 100 : 0;
-  return { up: d >= 0, text: (d >= 0 ? '+' : '') + d.toFixed(1) + '%' };
+// How far a line moved over a dragged range: percent for prices, percentage
+// points on a panel in percent (a share going 40% to 60% moved +20 pts), the
+// plain difference on a panel of numbers. The sign and the colour follow the
+// figure as printed, so a move that rounds to nothing reads +0.0.
+function _miniRangeMove(unit, v0, v1) {
+  const change = unit === '%' || unit === 'num' ? v1 - v0 : (v0 > 0 ? (v1 / v0 - 1) * 100 : 0);
+  const digits = unit === 'num' ? 2 : 1, shown = +change.toFixed(digits) || 0;   // || 0: never "-0.0"
+  return { up: shown >= 0, text: (shown >= 0 ? '+' : '') + shown.toFixed(digits) + (unit === 'num' ? '' : unit === '%' ? ' pts' : '%') };
 }
 function _miniFmtPrice(v) {
   const a = Math.abs(v);
@@ -490,15 +497,18 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     else eventGroups.push({ x0: x, x1: x, items: [item] });
   }
   // How far a band reaches past its first and last trade (MINI_EVENT): on a window
-  // short enough for marks, half of minPx on screen or half a day, whichever is
-  // more; on a longer one halfW. Never further than halfway to the next band's
-  // trades, so two bands do not overlap. A band under thinPx on a short window is
-  // drawn in a stronger tint.
-  const tradesApart = t1 - t0 < MINI_EVENT.marksWithinMs, dayW = plotW * 86400000 / (t1 - t0);
-  const bandHalfW = tradesApart ? Math.max(MINI_EVENT.minPx / kPx, dayW) / 2 : MINI_EVENT.halfW;
+  // short enough for marks, half of minPx on screen; on a longer one halfW. Never
+  // further than halfway to the next band's trades, less half the gap two bands keep
+  // on a short window, so neighbours do not overlap and a sale and the next day's buy
+  // stand apart. A band under thinPx on a short window is drawn in a stronger tint.
+  const tradesApart = t1 - t0 < MINI_EVENT.marksWithinMs;
+  const bandHalfW = tradesApart ? MINI_EVENT.minPx / kPx / 2 : MINI_EVENT.halfW, bandGap = tradesApart ? MINI_EVENT.gapPx / kPx : 0;
   const events = eventGroups.map((g, i) => {
     const prev = eventGroups[i - 1], next = eventGroups[i + 1];
-    const x0 = Math.max(g.x0 - bandHalfW, prev ? (prev.x1 + g.x0) / 2 : -Infinity), x1 = Math.min(g.x1 + bandHalfW, next ? (g.x1 + next.x0) / 2 : Infinity);
+    // Towards a neighbour the edge stops half the gap short of the midpoint, and never inside the
+    // band's own trades: a neighbour nearer than the gap (a run of trades cut by maxSpanX) gets less gap.
+    const x0 = Math.min(g.x0, Math.max(g.x0 - bandHalfW, prev ? (prev.x1 + g.x0 + bandGap) / 2 : -Infinity));
+    const x1 = Math.max(g.x1, Math.min(g.x1 + bandHalfW, next ? (g.x1 + next.x0 - bandGap) / 2 : Infinity));
     return { x0, x1, items: g.items, thin: tradesApart && (x1 - x0) * kPx < MINI_EVENT.thinPx };
   });
   // The latest day's trade while that day is on screen.
@@ -512,7 +522,9 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // The runs the log joins, for the strategy's own return over a dragged
   // range (_miniRunReturn): one run, unless the host joined two (opts.runs).
   const runs = opts && Array.isArray(opts.runs) && opts.runs.length ? opts.runs : [{ rows: log }];
-  const chartData = { series: series.filter(s => !s.hidden), panels, t0, t1, T0, T1, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home, log, holdings, runs };
+  // readings: each panel's reading by key, the first line the strategy declared in it; null while that line is hidden with its eye.
+  const readings = panels.map((_, p) => { const first = series.find(s => s.panel === p); return first.hidden ? null : first.key; });
+  const chartData = { series: series.filter(s => !s.hidden), readings, panels, t0, t1, T0, T1, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home, log, holdings, runs };
   window._miniCharts[cfg.id] = chartData;
   window._miniChartHover = chartData;
 
@@ -1054,7 +1066,7 @@ function _miniRangeBadges(data, readings, xA, xB) {
   const k = data.k, fs = 7 / k, ch = fs * 0.6, lh = 10 / k, padX = 3 / k;
   return data.panels.flatMap((P, p) => {
     const own = readings.filter(s => s.panel === p).map(s => {
-      const move = _miniRangeMove(s.p0.v, s.p1.v);
+      const move = _miniRangeMove(s.unit, s.p0.v, s.p1.v);
       return { y: (_miniLineY(data, s, s.p0.v) + _miniLineY(data, s, s.p1.v)) / 2 - lh / 2, move, label: s.label };
     }).sort((a, b) => a.y - b.y);
     for (let i = 1; i < own.length; i++) if (own[i].y - own[i - 1].y < lh) own[i].y = own[i - 1].y + lh;
@@ -1330,17 +1342,20 @@ document.addEventListener('mousemove', (e) => {
   const anchor = _miniAnchorFromEvent(svg, e, data);
 
   if (drag && drag.t !== anchor.t) {
-    // Range mode: shaded span + a chord on each price, the prices' moves in the tooltip.
+    // Range mode: shaded span + a chord per panel, the prices' moves in the tooltip.
     let lo = drag, hi = anchor;
     if (hi.t < lo.t) { lo = anchor; hi = drag; }
     const xA = _miniXAt(data, lo.t), xB = _miniXAt(data, hi.t);
     const spans = data.series.map(s => ({ ...s, p0: _miniPtAt(s.pts, lo.t), p1: _miniPtAt(s.pts, hi.t) })).filter(s => s.p0 && s.p1);
-    // A drag speaks of prices only (the user, 2026-11-22: "we are only
-    // interested in tqqq price change, soxl price change and strategy change,
-    // remove all others"): the first line of each panel in dollars gets a
-    // chord, a badge and a row in the readout. Panels in percent or plain
-    // numbers, and every level, get none.
-    const readings = data.panels.map((_, p) => spans.find(s => s.panel === p)).filter(s => s && s.unit === '$');
+    // Each panel's reading gets a chord and a badge on the chart; its levels
+    // get none, also while the reading is hidden or has no point at an end of
+    // the range (a level would take its place and show a flat "+0.00"). The
+    // tooltip lists the prices only, the readings in dollars (the user,
+    // 2026-11-22: "we are only interested in tqqq price change, soxl price
+    // change and strategy change, remove all others", then: "even through it
+    // not in tooltip, still keep signal change in the sygnal chart").
+    const readings = data.readings.map((key, p) => spans.find(s => s.panel === p && s.key === key)).filter(Boolean);
+    const prices = readings.filter(s => s.unit === '$');
     const badges = _miniRangeBadges(data, readings, xA, xB);
     g.innerHTML = `<rect x="${xA.toFixed(1)}" y="${data.padT}" width="${(xB - xA).toFixed(1)}" height="${(plotBottom - data.padT).toFixed(2)}" fill="rgba(134,118,255,0.10)"/>`
       + `<line x1="${xA.toFixed(1)}" y1="${data.padT}" x2="${xA.toFixed(1)}" y2="${plotBottom}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
@@ -1351,7 +1366,7 @@ document.addEventListener('mousemove', (e) => {
             <circle cx="${xA.toFixed(1)}" cy="${y0}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>
             <circle cx="${xB.toFixed(1)}" cy="${y1}" r="0.9" fill="${s.color}" stroke="#fff" stroke-width="0.3"/>`;
         }).join('')
-      // Each chord's midpoint gets a badge naming the line and its % change, green/red by sign.
+      // Each chord's midpoint gets a badge naming the line and its change (percent, points or a plain difference, by the panel's unit), green/red by sign.
       + badges.map(m => {
           const col = m.move.up ? '#00b929' : '#dc2626';
           return `<rect x="${m.box.x.toFixed(1)}" y="${m.box.y.toFixed(1)}" width="${m.box.w.toFixed(1)}" height="${m.box.h.toFixed(2)}" rx="${(3 / data.k).toFixed(2)}" fill="#fff" stroke="${col}" stroke-width="${(0.8 / data.k).toFixed(2)}"/>
@@ -1362,10 +1377,10 @@ document.addEventListener('mousemove', (e) => {
     const avoid = badges.map(m => ({ left: svgBox.left + m.box.x * px, right: svgBox.left + (m.box.x + m.box.w) * px, top: svgBox.top + m.box.y * px, bottom: svgBox.top + (m.box.y + m.box.h) * px }));
     // How long the range is, then each price from the range's start to its
     // end, coloured by direction, with its change in percent beside it, then
-    // the strategy's return. The chords' badges carry the same changes.
+    // the strategy's return. The chords' badges carry every reading's change.
     tip.innerHTML = `<div class="mct-date">${formatRangeDuration(lo.d, hi.d)}</div>`
-      + _miniPanelRows(data, readings, s => `<span class="mct-from">${_miniFmtExact(s.p0.v)} →</span> `
-          + `<b class="${s.p1.v >= s.p0.v ? 'mct-pos' : 'mct-neg'}">${_miniFmtExact(s.p1.v)} (${_miniRangeMove(s.p0.v, s.p1.v).text})</b>`)
+      + _miniPanelRows(data, prices, s => `<span class="mct-from">${_miniFmtExact(s.p0.v)} →</span> `
+          + `<b class="${s.p1.v >= s.p0.v ? 'mct-pos' : 'mct-neg'}">${_miniFmtExact(s.p1.v)} (${_miniRangeMove(s.unit, s.p0.v, s.p1.v).text})</b>`)
       + _miniRangeReturnHtml(data, lo.d, hi.d);
     _miniPlaceTip(tip, e, avoid);
     window._miniRangeShown = { cfgId: data.cfgId };
