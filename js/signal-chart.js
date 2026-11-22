@@ -367,8 +367,11 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const home = (opts && opts.home) || null;
   const z = window._miniZooms[cfg.id] || home;
   const minSpan = Math.min(MINI_ZOOM.minSpanMs, T1 - T0);
-  const t0 = z ? Math.max(T0, Math.min(z.t0, T1 - minSpan)) : T0;
-  const t1 = z ? Math.min(T1, Math.max(z.t1, t0 + minSpan)) : T1;
+  // The right end first, then the left: a window narrower than the least span
+  // widens to the left, so a resting view that ends on the main run's last
+  // day keeps that day at its right edge although the data runs on past it.
+  const t1 = z ? Math.min(T1, Math.max(z.t1, T0 + minSpan)) : T1;
+  const t0 = z ? Math.max(T0, Math.min(z.t0, t1 - minSpan)) : T0;
   const zoomed = t0 > T0 || t1 < T1;
   // Off the resting view: the zoom buttons show. Without a home that is any
   // zoom; with one, any move away from it.
@@ -522,8 +525,9 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // The runs the log joins, for the strategy's own return over a dragged
   // range (_miniRunReturn): one run, unless the host joined two (opts.runs).
   const runs = opts && Array.isArray(opts.runs) && opts.runs.length ? opts.runs : [{ rows: log }];
-  // readings: each panel's reading by key, the first line the strategy declared in it; null while that line is hidden with its eye.
-  const readings = panels.map((_, p) => { const first = series.find(s => s.panel === p); return first.hidden ? null : first.key; });
+  // readings: each panel's reading by key, the first line the strategy declared in it; null while that line is hidden with its eye,
+  // or while the window holds no point of any of the panel's lines (credit stress before 1971).
+  const readings = panels.map((_, p) => { const first = series.find(s => s.panel === p); return first && !first.hidden ? first.key : null; });
   const chartData = { series: series.filter(s => !s.hidden), readings, panels, t0, t1, T0, T1, W, H, padL, padT, padB, padR, k, events, cfgId: cfg.id, zoomed, home, log, holdings, runs };
   window._miniCharts[cfg.id] = chartData;
   window._miniChartHover = chartData;
@@ -564,13 +568,18 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   });
   // The zoom buttons, while zoomed: Reset, and Latest beside it while panned
   // away from the end (the click handler below; a double-click anywhere also
-  // resets). They sit at the strip's right end, inside the gutter so they
+  // resets). Latest stands alone at rest on a view that ends before the latest
+  // date. They sit at the strip's right end, inside the gutter so they
   // never cover a trade cap, or in the compact layout in the corner under the
   // end labels.
   const btnW = 50 / k, btnH = 10 / k, chipW = 38 / k;
   const btnX = W - 2 / k - btnW, chipX = btnX - 4 / k - chipW;
+  const restChipX = W - 2 / k - chipW;   // the Latest chip's place at rest, with no Reset beside it
   const btnY = compact ? plotBottom + (padB - btnH) / 2 : axisTopH + 1 / k;
-  const axisEnd = compact && offRest ? (atEnd ? btnX : chipX) - 4 / k : W;
+  // The Latest chip: shown while the latest date is off screen to the right; a click brings the window to it at the same span.
+  const latestChip = x => `<g class="mini-latest" role="button"><title>The latest date is off screen to the right. Click to jump to it at this zoom.</title><rect x="${x.toFixed(1)}" y="${btnY.toFixed(2)}" width="${chipW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(x + chipW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Latest →</text></g>`;
+  // Where the compact layout's date labels must stop: left of whichever button sits in that corner.
+  const axisEnd = !compact ? W : offRest ? (atEnd ? btnX : chipX) - 4 / k : atEnd ? W : restChipX - 4 / k;
   // Date labels just under the plot, on a tall chart in the band above the
   // strip too (topAxis), and in the gap above each later panel, to the right
   // of its name, so a stacked chart has dates at every divider (the user,
@@ -604,8 +613,12 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const hintW = txt => txt.length * 0.6 * (7 / k);   // JetBrains Mono advance
   let zoomUi = '';
   if (!offRest) {
+    // At rest. A resting view that ends before the latest date (the main
+    // chart's range, its Exit earlier) gets the Latest chip too, the hint
+    // to its left where both fit.
     const hint = MINI_TOUCH_UI ? 'pinch to zoom' : `${MOD_KEY} + scroll to zoom`;
-    if (!compact && hintW(hint) <= padR - 4 / k) zoomUi = `<text x="${(W - 2 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.6)">${hint}</text>`;
+    const hintRight = atEnd ? W - 2 / k : restChipX - 4 / k, room = padR - 4 / k - (atEnd ? 0 : chipW + 4 / k);
+    zoomUi = (!compact && hintW(hint) <= room ? `<text x="${hintRight.toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.6)">${hint}</text>` : '') + (atEnd ? '' : latestChip(restChipX));
   } else {
     const factor = ((T1 - T0) / (t1 - t0)).toFixed(1);
     const resetBtn = `<g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MINI_TOUCH_UI ? 'A pinch zooms, a drag pans.' : `${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.`}</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
@@ -618,7 +631,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
       // and a click brings the window back to the latest date at the same zoom.
       const short = `×${factor}`;
       const hint = !compact && hintW(short) <= padR - btnW - chipW - 12 / k ? `<text x="${(chipX - 4 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.9)">${short}</text>` : '';
-      zoomUi = `${hint}<g class="mini-latest" role="button"><title>The latest date is off screen to the right. Click to jump to it at this zoom.</title><rect x="${chipX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${chipW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(chipX + chipW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Latest →</text></g>${resetBtn}`;
+      zoomUi = `${hint}${latestChip(chipX)}${resetBtn}`;
     }
   }
   // The end of the data, when it is on screen: a dotted line at the latest
@@ -1147,7 +1160,7 @@ document.addEventListener('wheel', (e) => {
 // The Latest chip: keep the span, end the window at the latest date.
 function _miniJumpToLatest(svg) {
   const d = _miniDataOf(svg);
-  if (!d || !window._miniZooms[d.cfgId]) return;
+  if (!d || d.t1 >= d.T1) return;   // the latest date is on screen already
   const span = d.t1 - d.t0;
   window._miniZooms[d.cfgId] = { t0: Math.max(d.T0, d.T1 - span), t1: d.T1 };
   _miniChartClearHover();

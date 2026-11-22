@@ -154,24 +154,38 @@ function buildConfigSubChipsHtml(cfg) {
 // The display log holds one plain "hold" row a week or a month (the transaction
 // table renders every row and the main chart wants no more), so a zoom into
 // one month would show four points per line. The chart therefore gets a second
-// run of the same code, settings and range with p.dailyDisplay set, which logs
-// every day; the library snippet and the prompt both honour the flag. Cached
-// per result signature beside the display result and used only here; a
-// strategy that ignores the flag returns its ordinary log and nothing changes.
+// run of the same code, settings, money and Entry with p.dailyDisplay set, which
+// logs every day; the library snippet and the prompt both honour the flag. It
+// runs on past the main chart's Exit to the data's latest day (customDetailCtx),
+// so the chart can be moved forward from the main chart's range on the same
+// account, deposits and holdings (the user, 2026-11-22: "I can make signal
+// chart to go past in time, but I can't make it to go forward from main
+// chart"). Cached per signature beside the display result and used only here;
+// a strategy that ignores the flag returns its ordinary log.
 window._customDetailLogs = window._customDetailLogs || {};   // cfgId → { sig, log | null while running, holdings } (holdings: the run's per-day holdings, for the chart's tooltip)
+// The main run's ctx with its Exit on the data's latest day, named the way the
+// main window is named (an exact day when the window is exact, else the last
+// quarter), so the engines read the window as they do for the main run
+// (computeCustomGlobals's exactWindow). The run reaches the latest row, so it
+// follows a live price (customDataStamp).
+function customDetailCtx(ctx) {
+  const exact = !!(ctx.entryDateOverride || ctx.exitDateOverride);
+  const exit = exact ? { exitDateOverride: daily[daily.length - 1].date } : { exitIdx: quarterlyData.length - 1 };
+  return Object.assign({}, ctx, exit, { isLatestDaySelected: true });
+}
 function customDetailLog(cfg) {
   const ctx = window._customCtx, shown = (window._customResults || {})[cfg.id];
   if (!ctx || !shown || shown.error) return null;
-  const sig = customSig(cfg, ctx);
+  const detailCtx = customDetailCtx(ctx), sig = customSig(cfg, detailCtx);
   const have = window._customDetailLogs[cfg.id];
   if (have && have.sig === sig) return have.log;
   // A new live price (the signature's data stamp) keeps the last log on screen
   // until the run with the price is in; any other change (settings, the range)
   // draws the display log until then, since the old log shows the old rules.
   const carried = have && have.log && _sigSansStamp(have.sig) === _sigSansStamp(sig) ? have.log : null;
-  if (shown.sig !== sig) return carried;   // the display run is still catching up; its arrival re-renders the panel
+  if (shown.sig !== customSig(cfg, ctx)) return carried;   // the display run is still catching up; its arrival re-renders the panel
   window._customDetailLogs[cfg.id] = { sig, log: carried, holdings: carried ? have.holdings : null };
-  postCustomJob(cfg, cfg.params || {}, Object.assign({}, computeCustomGlobals(cfg, ctx), { dailyDisplay: true }), (msg, err) => {
+  postCustomJob(cfg, cfg.params || {}, Object.assign({}, computeCustomGlobals(cfg, detailCtx), { dailyDisplay: true }), (msg, err) => {
     const slot = window._customDetailLogs[cfg.id];
     if (!slot || slot.sig !== sig) return;   // superseded by a newer signature
     slot.log = (!err && msg && Array.isArray(msg.log)) ? msg.log : [];
@@ -202,21 +216,24 @@ function customHistoryLog(cfg) {
   });
   return null;
 }
-// What the signal chart draws: the main run (its detail log once it is in, the
-// display log until then and for good when the detail run failed), after the
-// history run's rows from before the main run's first day, so the chart
-// reaches back to the data's start. It rests on the main run's range (home)
-// and zooms out over the rest.
+// What the signal chart draws: the detail run (the main run carried on to the
+// data's latest day; the display log until it is in, and for good when it
+// failed), after the history run's rows from before its first day, so the
+// chart reaches from the data's start to its latest day whatever the main
+// chart's Entry and Exit. It rests on the main run's own range (home) and
+// zooms out over the rest.
 function customSignalChartView(cfg, displayLog) {
   const detail = customDetailLog(cfg);
   const main = detail && detail.length ? detail : displayLog;
   if (!main.length) return { log: main, home: null, holdings: null, runs: null };
-  const home = { t0: Date.parse(main[0].date), t1: Date.parse(main[main.length - 1].date) };
+  // The main run's last day: the display log's last row (the detail log runs on past it).
+  const exitRow = displayLog.length ? displayLog[displayLog.length - 1] : main[main.length - 1];
+  const home = { t0: Date.parse(main[0].date), t1: Date.parse(exitRow.date) };
   const history = customHistoryLog(cfg);
   const before = history ? history.filter(r => r.date < main[0].date) : [];
   // The per-day holdings beside each log, for the tooltip: the detail run's
-  // when its log is the one shown, else the display run's (the same days
-  // either way); the history run's before the main run's first day.
+  // when its log is the one shown, else the display run's; the history run's
+  // before the main run's first day.
   const detailSlot = window._customDetailLogs[cfg.id], historySlot = window._customHistoryLogs[cfg.id];
   const mainHoldings = detailSlot && detailSlot.log === main ? detailSlot.holdings : ((window._customResults || {})[cfg.id] || {}).holdings;
   const beforeHoldings = history && historySlot && historySlot.log === history && historySlot.holdings ? historySlot.holdings.filter(e => e.date < main[0].date) : [];
