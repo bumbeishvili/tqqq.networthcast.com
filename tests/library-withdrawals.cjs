@@ -144,7 +144,7 @@ const strategyIds = Object.keys(CODE).map(Number).filter(n => !engineRun(n)).sor
   // Entries added on 2026-11-04, after the rule: no saved copy of them lacks
   // it, and their books (MIX_BOOKS_SNIPPET) pay withdrawals in cover(), which
   // sections 1-3 check like everyone else's.
-  const ADDED_AFTER_RULE = [7, 14, 52, 53, 54];
+  const ADDED_AFTER_RULE = [7, 14, 52, 53, 54, 71];
   strategyIds.filter(n => !ADDED_AFTER_RULE.includes(n)).forEach(n => {
     const preRule = CODE[n].replace(WITHDRAWAL_BLOCK, '');
     ck(`#${n} the library text contains the withdrawal block once`, preRule !== CODE[n] && !WITHDRAWAL_BLOCK.test(preRule));

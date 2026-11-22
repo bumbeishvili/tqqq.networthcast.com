@@ -3709,8 +3709,10 @@ function withSoxlPile(base, spec) {
     const SOXL_PRICE = "SOXL price", SOXL_PANEL = soxlWhen === "lead" ? "SOXL vs SOXX" : SOXL_PRICE;   // SOXL_PANEL: where the SOXL rule's trades are marked
     let soxlPrev = false, soxlSwitch = false, soxlLeft = false;
     const soxlUnder = (i) => soxlHi[i] > 0 ? ((1 - data.soxl[i] / soxlHi[i]) * 100).toFixed(0) + "% under its " + SW + "-day high" : "";
-    const soxlLeadTxt = (i) => soxlLead[i] === soxlLead[i] ? (soxlLead[i] >= 0 ? "+" : "−") + Math.abs(soxlLead[i]).toFixed(0) + "%" : "n/a";
-    const soxlWhy = (i, w) => w === "soxl" ? (soxlWhen === "lead" ? "SOXL's lead over SOXX is " + soxlLeadTxt(i) + ", under " + leadIn + "%" : "SOXL is " + (soxlWhen === "always" ? "held for TQQQ" : soxlWhen === "belowAvg" ? "below its " + SW + "-day average" : soxlUnder(i))) + "; the rules hold TQQQ"
+    const soxlPct = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(0) + "%";   // a lead, as the notes print it
+    const soxlLeadTxt = (i) => soxlLead[i] === soxlLead[i] ? soxlPct(soxlLead[i]) : "n/a";
+    // A SOXL buy on a later close of the same hold (after a Monday trade, a one-day sale, the second day of a switch) finds the lead anywhere.
+    const soxlWhy = (i, w) => w === "soxl" ? (soxlWhen === "lead" ? "SOXL's lead over SOXX is " + soxlLeadTxt(i) + (soxlLead[i] < leadIn ? ", under " + leadIn + "%" : ", not sold back since it was under " + leadIn + "%") : "SOXL is " + (soxlWhen === "always" ? "held for TQQQ" : soxlWhen === "belowAvg" ? "below its " + SW + "-day average" : soxlUnder(i))) + "; the rules hold TQQQ"
       : w === "tqqq" && soxlLeft ? (soxlWhen === "lead" ? "SOXL's lead over SOXX is back over " + leadOut + "% (" + soxlLeadTxt(i) + ")" : "SOXL is back " + (soxlWhen === "belowAvg" ? "above its " + SW + "-day average" : "within " + Math.round(soxlDrop * 100) + "% of its " + SW + "-day high")) : "";
 `;
   const atClose = `      // The SOXL pile at this close, settled before the strategy's own trade
@@ -3766,7 +3768,8 @@ function withSoxlPile(base, spec) {
       // SOXL instead of TQQQ: one voice. The base's cards and verdict say what its
       // rules chose (TQQQ); while SOXL stands in for it, say so everywhere.
       const sWhen = p.soxlWhen || "lead", sWin = Math.round(+p.soxlWindow || 225), sDrop = p.soxlDrop == null ? 50 : +p.soxlDrop;
-      const sLead = lastRow.soxlLead, sLeadTxt = sLead != null ? (sLead >= 0 ? "+" : "−") + Math.abs(sLead).toFixed(0) + "%" : "n/a";
+      const sPct = (v) => (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(0) + "%";   // a lead, as the card prints it
+      const sLead = lastRow.soxlLead, sLeadTxt = sLead != null ? sPct(sLead) : "n/a";
       const sIn = p.soxlLeadEnter == null ? -15 : +p.soxlLeadEnter, sOut = p.soxlLeadExit == null ? 90 : +p.soxlLeadExit;
       const inSoxl = lastRow.held === "SOXL";
       const sRule = sWhen === "always" ? "SOXL is always held for TQQQ"
@@ -4530,6 +4533,166 @@ const FIT_ROUND_DEFAULTS = {
   overPct: 55, overWindow: 255, sqqqMaxDays: 15, nfciVeto: 0.5, soxlLeadDays: 420, soxlLeadEnter: -20, soxlLeadExit: 195,
   pileFloor: "join", bigRise: 10, bigDrop: 25, dipDay: 4, dipUnder: 35, dipUnderMax: 85 };
 CODE[53] = withDefaults(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: FIT_ROUND_DEFAULTS });
+
+// One replacement in a strategy's text; what it replaces has to be there exactly once.
+function replacedOnce(text, find, repl, what) {
+  const at = text.indexOf(find);
+  if (at < 0 || text.indexOf(find, at + 1) >= 0) throw new Error(`${what} must appear exactly once in the text`);
+  return text.slice(0, at) + repl + text.slice(at + find.length);
+}
+
+// ===== #53: a second way to sell SOXL, once its lead turns down (the user,
+// 2026-11-22: "there is clear cycle, are you sure we properly leveraging it",
+// then "let's integrate it in both") =====
+// SOXL's lead over SOXX swings: six times since 2010 it rose from a trough
+// under −20% to a high of 150% to 400% and fell back. With hindsight the rise
+// holds most of SOXL's gain over TQQQ (x9) and the decline gives it all back.
+// A fixed sell level has to guess the high: 195% caught the 2026 top by 8
+// points (+477% that year) and 205% would have missed it (+64%). The turn sell
+// guesses nothing: SOXL goes back to TQQQ at the first close with the lead a
+// set number of points under its highest close since the lead went under the
+// buy level, counted once that high has passed a level (in the trough the
+// lead moves that many points with no rise behind it).
+// It is the dropdown's second choice, and the level stays the default, here
+// and in #71, which is built from this text. Why: on the fitted years it
+// looks as good or better (Q1 2010 to Q4 2025 at 30 points, counted from 50%:
+// 198.0% a year with a 45.7% drawdown against 196.8% and 51.9% at the 195%
+// level, six falls of 30% or more against ten; 2026 to 20 November +314%
+// against +477%), but about 750 settings of turn-following rules only tie the
+// fixed levels there (a plain "over 40%" makes 198.3% / 45.7%), and on years
+// the settings had not seen it did not hold up. One fitted copy, return a
+// year and deepest fall, the turn sell against a fitted level: fitted on
+// earlier years and run on each next year of 2016-2025, 121% / 77% against
+// 139% / 80%; fitted on 2018-2026 and run on 2010-2017, 54% / 52% against
+// 59% / 63%; fitted on both ends and run on 2014-2021, 56% / 55% against
+// 97% / 47%. In #71's shape against its 10% level: 123% / 63% against
+// 114% / 65%, 94% / 52% against 89% / 45%, 130% / 37% against 165% / 42%.
+// On the rebuilt prices of 1986-2009 it makes 42.4% a year against 45.4%.
+// Holding SOXL only while the lead rises, without the buy in the trough,
+// lost in every form tried (160 settings). The bare SOXL lead (#67) has no
+// such choice: it reads FIT_WITH_FLOOR.
+function withSoxlTurnSell(base, spec) {
+  const what = (part) => `withSoxlTurnSell(${spec.name}): ${part}`;
+  const mode = `    { id: "soxlSell", label: "Back to TQQQ", tip: "At a lead level: the first close with the lead over a set level, which has to guess how high the lead will go. Once the lead turns down: SOXL is held for as long as its lead keeps rising, and sold when the lead has fallen a set number of points from its high.", text: "Sell SOXL back to TQQQ {}.", when: { soxlWhen: "lead" }, default: ${JSON.stringify(spec.sell)}, options: [
+      { value: "level", label: "at a lead level" }, { value: "turn", label: "once its lead turns down" } ] },
+`;
+  const turn = `    { id: "soxlTrail", label: "Points under the lead's high", tip: "The high is the lead's highest close since it went under the buy level. 30 means a lead that reached 150% sells at the first close under 120%.", text: "Turned down means {} points under the lead's highest close since SOXL was bought,", when: { soxlWhen: "lead", soxlSell: "turn" }, default: ${JSON.stringify(spec.trail)}, options:
+      Array.from({ length: 40 }, (_, k) => 5 + 5 * k) },
+    { id: "soxlTrailFrom", label: "Counted once the high is over (%)", tip: "Until the lead has closed over this, SOXL is held whatever the lead does. In the trough the lead moves by tens of points with no rise behind it.", text: "and only once that high is over {}.", unit: "%", when: { soxlWhen: "lead", soxlSell: "turn" }, default: ${JSON.stringify(spec.from)}, options:
+      Array.from({ length: 51 }, (_, k) => -50 + 5 * k) },
+`;
+  const settings = `    // How SOXL goes back to TQQQ (the Back to TQQQ settings): over the level leadOut, or once the lead has
+    // turned down. soxlSellAt: the lead under which the turn sell goes back today (NaN where it cannot yet);
+    // soxlHighAt: the lead's highest close since it went under the buy level, kept after the sale for its note.
+    const soxlTurn = (p.soxlSell || "level") === "turn", soxlTrail = +p.soxlTrail || 0, soxlTrailFrom = p.soxlTrailFrom == null ? -Infinity : +p.soxlTrailFrom;
+    const soxlSellAt = new Float64Array(n).fill(NaN), soxlHighAt = new Float64Array(n).fill(NaN);
+    // The lead that sends SOXL back to TQQQ today, for the chart: the level, or the turn sell's; NaN where there is none.
+    const soxlOutAt = (i) => soxlTurn ? soxlSellAt[i] : soxlLead[i] === soxlLead[i] ? leadOut : NaN;
+`;
+  const state = `        // In at the first close with the lead under leadIn. Out at the first close over leadOut or, with
+        // the turn sell, at the first close soxlTrail points under the lead's highest close since it went
+        // in, counted once that high has passed soxlTrailFrom. A turn sale can come with the lead still
+        // under leadIn (a sell line under the buy level, or a lead that drops through both in one
+        // close); the next buy then waits for a close at leadIn or over, or the sale would be undone
+        // at the next close.
+        if (!on) {
+          if (soxlLead[i] >= leadIn) soxlSoldUnder = false;
+          else if (!soxlSoldUnder) { on = true; soxlHigh = soxlLead[i]; }
+        } else {
+          if (soxlLead[i] > soxlHigh) soxlHigh = soxlLead[i];
+          if (soxlTurn && soxlHigh > soxlTrailFrom) soxlSellAt[i] = soxlHigh - soxlTrail;
+          if (soxlTurn ? soxlLead[i] < soxlSellAt[i] : soxlLead[i] > leadOut) { on = false; soxlLastHigh = soxlHigh; soxlSoldUnder = soxlTurn && soxlLead[i] < leadIn; }
+        }
+        soxlHighAt[i] = on ? soxlHigh : soxlLastHigh;
+`;
+  let t = replacedOnce(base, '    { id: "soxlLeadExit", ', mode + '    { id: "soxlLeadExit", ', what('the sell level\'s setting'));
+  // What the text says of the lead rule's end, where it names the level alone.
+  t = replacedOnce(t, 'held from a close under the entry level until one over the exit level', 'held from a close under the buy level until it is sold back, at a level or once the lead turns down', what('the SOXL condition\'s tip'));
+  t = replacedOnce(t, '    // entry level until the first close with it over the exit level. The state runs over\n', '    // entry level until it is sold back (the Back to TQQQ settings below). The state runs over\n', what('the lead rule\'s comment'));
+  t = replacedOnce(t, 'text: "Back to TQQQ at the first close with the lead over {}.", unit: "%", when: { soxlWhen: "lead" }',
+    'text: "Back to TQQQ at the first close with the lead over {}.", unit: "%", when: { soxlWhen: "lead", soxlSell: "level" }', what('the sell level\'s condition'));
+  t = replacedOnce(t, '    { id: "soxlDrop", ', turn + '    { id: "soxlDrop", ', what('the setting after the sell level'));
+  const levels = '    const LD = Math.max(1, Math.round(+p.soxlLeadDays || 380)), leadIn = p.soxlLeadEnter == null ? -15 : +p.soxlLeadEnter, leadOut = p.soxlLeadExit == null ? 90 : +p.soxlLeadExit;\n';
+  t = replacedOnce(t, levels, levels + settings, what('the lead rule\'s levels'));
+  t = replacedOnce(t, '      let on = false;\n', '      let on = false, soxlHigh = -Infinity, soxlLastHigh = NaN, soxlSoldUnder = false;\n', what('the lead rule\'s state'));
+  t = replacedOnce(t, '        if (!on && soxlLead[i] < leadIn) on = true; else if (on && soxlLead[i] > leadOut) on = false;\n', state, what('the lead rule\'s step'));
+  t = replacedOnce(t, '"SOXL\'s lead over SOXX is back over " + leadOut + "% (" + soxlLeadTxt(i) + ")"',
+    '(soxlTurn ? "SOXL\'s lead over SOXX turned down: " + soxlLeadTxt(i) + ", " + soxlTrail + " points or more under its high of " + soxlPct(soxlHighAt[i]) : "SOXL\'s lead over SOXX is back over " + leadOut + "% (" + soxlLeadTxt(i) + ")")', what('the sale\'s reason'));
+  t = replacedOnce(t, 'soxlLeadOut: soxlLead[i] === soxlLead[i] ? leadOut : null,', 'soxlLeadOut: soxlOutAt(i) === soxlOutAt(i) ? soxlOutAt(i) : null,', what('the chart row\'s sell level'));
+  t = replacedOnce(t, 'soxlLeadOutPx: soxlCrossAt(i, leadOut),', 'soxlLeadOutPx: soxlCrossAt(i, soxlOutAt(i)),', what('the chart row\'s sell price'));
+  t = replacedOnce(t, '{ key: "soxlLeadOutPx", label: "Back to TQQQ over", group: SOXL_PRICE }', '{ key: "soxlLeadOutPx", label: soxlTurn ? "Back to TQQQ under" : "Back to TQQQ over", group: SOXL_PRICE }', what('the price panel\'s sell line'));
+  t = replacedOnce(t, '{ key: "soxlLeadOut", label: "Back to TQQQ over", unit: "%", group: SOXL_PANEL, priceKey: "soxlLeadOutPx" }',
+    '{ key: "soxlLeadOut", label: soxlTurn ? "Back to TQQQ under" : "Back to TQQQ over", unit: "%", group: SOXL_PANEL, priceKey: "soxlLeadOutPx" }', what('the lead panel\'s sell line'));
+  const cardLevels = '      const sIn = p.soxlLeadEnter == null ? -15 : +p.soxlLeadEnter, sOut = p.soxlLeadExit == null ? 90 : +p.soxlLeadExit;\n';
+  t = replacedOnce(t, cardLevels, cardLevels + '      const sTurn = (p.soxlSell || "level") === "turn", sTrail = +p.soxlTrail || 0, sSellAt = lastRow.soxlLeadOut;\n', what('the card\'s levels'));
+  return replacedOnce(t, '" days; held for TQQQ from under " + sIn + "% until over " + sOut + "%"',
+    '" days; held for TQQQ from under " + sIn + "% until " + (sTurn ? sTrail + " points under its high" + (sSellAt != null ? ", now " + sPct(sSellAt) : "") : "over " + sOut + "%")', what('the card\'s rule'));
+}
+CODE[53] = withSoxlTurnSell(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", sell: "level", trail: 30, from: 50 });
+
+// ===== #71 — SOXL, TQQQ, QQQ - steady fit (the user, 2026-11-22: "add a paralel
+// strategy with these findings") =====
+// Fit (#53) with what the study of 21-22 November 2026 found about it, as an
+// entry of its own beside it. Built from #53's text at load, so a change to
+// Fit reaches it. What differs:
+//   - The ceiling is 100% (125 in Fit). 125 is the highest ceiling that still
+//     caught the 2025 fall (at 130 the fall of December 2024 to April 2025 is
+//     72%), so the fitted value leans on one event. With the settings fitted
+//     on earlier years and run on the next (2016-2025), fitted on 2018-2026
+//     and run on 2010-2017, and fitted on both ends and run on 2014-2021, a
+//     ceiling held at 100 made more than a fitted one in all three; on SPXL,
+//     SSO and QLD, which Fit never saw, it made more with a smaller fall.
+//   - SOXL goes back to TQQQ at the first close with its lead over 10% (195).
+//     The return is flat across the level on 2010-2025 and on 1986-2009, and
+//     the falls grow with it. 195 sold SOXL on 22 June 2026 with the lead at
+//     203%: from 205 up it never sells, and 2026 is +64% with an 85% fall.
+//     The turn sell (withSoxlTurnSell above) is its dropdown's other choice,
+//     as in Fit: with it 165.3% a year and a 45.7% drawdown, and SOXL on
+//     1,502 closes of 4,025 against 1,052.
+//   - No SOXL pile: every contribution goes into the strategy at once. The
+//     pile's three settings moved the end value by -0.9% to +0.8%.
+//   - The Fit button leaves eleven settings alone (fit: false). The ceiling,
+//     its way back and how SOXL is sold (the choice, its level and the turn
+//     sell's two numbers): a fit pulls them to the peak of the fitted years.
+//     The bear exit, the SQQQ limit and the credit veto: they do nothing
+//     since 2010, so a fit there drops them, and they carry the built history
+//     before it (1995-1999: 132% a year against 41% without the SQQQ limit;
+//     1987: +51% against -7% without the veto).
+// Everything else is Fit's, the Month-end dip included. Q1 2010 to Q4 2025:
+// 155.6% a year with a 39.3% drawdown against 196.8% and 51.9% for Fit. The
+// values 100 and 10 were picked with the whole record in sight. The card
+// (js/strategy-library.js) carries the numbers and what to expect.
+const STEADY_FIT = "SOXL, TQQQ, QQQ - steady fit";
+// A strategy built by withSoxlPile, without the pile: its settings, its log columns and its
+// card leave, and its switch is off, so a contribution stays in the strategy's own cash.
+function withoutSoxlPile(base, spec) {
+  const what = (part) => `withoutSoxlPile(${spec.name}): ${part}`;
+  let t = withoutSettings(base, { name: spec.name, ids: ["soxlPile", "pileHandover", "pileFloor"], sections: ["Contributions in SOXL"] });
+  t = replacedOnce(t, '    const pileOn = p.soxlPile !== false, pileConfirm = (p.pileHandover || "confirmed") === "confirmed", pileWait = (p.pileFloor || "wait") === "wait";\n',
+    '    const pileOn = false, pileConfirm = true, pileWait = true;   // no pile here: every contribution goes into the strategy at once\n', what('the pile\'s settings'));
+  t = replacedOnce(t, '    { key: "soxlPile", label: "SOXL pile", tip: "Contributions piled up in SOXL, or waiting in cash, before they join the strategy." },\n    { key: "soxlPut", label: "Put in the pile", tip: "The contributions in the current pile." },\n', '', what('the pile\'s log columns'));
+  t = replacedOnce(t, '    // The SOXL pile on the dashboard.\n', '    // SOXL instead of TQQQ on the dashboard.\n', what('the dashboard comment'));
+  t = replacedOnce(t, ', pileNow = lastRow.soxlPile || 0, putNow = lastRow.soxlPut || 0;\n      const fmtMoney = (x) => "$" + (x >= 1e6 ? (x / 1e6).toFixed(2) + "M" : x >= 1e3 ? (x / 1e3).toFixed(1) + "K" : x.toFixed(0));\n', ';\n', what('the pile card\'s amounts'));
+  return replacedOnce(t, '      res.signals.cards = (res.signals.cards || []).concat([{ label: "SOXL pile", icon: "dollar", tone: pileNow > 0 ? "good" : "",\n'
+    + '        value: pileNow > 0 ? fmtMoney(pileNow) : "Empty",\n'
+    + '        sub: pileNow > 0 ? fmtMoney(putNow) + " put in; sold for the strategy at the next SQQQ buy" : "contributions buy SOXL while the rules hold TQQQ",\n'
+    + '        tip: "Contributions pile up in SOXL while the rules hold TQQQ. The pile goes into the strategy when they switch to SQQQ." }]);\n', '', what('the pile card'));
+}
+// A strategy whose Fit button leaves some of its settings alone: each gets fit: false, and its tip says so.
+const FIT_LEAVES_TIP = "The Fit button leaves it alone.";
+function withFitLeaving(base, spec) {
+  return spec.ids.reduce((text, id) => {
+    const head = `{ id: "${id}", `, what = `withFitLeaving(${spec.name}): the setting ${id}`;
+    const flagged = replacedOnce(text, head, head + 'fit: false, ', what);
+    // The tip is on the setting's first line, a string in double quotes.
+    const at = flagged.indexOf(head), lineEnd = flagged.indexOf('\n', at), line = flagged.slice(at, lineEnd);
+    const tip = /tip: "((?:[^"\\]|\\.)*)"/.exec(line);
+    if (!tip) throw new Error(`${what} has no tip on its first line`);
+    return flagged.slice(0, at) + line.replace(tip[0], () => `tip: "${tip[1]} ${FIT_LEAVES_TIP}"`) + flagged.slice(lineEnd);
+  }, base);
+}
+CODE[71] = withFitLeaving(withDefaults(withoutSoxlPile(CODE[53], { name: STEADY_FIT }), { name: STEADY_FIT, defaults: { topLead: 100, soxlLeadExit: 10 } }),
+  { name: STEADY_FIT, ids: ["topLead", "backLead", "bearUnder", "bearSlope", "bearCloses", "sqqqMaxDays", "nfciVeto", "soxlSell", "soxlLeadExit", "soxlTrail", "soxlTrailFrom"] });
 
 // ===== #55 Seasonal TQQQ, #56 Donchian breakout + ATR stop (the user, 2026-11-09:
 // "let's include 2x4", from a search for leveraged-fund strategies the library
