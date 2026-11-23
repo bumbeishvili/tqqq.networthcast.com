@@ -126,8 +126,10 @@ const _miniShortDate = t => { const d = new Date(t); return `${d.getUTCDate()} $
 const _miniDayMonth = t => { const d = new Date(t); return `${d.getUTCDate()} ${MINI_MON[d.getUTCMonth()]}`; };
 // Minutes to the close as a person says them: "26 min", "2 h", "2 h 26 min".
 const _miniCloseGap = min => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h` + (min % 60 ? ` ${min % 60} min` : '');
-// A trade's day for its tooltip: weekday, then the log's date ("Tue 21 Dec 21").
-const _miniTradeDay = dateStr => `${MINI_WEEKDAY[new Date(dateStr + 'T00:00:00Z').getUTCDay()]} ${fmtLogDate(dateStr)}`;
+// A day as the tooltips name it, the hovered day's and a trade's alike: weekday, then the log's
+// date ("Tue 21 Dec 21"). The weekday matters to rules that trade by it (the user, 2026-11-23:
+// "when hovering over signal chart, make sure day is included").
+const _miniWeekdayDate = dateStr => `${MINI_WEEKDAY[new Date(dateStr + 'T00:00:00Z').getUTCDay()]} ${fmtLogDate(dateStr)}`;
 window._miniZooms = window._miniZooms || {};   // cfg id → { t0, t1 }; absent = the full range
 // fmt() rounds sub-$1000 values to whole dollars, which turns the low end of
 // a log axis (TQQQ opened at $0.42) into a "$0" label — keep decimals on
@@ -996,7 +998,7 @@ function _miniDayReadout(data, day, cy) {
   return {
     marks: `<line x1="${cx}" y1="${data.padT}" x2="${cx}" y2="${data.H - data.padB}" stroke="rgba(56,56,116,0.35)" stroke-width="0.3" stroke-dasharray="2,2"/>`
       + hits.map(h => `<circle cx="${cx}" cy="${_miniLineY(data, h, h.pt.v).toFixed(1)}" r="0.5" fill="${h.color}" stroke="#fff" stroke-width="0.25"/>`).join(''),
-    html: `<div class="mct-date">${_escHtml(fmtLogDate(day.d))}</div>`
+    html: `<div class="mct-date">${_escHtml(_miniWeekdayDate(day.d))}</div>`
       + _miniHoldingAt(data, day.d)
       + _miniPanelRows(data, listed, h => `<b>${_miniFmtReadout(h.unit, h.pt.v)}</b>`, h => _miniFmtReadout(h.unit, h.pt.v), hot),
   };
@@ -1116,7 +1118,7 @@ function _miniEventRows(group) {
   const listed = _miniListedTrades(group), unlisted = group.items.length - listed.length;
   return (group.items.length > 1 ? `<div class="mct-ev-head">${group.items.length} trades in this band</div>` : '')
     + listed.map(it => `<div class="mct-ev"><span class="mct-dot" style="background:${it.color};box-shadow:0 0 0 2px ${it.ring}${it.part ? `;clip-path:${_miniWedgeClip(it.part[0], it.part[1])}` : ''}"></span>`
-        + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${_escHtml(_miniTradeDay(it.date))}</span>`
+        + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${_escHtml(_miniWeekdayDate(it.date))}</span>`
         + (it.note ? `<div class="mct-ev-note">${_escHtml(it.note)}</div>` : '')
         + (it.beforeClose != null ? `<div class="mct-ev-note mct-ev-open">Not final: the price is from ${_miniCloseGap(it.beforeClose)} before the close.</div>` : '') + `</div>`).join('')
     + (unlisted > 0 ? `<div class="mct-ev-head">and ${unlisted} more — zoom in to split this band</div>` : '');
