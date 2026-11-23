@@ -54,7 +54,11 @@
   /* Two native sliders stacked on one track; only the thumbs take pointer events. */
   .range{position:relative;width:100%;height:16px}
   .range-track{position:absolute;left:0;right:0;top:6px;height:4px;border-radius:2px;background:var(--border2)}
-  .range-fill{position:absolute;top:6px;height:4px;border-radius:2px;background:var(--accent)}
+  /* The stretch between the thumbs can be dragged to move the whole period. Its
+     hit area is the slider's full height, under the thumbs, which stay on top. */
+  .range-fill{position:absolute;top:6px;height:4px;border-radius:2px;background:var(--accent);cursor:grab;touch-action:pan-y}
+  .range-fill::before{content:"";position:absolute;left:0;right:0;top:-6px;height:16px}
+  .range-fill.dragging{cursor:grabbing}
   .range input{position:absolute;left:0;top:0;width:100%;height:16px;margin:0;appearance:none;-webkit-appearance:none;background:none;pointer-events:none}
   .range input::-webkit-slider-runnable-track{background:none;height:16px}
   .range input::-moz-range-track{background:none;height:16px}
@@ -77,19 +81,33 @@
      the chart, the bars and the filters of the ticker before it out of sight. */
   .no-data{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 24px;text-align:center;font-size:13px;color:var(--muted)}
   .no-data[hidden]{display:none}
-  .panel.no-history #chart svg,.panel.no-history .scale-toggle,.panel.no-history .weekday{display:none}
+  .panel.no-history #chart svg,.panel.no-history .scale-toggle,.panel.no-history .weekday,.panel.no-history .daily{display:none}
   .panel.no-history .metric,.panel.no-history .period,.panel.no-history .switch{visibility:hidden}
   /* Out of reach too: a brush's own rects take the pointer whatever their visibility. */
   .panel.no-history .metric *,.panel.no-history .period *,.panel.no-history .switch *{pointer-events:none}
   /* Embedded, the chart's box has no height of its own once the chart is hidden. */
   .embed .no-data{position:static;height:100vh}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
-  #chart{position:relative}   /* its height is set to fit the window (fitChartToWindow) */
-  /* The weekday bars under the chart: a small block of five bars, one per
-     weekday, over the same days the chart draws. */
-  .weekday{display:flex;flex-direction:column;gap:2px;max-width:460px;margin:8px 0 6px;font-family:var(--mono);font-size:11.5px}
-  .weekday-head{display:flex;align-items:center;justify-content:space-between;gap:12px;height:20px}
-  #weekday-chart svg{display:block}
+  #chart{position:relative}   /* its height is set to fit the window (fitChartsToWindow) */
+  /* Under the chart, side by side: the weekday bars, a small block of five
+     bars, one per weekday, over the same days the chart draws; and the daily
+     bars, one a day of the period, in the room that is left. With less room
+     than both want the weekday bars give way first, down to their least
+     width; in a window narrower still the daily bars go under them. Both may
+     shrink under the width of the svg they hold, which is then redrawn to fit. */
+  .under-chart{display:flex;flex-wrap:wrap;align-items:flex-start;gap:0 28px}
+  .weekday,.daily{display:flex;flex-direction:column;gap:2px;min-width:0;margin:8px 0 6px;font-family:var(--mono);font-size:11.5px}
+  .weekday{flex:1000 1 300px;max-width:460px}   /* takes the spare room first, up to its full width */
+  .daily{flex:1 1 320px;margin-top:calc(8px - var(--daily-lift,0px))}   /* --daily-lift: set by fitChartsToWindow beside the weekday bars */
+  .weekday-head,.daily-head{display:flex;align-items:center;justify-content:space-between;gap:12px;height:20px}
+  /* A choice of one among a few, in the look of the chart's log pill. */
+  .segmented{display:inline-flex;border:1px solid var(--border);border-radius:6px;overflow:hidden}
+  .segmented button{padding:2px 8px;font:600 10px var(--sans);text-transform:uppercase;letter-spacing:.5px;color:var(--muted);background:rgba(219,223,241,.45);border:0;border-left:1px solid var(--border);cursor:pointer;user-select:none}
+  .segmented button:first-child{border-left:0}
+  .segmented button:hover{color:var(--text)}
+  .segmented button[aria-pressed="true"]{color:var(--accent);background:var(--panel)}
+  .segmented button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+  #weekday-chart svg,#daily-chart svg{display:block}
   .weekday-zero{stroke:var(--faint);stroke-width:1}
   .weekday-bar{fill:var(--faint);fill-opacity:.8}
   .weekday-bar.up{fill:var(--green)} .weekday-bar.down{fill:var(--red)}
@@ -97,6 +115,26 @@
   .weekday-value.up{fill:var(--green)} .weekday-value.down{fill:var(--red)}
   .weekday-day{font-family:var(--mono);font-size:11px;text-anchor:middle;fill:var(--muted)}
   .weekday-count{font-family:var(--mono);font-size:10px;text-anchor:middle;fill:var(--faint)}
+  .daily-week{fill:var(--text);fill-opacity:.07}   /* every other week's band, behind the bars */
+  .daily-zero{stroke:var(--faint);stroke-width:1}
+  .daily-grid{stroke:var(--border);stroke-dasharray:2 3}
+  .daily-pct,.daily-date{font-family:var(--mono);font-size:10px;fill:var(--muted)}
+  .daily-pct{text-anchor:end;dominant-baseline:middle}
+  .daily-bar{fill:var(--faint);fill-opacity:.8}
+  .daily-bar.up{fill:var(--green)} .daily-bar.down{fill:var(--red)}
+  /* Not a close yet (today so far, or a pre-market or after-hours print): hollow. */
+  .daily-bar.unclosed{fill-opacity:.25;stroke:var(--faint);stroke-width:1}
+  .daily-bar.up.unclosed{stroke:var(--green)} .daily-bar.down.unclosed{stroke:var(--red)}
+  .daily-bar.out{fill-opacity:.16}   /* a day of the period the other filters leave out of the chart */
+  .daily-hover{pointer-events:none}
+  .daily-hover-band{fill:var(--accent);fill-opacity:.16}
+  .daily-hover-label{font-family:var(--mono);font-size:10.5px;font-weight:600;text-anchor:middle;fill:var(--text)}
+  .daily-hover-label .up{fill:var(--green)} .daily-hover-label .down{fill:var(--red)}
+  .daily-overlay{fill:none;pointer-events:all}
+  .daily-overlay.panning{cursor:grabbing}
+  /* A finger moved sideways over the bars reads the days; up and down it still scrolls the page. On the svg:
+     Chromium takes a finger's drag away from a shape inside one whatever touch-action the shape has. */
+  #daily-chart svg{touch-action:pan-y;overflow:visible}   /* visible: a bar past the fixed scale runs out of the svg's box */
   /* ?embed=widget (the desktop widget page, widget.html): the chart alone,
      filling its frame. The filters and the period slider stay wired but
      hidden, so the chart shows every loaded day as it does by default. */
@@ -106,7 +144,7 @@
   /* Laid out off screen rather than display:none, so the hidden histograms
      still measure their real size when they draw. */
   .embed .toolbar{position:absolute;left:-10000px;top:0;width:900px;visibility:hidden}
-  .embed .scale-toggle,.embed .weekday{display:none}
+  .embed .scale-toggle,.embed .weekday,.embed .daily{display:none}
   /* The widget's other two charts label at 8-9px; the embedded chart matches. */
   .embed .axis text,.embed .now-label,.embed .annotation text{font-size:9px}
   .embed .line-label,.embed .today-label,.embed .extended-label{font-size:9.5px}
@@ -229,16 +267,20 @@
       <div class="no-data" id="no-data" hidden></div>
       <button type="button" class="scale-toggle" id="scale-toggle" aria-pressed="true" title="Switch the vertical axis between a symmetric log scale and a linear one">log</button>
     </div>
-    <div class="weekday" title="Each weekday's close vs the previous session's close, over the days the chart shows.">
-      <div class="weekday-head">
-        <span class="metric-name" id="weekday-name"></span>
-        <label class="switch" id="weekday-median-switch">
-          <input type="checkbox" id="toggle-weekday-median">
-          <span class="track"></span>
-          <span class="switch-label">Median</span>
-        </label>
+    <div class="under-chart">
+      <div class="weekday" title="Each weekday over the days the chart shows: how many closed up and down, or their usual close vs the previous session's close.">
+        <div class="weekday-head">
+          <span class="metric-name" id="weekday-name"></span>
+          <div class="segmented" id="weekday-stat" role="group" aria-label="What the weekday bars show"></div>
+        </div>
+        <div id="weekday-chart"></div>
       </div>
-      <div id="weekday-chart"></div>
+      <div class="daily">
+        <div class="daily-head">
+          <span class="metric-name" title="Each day's close vs the previous session's close, from the period's first day to its last. ⌘/Ctrl + scroll zooms the period, ⌘/Ctrl + drag slides it. Every other week is shaded. Days the other filters leave out of the chart are pale. A hollow bar is not a close yet: today so far, or the latest pre-market or after-hours price.">Daily change</span>
+        </div>
+        <div id="daily-chart"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -266,6 +308,9 @@ const DATA_ROOT = EMBED && EMBED_QUERY.get('data') ? EMBED_QUERY.get('data') : '
 // the site's "TQQQ intraday" link opens TQQQ. A name the list does not hold
 // is ignored.
 const TICKERS = ['TQQQ', 'QQQ', 'SPY', 'QLD', 'SSO', 'SPXL', 'SQQQ', 'GLD', 'SOXL', 'SOXX'];
+// How many times its index each fund moves in a day, with a minus for one that
+// moves against it: the daily bars' fixed scale is sized by it (dailyDomain).
+const TICKER_LEVERAGE = { TQQQ: 3, QQQ: 1, SPY: 1, QLD: 2, SSO: 2, SPXL: 3, SQQQ: -3, GLD: 1, SOXL: 3, SOXX: 1 };
 const DEFAULT_TICKER = TICKERS[0];
 const namedTicker = (EMBED_QUERY.get('ticker') || '').toUpperCase();
 let ticker = TICKERS.includes(namedTicker) ? namedTicker : DEFAULT_TICKER;
@@ -371,7 +416,8 @@ const RANGE_BADGE_H = 16;                // px a range badge's pill stands, and 
 const HOVER_END_CLEARANCE = 20;          // px the end label keeps from the mean / median names
 
 // Calendar date in New York, as the data's day timestamps are midnight ET.
-const marketDateNow = () => new Intl.DateTimeFormat('en-CA', { timeZone: MARKET_TZ }).format(new Date());
+const marketDateOf = date => new Intl.DateTimeFormat('en-CA', { timeZone: MARKET_TZ }).format(date);   // "2026-11-23", the day in New York
+const marketDateNow = () => marketDateOf(new Date());
 
 const shortZoneName = timeZone =>
   new Intl.DateTimeFormat('en-US', { timeZone, timeZoneName: 'short' }).formatToParts(new Date())
@@ -1230,36 +1276,57 @@ class IntradayOverlayChart extends ChartBase {
   }
 }
 
-// The weekday bars: each weekday's usual close vs the previous session's
-// close over the days the chart draws, as their mean or their median (the
-// user, 2026-11-22: "daily bar chart (mon, tue, wed etc) average in the
-// bottom, also a switch for median"). A session still open has no close yet
-// and is left out. The day stamps are the file's calendar dates at local
-// midnight, so getDay() is the New York weekday.
+// The weekday bars, over the days the chart draws (the user, 2026-11-22:
+// "daily bar chart (mon, tue, wed etc) average in the bottom, also a switch
+// for median"; the day after: "have count, median, average", and "when
+// choosing count ... red how many below and green how many in plus"). Each
+// weekday gets one bar for its usual close vs the previous session's close,
+// the mean or the median, or with Count two: the days that closed up, in
+// green over the line, and the days that closed down, in red under it. A day
+// that closed flat is neither. A session still open has no close yet and is
+// left out. The day stamps are the file's calendar dates at local midnight,
+// so getDay() is the New York weekday.
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-function buildWeekdayBars(days, useMedian) {
+// A bar: its signed height, the text at its end, its tone, and the side of the line the text sits on.
+const closeBar = pct => { const tone = toneOf(pct); return { value: pct, text: fmtPct(tone === 'flat' ? 0 : pct), tone, side: pct >= 0 ? 'above' : 'below' }; };
+const countBars = closes => [
+  { value: d3.sum(closes, pct => toneOf(pct) === 'up'), tone: 'up', side: 'above' },
+  { value: -d3.sum(closes, pct => toneOf(pct) === 'down'), tone: 'down', side: 'below' },
+].map(bar => ({ ...bar, text: String(Math.abs(bar.value)) }));
+// What the bars can show, in the order of the choice: its button, the block's
+// name, a weekday's bars from its closes, and the least extent the scale
+// spans either side of the line, so near-zero bars do not fill the plot.
+const WEEKDAY_STATS = {
+  count: { button: 'Count', name: 'Up and down days by weekday', bars: countBars, leastExtent: 1 },
+  median: { button: 'Median', name: 'Median close by weekday', bars: closes => closes.length ? [closeBar(d3.median(closes))] : [], leastExtent: 0.05 },
+  average: { button: 'Average', name: 'Average close by weekday', bars: closes => closes.length ? [closeBar(d3.mean(closes))] : [], leastExtent: 0.05 },
+};
+const WEEKDAY_DEFAULT_STAT = 'average';
+function buildWeekdayBars(days, stat) {
   const live = liveMarketDate();   // read once, not for each day: every reading builds date formatters
   const closesByWeekday = d3.rollup(days.filter(d => fmtIsoDay(d.date) !== live), group => group.map(d => d.closeVsPrevPct), d => d.date.getDay());
   return WEEKDAYS.map((label, k) => {
     const closes = closesByWeekday.get(k + 1) || [];   // getDay(): 1 is Monday
-    return { id: label, label, days: closes.length, value: closes.length ? (useMedian ? d3.median(closes) : d3.mean(closes)) : null };
+    return { id: label, label, days: closes.length, bars: stat.bars(closes).map(bar => ({ ...bar, id: `${label}-${bar.side}`, label })) };
   });
 }
 
-// Five bars on a zero line, each with its value at its end, its weekday and
-// its count of days beneath. No axis: the values are on the bars.
+// A weekday's bars on a zero line, each with its text past its end, the
+// weekday and its count of days beneath. No axis: the values are on the bars.
 const WEEKDAY_VALUE_GAP = 4;             // px between a bar's end and its value
 const WEEKDAY_VALUE_CAP = 7;             // px the value's digits stand over their baseline, at 10.5px
 const WEEKDAY_VALUE_ROOM = WEEKDAY_VALUE_GAP + WEEKDAY_VALUE_CAP + 4;   // px kept at the top and the bottom of the plot for the values past the bars' ends
+const UNDER_CHART_HEIGHT = 126;          // px the weekday bars and the daily bars stand at the least, side by side
+const UNDER_CHART_FULL_HEIGHT = 300;     // and at the most, in a window with the room (fitChartsToWindow)
+const DAILY_LIFT = 26;                   // px the daily bars rise over the weekday bars beside them: the row of the chart's scale button, empty right of the button
 const WEEKDAY_NAME_ROW = 16;             // px from the plot's bottom to the weekday names' baseline
 const WEEKDAY_COUNT_ROW = 30;            // and to the day counts' baseline
-const WEEKDAY_MIN_EXTENT_PCT = 0.05;     // least |%| the scale spans, so near-zero bars do not fill the plot
 class WeekdayBarChart extends ChartBase {
   constructor() {
     super({
       id: 'ID' + Math.floor(Math.random() * 1000000),
       svgWidth: 400,
-      svgHeight: 126,
+      svgHeight: UNDER_CHART_HEIGHT,
       marginTop: 2,
       marginBottom: WEEKDAY_COUNT_ROW + 4,   // the weekday names, then the day counts
       marginRight: 4,
@@ -1267,6 +1334,7 @@ class WeekdayBarChart extends ChartBase {
       container: 'body',
       defaultFont: 'inherit',
       data: null,               // buildWeekdayBars' rows
+      leastExtent: 0,           // least extent of the scale either side of the line (the statistic's)
       chartWidth: null,
       chartHeight: null,
       firstRender: true,
@@ -1283,29 +1351,318 @@ class WeekdayBarChart extends ChartBase {
   }
 
   drawBars() {
-    const { chart, data, chartWidth, chartHeight } = this.getState();
+    const { chart, data, leastExtent, chartWidth, chartHeight } = this.getState();
     const x = d3.scaleBand().domain(data.map(d => d.label)).range([0, chartWidth]).padding(0.38);
-    const shown = data.filter(d => d.value !== null);
-    const [lo, hi] = d3.extent(shown, d => d.value);
+    const bars = data.flatMap(d => d.bars);
+    const [lo, hi] = d3.extent(bars, bar => bar.value);
     const y = d3.scaleLinear()
-      .domain([Math.min(-WEEKDAY_MIN_EXTENT_PCT, lo ?? 0), Math.max(WEEKDAY_MIN_EXTENT_PCT, hi ?? 0)])
+      .domain([Math.min(-leastExtent, lo ?? 0), Math.max(leastExtent, hi ?? 0)])
       .range([chartHeight - WEEKDAY_VALUE_ROOM, WEEKDAY_VALUE_ROOM]);
-    const tone = d => toneOf(d.value);
     const mid = d => x(d.label) + x.bandwidth() / 2;
+    const toned = selection => selection.classed('up', bar => bar.tone === 'up').classed('down', bar => bar.tone === 'down');
 
     chart._add('line.weekday-zero').attr('x1', 0).attr('x2', chartWidth).attr('y1', y(0)).attr('y2', y(0));
-    chart._add('rect.weekday-bar', shown)
-      .attr('x', d => x(d.label)).attr('width', x.bandwidth())
-      .attr('y', d => Math.min(y(0), y(d.value))).attr('height', d => Math.abs(y(d.value) - y(0)))
+    chart._add('rect.weekday-bar', bars)
+      .attr('x', bar => x(bar.label)).attr('width', x.bandwidth())
+      .attr('y', bar => Math.min(y(0), y(bar.value))).attr('height', bar => Math.abs(y(bar.value) - y(0)))
       .attr('rx', 2)
-      .classed('up', d => tone(d) === 'up').classed('down', d => tone(d) === 'down');
-    // The value sits past the bar's end: above a rise, under a fall.
-    chart._add('text.weekday-value', shown)
-      .attr('x', mid).attr('y', d => d.value >= 0 ? y(d.value) - WEEKDAY_VALUE_GAP : y(d.value) + WEEKDAY_VALUE_GAP + WEEKDAY_VALUE_CAP)
-      .classed('up', d => tone(d) === 'up').classed('down', d => tone(d) === 'down')
-      .text(d => fmtPct(tone(d) === 'flat' ? 0 : d.value));
+      .call(toned);
+    // The text sits past the bar's end: over the line's upper bars, under its lower ones.
+    chart._add('text.weekday-value', bars)
+      .attr('x', mid).attr('y', bar => bar.side === 'above' ? y(bar.value) - WEEKDAY_VALUE_GAP : y(bar.value) + WEEKDAY_VALUE_GAP + WEEKDAY_VALUE_CAP)
+      .call(toned)
+      .text(bar => bar.text);
     chart._add('text.weekday-day', data).attr('x', mid).attr('y', chartHeight + WEEKDAY_NAME_ROW).text(d => d.label);
     chart._add('text.weekday-count', data).attr('x', mid).attr('y', chartHeight + WEEKDAY_COUNT_ROW).text(d => `${d.days} ${d.days === 1 ? 'day' : 'days'}`);
+  }
+}
+
+// The daily bars, beside the weekday bars (the user, 2026-11-23: "also
+// include daily change chart, plus percent, minus percent etc, this one
+// should be date driven though, the start and end should be controlled by
+// this", the period slider). One bar a day, in date order: the day's close vs
+// the previous session's close, green up and red down. The period sets the
+// first day and the last; a day the other filters leave out of the chart
+// keeps its place and is drawn pale, so the dates stay where they are.
+//
+// Today has a bar before its close too (the user, 2026-11-23: "if it's last,
+// say today", "and incorporate premarket too"). A session still open stands
+// at its change so far. Outside the session the proxy's latest pre-market,
+// after-hours or overnight print, the one the chart above pulses
+// (`extended`), takes one more place after the last day, at its change
+// against that day's close. Neither is a close yet: both are drawn hollow
+// and the hover names them.
+//
+// `view` is the period slider's window, { first, days } in days from the
+// first loaded day: whole days at rest, fractions of a day while a zoom or a
+// slide is under way. The bars are the days at least partly inside it, each
+// with its place `at`; a day at an edge that the thumbs have not taken in is
+// not among the shown days, so it is pale. The print's place comes into the
+// window as the last day's does, so it stays with the period's end.
+const DAILY_VIEW_SLACK = 1e-6;           // days: a window edge this close to a day's edge is on it
+const parseIsoDay = d3.timeParse('%Y-%m-%d');
+function buildDailyBars(allDays, view, shownDays, extended) {
+  const total = allDays.length, today = marketDateNow(), live = liveMarketDate();   // read once, not for each day
+  const shown = new Set(shownDays.map(d => d.id));
+  const printRoom = extended ? Math.max(0, Math.min(1, view.first + view.days - (total - 1))) : 0;
+  const days = view.days + printRoom;
+  const from = Math.max(0, Math.floor(view.first + DAILY_VIEW_SLACK));
+  const to = Math.min(total + (extended ? 1 : 0), Math.ceil(view.first + days - DAILY_VIEW_SLACK));
+  const dayBar = (at) => {
+    const day = allDays[at], iso = fmtIsoDay(day.date);
+    return { ...closeBar(day.closeVsPrevPct), id: day.id, date: day.date, at, shown: shown.has(day.id), today: iso === today, unclosed: iso === live, note: iso === live ? 'so far' : null };
+  };
+  const printBar = () => {
+    const iso = marketDateOf(new Date(extended.time));
+    return { ...closeBar(extended.changePct), id: 'extended', date: parseIsoDay(iso), at: total, shown: true, today: iso === today, unclosed: true, note: EXTENDED_SESSION_NAMES[extended.session] };
+  };
+  return {
+    view: { first: view.first, days },
+    bars: d3.range(from, to).map(at => (at === total ? printBar() : dayBar(at))),
+  };
+}
+
+// The days' bars on a zero line, each in a slot of the same width, so the
+// plot runs from the period's first day to its last as the slider's track
+// does. A few % ticks on the left, a few dates beneath; the hovered day's
+// date and change print over the plot. The window may start and end inside a
+// day (a zoom or a slide under way): the bands and the bars are clipped to
+// the plot.
+const DAILY_PCT_TICKS = 4;               // about this many % ticks
+// The % scale is fixed, so a bar's height means the same whatever the period
+// and through a zoom (the user, 2026-11-23: "let's keep 30% above and 20%
+// bellow fixed scale and allow bars to go above it, even if it goes outside of
+// chart"): +30% and −20% for a fund three times its index, in proportion for
+// the others, turned over for a fund that moves against its index. A bar past
+// the scale runs on out of the plot, as far as the block's heading above and
+// the foot of the dates below.
+const DAILY_SCALE_3X = { up: 30, down: 20 };
+function dailyDomain(fund) {
+  if (!(fund in TICKER_LEVERAGE)) throw new Error(`No leverage set for ${fund} in TICKER_LEVERAGE: the daily bars' scale needs it.`);
+  const times = TICKER_LEVERAGE[fund] / 3;
+  return times > 0 ? [-DAILY_SCALE_3X.down * times, DAILY_SCALE_3X.up * times] : [DAILY_SCALE_3X.up * times, -DAILY_SCALE_3X.down * times];
+}
+const DAILY_HEAD_ROOM = 22;              // px over the svg a bar past the scale may run: the heading's row
+const DAILY_BAR_MAX = 24;                // px a bar is wide at most, in a period of few days
+const DAILY_BAR_GAP_MAX = 2;             // px between neighbouring bars, once their slots are wide enough for a gap
+const DAILY_DATE_SPACING = 90;           // px of plot width for each date between the corners' two
+const DAILY_DATE_CHAR = 6.2;             // px a character of a date is wide at the most: the mono face's 0.6 em at 10 px, and a little over
+const DAILY_DATE_GAP = 8;                // px two dates keep between them
+const DAILY_DATE_ROW = 13;               // px from the plot's bottom to the dates' baseline
+const DAILY_LABEL_ROW = 5;               // px from the plot's top up to the hovered day's label
+const DAILY_HOVER_BAND_MIN = 3;          // px the hovered day's band is wide at least
+const DAILY_WEEK_ZERO = new Date(2000, 0, 3);   // a Monday: weeks are numbered from it, so a week keeps its shade whatever the period
+const weekOf = date => d3.timeMonday.count(DAILY_WEEK_ZERO, date);
+// The zoom's feel, the main chart's (CHART_ZOOM in js/chart.js): a wheel step
+// scales the days shown by 2^(deltaY × k), so a pull towards the reader zooms
+// out; k for a wheel that counts in pixels, in lines (Firefox with a mouse)
+// and in pages.
+const DAILY_ZOOM = { pixelK: 0.002, lineK: 0.05, pageK: 1, rightAnchorPx: 200 };
+const wheelFactor = event => Math.pow(2, event.deltaY * (event.deltaMode === 1 ? DAILY_ZOOM.lineK : event.deltaMode === 2 ? DAILY_ZOOM.pageK : DAILY_ZOOM.pixelK));
+const modKeyHeld = event => event.metaKey || event.ctrlKey;   // ⌘ on a Mac, Ctrl elsewhere, as js/utils.js has it; this page loads no site script
+const fmtDailyDay = d3.timeFormat('%a, %b %-d, %Y');
+const fmtDailyMonthYear = d3.timeFormat('%b %Y'), fmtDailyMonth = d3.timeFormat('%b'), fmtDailyMonthDay = d3.timeFormat('%b %-d'), fmtDailyEnd = d3.timeFormat('%b %-d, %Y');
+class DailyChangeChart extends ChartBase {
+  constructor() {
+    super({
+      id: 'ID' + Math.floor(Math.random() * 1000000),
+      svgWidth: 400,
+      svgHeight: UNDER_CHART_HEIGHT,
+      marginTop: 16,            // the hovered day's date and change
+      marginBottom: 18,         // the dates
+      marginRight: 8,
+      marginLeft: 40,           // the % ticks
+      container: 'body',
+      defaultFont: 'inherit',
+      data: null,               // buildDailyBars' bars
+      domain: null,             // [low, high] %: the fixed scale (dailyDomain)
+      view: null,               // buildDailyBars' view: { first, days }, the window in the bars' `at`
+      onZoom: null,             // (factor, at): the period's owner scales the days shown
+      onPanStart: null,         // (): the owner takes hold of the period and returns slide(days)
+      onPanEnd: null,           // (): the slide is over
+      pointerX: null,           // px along the plot the pointer rests at; null off the plot
+      pan: null,                // a slide under way: where it started and the owner's slide
+      chartWidth: null,
+      chartHeight: null,
+      firstRender: true,
+    });
+  }
+
+  render() {
+    this.setDynamicContainer();
+    this.calculateProperties();
+    this.drawSvgAndWrappers();
+    this.drawScales();
+    this.drawWeekBands();
+    this.drawAxes();
+    this.drawBars();
+    this.drawHover();
+    this.drawGestures();
+    this.setState({ firstRender: false });
+    return this;
+  }
+
+  drawScales() {
+    const { chart, id, domain, view, chartWidth, chartHeight, marginTop, marginBottom } = this.getState();
+    const y = d3.scaleLinear().domain(domain).range([chartHeight, 0]);   // not clamped: a bar past the scale runs out of the plot
+    const slot = chartWidth / view.days;                    // px a day takes along the plot
+    const left = at => (at - view.first) * slot;            // the left edge of a day's slot
+    const mid = at => left(at) + slot / 2;                  // and its middle
+    // What a window's edge cuts: the bands to the plot's box, the bars to its
+    // width alone, with the room over and under it a bar past the scale may take.
+    const clip = `${id}-plot`, barsClip = `${id}-bars`;
+    chart._add('clipPath.daily-clip').attr('id', clip)._add('rect.daily-clip-box').attr('width', chartWidth).attr('height', chartHeight);
+    chart._add('clipPath.daily-bars-clip').attr('id', barsClip)._add('rect.daily-bars-clip-box')
+      .attr('width', chartWidth).attr('y', -marginTop - DAILY_HEAD_ROOM).attr('height', DAILY_HEAD_ROOM + marginTop + chartHeight + marginBottom);
+    this.setState({ y, slot, left, mid, clip: `url(#${clip})`, barsClip: `url(#${barsClip})` });
+  }
+
+  // Every other calendar week stands on a grey band, from its first day's
+  // slot to its last, so the eye finds where one week ends and the next
+  // starts (the user, 2026-11-23: "strip color weekly so it's clear week
+  // change"). The bands, the axes and the bars each have a group of their
+  // own, made in this order on the first render: a week, a tick or a day that
+  // comes into a later render lands in its own layer, under the hover overlay.
+  drawWeekBands() {
+    const { chart, data, chartHeight, slot, left, clip } = this.getState();
+    const weeks = d3.groups(data, d => weekOf(d.date))
+      .filter(([week]) => week % 2 === 1)
+      .map(([week, days]) => ({ id: `week${week}`, x: left(days[0].at), width: days.length * slot }));
+    chart._add('g.daily-weeks').attr('clip-path', clip)._add('rect.daily-week', weeks)
+      .attr('x', week => week.x).attr('width', week => week.width).attr('y', 0).attr('height', chartHeight);
+  }
+
+  drawAxes() {
+    const { chart, data, chartWidth, chartHeight, y, mid } = this.getState();
+    const axes = chart._add('g.daily-axes');
+    const pctTicks = y.ticks(DAILY_PCT_TICKS).map(value => ({ id: `pct${value}`, value }));
+    axes._add('line.daily-grid', pctTicks.filter(tick => tick.value !== 0))
+      .attr('x1', 0).attr('x2', chartWidth).attr('y1', tick => y(tick.value)).attr('y2', tick => y(tick.value));
+    axes._add('line.daily-zero').attr('x1', 0).attr('x2', chartWidth).attr('y1', y(0)).attr('y2', y(0));
+    axes._add('text.daily-pct', pctTicks).attr('x', -6).attr('y', tick => y(tick.value)).text(tick => fmtAxisPct(tick.value));
+
+    // The dates. At the plot's bottom corners, always, the first and the last
+    // day on it by their actual dates, the last as "today" when it is (the
+    // user, 2026-11-23: "at the end always include min and max dates ...
+    // using actual day, not just month, if it's last, say today"); a single
+    // day is named under its bar. Between the corners the calendar's round
+    // dates, each at the first day on or after it and named for that day
+    // (month starts read as months, with the year at each January), where
+    // that is not a corner's own day and the name is clear of the corners'
+    // two and of the name before it.
+    const onPlot = data.filter(day => mid(day.at) >= 0 && mid(day.at) <= chartWidth);
+    const first = onPlot[0], last = onPlot[onPlot.length - 1];
+    const nameOf = day => (day.today ? 'today' : fmtDailyEnd(day.date));
+    const corners = !onPlot.length ? []
+      : first === last ? [{ id: 'date-only', x: mid(first.at), anchor: 'middle', text: nameOf(first) }]
+        : [{ id: 'date-first', x: 0, anchor: 'start', text: nameOf(first) }, { id: 'date-last', x: chartWidth, anchor: 'end', text: nameOf(last) }];
+    // The px a name takes along the plot, from its length: no measuring of text on every frame of a zoom.
+    const span = (tick) => {
+      const width = tick.text.length * DAILY_DATE_CHAR;
+      const left = tick.anchor === 'start' ? tick.x : tick.anchor === 'end' ? tick.x - width : tick.x - width / 2;
+      return [left, left + width];
+    };
+    const clear = (a, b) => span(a)[1] + DAILY_DATE_GAP <= span(b)[0] || span(b)[1] + DAILY_DATE_GAP <= span(a)[0];
+    const roundDates = onPlot.length > 1 ? d3.scaleTime().domain([first.date, last.date]).ticks(Math.max(2, Math.floor(chartWidth / DAILY_DATE_SPACING))) : [];
+    const byMonth = roundDates.every(date => date.getDate() === 1);
+    const indexOnOrAfter = d3.bisector(day => day.date).left;
+    const between = Array.from(new Set(roundDates.map(date => Math.min(onPlot.length - 1, indexOnOrAfter(onPlot, date)))), index => onPlot[index])
+      .filter(day => day !== first && day !== last)
+      .map(day => ({ id: `date${day.id}`, x: mid(day.at), anchor: 'middle', text: !byMonth ? fmtDailyMonthDay(day.date) : day.date.getMonth() === 0 ? fmtDailyMonthYear(day.date) : fmtDailyMonth(day.date) }))
+      .reduce((kept, tick) => (corners.concat(kept.slice(-1)).every(other => clear(tick, other)) ? kept.concat([tick]) : kept), []);
+    axes._add('text.daily-date', corners.concat(between))
+      .attr('x', tick => tick.x).attr('y', chartHeight + DAILY_DATE_ROW).attr('text-anchor', tick => tick.anchor)
+      .text(tick => tick.text);
+  }
+
+  // The gap between neighbours grows with the slot, with no step in it: a
+  // zoom changes the slot a little at a time and the bars must follow evenly.
+  drawBars() {
+    const { chart, data, y, slot, mid, barsClip } = this.getState();
+    const width = Math.min(DAILY_BAR_MAX, Math.max(1, slot - Math.min(DAILY_BAR_GAP_MAX, slot / 4)));
+    chart._add('g.daily-bars').attr('clip-path', barsClip)._add('rect.daily-bar', data)
+      .attr('x', d => mid(d.at) - width / 2).attr('width', width)
+      .attr('y', d => Math.min(y(0), y(d.value))).attr('height', d => Math.abs(y(d.value) - y(0)))
+      .attr('rx', Math.min(2, width / 3))
+      .classed('up', d => d.tone === 'up').classed('down', d => d.tone === 'down').classed('out', d => !d.shown).classed('unclosed', d => d.unclosed);
+  }
+
+  // The day under the pointer: a band down its slot, and its date and change
+  // over the plot, kept inside the plot's width. A render under a resting
+  // pointer (a zoom step, a slide, a data refresh) reads the day now under it.
+  drawHover() {
+    const { chart, data, view, chartWidth, chartHeight, slot, mid, pointerX, pan } = this.getState();
+    const marks = chart._add('g.daily-hover');
+    const band = marks._add('rect.daily-hover-band').attr('y', 0).attr('height', chartHeight);
+    const label = marks._add('text.daily-hover-label').attr('y', -DAILY_LABEL_ROW);
+    const bandHalf = Math.max(DAILY_HOVER_BAND_MIN, slot) / 2;
+    const show = (x) => {
+      marks.style('display', x === null ? 'none' : null);
+      if (x === null) return;
+      // The day whose slot holds x; the bars' places run on without a gap.
+      const day = data[Math.max(0, Math.min(data.length - 1, Math.floor(view.first + x / slot) - data[0].at))];
+      const from = Math.max(0, mid(day.at) - bandHalf), to = Math.min(chartWidth, mid(day.at) + bandHalf);   // a day at the window's edge may be cut
+      band.attr('x', from).attr('width', to - from);
+      label.html(`${fmtDailyDay(day.date)}${day.note ? ` ${day.note}` : ''} <tspan class="${day.tone}">${day.text}</tspan>`);   // the note: "so far", "pre-market"
+      const half = label.node().getComputedTextLength() / 2;
+      label.attr('x', Math.max(half, Math.min(chartWidth - half, mid(day.at))));
+    };
+    chart._add('rect.daily-overlay').attr('width', chartWidth).attr('height', chartHeight)
+      .classed('panning', pan !== null)   // _add sets the class anew on every render
+      .on('pointerdown.hover pointermove.hover', (event) => {   // pointerdown: a finger's tap moves nothing before it lands
+        const x = d3.pointer(event)[0];
+        this.setState({ pointerX: x });
+        show(x);
+      })
+      .on('pointerleave.hover', () => {
+        this.setState({ pointerX: null });
+        show(null);
+      });
+    show(pointerX);
+  }
+
+  // ⌘/Ctrl + wheel over the plot zooms the period and ⌘/Ctrl + drag slides it,
+  // the gestures of the site's main chart (the user, 2026-11-23: "implement
+  // cmd zoom in and panning functionality on the chart, so that it stays sync
+  // with slider"). The chart reads the gesture and the period's owner moves
+  // the days: onZoom(factor, at) scales the days shown around the pointer's
+  // place along the plot (0 its left edge, 1 its right), onPanStart() takes
+  // hold of the period and returns the slide(days) the drag then calls, so
+  // the day taken hold of stays under the pointer; onPanEnd() when the button
+  // is let go. Days here are not whole: a step may move the window by a
+  // fraction of one, which is what keeps the bars from jumping a slot at a
+  // time (the user, same day: "it's jumpy, can you fix jumpiness when zooming
+  // in"). Within rightAnchorPx of the plot's right edge the zoom's pivot is
+  // that edge: the period's last day stays put. A plain wheel scrolls the
+  // page and a plain drag does nothing; passive: false so the wheel moves
+  // neither the page nor the browser's own zoom.
+  drawGestures() {
+    const { chart, chartWidth, onZoom, onPanStart, onPanEnd } = this.getState();
+    const overlay = chart.select('rect.daily-overlay');
+    overlay
+      .on('wheel.zoom', (event) => {
+        if (!modKeyHeld(event)) return;
+        event.preventDefault();
+        const x = d3.pointer(event)[0];
+        const nearRight = chartWidth - x <= Math.min(DAILY_ZOOM.rightAnchorPx, chartWidth / 2);
+        onZoom(wheelFactor(event), nearRight ? 1 : Math.max(0, Math.min(1, x / chartWidth)));
+      }, { passive: false })
+      .on('pointerdown.pan', (event) => {
+        if (event.button !== 0 || !modKeyHeld(event)) return;
+        this.setState({ pan: { x: event.clientX, slide: onPanStart() } });
+        overlay.classed('panning', true).node().setPointerCapture(event.pointerId);   // the drag goes on outside the plot
+        event.preventDefault();   // no text selection while dragging
+      })
+      .on('pointermove.pan', (event) => {
+        const { pan, slot } = this.getState();
+        if (pan) pan.slide((pan.x - event.clientX) / slot);
+      })
+      .on('pointerup.pan pointercancel.pan', () => {
+        if (!this.getState().pan) return;
+        this.setState({ pan: null });
+        overlay.classed('panning', false);
+        onPanEnd();
+      });
   }
 }
 
@@ -1319,6 +1676,9 @@ function renderCoverage(days) {
 // as 'edge' so it keeps following the data as days are appended; a thumb in
 // the middle is saved as its date so it lands on the same day next time.
 const PERIOD_STORAGE_KEY = 'tqqq-intraday-period';
+const PERIOD_ZOOM_MIN_DAYS = 5;          // a zoom stops at a week of trading days; the thumbs still go down to one day
+const PERIOD_SETTLE_AFTER_MS = 250;      // a wheel still this long has ended its zoom (the main chart's settleMs)
+const PERIOD_SETTLE_MS = 160;            // the glide of the daily bars' window onto whole days
 const fmtIsoDay = d3.timeFormat('%Y-%m-%d');
 
 // localStorage can be missing or throw (private mode, blocked storage);
@@ -1346,20 +1706,40 @@ function restoreThumb(saved, allDays, edgeIndex, isStart) {
 
 // Two-thumb period slider over the loaded trading days. Each thumb is an
 // index into allDays; the thumbs cannot cross. Every move re-filters the
-// days, recomputes the aggregates and rules, and re-renders the chart.
-function setupPeriodSlider(allDays, onChange) {
+// days, recomputes the aggregates and rules, and re-renders the chart
+// (onChange).
+//
+// The daily bars also draw the slider's window, `view`: { first, days } in
+// days from the first loaded day. At rest it is the thumbs' whole days. A
+// zoom or a slide moves it by fractions of a day, so the bars move evenly
+// with the pointer, with the thumbs on the whole days nearest it; when the
+// gesture is over the window glides onto those days. A step that moves the
+// window and leaves the thumbs where they are redraws the daily bars alone
+// (onView).
+function setupPeriodSlider(allDays, onChange, onView) {
   const start = d3.select('#range-start'), end = d3.select('#range-end'), fill = d3.select('#range-fill');
-  const last = allDays.length - 1;
+  const last = allDays.length - 1, total = allDays.length;
   const saved = readSavedPeriod();
   start.attr('max', last).property('value', restoreThumb(saved.start, allDays, 0, true));
   end.attr('max', last).property('value', restoreThumb(saved.end, allDays, last, false));
+
+  const read = () => {
+    const a = +start.property('value'), b = +end.property('value');
+    return { lo: Math.min(a, b), hi: Math.max(a, b) };
+  };
+  const whole = () => {
+    const { lo, hi } = read();
+    return { first: lo, days: hi - lo + 1 };
+  };
+  let view = whole();
+  let drawn = null;       // the thumbs' days the charts were last given
+  let current = true;     // false once newer data has a slider of its own: nothing of this one draws any more
 
   // `moved`: a thumb was dragged. Only then is the period saved: a setup on a
   // fund with a shorter history snaps a thumb to its edge, and saving that
   // would lose the day another fund's view had.
   const apply = (moved) => {
-    let lo = +start.property('value'), hi = +end.property('value');
-    if (lo > hi) [lo, hi] = [hi, lo];
+    const { lo, hi } = read();
     start.property('value', lo);
     end.property('value', hi);
     fill.style('left', `${lo / last * 100}%`).style('width', `${(hi - lo) / last * 100}%`);
@@ -1367,11 +1747,102 @@ function setupPeriodSlider(allDays, onChange) {
       start: lo === 0 ? 'edge' : fmtIsoDay(allDays[lo].date),
       end: hi === last ? 'edge' : fmtIsoDay(allDays[hi].date),
     });
-    onChange(allDays.slice(lo, hi + 1));
+    drawn = { lo, hi };
+    onChange(allDays.slice(lo, hi + 1), view);
   };
-  start.on('input', () => apply(true));
-  end.on('input', () => apply(true));
+
+  // The end of a gesture: the window glides onto the thumbs' whole days.
+  let settleTimer = 0, settling = null;
+  const stopSettling = () => {
+    clearTimeout(settleTimer);
+    if (settling) settling.stop();
+    settling = null;
+  };
+  const settle = () => {
+    stopSettling();
+    const from = view, to = whole();
+    if (from.first === to.first && from.days === to.days) return;
+    settling = d3.timer((elapsed) => {
+      const t = Math.min(1, elapsed / PERIOD_SETTLE_MS), k = d3.easeCubicOut(t);
+      view = t === 1 ? to : { first: from.first + (to.first - from.first) * k, days: from.days + (to.days - from.days) * k };
+      onView(view);
+      if (t === 1) stopSettling();
+    });
+  };
+
+  // A thumb moved by hand: the window is the thumbs' days at once.
+  const fromThumbs = () => {
+    stopSettling();
+    view = whole();
+    apply(true);
+  };
+  start.on('input', fromThumbs);
+  end.on('input', fromThumbs);
+
+  // A gesture's step: the window as given, the thumbs on the whole days
+  // nearest it (as many as the window's days rounded, about its middle). The
+  // charts follow a frame at most: all of them when the thumbs moved, the
+  // daily bars alone when only the window did.
+  let frame = 0;
+  const look = (next) => {
+    if (!current) return;
+    view = next;
+    const count = Math.round(view.days);
+    const lo = Math.max(0, Math.min(total - count, Math.round(view.first + (view.days - count) / 2)));
+    start.property('value', lo);
+    end.property('value', lo + count - 1);
+    if (!frame) frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!current) return;
+      const now = read();
+      if (now.lo === drawn.lo && now.hi === drawn.hi) onView(view); else apply(true);
+    });
+  };
+  // A hold on the window as it stands: slide(days) puts it that many days from
+  // where it was taken hold of, its length kept, stopped at either end of the
+  // data. From the hold and not from the last step, so a drag past an end and
+  // back returns to the same days.
+  const grip = () => {
+    stopSettling();
+    const held = view;
+    return days => look({ first: Math.max(0, Math.min(total - held.days, held.first + days)), days: held.days });
+  };
+  // The window scaled to `factor` times its days around a pivot: `at` runs
+  // from 0, the window's left edge, to 1, its right, and the day there stays
+  // where it is. Never under PERIOD_ZOOM_MIN_DAYS, or under the window's own
+  // length where the thumbs set it shorter, and never past the data. The
+  // window settles once the wheel has been still for PERIOD_SETTLE_AFTER_MS.
+  const zoom = (factor, at) => {
+    stopSettling();
+    const days = Math.max(Math.min(PERIOD_ZOOM_MIN_DAYS, view.days), Math.min(total, view.days * factor));
+    look({ first: Math.max(0, Math.min(total - days, view.first + at * (view.days - days))), days });
+    settleTimer = setTimeout(settle, PERIOD_SETTLE_AFTER_MS);
+  };
+
+  // A drag on the stretch between the thumbs moves both by the same number of
+  // days, so the period keeps its length and stops at either end of the data
+  // (the user, 2026-11-23: "make sure I can drag the range"). The pointer is
+  // captured, so the drag goes on outside the slider.
+  let drag = null;
+  fill.on('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    drag = { x: event.clientX, slide: grip(), daysPerPx: last / d3.select('#period-range').node().getBoundingClientRect().width };
+    fill.classed('dragging', true).node().setPointerCapture(event.pointerId);
+    event.preventDefault();   // no text selection while dragging
+  }).on('pointermove', (event) => {
+    if (drag) drag.slide(Math.round((event.clientX - drag.x) * drag.daysPerPx));
+  }).on('pointerup pointercancel', () => {
+    if (!drag) return;
+    drag = null;
+    fill.classed('dragging', false);
+    settle();
+  });
   apply(false);
+  const stop = () => {
+    current = false;
+    stopSettling();
+  };
+  return { grip, zoom, settle, stop };
 }
 
 // On/off switches whose state survives reloads, one localStorage key each.
@@ -1380,7 +1851,8 @@ function setupPeriodSlider(allDays, onChange) {
 const SIMILAR_STORAGE_KEY = 'tqqq-intraday-similar';
 const TREND_STORAGE_KEY = 'tqqq-intraday-trend';
 const LOG_SCALE_STORAGE_KEY = 'tqqq-intraday-log-scale';
-const WEEKDAY_MEDIAN_STORAGE_KEY = 'tqqq-intraday-weekday-median';
+const WEEKDAY_STAT_STORAGE_KEY = 'tqqq-intraday-weekday-stat';
+const WEEKDAY_MEDIAN_STORAGE_KEY = 'tqqq-intraday-weekday-median';   // the Median switch the choice replaced on 23 November 2026: its saved "on" still means the median
 function readSavedSwitch(key, fallback = false) {
   if (key === SIMILAR_STORAGE_KEY && EMBED_SIMILAR !== null) return EMBED_SIMILAR;
   if (key === TREND_STORAGE_KEY && EMBED_TREND !== null) return EMBED_TREND;
@@ -1521,20 +1993,36 @@ function setupTrendFilter(latest, onChange) {
   return state;
 }
 
-// The weekday bars' statistic: the mean, or the median with the switch on.
-// The block's name says which.
+// What the weekday bars show: a button for each of WEEKDAY_STATS, the one
+// in use pressed, the block's name saying which. The choice is saved; with
+// nothing saved, or storage blocked, it is the one the buttons show: the
+// default at first, and their own state on the page's later data refreshes.
+function readSavedWeekdayStat(fallback) {
+  let saved = null;
+  try { saved = localStorage.getItem(WEEKDAY_STAT_STORAGE_KEY); } catch { return fallback; }
+  if (saved !== null && saved in WEEKDAY_STATS) return saved;
+  return readSavedSwitch(WEEKDAY_MEDIAN_STORAGE_KEY, false) ? 'median' : fallback;
+}
+function writeSavedWeekdayStat(key) {
+  if (EMBED) return;
+  try { localStorage.setItem(WEEKDAY_STAT_STORAGE_KEY, key); } catch { /* storage unavailable */ }
+}
 function setupWeekdayStat(onChange) {
-  const input = d3.select('#toggle-weekday-median');
-  // With nothing saved, or storage blocked, the switch keeps what it shows: off at first, and its own state on the page's later data refreshes.
-  const state = { median: readSavedSwitch(WEEKDAY_MEDIAN_STORAGE_KEY, input.property('checked')) };
-  const showName = () => d3.select('#weekday-name').text(`${state.median ? 'Median' : 'Average'} close by weekday`);
-  input.property('checked', state.median).on('change', function () {
-    state.median = this.checked;
-    writeSavedSwitch(WEEKDAY_MEDIAN_STORAGE_KEY, state.median);
-    showName();
+  const buttons = d3.select('#weekday-stat').selectAll('button').data(Object.keys(WEEKDAY_STATS)).join('button')
+    .attr('type', 'button').attr('data-stat', key => key).text(key => WEEKDAY_STATS[key].button);
+  const pressed = buttons.filter('[aria-pressed="true"]');
+  const state = { stat: readSavedWeekdayStat(pressed.empty() ? WEEKDAY_DEFAULT_STAT : pressed.datum()) };
+  const show = () => {
+    buttons.attr('aria-pressed', key => String(key === state.stat));
+    d3.select('#weekday-name').text(WEEKDAY_STATS[state.stat].name);
+  };
+  buttons.on('click', (event, key) => {
+    state.stat = key;
+    writeSavedWeekdayStat(key);
+    show();
     onChange();
   });
-  showName();
+  show();
   return state;
 }
 
@@ -1545,8 +2033,11 @@ function setupWeekdayStat(onChange) {
 const chart = new IntradayOverlayChart().container('#chart')
   .minuteOffset(localOffsetFromMarket()).zoneLabel(shortZoneName(LOCAL_TZ));
 // The weekday bars under it, over the days it draws. The desktop widget
-// shows the chart alone, so embedded they are neither shown nor drawn.
+// shows the chart alone, so embedded the bars under it are neither shown nor drawn.
 const weekdayChart = new WeekdayBarChart().container('#weekday-chart');
+// And beside them the daily bars, over the period's days.
+const dailyChart = new DailyChangeChart().container('#daily-chart');
+let period = null;   // the period slider of the data on screen (setupPeriodSlider), which the daily bars' gestures move
 // Embedded, the chart is as tall as its frame (the width already follows the
 // container through setDynamicContainer), with no row under the axis for the
 // hidden scale button, a label gutter on the right just wide enough for the
@@ -1559,32 +2050,60 @@ if (EMBED) {
 }
 
 // On its own the page fits the window with no vertical scroll where it can
-// (the user, 2026-11-22: "make sure it fits 14 inch macbook vertically"): the
-// chart takes the height the rest of the page leaves, the link, the toolbar,
-// the weekday bars and the paddings, between its least and its full height.
-// In a window too short for that the chart stops at its least height and the
-// page scrolls the rest. On a phone or a tablet (a touch-first screen) the
-// chart keeps its full height and the page scrolls, as it always did: a short
-// chart that narrow crowds its notes. The window's size is the layout
-// viewport's, which a pinch zoom leaves alone.
+// (the user, 2026-11-22: "make sure it fits 14 inch macbook vertically"), and
+// the chart shares the window's height with the bars under it (the user,
+// 2026-11-23, of the daily bars: "make this chart bigger in height, there is
+// space"). The chart stands between its least and its full height, the bars
+// between theirs, both the same part of the way up, in the height the rest
+// of the page leaves: the link, the toolbar, the bars' headings and the
+// paddings. In a window too short for the least heights the page scrolls the
+// rest. The bars grow only side by side: one over the other, in a narrow
+// window, they keep their least height and the chart takes what is left, as
+// it does when they are hidden. Side by side the daily bars also rise by
+// DAILY_LIFT into the row under the chart's time axis, which holds only the
+// scale button at its left end (the user, same day, an arrow at that row:
+// "there is still a space, I want this space utilized"); their foot stays
+// level with the weekday bars'. On a phone or a tablet (a touch-first screen)
+// the chart keeps its full height, the bars their least, and the page
+// scrolls, as it always did: a short chart that narrow crowds its notes. The
+// window's size is the layout viewport's, which a pinch zoom leaves alone.
 const CHART_FULL_HEIGHT = chart.svgHeight();
 const CHART_MIN_HEIGHT = 360;
 const TOUCH_FIRST = window.matchMedia('(pointer: coarse)').matches;
-function fitChartToWindow() {
+const UNDER_CHARTS = [weekdayChart, dailyChart];
+function fitChartsToWindow() {
   const chartBox = document.getElementById('chart');
-  const rest = document.querySelector('.wrap').getBoundingClientRect().height - chartBox.getBoundingClientRect().height;
-  const room = Math.floor(document.documentElement.clientHeight - rest);
-  const height = TOUCH_FIRST ? CHART_FULL_HEIGHT : Math.max(CHART_MIN_HEIGHT, Math.min(CHART_FULL_HEIGHT, room));
-  chartBox.style.minHeight = `${height}px`;   // held before the first draw too, so the page does not jump when the chart arrives
-  chart.svgHeight(height);
+  const heightOf = element => element.getBoundingClientRect().height;
+  const [weekdayBox, dailyBox] = UNDER_CHARTS.map(bars => document.querySelector(bars.container()));
+  const weekdayBlock = weekdayBox.parentNode.getBoundingClientRect(), dailyBlock = dailyBox.parentNode.getBoundingClientRect();
+  // The rows the bars take: none while hidden (no history yet), one side by side, two one over the other.
+  // Told by the blocks' sides: the daily bars' rise moves their top, never their left.
+  const rows = dailyBlock.height === 0 ? 0 : dailyBlock.left >= weekdayBlock.right ? 1 : 2;
+  const grow = rows === 1 && !TOUCH_FIRST;
+  const lift = rows === 1 ? DAILY_LIFT : 0;
+  const rest = heightOf(document.querySelector('.wrap')) - heightOf(chartBox) - rows * heightOf(weekdayBox);
+  const spare = document.documentElement.clientHeight - rest - CHART_MIN_HEIGHT - rows * UNDER_CHART_HEIGHT;
+  const chartRange = CHART_FULL_HEIGHT - CHART_MIN_HEIGHT, underRange = grow ? UNDER_CHART_FULL_HEIGHT - UNDER_CHART_HEIGHT : 0;
+  const part = Math.max(0, Math.min(1, spare / (chartRange + underRange)));   // of the way from the least heights to the full ones
+  const chartHeight = TOUCH_FIRST ? CHART_FULL_HEIGHT : Math.floor(CHART_MIN_HEIGHT + part * chartRange);
+  const underHeight = Math.floor(UNDER_CHART_HEIGHT + part * underRange);
+  // The heights are held on the boxes too, before the first draw, so the page does not jump when the charts arrive.
+  chartBox.style.minHeight = `${chartHeight}px`;
+  chart.svgHeight(chartHeight);
+  d3.select(dailyBox.parentNode).style('--daily-lift', `${lift}px`);
+  [[weekdayBox, weekdayChart, underHeight], [dailyBox, dailyChart, underHeight + lift]].map(([box, bars, height]) => {
+    d3.select(box).style('min-height', `${height}px`);
+    return bars.svgHeight(height);
+  });
 }
 if (!EMBED) {
-  // The bars' room is held before their first draw, so the first fit already counts it.
-  d3.select('#weekday-chart').style('min-height', `${weekdayChart.svgHeight()}px`);
-  fitChartToWindow();
+  fitChartsToWindow();
   // Refit when the window changes, and when the toolbar does: its controls
   // wrap onto another row in a narrow window or once the web fonts land.
-  const refit = () => { fitChartToWindow(); if (chart.data()) chart.render(); };
+  const refit = () => {
+    fitChartsToWindow();
+    [chart, ...UNDER_CHARTS].filter(drawn => drawn.data()).map(drawn => drawn.render());
+  };
   window.addEventListener('resize', refit);
   new ResizeObserver(refit).observe(document.querySelector('.toolbar'));
 }
@@ -1654,8 +2173,8 @@ function loadLiveQuote() {
 }
 function extendedPrint(quotes) {
   const q = quotes && quotes.quotes && quotes.quotes[ticker], x = q && q.extended;
-  if (!x || !(x.price > 0) || typeof x.changePct !== 'number' || !(x.session in EXTENDED_SESSION_NAMES)) return null;
-  return { session: x.session, price: x.price, changePct: x.changePct };
+  if (!x || !(x.price > 0) || typeof x.changePct !== 'number' || !x.time || !(x.session in EXTENDED_SESSION_NAMES)) return null;
+  return { session: x.session, price: x.price, time: x.time, changePct: x.changePct };
 }
 
 // The ticker's name where the page shows it: the tab's title, the dropdown,
@@ -1688,7 +2207,7 @@ function showHistoryNote(text) {
   d3.select('.panel').classed('no-history', text !== null);
   d3.select('#no-data').property('hidden', text === null).text(text || '');
   if (text !== null) d3.select('#coverage').text('');
-  if (!EMBED) fitChartToWindow();   // the weekday bars' room goes and comes back with the note
+  if (!EMBED) fitChartsToWindow();   // the bars' room goes and comes back with the note
 }
 
 function loadData() {
@@ -1702,13 +2221,20 @@ function loadData() {
     if (asked !== ticker) return;
     drawnTicker = asked;
     showHistoryNote(null);
-    chart.extended(extendedPrint(quotes));
+    const print = extendedPrint(quotes);
+    chart.extended(print);
     const allDays = withMarketState(buildDays(mergeTodayRows(history, today)));
     const allPct = allDays.flatMap(d => d.points.map(p => p.pct));
     // The y extent only ever grows, so a refresh never rescales the plot.
     chart.yLimit(Math.max(chart.yLimit() || 0, Math.ceil(Math.max(-d3.min(allPct), d3.max(allPct)))));
     const latestId = allDays[allDays.length - 1].id;
     let periodDays = allDays;
+    let periodView = null;        // the slider's window, for the daily bars
+    let shownDays = [];           // the days the chart drew last
+    const drawDaily = () => {
+      const { bars, view } = buildDailyBars(allDays, periodView, shownDays, print);
+      dailyChart.data(bars).view(view).render();
+    };
 
     const refresh = () => {
       const inRange = metric.filter(periodDays);
@@ -1725,7 +2251,12 @@ function loadData() {
         .todayId(latestId)
         .opacityCount(filtered.filter(d => d.id !== latestId).length)
         .render();
-      if (!EMBED) weekdayChart.data(buildWeekdayBars(days, weekday.median)).render();
+      if (!EMBED) {
+        const stat = WEEKDAY_STATS[weekday.stat];
+        weekdayChart.leastExtent(stat.leastExtent).data(buildWeekdayBars(days, stat)).render();
+        shownDays = days;
+        drawDaily();
+      }
     };
     let ready = false;                                 // one render once every control is wired
     const guarded = () => { if (ready) refresh(); };
@@ -1733,7 +2264,11 @@ function loadData() {
     const similar = setupSimilarFilter(guarded);
     const trend = setupTrendFilter(allDays[allDays.length - 1], guarded);
     const weekday = setupWeekdayStat(guarded);
-    setupPeriodSlider(allDays, days => { periodDays = days; guarded(); });
+    if (period) period.stop();   // a gesture on the data just replaced must not draw over the new
+    period = setupPeriodSlider(allDays,
+      (days, view) => { periodDays = days; periodView = view; guarded(); },
+      (view) => { periodView = view; if (!EMBED) drawDaily(); });
+    dailyChart.domain(dailyDomain(asked)).onZoom(period.zoom).onPanStart(period.grip).onPanEnd(period.settle);   // its gestures move the slider's window
     ready = true;
     refresh();
   }, error => {
