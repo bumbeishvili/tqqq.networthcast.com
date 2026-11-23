@@ -3353,6 +3353,9 @@
   .custom-params { margin-top: 8px; }
   .custom-param-line { font-size: calc(12px * var(--ui-scale)); line-height: 2.3; color: var(--text-muted); }
   .custom-param-line .cp-tail { white-space: nowrap; }
+  /* a section with every setting switched off (js/saved-configs.js customOffSections): dimmed, full again under the pointer or the keyboard so it can be switched back on */
+  .custom-param-group.off, .custom-param-line.off { opacity: 0.4; }
+  .custom-param-line.off:hover, .custom-param-line.off:focus-within { opacity: 1; }
   /* { section: "Label" } schema entries — sub-headers dividing a long
      settings list into logical blocks. */
   .custom-param-group {
