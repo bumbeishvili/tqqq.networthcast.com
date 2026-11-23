@@ -1394,11 +1394,13 @@ function renderStrategyPanelBody(idx) {
 // whose run _logData carries then.
 //   SMA: the signal ticker's daily close, its N-day average and the buffer
 //   lines around it, from the daily arrays the engine itself reads
-//   (dailyRows, smaAtDailyByKey), over the whole history. Each RSI rule is
-//   drawn as the close that would put RSI at its threshold (rsiLevel, as the
-//   library's RSI strategies draw theirs), and the bubble brake as its
-//   ticker's average plus the trigger, with that ticker's own close when it
-//   is not the signal ticker. Then the run's trades, and those of a run on
+//   (dailyRows, smaAtDailyByKey), over the whole history. Each RSI rule gets
+//   the RSI itself in a panel of its own, as the library's SMA entries have
+//   (the user, 2026-11-23: RSI "visible in the sygnal chars everywehrere
+//   where it's used"): the reading and its level, which names in brackets
+//   the close that would put the RSI on it (rsiLevel). The bubble brake is
+//   its ticker's average plus the trigger, with that ticker's own close when
+//   it is not the signal ticker. Then the run's trades, and those of a run on
 //   $10,000 over the years before it, so zooming out shows them too. The
 //   chart rests on the main run's range.
 //   9sig: the fund holding against the signal line, daily. The holding is the
@@ -1455,20 +1457,21 @@ function rsiLevelSeries(col, w, x) {
 // closes show one: a buy closing over the buy line, a sell under the sell
 // line or with RSI at its overheat level, the bubble brake and its release.
 // Selling to cash is the sell leg of a move; buying the out ticker is its buy
-// leg.
+// leg. A sale on the RSI is marked in the RSI's panel (firedBy).
+const SMA_RSI_PANEL = 'RSI';
 function smaChartTrade(t, o, price, c, overheat) {
   const A = o.smaAsset.toUpperCase(), W = o.smaWindow;
   const kind = t.action === 'ENTER' || t.action === 'BG-CLEAR' ? 'buy'
     : t.action === 'EXIT' || t.action === 'BG-GTFO' ? (t.held === 'cash' ? 'sell' : 'buy') : null;
   if (!kind) return null;
-  let note = '';
+  let note = '', fired = null;
   if (t.action === 'BG-GTFO') note = `Bubble brake: ${o.bgAsset.toUpperCase()} ${o.bgGtfoPct}% or more over its ${o.bgWindow || W}-day average`;
   else if (t.action === 'BG-CLEAR') note = 'Bubble brake off';
   else if (t.action === 'EXIT' && t.held !== 'cash') note = `Parked in ${_heldName(t.held)} while out`;
   else if (c != null && kind === 'buy' && price > c * (1 + o.entryBufferPct / 100)) note = `${A} closed over its ${W}-day average${o.entryBufferPct > 0 ? ` +${o.entryBufferPct}%` : ''}`;
   else if (c != null && kind === 'sell' && price < c * (1 - o.exitBufferPct / 100)) note = `${A} closed under its ${W}-day average${o.exitBufferPct > 0 ? ` -${o.exitBufferPct}%` : ''}`;
-  else if (overheat != null && kind === 'sell' && price >= overheat) note = `RSI(${o.rsiOhWindow}) of ${A} at or over ${o.rsiOverheatThreshold}`;
-  return { action: kind, held: _heldName(t.held), value: t.total, note };
+  else if (overheat != null && kind === 'sell' && price >= overheat) { note = `RSI(${o.rsiOhWindow}) of ${A} at or over ${o.rsiOverheatThreshold}`; fired = SMA_RSI_PANEL; }
+  return { action: kind, held: _heldName(t.held), value: t.total, note, ...(fired ? { firedBy: fired } : {}) };
 }
 function smaSignalChart() {
   const smaLog = _logData && _logData.smaLog;
@@ -1481,17 +1484,25 @@ function smaSignalChart() {
   const bgCenter = o.bgGtfoPct > 0 ? smaAtDailyByKey[o.bgAsset + '_' + (o.bgWindow || o.smaWindow)] : null;
   const overheat = o.rsiOverheatThreshold > 0 ? rsiLevelSeries(col, o.rsiOhWindow, o.rsiOverheatThreshold) : null;
   const cool = o.rsiCoolThreshold > 0 ? rsiLevelSeries(col, o.rsiCoolWindow, o.rsiCoolThreshold) : null;
+  // The RSI each rule reads, per daily index, as the engine reads it.
+  const rsiSell = overheat ? rsiAtDailyByKey[o.smaAsset + '_' + o.rsiOhWindow] : null;
+  const rsiBuy = cool ? rsiAtDailyByKey[o.smaAsset + '_' + o.rsiCoolWindow] : null;
   // A bubble brake read on another fund gets a panel of its own (a line's
   // group, js/signal-chart.js): that fund's price against its bubble line.
+  // The panels are named once there is more than the price's: the RSI's, the
+  // bubble brake's own.
   const ownPanel = bgCenter && bgCol !== col;
-  const main = ownPanel ? o.smaAsset.toUpperCase() : undefined, bubble = ownPanel ? o.bgAsset.toUpperCase() : undefined;
+  const main = ownPanel || overheat || cool ? o.smaAsset.toUpperCase() : undefined, bubble = ownPanel ? o.bgAsset.toUpperCase() : main;
   const lines = [{ key: 'assetPrice', label: `${o.smaAsset.toUpperCase()} price`, group: main }, { key: 'center', label: `${o.smaWindow}-day average`, group: main }];
   if (o.entryBufferPct > 0) lines.push({ key: 'buyLine', label: `Buy line (+${o.entryBufferPct}%)`, group: main });
   if (o.exitBufferPct > 0) lines.push({ key: 'sellLine', label: `Sell line (-${o.exitBufferPct}%)`, group: main });
-  if (overheat) lines.push({ key: 'overheatLine', label: `RSI(${o.rsiOhWindow}) ${o.rsiOverheatThreshold}`, group: main });
-  if (cool) lines.push({ key: 'coolLine', label: `RSI(${o.rsiCoolWindow}) ${o.rsiCoolThreshold}`, group: main });
+  // The RSI panel is drawn at full height (tall) with one rule on as with both: a reading that swings between 0 and 100 needs the room.
+  if (overheat) lines.push({ key: 'rsiSell', label: `RSI(${o.rsiOhWindow})`, unit: 'num', group: SMA_RSI_PANEL, priceKey: 'assetPrice', tall: true },
+    { key: 'rsiSellLevel', label: `Sell at ${o.rsiOverheatThreshold}`, unit: 'num', group: SMA_RSI_PANEL, priceKey: 'rsiSellLevelPx' });
+  if (cool) lines.push({ key: 'rsiBuy', label: `RSI(${o.rsiCoolWindow})`, unit: 'num', group: SMA_RSI_PANEL, priceKey: 'assetPrice', tall: true },
+    { key: 'rsiBuyLevel', label: `Buy under ${o.rsiCoolThreshold}`, unit: 'num', group: SMA_RSI_PANEL, priceKey: 'rsiBuyLevelPx' });
   if (ownPanel) lines.push({ key: 'bubblePrice', label: `${o.bgAsset.toUpperCase()} price`, group: bubble });
-  if (bgCenter) lines.push({ key: 'bubbleLine', label: `${o.bgAsset.toUpperCase()} bubble line (+${o.bgGtfoPct}%)`, group: bubble });
+  if (bgCenter) lines.push({ key: 'bubbleLine', label: `${o.bgAsset.toUpperCase()} bubble line (+${o.bgGtfoPct}%)`, group: bubble });   // in the price's panel when it has none of its own: a line's group places it, wherever it stands in the list
   const start = smaLog[0].date, end = smaLog[smaLog.length - 1].date;
   const trades = smaHistoryTrades(o, start).concat(smaLog);
   const rows = [];
@@ -1502,8 +1513,12 @@ function smaSignalChart() {
       date, assetPrice: price, center: c,
       buyLine: c != null && o.entryBufferPct > 0 ? c * (1 + o.entryBufferPct / 100) : null,
       sellLine: c != null && o.exitBufferPct > 0 ? c * (1 - o.exitBufferPct / 100) : null,
-      overheatLine: overheat ? overheat[i] : null,
-      coolLine: cool ? cool[i] : null,
+      rsiSell: rsiSell && rsiSell[i] != null ? rsiSell[i] : null,
+      rsiSellLevel: rsiSell && rsiSell[i] != null ? o.rsiOverheatThreshold : null,
+      rsiSellLevelPx: overheat ? overheat[i] : null,
+      rsiBuy: rsiBuy && rsiBuy[i] != null ? rsiBuy[i] : null,
+      rsiBuyLevel: rsiBuy && rsiBuy[i] != null ? o.rsiCoolThreshold : null,
+      rsiBuyLevelPx: cool ? cool[i] : null,
       bubblePrice: bgCenter && bgCol !== col ? dailyRows[i][bgCol] : null,
       bubbleLine: bgCenter && bgCenter[i] != null ? bgCenter[i] * (1 + o.bgGtfoPct / 100) : null,
     };

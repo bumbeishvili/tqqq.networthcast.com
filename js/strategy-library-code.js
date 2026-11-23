@@ -73,9 +73,9 @@ const CENTER_LINE_SNIPPET = `    const useMed = p.stat === "median";
 // The close that would put Wilder's RSI at x today, from yesterday's close and
 // the average gain and loss over n days, smoothed as the RSI strategies below
 // smooth them. RSI rises with the close, so a close above this level is
-// exactly RSI above x: those strategies draw their RSI thresholds on the
-// signal chart at these prices. null for x of 0 or 100, which no close
-// reaches. Shared like centerLine: each strategy embeds the SOURCE via
+// exactly RSI above x: those strategies name these prices in brackets on
+// the RSI levels of their signal charts. null for x of 0 or 100, which no
+// close reaches. Shared like centerLine: each strategy embeds the SOURCE via
 // RSI_LEVEL_SNIPPET.
 function rsiLevel(prev, ag, al, n, x) {
   if (!(x > 0 && x < 100) || !(prev > 0)) return null;
@@ -84,6 +84,49 @@ function rsiLevel(prev, ag, al, n, x) {
   return rise >= 0 ? prev + rise : prev - m * (ag / rs - al);
 }
 const RSI_LEVEL_SNIPPET = `    ${rsiLevel.toString().replace(/\n/g, '\n    ')}`;
+// A level in RSI points for the chart: itself where an RSI can stand (between 0 and 100), else
+// null, so a level no RSI reaches draws nothing and does not stretch the panel's axis.
+function rsiPoint(x) {
+  return x > 0 && x < 100 ? x : null;
+}
+// The signal-chart lines of a strategy whose signals can be read on the RSI (#41, #44, #45; a
+// setting, off by default): the price panel's lines, then a panel for each RSI reading with the
+// rule's levels in RSI points (the user, 2026-11-23: RSI "visible in the sygnal chars everywehrere
+// where it's used"). readings: one per signal, either { key, days, levels: [{ key, label }] } or a
+// falsy value for a signal that does not read the RSI. With none reading it the lines go back as
+// they came. The levels name no price: the price panel draws them at prices implied by the day's
+// RSI, which cross where the rule fires but are not prices an order could sit at (one close barely
+// moves an RSI over 250 days).
+function withRsiPanels(lines, asset, readings) {
+  const read = readings.filter(Boolean);
+  if (!read.length) return lines;
+  const price = asset + " price";
+  return lines.map(line => Object.assign({ group: price }, line)).concat(read.flatMap(reading => {
+    const panel = asset + " RSI(" + reading.days + ")";
+    return [{ key: reading.key, label: panel, unit: "num", group: panel, priceKey: "assetPrice", tall: true }]   // at full height: a reading that swings between 0 and 100 needs the room
+      .concat(reading.levels.map(level => Object.assign({ unit: "num", group: panel }, level)));
+  }));
+}
+const RSI_PANELS_SNIPPET = `    ${rsiPoint.toString().replace(/\n/g, '\n    ')}
+    ${withRsiPanels.toString().replace(/\n/g, '\n    ')}`;
+// What the two strategies with a main and a crash signal (#41, #44) share of it, as the source
+// both embed. In the log row: each signal that reads the RSI gives its level in RSI points, the
+// main signal its reading too, the crash signal its own reading only on a line of its own.
+const TWO_SIGNAL_RSI_ROW_SNIPPET = `          ...(mainRsi && sigM > 0 ? { rsi: sigM, rsiOver: rsiPoint(med * (1 + over)) } : {}),
+          ...(crashRsi && sigC > 0 ? Object.assign({ rsiExit: rsiPoint(medC * (1 + exitB)) }, sameLine ? {} : { rsiCrash: sigC }) : {})`;
+// On the chart: the RSI itself in a panel under the price (before NFCI's, where there is one). The
+// crash exit sits in the main signal's panel when both read one line.
+const TWO_SIGNAL_RSI_LINES_SNIPPET = `    const rsiExitLevel = { key: "rsiExit", label: "Crash exit" };
+    const chartLines = withRsiPanels(priceLines, A, [
+      mainRsi && { key: "rsi", days: W, levels: [{ key: "rsiOver", label: "Overextended" }].concat(sameLine ? [rsiExitLevel] : []) },
+      crashRsi && !sameLine && { key: "rsiCrash", days: W2, levels: [rsiExitLevel] }]);`;
+// What the three QQQ strategies with an RSI rule (#15, #22, #23) share for their charts, as the
+// source each embeds once RSI_ON says whether an RSI rule is on: QQQ against its line, and QQQ's
+// RSI against its levels in a panel of its own, at full height (a reading that swings between 0
+// and 100 needs the room). A trade is marked in the panel of the rule that fired it: the RSI's
+// when QQQ stood above its line the close before a buy, or stands above it at a sale.
+const QQQ_RSI_CHART_SNIPPET = `    const RSI_PANEL = "QQQ RSI(" + RW + ")", PRICE_PANEL = RSI_ON ? "QQQ price" : undefined;
+    const aboveLine = (i) => { const c = centerLine(sig, W, i, useMed); return c > 0 && sig[i] > c; };`;
 // The stat param entry, in both default flavors.
 const STAT_PARAM_SNIPPET = `{ id: "stat", label: "Center line", text: "Use the {} for the line.", options: [{ value: "sma", label: "Moving average" }, { value: "median", label: "Median" }], default: "sma" }`;
 const STAT_PARAM_MEDIAN_SNIPPET = `{ id: "stat", label: "Center line", text: "Use the {} for the line.", options: [{ value: "median", label: "Median" }, { value: "sma", label: "Moving average" }], default: "median" }`;
@@ -508,11 +551,14 @@ CODE[15] = `{
            ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "rsi", label: "RSI(14)", tip: "Wilder's RSI of QQQ's closes over 14 days, 0 to 100." },
              { key: "rsiCapLine", label: "RSI cap", tip: "The QQQ close that would put RSI(14) at the cap today. Above it the strategy is out." }],
   run(data, p) {
     const log = [], W = p.window, RW = 14, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
 ${RSI_LEVEL_SNIPPET}
+    const RSI_ON = p.rsiMax < 100;
+${QQQ_RSI_CHART_SNIPPET}
     const seed = Math.max(1, p.startIdx - 60);
     let ag = 0, al = 0;
     for (let i = seed; i < seed + RW && i <= p.startIdx; i++) { const d = sig[i] - sig[i - 1]; if (d > 0) ag += d; else al -= d; }
@@ -523,7 +569,7 @@ ${RSI_LEVEL_SNIPPET}
     const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold", note = "";
+      let contributed = 0, action = "hold", note = "", fired;
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -535,16 +581,18 @@ ${SELL_SH_TO_COVER}
       ag = (ag * (RW - 1) + g) / RW; al = (al * (RW - 1) + l) / RW;
       const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
       const sma = centerLine(sig, W, i, useMed), px = lev[i], bull = sma > 0 && sig[i] > sma && rsi < p.rsiMax;
-      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: QQQ above its " + lineName + ", RSI(14) under " + p.rsiMax; }
-      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = sig[i] > sma ? "Sold TQQQ: RSI(14) reached " + p.rsiMax : "Sold TQQQ: QQQ closed under its " + lineName; }
+      if (bull && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: QQQ above its " + lineName + ", RSI(14) under " + p.rsiMax; fired = RSI_ON && aboveLine(i - 1) ? RSI_PANEL : PRICE_PANEL; }
+      else if (!bull && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = sig[i] > sma ? "Sold TQQQ: RSI(14) reached " + p.rsiMax : "Sold TQQQ: QQQ closed under its " + lineName; fired = RSI_ON && sig[i] > sma ? RSI_PANEL : PRICE_PANEL; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
-          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, rsiCapLine: capLine });
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, rsiCapLine: capLine,
+          rsi: rsi, ...(RSI_ON ? { rsiCap: p.rsiMax } : {}), ...(fired ? { firedBy: fired } : {}) });
     }
-    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName },
-      ...(p.rsiMax < 100 ? [{ key: "rsiCapLine", label: "RSI(14) " + p.rsiMax }] : [])] };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price", group: PRICE_PANEL }, { key: "center", label: lineName, group: PRICE_PANEL },
+      ...(RSI_ON ? [{ key: "rsi", label: RSI_PANEL, unit: "num", group: RSI_PANEL, priceKey: "assetPrice", tall: true },
+        { key: "rsiCap", label: "Sell at " + p.rsiMax, unit: "num", group: RSI_PANEL, priceKey: "rsiCapLine" }] : [])] };
   }
 }`;
 
@@ -741,12 +789,15 @@ CODE[22] = `{
            ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "rsi", label: "RSI(2)", tip: "Wilder's RSI of QQQ's closes over 2 days, 0 to 100." },
              { key: "rsiBuyLine", label: "RSI buy", tip: "The QQQ close that would put RSI(2) at the buy level today. A close under it, with QQQ above its center, buys." },
              { key: "rsiSellLine", label: "RSI sell", tip: "The QQQ close that would put RSI(2) at the sell level today. A close above it sells." }],
   run(data, p) {
     const log = [], W = 200, RW = 2, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
 ${RSI_LEVEL_SNIPPET}
+    const RSI_ON = true;   // the RSI is this rule itself: no setting turns it off
+${QQQ_RSI_CHART_SNIPPET}
     const seed = Math.max(1, p.startIdx - 30);
     let ag = 0, al = 0;
     for (let i = seed; i < seed + RW && i <= p.startIdx; i++) { const d = sig[i] - sig[i - 1]; if (d > 0) ag += d; else al -= d; }
@@ -757,7 +808,7 @@ ${RSI_LEVEL_SNIPPET}
     const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold", note = "";
+      let contributed = 0, action = "hold", note = "", fired;
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -769,16 +820,19 @@ ${SELL_SH_TO_COVER}
       ag = (ag * (RW - 1) + g) / RW; al = (al * (RW - 1) + l) / RW;
       const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
       const sma = centerLine(sig, W, i, useMed), px = lev[i], up = sma > 0 && sig[i] > sma;
-      if (up && !invested && rsi < p.buy && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: RSI(2) under " + p.buy + ", QQQ above its " + lineName; }
-      else if (invested && (!up || rsi > p.sell)) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = up ? "Sold TQQQ: RSI(2) over " + p.sell : "Sold TQQQ: QQQ closed under its " + lineName; }
+      if (up && !invested && rsi < p.buy && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: RSI(2) under " + p.buy + ", QQQ above its " + lineName; fired = aboveLine(i - 1) ? RSI_PANEL : PRICE_PANEL; }
+      else if (invested && (!up || rsi > p.sell)) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = up ? "Sold TQQQ: RSI(2) over " + p.sell : "Sold TQQQ: QQQ closed under its " + lineName; fired = up ? RSI_PANEL : PRICE_PANEL; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
-          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, rsiBuyLine: rsiBuyLine, rsiSellLine: rsiSellLine });
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, rsiBuyLine: rsiBuyLine, rsiSellLine: rsiSellLine,
+          rsi: rsi, rsiBuy: p.buy, rsiSell: p.sell, ...(fired ? { firedBy: fired } : {}) });
     }
-    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName },
-      { key: "rsiBuyLine", label: "RSI(2) " + p.buy }, { key: "rsiSellLine", label: "RSI(2) " + p.sell }] };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price", group: PRICE_PANEL }, { key: "center", label: lineName, group: PRICE_PANEL },
+      { key: "rsi", label: RSI_PANEL, unit: "num", group: RSI_PANEL, priceKey: "assetPrice", tall: true },
+      { key: "rsiBuy", label: "Buy under " + p.buy, unit: "num", group: RSI_PANEL, priceKey: "rsiBuyLine" },
+      { key: "rsiSell", label: "Sell over " + p.sell, unit: "num", group: RSI_PANEL, priceKey: "rsiSellLine" }] };
   }
 }`;
 
@@ -792,12 +846,15 @@ CODE[23] = `{
            ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
+             { key: "rsi", label: "RSI(10)", tip: "Wilder's RSI of QQQ's closes over 10 days, 0 to 100." },
              { key: "overheatLine", label: "Overheat line", tip: "The QQQ close that would put RSI(10) at the overheat level today. A close above it sells." },
              { key: "coolLine", label: "Cool line", tip: "The QQQ close that would put RSI(10) at the cool level today. While out, a close under it, with QQQ above its center, buys back." }],
   run(data, p) {
     const log = [], W = 200, RW = 10, sig = data.qqq, lev = data.tqqq;
 ${CENTER_LINE_SNIPPET}
 ${RSI_LEVEL_SNIPPET}
+    const OH_ON = p.oh < 100, COOL_ON = p.cool < 100, RSI_ON = OH_ON || COOL_ON;
+${QQQ_RSI_CHART_SNIPPET}
     const seed = Math.max(1, p.startIdx - 40);
     let ag = 0, al = 0;
     for (let i = seed; i < seed + RW && i <= p.startIdx; i++) { const d = sig[i] - sig[i - 1]; if (d > 0) ag += d; else al -= d; }
@@ -808,7 +865,7 @@ ${RSI_LEVEL_SNIPPET}
     const lineName = W + "-day " + (useMed ? "median" : "average");
     for (let i = p.startIdx; i <= p.endIdx; i++) {
       const month = data.dates[i].slice(0, 7);
-      let contributed = 0, action = "hold", note = "";
+      let contributed = 0, action = "hold", note = "", fired;
       if (p.contributions && p.contributions[data.dates[i]]) {
         const amt = p.contributions[data.dates[i]];
         cash += amt; contributed = amt; action = "contribution";
@@ -821,16 +878,19 @@ ${SELL_SH_TO_COVER}
       const rsi = al === 0 ? 100 : 100 - 100 / (1 + ag / al);
       const sma = centerLine(sig, W, i, useMed), px = lev[i], up = sma > 0 && sig[i] > sma;
       const wantIn = up && rsi < p.oh && (invested || rsi < p.cool);
-      if (wantIn && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: " + (p.cool < 100 ? "RSI(10) under " + p.cool + ", " : "") + "QQQ above its " + lineName; }
-      else if (!wantIn && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = up ? "Sold TQQQ: RSI(10) reached " + p.oh : "Sold TQQQ: QQQ closed under its " + lineName; }
+      if (wantIn && !invested && px > 0) { sh = cash / px; cash = 0; invested = true; action = "buy"; note = "Bought TQQQ: " + (p.cool < 100 ? "RSI(10) under " + p.cool + ", " : "") + "QQQ above its " + lineName; fired = RSI_ON && aboveLine(i - 1) ? RSI_PANEL : PRICE_PANEL; }
+      else if (!wantIn && invested) { cash = sh * px; sh = 0; invested = false; action = "sell"; note = up ? "Sold TQQQ: RSI(10) reached " + p.oh : "Sold TQQQ: QQQ closed under its " + lineName; fired = RSI_ON && up ? RSI_PANEL : PRICE_PANEL; }
       else if (invested && cash > 0 && px > 0) { sh += cash / px; cash = 0; }
 ${WEEKLY_MONTH_END_SNIPPET}
       if (contributed !== 0 || action === "buy" || action === "sell" || logDay)
         log.push({ date: data.dates[i], value: sh * px + cash, price: px, contributed: contributed, action: action,
-          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, overheatLine: overheatLine, coolLine: coolLine });
+          held: invested ? "TQQQ" : "CASH", note: note, assetPrice: sig[i], center: sma, overheatLine: overheatLine, coolLine: coolLine,
+          rsi: rsi, ...(OH_ON ? { rsiSellLevel: p.oh } : {}), ...(COOL_ON ? { rsiBuyLevel: p.cool } : {}), ...(fired ? { firedBy: fired } : {}) });
     }
-    return { log, lines: [{ key: "assetPrice", label: "QQQ price" }, { key: "center", label: lineName },
-      ...(p.oh < 100 ? [{ key: "overheatLine", label: "RSI(10) " + p.oh }] : []), ...(p.cool < 100 ? [{ key: "coolLine", label: "RSI(10) " + p.cool }] : [])] };
+    return { log, lines: [{ key: "assetPrice", label: "QQQ price", group: PRICE_PANEL }, { key: "center", label: lineName, group: PRICE_PANEL },
+      ...(RSI_ON ? [{ key: "rsi", label: RSI_PANEL, unit: "num", group: RSI_PANEL, priceKey: "assetPrice", tall: true }] : []),
+      ...(OH_ON ? [{ key: "rsiSellLevel", label: "Sell at " + p.oh, unit: "num", group: RSI_PANEL, priceKey: "overheatLine" }] : []),
+      ...(COOL_ON ? [{ key: "rsiBuyLevel", label: "Buy under " + p.cool, unit: "num", group: RSI_PANEL, priceKey: "coolLine" }] : [])] };
   }
 }`;
 
@@ -1873,6 +1933,7 @@ CODE[41] = `{
     // to "same", reusing the main signal exactly.
     const useMed = p.stat !== "sma";
     const mainRsi = p.stat === "rsi";
+${RSI_PANELS_SNIPPET}
     const crashSame = p.crashStat === "same" || p.crashStat == null;
     const crashRsi = crashSame ? mainRsi : p.crashStat === "rsi";
     const W2raw = +p.crashWindow || 0;
@@ -2043,6 +2104,7 @@ ${END_ROW_ACTION}
           assetPrice: px[i] || 0, medianPrice: medPlot, abovePct: above * 100, zone: zone,
           crashCenter: medCPlot, crashAbovePct: aboveC * 100,
           mainSignal: sigM, crashSignal: sigC,
+${TWO_SIGNAL_RSI_ROW_SNIPPET},
           overLine: medPlot * (1 + over), exitLine: medCPlot * (1 + exitB)
         });
       }
@@ -2058,15 +2120,16 @@ ${END_ROW_ACTION}
     const holdTxt = held === "cash" ? "cash" : held.toUpperCase();
     // Signal-chart lines (bounce/bail levels intentionally not drawn — they
     // cluttered the chart; the exit line anchors the downside visually).
-    const chartLines = [
+    const priceLines = [
       { key: "assetPrice", label: A + " price" },
       mainRsi ? { key: "medianPrice", label: "RSI(" + W + ") line" } : { key: "medianPrice", label: W + "-day " + CN },
     ];
-    if (!sameLine) chartLines.push(crashRsi ? { key: "crashCenter", label: "RSI(" + W2 + ") crash line" } : { key: "crashCenter", label: W2 + "-day " + CNc + " crash" });
-    chartLines.push(
+    if (!sameLine) priceLines.push(crashRsi ? { key: "crashCenter", label: "RSI(" + W2 + ") crash line" } : { key: "crashCenter", label: W2 + "-day " + CNc + " crash" });
+    priceLines.push(
       { key: "exitLine", label: "Crash exit (" + (p.exitPct || 0) + "%" + (sameLine ? "" : " @ " + CNc) + ")" },
       { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)" }
     );
+${TWO_SIGNAL_RSI_LINES_SNIPPET}
     if (inCrash && stintLen > 0) stints.push(stintLen);   // still out on the last day
     const stintsSorted = stints.slice().sort((a, b) => a - b);
     const medianStint = stintsSorted.length ? stintsSorted[(stintsSorted.length - 1) >> 1] : 0;
@@ -2234,6 +2297,7 @@ CODE[44] = `{
 
     const useMed = p.stat !== "sma";
     const mainRsi = p.stat === "rsi";
+${RSI_PANELS_SNIPPET}
     const crashSame = p.crashStat === "same" || p.crashStat == null;
     const crashRsi = crashSame ? mainRsi : p.crashStat === "rsi";
     const W2raw = +p.crashWindow || 0;
@@ -2427,7 +2491,8 @@ ${END_ROW_ACTION}
           nfciVeto: nfciTh !== 999 && isFinite(nfNow) ? nfciTh : null,
           ...(fired ? { firedBy: fired } : {}),
           zone: vetoOn ? "CREDIT VETO" : zone,
-          overLine: medPlot * (1 + over), exitLine: medPlot * (1 + exitB)
+          overLine: medPlot * (1 + over), exitLine: medPlot * (1 + exitB),
+${TWO_SIGNAL_RSI_ROW_SNIPPET}
         });
       }
     }
@@ -2441,12 +2506,13 @@ ${END_ROW_ACTION}
     // Two panels: the price with the lines set from its center, and NFCI with
     // the credit veto, the rule that reads it.
     const PRICE = A + " price";
-    const chartLines = [
+    const priceLines = [
       { key: "assetPrice", label: A + " price", group: PRICE },
       mainRsi ? { key: "medianPrice", label: "RSI(" + W + ") line", group: PRICE } : { key: "medianPrice", label: W + "-day " + CN, group: PRICE },
       { key: "exitLine", label: "Crash exit (" + (p.exitPct || 0) + "%)", group: PRICE },
       { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)", group: PRICE }
     ];
+${TWO_SIGNAL_RSI_LINES_SNIPPET}
     if (nfciTh !== 999) chartLines.push({ key: "nfci", label: "NFCI", unit: "num", group: CREDIT }, { key: "nfciVeto", label: "Credit veto", unit: "num", group: CREDIT });
     if (inCrash && stintLen > 0) stints.push(stintLen);
     const nfciStr = isFinite(nfNow) ? (nfNow >= 0 ? "+" : "") + nfNow.toFixed(2) : "n/a";
@@ -2617,6 +2683,7 @@ CODE[45] = `{
 
     const useMed = p.stat !== "sma";
     const mainRsi = p.stat === "rsi";
+${RSI_PANELS_SNIPPET}
 
     const mkRoll = (Wn) => {
       const win = []; let sum = 0;
@@ -2826,7 +2893,8 @@ ${END_ROW_ACTION}
           ...(dipF > 0 && state === "crashCash" && !bbArmed && lowRel * dipF < exitB ? { stintLine: medPlot * (1 + Math.max(bbB, lowRel * dipF)) }
             : tr ? { stintLine: (mainRsi ? px[i] / sigM : 1) * trEntry * (1 - SLICE_STOP) } : {}),
           overLine: medPlot * (1 + over), exitLine: medPlot * (1 + exitB),
-          ...(bbPct === 999 ? {} : { buyBackLine: medPlot * (1 + bbB) })
+          ...(bbPct === 999 ? {} : { buyBackLine: medPlot * (1 + bbB) }),
+          ...(mainRsi && sigM > 0 ? Object.assign({ rsi: sigM, rsiOver: rsiPoint(med * (1 + over)), rsiExit: rsiPoint(med * (1 + exitB)) }, bbPct === 999 ? {} : { rsiBuyBack: rsiPoint(med * (1 + bbB)) }) : {})
         });
       }
     }
@@ -2837,14 +2905,18 @@ ${END_ROW_ACTION}
     const pctStr = (above >= 0 ? "+" : "−") + Math.abs(above * 100).toFixed(2) + "%";
     const zoneTone = state === "normal" ? "good" : "bad";
     const holdTxt = held === "cash" ? "cash" : held.toUpperCase();
-    const chartLines = [
+    const priceLines = [
       { key: "assetPrice", label: A + " price" },
       mainRsi ? { key: "medianPrice", label: "RSI(" + W + ") line" } : { key: "medianPrice", label: W + "-day " + CN },
       { key: "exitLine", label: "Sell line (" + exitLvl + ")" },
       { key: "overLine", label: "Overextended (+" + (p.overPct || 0) + "%)" }
     ];
-    if (bbPct !== 999) chartLines.push({ key: "buyBackLine", label: "Buy-back (" + bbPct + "%)" });
-    if (dipF > 0 || sliceF > 0) chartLines.push({ key: "stintLine", label: dipF > 0 && sliceF > 0 ? "Re-entry, slice stop" : dipF > 0 ? "Re-entry" : "Slice stop (-" + Math.round(SLICE_STOP * 100) + "%)" });
+    if (bbPct !== 999) priceLines.push({ key: "buyBackLine", label: "Buy-back (" + bbPct + "%)" });
+    if (dipF > 0 || sliceF > 0) priceLines.push({ key: "stintLine", label: dipF > 0 && sliceF > 0 ? "Re-entry, slice stop" : dipF > 0 ? "Re-entry" : "Slice stop (-" + Math.round(SLICE_STOP * 100) + "%)" });
+    // The signal read on the RSI gets the RSI itself in a panel under the price, with the three levels that read it.
+    const chartLines = withRsiPanels(priceLines, A, [
+      mainRsi && { key: "rsi", days: W, levels: [{ key: "rsiExit", label: "Sell line" }, { key: "rsiOver", label: "Overextended" }]
+        .concat(bbPct === 999 ? [] : [{ key: "rsiBuyBack", label: "Buy-back" }]) }]);
     if (inCrash && stintLen > 0) stints.push(stintLen);
     return {
       log: log,
@@ -5158,8 +5230,9 @@ ${part(spec.row)}
     const callOf = (inNow, name, reading, note) => ({ action: inNow ? "Hold ${fundSaid}" : OUT_ACTION, tone: inNow ? "good" : buys ? "" : "bad", note: note,
       reasons: [{ name: name, val: reading, tag: inNow ? "in · ${fundSaid}" : OUT_NAME, lean: inNow ? "buy" : OUT_LEAN }] });
 ${part(spec.dashboard)}
-    // The chart: TQQQ's price on top, to read the rule against buy and hold, then the rule's panel at full height.
-    const chartLines = [{ key: "assetPrice", label: "${fundSaid} price", group: PRICE_PANEL }].concat(lines.map(line => Object.assign({}, line, { group: RULE_PANEL, tall: true })));
+    // The chart: TQQQ's price on top, to read the rule against buy and hold, then the rule's panel at full
+    // height. A line that names a panel of its own (a second reading the rule takes, as #72's RSI) keeps it.
+    const chartLines = [{ key: "assetPrice", label: "${fundSaid} price", group: PRICE_PANEL }].concat(lines.map(line => Object.assign({ group: RULE_PANEL, tall: true }, line)));
     return { log: log, lines: chartLines, signals: { cards: [card].concat(tripCards), decision: decision } };
   }
 }`;
@@ -5377,20 +5450,30 @@ function rollingMedian(values, W, from, to) {
   }
   return out;
 }
-// Wilder's RSI of a price series over n closes for every row to `to` (NaN until n changes exist):
-// the average gain and loss over the first n changes, then smoothed, as the RSI entries smooth them.
-function wilderRsi(prices, n, to) {
-  const out = new Float64Array(to + 1).fill(NaN);
+// Wilder's average gain and loss of a price series over n closes for every row to `to` (NaN until
+// n changes exist): plain averages over the first n changes, then smoothed, as the RSI entries
+// smooth them. The RSI is read off them, and so is the close that would put it at a level
+// (rsiLevel, from the pair of the day before).
+function wilderGainLoss(prices, n, to) {
+  const gains = new Float64Array(to + 1).fill(NaN), losses = new Float64Array(to + 1).fill(NaN);
   let gain = 0, loss = 0, count = 0;
   for (let i = 1; i <= to; i++) {
     if (!(prices[i] > 0 && prices[i - 1] > 0)) continue;
     const change = prices[i] - prices[i - 1], up = change > 0 ? change : 0, down = change < 0 ? -change : 0;
     if (count < n) { gain += up; loss += down; count++; if (count === n) { gain /= n; loss /= n; } }
     else { gain = (gain * (n - 1) + up) / n; loss = (loss * (n - 1) + down) / n; }
-    if (count >= n) out[i] = loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+    if (count >= n) { gains[i] = gain; losses[i] = loss; }
   }
-  return out;
+  return { gains, losses };
 }
+// Wilder's RSI of a price series over n closes for every row to `to` (NaN until n changes exist).
+function wilderRsi(prices, n, to) {
+  const { gains, losses } = wilderGainLoss(prices, n, to);
+  return gains.map((gain, i) => (losses[i] === 0 ? 100 : 100 - 100 / (1 + gain / losses[i])));
+}
+// Both, as the source a bare entry embeds.
+const WILDER_RSI_SNIPPET = `${bareFn(wilderGainLoss)}
+${bareFn(wilderRsi)}`;
 
 // ----- Rules read on TQQQ's median close (#61-#63) -----
 // What the three share: the median for every close from three windows before the Entry, where the
@@ -5653,7 +5736,7 @@ CODE[67] = bareStrategy({
 
 // ----- Rules read on QQQ's momentum (#68-#70) -----
 const BARE_RSI_DAYS = (days, tip) => `    { id: "rsiDays", label: "RSI over (days)", tip: "${tip}", text: "Read QQQ's RSI over {} days.", default: ${days}, options: [2, 3, 4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 25, 30] },`;
-const BARE_RSI_SETUP = `${bareFn(wilderRsi)}
+const BARE_RSI_SETUP = `${WILDER_RSI_SNIPPET}
     const RD = Math.max(2, Math.round(+p.rsiDays || 10)), rsi = wilderRsi(data.qqq, RD, p.endIdx);
     const rsiSays = (i) => (rsi[i] === rsi[i] ? "QQQ's RSI(" + RD + ") is " + rsi[i].toFixed(0) : "no RSI yet");
     const RSI_PANEL = "QQQ RSI(" + RD + ")";`;
@@ -5812,7 +5895,8 @@ CODE[72] = bareStrategy({
       2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100] },
     { id: "rsiLevel", label: "Low at or under", tip: "The week is skipped with the RSI at this level or under. From 30 to 40 skipping helped in 2010-2025; from 45 up it skips too many weeks.", text: "at {} or under.", default: 40, when: { rsiSkip: true }, options: [
       5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5, 17, 17.5, 18, 18.5, 19, 19.5, 20, 20.5, 21, 21.5, 22, 22.5, 23, 23.5, 24, 24.5, 25, 25.5, 26, 26.5, 27, 27.5, 28, 28.5, 29, 29.5, 30, 30.5, 31, 31.5, 32, 32.5, 33, 33.5, 34, 34.5, 35, 35.5, 36, 36.5, 37, 37.5, 38, 38.5, 39, 39.5, 40, 40.5, 41, 41.5, 42, 42.5, 43, 43.5, 44, 44.5, 45, 45.5, 46, 46.5, 47, 47.5, 48, 48.5, 49, 49.5, 50, 50.5, 51, 51.5, 52, 52.5, 53, 53.5, 54, 54.5, 55, 55.5, 56, 56.5, 57, 57.5, 58, 58.5, 59, 59.5, 60, 60.5, 61, 61.5, 62, 62.5, 63, 63.5, 64, 64.5, 65, 65.5, 66, 66.5, 67, 67.5, 68, 68.5, 69, 69.5, 70] },`,
-  columns: `    { key: "lineRel", label: "vs line", tip: "How far the close the down trend is read on sits above (+) or below (−) its line, the average or median of the closes before it, in percent." },`,
+  columns: `    { key: "lineRel", label: "vs line", tip: "How far the close the down trend is read on sits above (+) or below (−) its line, the average or median of the closes before it, in percent." },
+    { key: "rsi", label: "RSI", tip: "Wilder's RSI of the fund and over the days set, 0 to 100. A week is skipped with it at the level or under. Blank with the skip off." },`,
   rest: '"tqqq"',
   panel: 'TREND_PANEL',
   setup: `    // The down trend at every close: TQQQ's close against its line, the average or the median of the N
@@ -5844,11 +5928,20 @@ ${bareFn(rollingMedian)}
     const downAt = (i) => lineBefore[i] > 0 && S[i] < levelAt(i);
     const TREND_PANEL = SIG_NAME + " vs its " + N + "-day " + LINE;
     // The RSI skip: a week is not taken when the RSI is at the level or under at the close that would leave TQQQ.
-${bareFn(wilderRsi)}
+${WILDER_RSI_SNIPPET}
+${bareFn(rsiLevel)}
     const RSI_SKIP = p.rsiSkip !== false, RSI_FUND = p.rsiFund || "tqqq", RSI_DAYS = Math.max(2, Math.round(+p.rsiDays || 9)), RSI_LEVEL = p.rsiLevel == null ? 40 : +p.rsiLevel;
     if (RSI_SKIP && !data[RSI_FUND]) throw new Error("No prices for " + RSI_FUND.toUpperCase() + " (data." + RSI_FUND + ")");
-    const rsi = RSI_SKIP ? wilderRsi(data[RSI_FUND], RSI_DAYS, p.endIdx) : null;
+    const R = data[RSI_FUND];
+    const rsi = RSI_SKIP ? wilderRsi(R, RSI_DAYS, p.endIdx) : null;
     const RSI_NAME = RSI_FUND.toUpperCase() + "'s RSI(" + RSI_DAYS + ")";
+    // The RSI on the chart, in a panel of its own (the user, 2026-11-23: "why is not rsi visible in the
+    // short strat chart"): the reading and the level a week is skipped at, with the close of the RSI's
+    // fund that would put the RSI on that level today, from the day before's close and averages.
+    const RSI_PANEL = RSI_FUND.toUpperCase() + " RSI(" + RSI_DAYS + ")";
+    const rsiAverages = RSI_SKIP ? wilderGainLoss(R, RSI_DAYS, p.endIdx) : null;
+    const skipClose = (i) => { const at = i > 0 ? rsiLevel(R[i - 1], rsiAverages.gains[i - 1], rsiAverages.losses[i - 1], RSI_DAYS, RSI_LEVEL) : null; return at > 0 ? at : null; };
+    const rsiRow = (i) => (RSI_SKIP && rsi[i] === rsi[i] ? { rsi: rsi[i], rsiSkipLevel: RSI_LEVEL, rsiClose: R[i], rsiSkipClose: skipClose(i) } : {});
     const lowAt = (i) => RSI_SKIP && rsi[i] <= RSI_LEVEL;   // false while there is no RSI yet
     const goAt = (i) => downAt(i) && !lowAt(i);             // a close that may start, or keep, a week's days out
     // The week: the close that moves the money out of TQQQ and the close that brings it back.
@@ -5902,9 +5995,11 @@ ${bareFn(wilderRsi)}
         : !downAt(i) ? "No down trend: " + trendSays(i)
         : outSession(i + 1) ? "The down trend began after this week's close out of " + FUND_NAME + " (" + trendSays(i) + ")"
         : "Down trend, the week's " + FUND_NAME + " days (" + trendSays(i) + ")";`,
-  row: `          trendClose: S[i] > 0 ? S[i] : null, lineRel: gapAt(i), trendLevel: lineBefore[i] > 0 ? -UNDER : null, trendPx: lineBefore[i] > 0 ? levelAt(i) : null,`,
+  row: `          trendClose: S[i] > 0 ? S[i] : null, lineRel: gapAt(i), trendLevel: lineBefore[i] > 0 ? -UNDER : null, trendPx: lineBefore[i] > 0 ? levelAt(i) : null,
+          ...rsiRow(i),`,
   dashboard: `    const downNow = downAt(p.endIdx), outNow = outAt(p.endIdx), lowNow = lowAt(p.endIdx);
-    const lines = [{ key: "lineRel", label: SIG_NAME + " vs " + LINE, unit: "%", priceKey: "trendClose" }, { key: "trendLevel", label: "Down trend under", unit: "%", priceKey: "trendPx" }];
+    const lines = [{ key: "lineRel", label: SIG_NAME + " vs " + LINE, unit: "%", priceKey: "trendClose" }, { key: "trendLevel", label: "Down trend under", unit: "%", priceKey: "trendPx" }]
+      .concat(RSI_SKIP ? [{ key: "rsi", label: RSI_PANEL, unit: "num", group: RSI_PANEL, priceKey: "rsiClose" }, { key: "rsiSkipLevel", label: "Skip at or under", unit: "num", group: RSI_PANEL, priceKey: "rsiSkipClose" }] : []);
     const card = { label: RULE, icon: "clock", tone: downNow ? "bad" : "good", value: outNow ? OUT_DAYS : NONE_OUT ? "No days out" : downNow ? (lowNow ? "RSI low" : FUND_NAME + " days") : "No down trend",
       sub: gapText(p.endIdx) + " vs " + LINE,
       tip: SIG_NAME + "'s close against the " + LINE + " of the " + N + " closes before it. With the close " + (UNDER > 0 ? "more than " + UNDER + "% under it" : UNDER < 0 ? "less than " + -UNDER + "% over it" : "under it") + " at " + OUT_DAY + "'s close, the money moves to " + OUT_NAME + " there and back to " + FUND_NAME + " at " + BACK_DAY + "'s close"
@@ -6116,8 +6211,9 @@ ${SMA_ENGINE_SOURCE}
       if (entryBuf > 0) lines.push({ key: "buyLine", label: "Buy above (+" + entryBuf + "%)", group: SIG + " trend" });
       if (exitBuf > 0) lines.push({ key: "sellLine", label: "Sell below (−" + exitBuf + "%)", group: SIG + " trend" });
       if (rsiSellLvl > 0 || rsiBuyLvl > 0) {
-        if (rsiSellLvl > 0) lines.push({ key: "rsiSell", label: "RSI(" + (+p.rsiSellWindow || 10) + ")", unit: "num", group: "RSI", priceKey: "signalClose" }, { key: "rsiSellLevel", label: "Sell at " + rsiSellLvl, unit: "num", group: "RSI", priceKey: "rsiSellLevelPx" });
-        if (rsiBuyLvl > 0) lines.push({ key: "rsiBuy", label: "RSI(" + (+p.rsiBuyWindow || 10) + ")", unit: "num", group: "RSI", priceKey: "signalClose" }, { key: "rsiBuyLevel", label: "Buy under " + rsiBuyLvl, unit: "num", group: "RSI", priceKey: "rsiBuyLevelPx" });
+        // The RSI panel is drawn at full height with one rule on as with both: a reading that swings between 0 and 100 needs the room.
+        if (rsiSellLvl > 0) lines.push({ key: "rsiSell", label: "RSI(" + (+p.rsiSellWindow || 10) + ")", unit: "num", group: "RSI", priceKey: "signalClose", tall: true }, { key: "rsiSellLevel", label: "Sell at " + rsiSellLvl, unit: "num", group: "RSI", priceKey: "rsiSellLevelPx" });
+        if (rsiBuyLvl > 0) lines.push({ key: "rsiBuy", label: "RSI(" + (+p.rsiBuyWindow || 10) + ")", unit: "num", group: "RSI", priceKey: "signalClose", tall: true }, { key: "rsiBuyLevel", label: "Buy under " + rsiBuyLvl, unit: "num", group: "RSI", priceKey: "rsiBuyLevelPx" });
       }
       if (brakeLvl > 0) lines.push({ key: "brakeGauge", label: brakeAsset.toUpperCase() + " vs " + brakeW + "-day average", unit: "%", group: "Bubble brake", priceKey: "brakePrice" }, { key: "brakeLevel", label: "To cash at +" + brakeLvl + "%", unit: "%", group: "Bubble brake", priceKey: "brakeLevelPx" });
       return { log, holdings: r.ddControls || [], lines, signals: smaSignals() };
