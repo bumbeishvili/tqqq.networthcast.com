@@ -3669,12 +3669,17 @@ function fitBetween(sp, picked) {
 // setting's list has decimals; under 1 only 0 or 0.5. A value is judged by the
 // number it stands for (space[].number); a named choice ("Off", a fund,
 // Yes/No) has none and stays in the search. (FIT_VARIANTS.round)
-// A goal's other ways of searching, each its own menu entry: on round values, or for the fewest settings ("Fewest settings" below).
+// A goal's other ways of searching, each its own menu entry: on round values (round), for the
+// fewest settings (fewest, "Fewest settings" below), or both (the user, 2026-11-23: "one option
+// with fit - fewest parameter with rounded numbers").
 const FIT_VARIANTS = {
-  round: { label: 'round numbers', tip: 'The same search on round values only: multiples of 5 from 10 up, whole or half numbers below.' },
-  fewest: { label: 'fewest settings', tip: 'The same search, then the fewest settings that keep 95% of the best result found: settings are taken out one by one, the rest tuned again, and the search repeated from what is left. Takes about ten times as long.' },
+  round: { label: 'round numbers', round: true, tip: 'The same search on round values only: multiples of 5 from 10 up, whole or half numbers below.' },
+  fewest: { label: 'fewest settings', fewest: true, tip: 'The same search, then the fewest settings that keep 95% of the best result found: settings are taken out one by one, the rest tuned again, and the search repeated from what is left. Takes about ten times as long.' },
+  fewestRound: { label: 'fewest settings, round numbers', fewest: true, round: true, tip: 'The search for the fewest settings, on round values only: multiples of 5 from 10 up, whole or half numbers below.' },
 };
 const fitGoalLabel = (goal, variant) => FIT_GOALS[goal].label + (variant ? ', ' + FIT_VARIANTS[variant].label : '');
+// What a variant asks of the search: { round, fewest }; neither for the plain goal ('').
+const fitVariant = (variant) => variant ? FIT_VARIANTS[variant] : {};
 function fitIsRound(x, halves) {
   const a = Math.abs(x);
   if (a >= 10) return a % 5 === 0;
@@ -3991,22 +3996,25 @@ async function fitFewest(state, space, cur, measure, goal, hurdleFinal, cagrOf, 
   return result;
 }
 // One fit from start to the result note: runs the search, sets what it found
-// (job.apply), and writes the change list. job.variant: 'round' makes it a round
-// fit, 'fewest' follows the search with fitFewest.
+// (job.apply), and writes the change list. job.variant (FIT_VARIANTS): round
+// keeps the search to round values, fewest follows it with fitFewest.
 async function fitRun(job) {
   const state = _fit = { key: job.key, goal: job.goal, stage: 1, stages: job.goal === 'dd' ? 2 : 1, phase: 'rounds', round: 1, done: 0, total: 0, stopped: false, close: job.close,
-    base: 0, span: job.variant === 'fewest' ? 1 - FIT_FEWEST_STEP : 1 };
+    base: 0, span: fitVariant(job.variant).fewest ? 1 - FIT_FEWEST_STEP : 1 };
   delete _fitNotes[job.key];
   render();
   const before = Object.assign({}, job.cur);
   const start = await job.measure(Object.assign({}, before));
-  const round = job.variant === 'round', space = round ? job.space.map(fitRoundSetting) : job.space;
+  const { round, fewest } = fitVariant(job.variant), space = round ? job.space.map(fitRoundSetting) : job.space;
   if (round) space.forEach(s => { job.cur[s.id] = s.snap(job.cur[s.id]); });
+  // Where the search begins, one of the sets the fewest settings are picked from: the settings as
+  // they are, or on round numbers their round neighbours.
+  const begun = !fewest ? null : round ? { values: Object.assign({}, job.cur), result: await job.measure(Object.assign({}, job.cur)) } : { values: before, result: start };
   const hurdleFinal = job.hurdle && job.hurdle.final;
   let best = await fitSearch(state, space, job.cur, job.measure, job.goal, hurdleFinal);
   // The fewest settings: only from a search that reached its goal.
   const reached = best && (job.goal === 'cagr' || best.final > hurdleFinal);
-  if (job.variant === 'fewest' && reached && !state.stopped) best = await fitFewest(state, space, job.cur, job.measure, job.goal, hurdleFinal, job.cagrOf, best, { values: before, result: start });
+  if (fewest && reached && !state.stopped) best = await fitFewest(state, space, job.cur, job.measure, job.goal, hurdleFinal, job.cagrOf, best, begun);
   job.close();
   _fit = null;
   if (state.stopped) { render(); return; }
@@ -4017,7 +4025,7 @@ async function fitRun(job) {
   // Each changed setting, old → new, as its dropdown reads (the user: "a quick summary of what changed").
   const changes = changed.map(s => ({ label: s.label, from: s.text(before[s.id]), to: s.text(job.cur[s.id]) }));
   if (changed.length) job.apply(job.cur, changed);
-  const inUse = job.variant === 'fewest' ? { before: fitInUseCount(job.space, before), now: fitInUseCount(job.space, job.cur), of: job.space.length, next: state.next, top: state.top } : null;
+  const inUse = fewest ? { before: fitInUseCount(job.space, before), now: fitInUseCount(job.space, job.cur), of: job.space.length, next: state.next, top: state.top } : null;
   _fitNotes[job.key] = { text: fitNoteText(job.goal, job.variant, job.cagrOf, start, best, job.hurdle, changed.length, inUse), changes };
   render();
 }
@@ -4141,7 +4149,7 @@ function fitNoteText(goal, variant, cagrOf, start, best, hurdle, nChanged, inUse
   if (!best) return 'The runs failed, so nothing changed.';
   const cagr = (r) => cagrOf(r.final).toFixed(1) + '%';
   const dd = (r) => (r.dd * 100).toFixed(1) + '%';
-  const inRound = variant === 'round' ? ` in ${FIT_VARIANTS.round.label}` : '';
+  const { round, fewest } = fitVariant(variant), inRound = round ? ` in ${FIT_VARIANTS.round.label}` : '';
   // The fewest settings: how many of the settings Fit may change are in use, against how many were.
   const used = !inUse ? '' : ` ${inUse.now} of ${inUse.of} settings in use${inUse.before !== inUse.now ? ', ' + inUse.before + ' before' : ''}.`
     + (inUse.next ? ` The next to go would be "${inUse.next.label}": ${goal === 'cagr' ? 'CAGR ' + cagr(inUse.next.r) : 'max drawdown ' + dd(inUse.next.r) + ', CAGR ' + cagr(inUse.next.r)} without it.` : '')
@@ -4155,7 +4163,7 @@ function fitNoteText(goal, variant, cagrOf, start, best, hurdle, nChanged, inUse
   // Settings under the hurdle climb to it first, so the drawdown can grow.
   return start && !(start.final > hurdle.final)
     ? `The current settings don't beat ${bh}. The lowest drawdown${inRound} that does, and the highest CAGR at it, ${changed}: ${moved}.${used}`
-    : `${fitGoalLabel(goal, variant === 'fewest' ? variant : '')}${inRound} that still beats ${bh}, and the highest CAGR at it, ${changed}: ${moved}.${used}`;
+    : `${fewest ? fitGoalLabel(goal, variant) : fitGoalLabel(goal) + inRound} that still beats ${bh}, and the highest CAGR at it, ${changed}: ${moved}.${used}`;
 }
 
 // The Fit button beside "Reset to default"; a running search shows its progress and stops on click.
