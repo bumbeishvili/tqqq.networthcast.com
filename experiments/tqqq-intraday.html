@@ -1451,6 +1451,36 @@ const DAILY_DATE_GAP = 8;                // px two dates keep between them
 const DAILY_DATE_ROW = 13;               // px from the plot's bottom to the dates' baseline
 const DAILY_LABEL_ROW = 5;               // px from the plot's top up to the hovered day's label
 const DAILY_HOVER_BAND_MIN = 3;          // px the hovered day's band is wide at least
+// The fisheye: where the days are too thin to tell one from the next, the days
+// around the pointer open up, so the day after a highlighted one can be read
+// (the user, 2026-11-23: "when you charts are too small, add fisheye zoom in
+// view when hovering, I want to see when similar bars are highlighted what
+// the next move was usualy"). slot: px the day under the pointer is opened
+// to, however thin the days are; a period whose days are that wide already
+// has no lens. radius: px along the plot the lens reaches on each side of the
+// pointer, and share: the most of the plot's width it may reach; past it the
+// days stay where they are, so most of the plot keeps its overview. With
+// these, on a plot wide enough for the whole radius, the slots of the four
+// days next to the hovered one are about 12, 10.5, 9 and 8 px wide, whatever
+// the period.
+const DAILY_FISHEYE = { slot: 14, radius: 180, share: 0.3 };
+// A fisheye lens along a line (Sarkar and Brown's distortion, as d3's fisheye
+// plugin has it, kept to a radius): a place within `radius` of `focus` moves
+// away from it, so the stretch at the focus is `power` times as long and the
+// stretch at the lens's rim as much shorter; the focus, the rim and everything
+// past it stay put. Near an end of the line (`min`, `max`) a side reaches only
+// to the end, and its power falls with its reach: the days between the
+// pointer and the plot's edge are not squeezed out of sight to make room.
+function fisheyeLens(focus, radius, power, min, max) {
+  const side = (room) => { const reach = Math.max(0, Math.min(radius, room)); return { reach, power: 1 + (power - 1) * reach / radius }; };
+  const before = side(focus - min), after = side(max - focus);
+  return (x) => {
+    const { reach, power: sidePower } = x < focus ? before : after, away = Math.abs(x - focus);
+    if (away >= reach) return x;
+    const t = away / reach;   // 0 at the focus, 1 at the rim
+    return focus + Math.sign(x - focus) * reach * sidePower * t / ((sidePower - 1) * t + 1);
+  };
+}
 const DAILY_WEEK_ZERO = new Date(2000, 0, 3);   // a Monday: weeks are numbered from it, so a week keeps its shade whatever the period
 const weekOf = date => d3.timeMonday.count(DAILY_WEEK_ZERO, date);
 // The zoom's feel, the main chart's (CHART_ZOOM in js/chart.js): a wheel step
@@ -1481,6 +1511,8 @@ class DailyChangeChart extends ChartBase {
       onPanStart: null,         // (): the owner takes hold of the period and returns slide(days)
       onPanEnd: null,           // (): the slide is over
       pointerX: null,           // px along the plot the pointer rests at; null off the plot
+      lensed: false,            // the days are thin enough for the fisheye (drawScales)
+      lensFrame: null,          // the frame the plot is drawn again in, under the fisheye; null with none on its way
       pan: null,                // a slide under way: where it started and the owner's slide
       chartWidth: null,
       chartHeight: null,
@@ -1492,29 +1524,44 @@ class DailyChangeChart extends ChartBase {
     this.setDynamicContainer();
     this.calculateProperties();
     this.drawSvgAndWrappers();
-    this.drawScales();
-    this.drawWeekBands();
-    this.drawAxes();
-    this.drawBars();
-    this.drawHover();
+    this.drawPlot();
     this.drawGestures();
     this.setState({ firstRender: false });
     return this;
   }
 
+  // Everything placed along the days. Under the fisheye the days move with the
+  // pointer, so this is drawn again as it moves (pointTo).
+  drawPlot() {
+    this.drawScales();
+    this.drawWeekBands();
+    this.drawAxes();
+    this.drawBars();
+    this.drawHover();
+  }
+
   drawScales() {
-    const { chart, id, domain, view, chartWidth, chartHeight, marginTop, marginBottom } = this.getState();
+    const { chart, id, domain, view, chartWidth, chartHeight, marginTop, marginBottom, pointerX, pan } = this.getState();
     const y = d3.scaleLinear().domain(domain).range([chartHeight, 0]);   // not clamped: a bar past the scale runs out of the plot
     const slot = chartWidth / view.days;                    // px a day takes along the plot
-    const left = at => (at - view.first) * slot;            // the left edge of a day's slot
+    const left = at => (at - view.first) * slot;            // the left edge of a day's slot, in days of equal width
     const mid = at => left(at) + slot / 2;                  // and its middle
+    // The fisheye, while the pointer rests on days too thin to read and no
+    // slide is under way: a day's slot as it is drawn runs between its two
+    // edges seen through the lens. The plot's ends stay where they are.
+    const power = DAILY_FISHEYE.slot / slot;
+    const lensed = power > 1;
+    const radius = Math.min(DAILY_FISHEYE.radius, chartWidth * DAILY_FISHEYE.share);
+    const lens = lensed && pointerX !== null && !pan ? fisheyeLens(pointerX, radius, power, 0, chartWidth) : x => x;
+    const span = at => [lens(left(at)), lens(left(at) + slot)];
+    const center = at => d3.mean(span(at));
     // What a window's edge cuts: the bands to the plot's box, the bars to its
     // width alone, with the room over and under it a bar past the scale may take.
     const clip = `${id}-plot`, barsClip = `${id}-bars`;
     chart._add('clipPath.daily-clip').attr('id', clip)._add('rect.daily-clip-box').attr('width', chartWidth).attr('height', chartHeight);
     chart._add('clipPath.daily-bars-clip').attr('id', barsClip)._add('rect.daily-bars-clip-box')
       .attr('width', chartWidth).attr('y', -marginTop - DAILY_HEAD_ROOM).attr('height', DAILY_HEAD_ROOM + marginTop + chartHeight + marginBottom);
-    this.setState({ y, slot, left, mid, clip: `url(#${clip})`, barsClip: `url(#${barsClip})` });
+    this.setState({ y, slot, left, mid, lensed, span, center, clip: `url(#${clip})`, barsClip: `url(#${barsClip})` });
   }
 
   // Every other calendar week stands on a grey band, from its first day's
@@ -1524,16 +1571,16 @@ class DailyChangeChart extends ChartBase {
   // own, made in this order on the first render: a week, a tick or a day that
   // comes into a later render lands in its own layer, under the hover overlay.
   drawWeekBands() {
-    const { chart, data, chartHeight, slot, left, clip } = this.getState();
+    const { chart, data, chartHeight, span, clip } = this.getState();
     const weeks = d3.groups(data, d => weekOf(d.date))
       .filter(([week]) => week % 2 === 1)
-      .map(([week, days]) => ({ id: `week${week}`, x: left(days[0].at), width: days.length * slot }));
+      .map(([week, days]) => { const x = span(days[0].at)[0]; return { id: `week${week}`, x, width: span(days[days.length - 1].at)[1] - x }; });
     chart._add('g.daily-weeks').attr('clip-path', clip)._add('rect.daily-week', weeks)
       .attr('x', week => week.x).attr('width', week => week.width).attr('y', 0).attr('height', chartHeight);
   }
 
   drawAxes() {
-    const { chart, data, chartWidth, chartHeight, y, mid } = this.getState();
+    const { chart, data, chartWidth, chartHeight, y, mid, center } = this.getState();
     const axes = chart._add('g.daily-axes');
     const pctTicks = y.ticks(DAILY_PCT_TICKS).map(value => ({ id: `pct${value}`, value }));
     axes._add('line.daily-grid', pctTicks.filter(tick => tick.value !== 0))
@@ -1554,7 +1601,7 @@ class DailyChangeChart extends ChartBase {
     const first = onPlot[0], last = onPlot[onPlot.length - 1];
     const nameOf = day => (day.today ? 'today' : fmtDailyEnd(day.date));
     const corners = !onPlot.length ? []
-      : first === last ? [{ id: 'date-only', x: mid(first.at), anchor: 'middle', text: nameOf(first) }]
+      : first === last ? [{ id: 'date-only', x: center(first.at), anchor: 'middle', text: nameOf(first) }]
         : [{ id: 'date-first', x: 0, anchor: 'start', text: nameOf(first) }, { id: 'date-last', x: chartWidth, anchor: 'end', text: nameOf(last) }];
     // The px a name takes along the plot, from its length: no measuring of text on every frame of a zoom.
     const span = (tick) => {
@@ -1568,7 +1615,7 @@ class DailyChangeChart extends ChartBase {
     const indexOnOrAfter = d3.bisector(day => day.date).left;
     const between = Array.from(new Set(roundDates.map(date => Math.min(onPlot.length - 1, indexOnOrAfter(onPlot, date)))), index => onPlot[index])
       .filter(day => day !== first && day !== last)
-      .map(day => ({ id: `date${day.id}`, x: mid(day.at), anchor: 'middle', text: !byMonth ? fmtDailyMonthDay(day.date) : day.date.getMonth() === 0 ? fmtDailyMonthYear(day.date) : fmtDailyMonth(day.date) }))
+      .map(day => ({ id: `date${day.id}`, x: center(day.at), anchor: 'middle', text: !byMonth ? fmtDailyMonthDay(day.date) : day.date.getMonth() === 0 ? fmtDailyMonthYear(day.date) : fmtDailyMonth(day.date) }))
       .reduce((kept, tick) => (corners.concat(kept.slice(-1)).every(other => clear(tick, other)) ? kept.concat([tick]) : kept), []);
     axes._add('text.daily-date', corners.concat(between))
       .attr('x', tick => tick.x).attr('y', chartHeight + DAILY_DATE_ROW).attr('text-anchor', tick => tick.anchor)
@@ -1578,47 +1625,52 @@ class DailyChangeChart extends ChartBase {
   // The gap between neighbours grows with the slot, with no step in it: a
   // zoom changes the slot a little at a time and the bars must follow evenly.
   drawBars() {
-    const { chart, data, y, slot, mid, barsClip } = this.getState();
-    const width = Math.min(DAILY_BAR_MAX, Math.max(1, slot - Math.min(DAILY_BAR_GAP_MAX, slot / 4)));
+    const { chart, data, y, span, center, barsClip } = this.getState();
+    // Each bar in the middle of its day's slot as drawn: under the fisheye the slots differ in width.
+    const widths = data.map((d) => { const [from, to] = span(d.at), room = to - from; return Math.min(DAILY_BAR_MAX, Math.max(1, room - Math.min(DAILY_BAR_GAP_MAX, room / 4))); });
     chart._add('g.daily-bars').attr('clip-path', barsClip)._add('rect.daily-bar', data)
-      .attr('x', d => mid(d.at) - width / 2).attr('width', width)
+      .attr('x', (d, i) => center(d.at) - widths[i] / 2).attr('width', (d, i) => widths[i])
       .attr('y', d => Math.min(y(0), y(d.value))).attr('height', d => Math.abs(y(d.value) - y(0)))
-      .attr('rx', Math.min(2, width / 3))
+      .attr('rx', (d, i) => Math.min(2, widths[i] / 3))
       .classed('up', d => d.tone === 'up').classed('down', d => d.tone === 'down').classed('out', d => !d.shown).classed('unclosed', d => d.unclosed);
   }
 
-  // The day under the pointer: a band down its slot, and its date and change
-  // over the plot, kept inside the plot's width. A render under a resting
-  // pointer (a zoom step, a slide, a data refresh) reads the day now under it.
+  // The day under the pointer: a band down its slot as drawn, and its date and
+  // change over the plot, kept inside the plot's width. A render under a
+  // resting pointer (a zoom step, a slide, a data refresh) reads the day now
+  // under it. The pointer is always in its own day: the fisheye's focus stays
+  // where it is, so the day is found in slots of equal width.
   drawHover() {
-    const { chart, data, view, chartWidth, chartHeight, slot, mid, pointerX, pan } = this.getState();
-    const marks = chart._add('g.daily-hover');
+    const { chart, data, view, chartWidth, chartHeight, slot, span, center, pointerX, pan } = this.getState();
+    const marks = chart._add('g.daily-hover').style('display', pointerX === null ? 'none' : null);
     const band = marks._add('rect.daily-hover-band').attr('y', 0).attr('height', chartHeight);
     const label = marks._add('text.daily-hover-label').attr('y', -DAILY_LABEL_ROW);
-    const bandHalf = Math.max(DAILY_HOVER_BAND_MIN, slot) / 2;
-    const show = (x) => {
-      marks.style('display', x === null ? 'none' : null);
-      if (x === null) return;
-      // The day whose slot holds x; the bars' places run on without a gap.
-      const day = data[Math.max(0, Math.min(data.length - 1, Math.floor(view.first + x / slot) - data[0].at))];
-      const from = Math.max(0, mid(day.at) - bandHalf), to = Math.min(chartWidth, mid(day.at) + bandHalf);   // a day at the window's edge may be cut
-      band.attr('x', from).attr('width', to - from);
-      label.html(`${fmtDailyDay(day.date)}${day.note ? ` ${day.note}` : ''} <tspan class="${day.tone}">${day.text}</tspan>`);   // the note: "so far", "pre-market"
-      const half = label.node().getComputedTextLength() / 2;
-      label.attr('x', Math.max(half, Math.min(chartWidth - half, mid(day.at))));
-    };
     chart._add('rect.daily-overlay').attr('width', chartWidth).attr('height', chartHeight)
-      .classed('panning', pan !== null)   // _add sets the class anew on every render
-      .on('pointerdown.hover pointermove.hover', (event) => {   // pointerdown: a finger's tap moves nothing before it lands
-        const x = d3.pointer(event)[0];
-        this.setState({ pointerX: x });
-        show(x);
-      })
-      .on('pointerleave.hover', () => {
-        this.setState({ pointerX: null });
-        show(null);
-      });
-    show(pointerX);
+      .classed('panning', pan !== null);   // _add sets the class anew on every render
+    if (pointerX === null) return;
+    // The day whose slot holds the pointer; the bars' places run on without a gap.
+    const day = data[Math.max(0, Math.min(data.length - 1, Math.floor(view.first + pointerX / slot) - data[0].at))];
+    const [dayFrom, dayTo] = span(day.at), pad = Math.max(0, DAILY_HOVER_BAND_MIN - (dayTo - dayFrom)) / 2;
+    const from = Math.max(0, dayFrom - pad), to = Math.min(chartWidth, dayTo + pad);   // a day at the window's edge may be cut
+    band.attr('x', from).attr('width', to - from);
+    label.html(`${fmtDailyDay(day.date)}${day.note ? ` ${day.note}` : ''} <tspan class="${day.tone}">${day.text}</tspan>`);   // the note: "so far", "pre-market"
+    const half = label.node().getComputedTextLength() / 2;
+    label.attr('x', Math.max(half, Math.min(chartWidth - half, center(day.at))));
+  }
+
+  // The pointer's place along the plot, or null once it has left. Under the
+  // fisheye the days move with it, so the plot is drawn again, once a frame
+  // however many steps the pointer takes in it (a mouse reports far more often
+  // than a screen draws); otherwise only the hovered day's marks, as during a
+  // slide, which has no lens and whose own steps draw the plot.
+  pointTo(x) {
+    this.setState({ pointerX: x });
+    const { lensed, lensFrame, pan } = this.getState();
+    if (!lensed || pan) this.drawHover();
+    else if (lensFrame === null) this.setState({ lensFrame: requestAnimationFrame(() => {
+      this.setState({ lensFrame: null });
+      this.drawPlot();   // reads the pointer's place as it is now
+    }) });
   }
 
   // ⌘/Ctrl + wheel over the plot zooms the period and ⌘/Ctrl + drag slides it,
@@ -1640,6 +1692,8 @@ class DailyChangeChart extends ChartBase {
     const { chart, chartWidth, onZoom, onPanStart, onPanEnd } = this.getState();
     const overlay = chart.select('rect.daily-overlay');
     overlay
+      .on('pointerdown.hover pointermove.hover', event => this.pointTo(d3.pointer(event)[0]))   // pointerdown: a finger's tap moves nothing before it lands
+      .on('pointerleave.hover', () => this.pointTo(null))
       .on('wheel.zoom', (event) => {
         if (!modKeyHeld(event)) return;
         event.preventDefault();
