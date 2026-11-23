@@ -183,7 +183,8 @@
   // previews read them), and one run's final value and max drawdown, measured
   // at every daily close as the chart's own drawdown is (js/chart.js).
   window.previewFit = {
-    selects: (kind) => PREVIEW_SELECT_IDS.filter(id => PREVIEW_SELECTS[id].kind === kind && PREVIEW_SELECTS[id].fit !== false),
+    // A panel's settings, each with whether Fit tunes it unless the user freezes it.
+    settings: (kind) => PREVIEW_SELECT_IDS.filter(id => PREVIEW_SELECTS[id].kind === kind).map(id => ({ id, fit: PREVIEW_SELECTS[id].fit !== false })),
     name: (id) => PREVIEW_SELECTS[id].name,
     base: (kind) => kind === 'sma' ? readSmaParams() : read9sigParams(),
     measure(kind, base, values) {

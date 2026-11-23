@@ -4874,6 +4874,14 @@ ${WEEKLY_MONTH_END_SNIPPET}
 //                     rule that can hold another fund there (and its default, cash unless given);
 //                     without it the rule is out in cash;
 //   out               instead of park, the one fund a rule is out in (the SOXL lead: SOXL);
+//   after             settings that follow the out-holding setting, where a rule's sentence reads
+//                     better that way;
+//   fund              true for a rule that trades a fund picked in its settings (a "fund" setting among
+//                     its params) where every other rule trades TQQQ: the run then has FUND and
+//                     FUND_NAME, the chart's top panel is that fund's price, and the out-holding
+//                     setting lists TQQQ too (#72, at the user's word);
+//   splitDefault      false for a rule whose switch between two funds is made at one close unless
+//                     its "One trade per day" setting says otherwise (#72, at the user's word);
 //   trips             a rule's own way of counting its round trips on the dashboard;
 //   setup             what the rule works out before the first day;
 //   rule              at each close: `want` ("tqqq" or "cash") and `why`, the note of a trade there;
@@ -4898,26 +4906,33 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // stretch out of it.
 // The funds a bare rule can hold while out of TQQQ: every fund the app carries but TQQQ.
 const BARE_PARK_FUNDS = ["qqq", "gld", "spy", "qld", "sso", "spxl", "sqqq", "soxl", "soxx"];
+// Every fund the app carries, for a rule whose own fund is a setting (spec.fund), and a list of funds as a setting's options.
+const BARE_FUNDS = ["tqqq"].concat(BARE_PARK_FUNDS);
+const bareFundOptions = (funds) => funds.map(fund => ({ value: fund, label: fund.toUpperCase() }));
 // The out-holding setting of a rule that buys TQQQ for a trade and is out of it the rest of the time.
 const BARE_PARK_BETWEEN_TRADES = { label: "Held between trades", tip: "What the money is in while no trade is open.", text: "Between trades hold {}." };
 // How a bare rule's round trips are counted on the dashboard unless it brings its own way (spec.trips), as
 // source: a rule that buys is paid by a rise of TQQQ while it is in, a rule that sells by a fall while it is out.
-const BARE_TRIPS_DEFAULT_SRC = '{ up: buys, word: buys ? "up" : "down", label: buys ? "Trades this run" : "Times out this run", lastLabel: buys ? "Trades, last year" : "Times out, last year",'
-  + ' tip: (buys ? "Each buy and the sale after it is one trade" : "Each sale and the buy after it is one time out") + ". The second line: the share of them where TQQQ " + (buys ? "rose" : "fell") + " between the two closes, and its average move between them, before costs." }';
+// `fundSaid` is the traded fund's name as that source writes it inside a text (bareStrategy).
+const bareTripsDefaultSrc = (fundSaid) => '{ up: buys, word: buys ? "up" : "down", label: buys ? "Trades this run" : "Times out this run", lastLabel: buys ? "Trades, last year" : "Times out, last year",'
+  + ' tip: (buys ? "Each buy and the sale after it is one trade" : "Each sale and the buy after it is one time out") + ". The second line: the share of them where ' + fundSaid + ' " + (buys ? "rose" : "fell") + " between the two closes, and its average move between them, before costs." }';
 function bareStrategy(spec) {
   const part = (text) => text.replace(/\n+$/, '');   // a spec part, without the line break it may end with
+  // A rule whose fund is a setting (spec.fund, with a "fund" setting among its params) trades that fund in
+  // TQQQ's place. The traded fund as the run's source writes it: its id, and its name inside a text.
+  const fundId = spec.fund ? 'FUND' : '"tqqq"', fundSaid = spec.fund ? '" + FUND_NAME + "' : 'TQQQ';
   // The two settings of a rule that can hold another fund while out: which, and how a switch is made.
   const parkParam = !spec.park ? '' : `    { id: "park", label: "${spec.park.label}", tip: "${spec.park.tip}", text: "${spec.park.text}", default: "${spec.park.default || 'cash'}", options:
-      ${JSON.stringify([{ value: "cash", label: "cash" }].concat(BARE_PARK_FUNDS.map(fund => ({ value: fund, label: fund.toUpperCase() }))))} },
+      ${JSON.stringify([{ value: "cash", label: "cash" }].concat(bareFundOptions(spec.fund ? BARE_FUNDS : BARE_PARK_FUNDS)))} },
 `;
-  const splitParam = !(spec.park || spec.out) ? '' : `    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch between TQQQ and the other fund sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days, selling at one close and buying at the next: {}.", type: "bool", default: true,${spec.out ? '' : ' when: { park: ' + JSON.stringify(BARE_PARK_FUNDS) + ' },'} options: [
+  const splitParam = !(spec.park || spec.out) ? '' : `    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch between ${spec.fund ? 'two funds' : 'TQQQ and the other fund'} sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days, selling at one close and buying at the next: {}.", type: "bool", default: ${spec.splitDefault === false ? 'false' : 'true'},${spec.out ? '' : ' when: { park: ' + JSON.stringify(BARE_PARK_FUNDS) + ' },'} options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
 `;
   return `{
   name: "${spec.name}",
   params: [
 ${part(spec.params)}
-${parkParam}    { section: "Execution & costs" },
+${parkParam}${spec.after ? part(spec.after) + '\n' : ''}    { section: "Execution & costs" },
 ${splitParam}    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
     { id: "tradeCost", fit: false, label: "Trading cost (%)", tip: "Charged on every buy and sell, as a share of the amount traded.", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
@@ -4925,7 +4940,7 @@ ${splitParam}    { id: "cashRate", fit: false, label: "Cash interest (%/yr)", ti
   ],
   columns: [
 ${part(spec.columns)}
-    { key: "assetPrice", label: "TQQQ", tip: "TQQQ's closing price." },
+    { key: "assetPrice", label: "${spec.fund ? 'Fund' : 'TQQQ'}", tip: "${spec.fund ? "The traded fund's closing price." : "TQQQ's closing price."}" },
     { key: "fee", label: "Fee", tip: "Trading cost paid on this row's trade." }
   ],
   run(data, p) {
@@ -4935,17 +4950,17 @@ ${part(spec.columns)}
     const priceOf = (id, i) => (id === "cash" || !data[id]) ? 0 : (data[id][i] || 0);
     // While the rule is out of TQQQ: cash, or the fund picked to hold in its place. A switch
     // between two funds sells at one close and buys at the next unless that setting is No.
-    const OUT = ${spec.out ? spec.out : spec.park ? 'p.park || "' + (spec.park.default || 'cash') + '"' : '"cash"'}, SPLIT = p.splitDays !== false;
+    const OUT = ${spec.out ? spec.out : spec.park ? 'p.park || "' + (spec.park.default || 'cash') + '"' : '"cash"'}, SPLIT = ${spec.splitDefault === false ? 'p.splitDays === true' : 'p.splitDays !== false'};
     if (OUT !== "cash" && !data[OUT]) throw new Error("No prices for " + OUT.toUpperCase() + " (data." + OUT + ")");
     const nameOf = (id) => (id === "cash" ? "cash" : id.toUpperCase());
     // For the dashboard: the out holding's name, today's call while out, and which way that leans.
     const OUT_NAME = nameOf(OUT), OUT_ACTION = OUT === "cash" ? "Stay in cash" : "Hold " + OUT_NAME, OUT_LEAN = OUT === "cash" ? "cash" : "out";
-${part(spec.setup)}
+${spec.fund ? '    const FUND = p.fund || "tqqq", FUND_NAME = FUND.toUpperCase();   // the fund the rule trades\n    if (!data[FUND]) throw new Error("No prices for " + FUND_NAME + " (data." + FUND + ")");\n' : ''}${part(spec.setup)}
     const REST_HOLD = ${spec.rest};   // the rule's side between its trades: "cash" = out of TQQQ, "tqqq" = in it
-    const PRICE_PANEL = "TQQQ price", RULE_PANEL = ${spec.panel};   // the chart's two panels
+    const PRICE_PANEL = "${fundSaid} price", RULE_PANEL = ${spec.panel};   // the chart's two panels
     const trips = [];   // the rule's finished round trips: the close each ended at and the move over it
     let tripPx = 0;   // the price where the open round trip began; 0 while none is open
-    const tripPrice = (i) => ${spec.trips ? spec.trips.price : 'T[i]'};   // what a round trip's move is measured on: TQQQ's close unless the rule says otherwise
+    const tripPrice = (i) => ${spec.trips ? spec.trips.price : spec.fund ? 'priceOf(FUND, i)' : 'T[i]'};   // what a round trip's move is measured on: TQQQ's close unless the rule says otherwise
     let cash = p.initial, shares = 0, held = "cash";
     let invested = p.initial;
     let wasIn = false;   // the rule wanted TQQQ at the prior close
@@ -4962,7 +4977,7 @@ ${SELL_HELD_TO_COVER}
 ${part(spec.rule)}
       // What to hold from this close: TQQQ while the rule is in, the out holding otherwise. A
       // switch between two funds rests a day in cash: the sale today, the purchase at the next close.
-      const dest = want === "tqqq" ? "tqqq" : OUT;
+      const dest = want === "tqqq" ? ${fundId} : OUT;
       const twoDays = SPLIT && dest !== held && held !== "cash" && dest !== "cash";
       const target = twoDays ? "cash" : dest;
       if (target !== held && (target === "cash" || priceOf(target, i) > 0)) {
@@ -4982,7 +4997,7 @@ ${part(spec.rule)}
       if (i === p.startIdx) { action = "start"; note = (held === "cash" ? "In cash" : "Holding " + nameOf(held)) + " at the entry: " + why; }
       // A round trip: for a rule that buys, a stretch in TQQQ; for a rule that sells, a stretch out
       // of it. It opens at the close TQQQ is bought (or sold) and ends at the close it is sold (or bought back).
-      const away = (held === "tqqq") === (REST_HOLD === "cash");
+      const away = (held === ${fundId}) === (REST_HOLD === "cash");
       if (away && !tripPx) tripPx = tripPrice(i);
       else if (!away && tripPx) { trips.push({ end: i, move: tripPrice(i) / tripPx - 1 }); tripPx = 0; }
       const px = priceOf(held, i), stockVal = shares * px;
@@ -4993,7 +5008,7 @@ ${END_ROW_ACTION}
           date: dates[i], value: stockVal + cash, action: action, note: note,
           held: held.toUpperCase(), price: px, shares: shares, holdingsValue: stockVal,
           cash: cash, contributed: contributed, invested: invested, fee: fee,
-          assetPrice: T[i] > 0 ? T[i] : null,
+          assetPrice: ${spec.fund ? 'priceOf(FUND, i) > 0 ? priceOf(FUND, i) : null' : 'T[i] > 0 ? T[i] : null'},
           ...(action === "buy" || action === "sell" || action === "switch" ? { firedBy: RULE_PANEL } : {}),   // a trade is marked in the rule's panel
 ${part(spec.row)}
         });
@@ -5006,7 +5021,7 @@ ${part(spec.row)}
     const buys = REST_HOLD === "cash";
     const signed = (x) => (x >= 0 ? "+" : "−") + Math.abs(x * 100).toFixed(Math.abs(x) >= 1 ? 0 : 1) + "%";   // no decimal from 100% on: the card's line is short
     // A rule may count its trips its own way (spec.trips): its labels, the word for a trip that paid, and whether a rise pays.
-    const TRIP = ${spec.trips ? JSON.stringify({ up: spec.trips.up, word: spec.trips.word, label: spec.trips.label, lastLabel: spec.trips.lastLabel, tip: spec.trips.tip }) : BARE_TRIPS_DEFAULT_SRC};
+    const TRIP = ${spec.trips ? JSON.stringify({ up: spec.trips.up, word: spec.trips.word, label: spec.trips.label, lastLabel: spec.trips.lastLabel, tip: spec.trips.tip }) : bareTripsDefaultSrc(fundSaid)};
     const tripsCard = (label, list, tip) => {
       const paid = list.filter(trip => (TRIP.up ? trip.move > 0 : trip.move < 0)).length;
       const average = list.reduce((sum, trip) => sum + trip.move, 0) / list.length;
@@ -5019,11 +5034,11 @@ ${part(spec.row)}
       tripsCard(TRIP.lastLabel, trips.filter(trip => trip.end > p.endIdx - 252), TRIP.tip + " Counted over the run's last 252 trading days.")
     ];
     // Today's call for a rule that is in TQQQ or out of it: what a dashboard says of either.
-    const callOf = (inNow, name, reading, note) => ({ action: inNow ? "Hold TQQQ" : OUT_ACTION, tone: inNow ? "good" : buys ? "" : "bad", note: note,
-      reasons: [{ name: name, val: reading, tag: inNow ? "in · TQQQ" : OUT_NAME, lean: inNow ? "buy" : OUT_LEAN }] });
+    const callOf = (inNow, name, reading, note) => ({ action: inNow ? "Hold ${fundSaid}" : OUT_ACTION, tone: inNow ? "good" : buys ? "" : "bad", note: note,
+      reasons: [{ name: name, val: reading, tag: inNow ? "in · ${fundSaid}" : OUT_NAME, lean: inNow ? "buy" : OUT_LEAN }] });
 ${part(spec.dashboard)}
     // The chart: TQQQ's price on top, to read the rule against buy and hold, then the rule's panel at full height.
-    const chartLines = [{ key: "assetPrice", label: "TQQQ price", group: PRICE_PANEL }].concat(lines.map(line => Object.assign({}, line, { group: RULE_PANEL, tall: true })));
+    const chartLines = [{ key: "assetPrice", label: "${fundSaid} price", group: PRICE_PANEL }].concat(lines.map(line => Object.assign({}, line, { group: RULE_PANEL, tall: true })));
     return { log: log, lines: chartLines, signals: { cards: [card].concat(tripCards), decision: decision } };
   }
 }`;
@@ -5616,6 +5631,167 @@ CODE[70] = bareStrategy({
     const card = { label: "MACD", icon: "activity", tone: bullNow ? "good" : "", value: bullNow ? "In TQQQ" : "Out", sub: macdVs,
       tip: "QQQ's MACD against its signal line. TQQQ is held while the MACD is above the signal line and above zero." };
     const decision = callOf(bullNow, "MACD", macdVs, macdSays(p.endIdx));`,
+});
+
+// #72 Short strat - late-week SQQQ, built as a bare entry and named by the user ("Just call it short
+// strat - instead of bare"). The user, 2026-11-23: "let's add one bare strategy, in downtrend, buy
+// sqqq on wed close and buy tqqq on Fridays close"). From that day's weekday study: with TQQQ under
+// its 50-day average its Thursdays and Fridays have been weak since 2010 and its Tuesdays and
+// Wednesdays strong. TQQQ is held; in a week where the close the down trend is read on is under its
+// line (the average or the median of the closes before it, by a set percentage or more) the money
+// moves out of TQQQ at one weekday's close and back into it at another's. Out, it is in SQQQ, or as a setting in cash or
+// another fund (the user, same day: "also show the cash option").
+// A switch between two funds is made at one close here unless the setting says otherwise (the
+// user, same day: "suppose switch can happen in the same day"): SQQQ over Thursday and Friday. With
+// one trade a day the two closes named are the closes of the PURCHASES and each sale is the close
+// before: TQQQ sold at Tuesday's close, SQQQ bought at Wednesday's and sold at Thursday's, TQQQ
+// bought at Friday's, so SQQQ is held over Thursday. Cash has no second leg: TQQQ is sold and
+// bought at the two closes named.
+// A week is skipped when RSI is low at the close that would leave TQQQ (the user, same day, on
+// seeing that the routine did better without the weeks that began deeply sold: "add it as option").
+// The fund traded and the fund the down trend is read on are settings too (the user, same day:
+// "make sure I can also choose tqqq, soxl or other tickets, right now it's frozen to tqqq").
+// The defaults are the settings the user fitted and picked that day ("make this as default"): the
+// down trend on QQQ against its 30-day median, the skip on with TQQQ's RSI over 9 days at 40 or
+// under. Q1 2010 to Q4 2025 they make 106.1% a year (max drawdown 60%) against 62.8% (70%) for the
+// entry's first defaults (TQQQ's own 50-day average, no skip). It is a narrow peak: a step away on
+// the RSI level makes 83% to 87%. The card says so.
+// It is a weekly routine: the down trend is read where the week's days out start (at the sale and
+// at the purchase with one trade a day) and not again inside them, so the money never leaves TQQQ
+// late in a week and never comes back early.
+// A week short of a day keeps the sessions: the days out are the sessions after the first day
+// through the second, so with no Friday session TQQQ is bought back at Thursday's close (a close
+// later with one trade a day, when the fund's one session leaves no close for its sale). Past the
+// last date of the data the weekdays run on in a row: a holiday there is not known yet.
+CODE[72] = bareStrategy({
+  name: "Short strat - late-week SQQQ",
+  fund: true,
+  params: `    { id: "trendFund", label: "Down trend of", tip: "The fund whose closes the down trend is read on.", text: "While {} closes", default: "qqq", options:
+      ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
+    { id: "trendUnder", label: "Down trend: under the line by", tip: "How far under its line the close must be for a down trend. 0 is any close under the line; a negative number also takes closes less than that far over it.", text: "more than {} under", unit: "%", default: 0, options: [
+      -60, -59, -58, -57, -56, -55, -54, -53, -52, -51, -50, -49, -48, -47, -46, -45, -44, -43, -42, -41, -40, -39.5, -39, -38.5, -38, -37.5, -37, -36.5, -36, -35.5, -35, -34.5, -34, -33.5, -33, -32.5, -32, -31.5, -31, -30.5, -30, -29.5, -29, -28.5, -28, -27.5, -27, -26.5, -26, -25.5, -25, -24.5, -24, -23.5, -23, -22.5, -22, -21.5, -21, -20.5, -20, -19.5, -19, -18.5, -18, -17.5, -17, -16.5, -16, -15.5, -15, -14.5, -14, -13.5, -13, -12.5, -12, -11.5, -11, -10.5, -10, -9.5, -9, -8.5, -8, -7.5, -7, -6.5, -6, -5.5, -5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5,
+      0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5, 17, 17.5, 18, 18.5, 19, 19.5, 20, 20.5, 21, 21.5, 22, 22.5, 23, 23.5, 24, 24.5, 25, 25.5, 26, 26.5, 27, 27.5, 28, 28.5, 29, 29.5, 30, 30.5, 31, 31.5, 32, 32.5, 33, 33.5, 34, 34.5, 35, 35.5, 36, 36.5, 37, 37.5, 38, 38.5, 39, 39.5, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60] },
+    { id: "trendDays", label: "Line over (days)", tip: "How many closes before today's the line covers. 250 is about a year.", text: "its {}-day", default: 30, options: [
+      2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 65, 70, 75, 80, 85, 90, 95, 100, 105, 110, 115, 120, 125, 130, 135, 140, 145, 150, 155, 160, 165, 170, 175, 180, 185, 190, 195, 200, 205, 210, 215, 220, 225, 230, 235, 240, 245, 250, 260, 270, 280, 290, 300, 310, 320, 330, 340, 350, 360, 370, 380, 390, 400, 410, 420, 430, 440, 450, 460, 470, 480, 490, 500] },
+    { id: "trendLine", label: "Line", tip: "The line: the average of those closes, or their median (the middle one). With no down trend the fund is held all week.", text: "{},", default: "median", options: [
+      { value: "average", label: "average" }, { value: "median", label: "median" } ] },
+    { id: "fund", label: "Fund", tip: "The fund held all week but for the days out.", text: "move out of {}", default: "tqqq", options:
+      ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
+    { id: "outDay", label: "Out of the fund at", tip: "The weekday whose close moves the money out of the fund, if the down trend holds there. With one trade per day and another fund held in between, the fund is sold at the close before it and the other one is bought at this one.", text: "at a {} close", default: 3, options: [
+      { value: 1, label: "Monday" }, { value: 2, label: "Tuesday" }, { value: 3, label: "Wednesday" }, { value: 4, label: "Thursday" }, { value: 5, label: "Friday" } ] },
+    { id: "backDay", label: "Back in the fund at", tip: "The weekday whose close buys the fund back. With one trade per day and another fund held in between, that one is sold at the close before it; with the two days side by side it has one session and the fund comes back a close later. The same day as the first leaves no days out.", text: "and back into it at a {} close.", default: 5, options: [
+      { value: 1, label: "Monday" }, { value: 2, label: "Tuesday" }, { value: 3, label: "Wednesday" }, { value: 4, label: "Thursday" }, { value: 5, label: "Friday" } ] },`,
+  park: { label: "Held in between", tip: "What the money is in between the two closes: SQQQ, cash or another fund.", text: "Hold {} in between.", default: "sqqq" },
+  splitDefault: false,
+  after: `    { id: "rsiSkip", label: "Skip a week for a low RSI", tip: "Yes: a week is skipped, and the fund held through it, when the RSI is at the level or under at the close that would leave the fund. A low RSI in a down trend means the fall is already steep; in such weeks TQQQ rose on average over the days out in 2010-2025. In 2026 skipping them made less than taking them.", text: "Skip a week for a low RSI: {}.", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "rsiFund", label: "RSI of", tip: "The fund whose closes the RSI is read on.", text: "Low is {}'s", default: "tqqq", when: { rsiSkip: true }, options:
+      ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
+    { id: "rsiDays", label: "RSI over (days)", tip: "Wilder's RSI over this many closes. Fewer days swing faster.", text: "RSI over {} days", default: 9, when: { rsiSkip: true }, options: [
+      2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100] },
+    { id: "rsiLevel", label: "Low at or under", tip: "The week is skipped with the RSI at this level or under. From 30 to 40 skipping helped in 2010-2025; from 45 up it skips too many weeks.", text: "at {} or under.", default: 40, when: { rsiSkip: true }, options: [
+      5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5, 17, 17.5, 18, 18.5, 19, 19.5, 20, 20.5, 21, 21.5, 22, 22.5, 23, 23.5, 24, 24.5, 25, 25.5, 26, 26.5, 27, 27.5, 28, 28.5, 29, 29.5, 30, 30.5, 31, 31.5, 32, 32.5, 33, 33.5, 34, 34.5, 35, 35.5, 36, 36.5, 37, 37.5, 38, 38.5, 39, 39.5, 40, 40.5, 41, 41.5, 42, 42.5, 43, 43.5, 44, 44.5, 45, 45.5, 46, 46.5, 47, 47.5, 48, 48.5, 49, 49.5, 50, 50.5, 51, 51.5, 52, 52.5, 53, 53.5, 54, 54.5, 55, 55.5, 56, 56.5, 57, 57.5, 58, 58.5, 59, 59.5, 60, 60.5, 61, 61.5, 62, 62.5, 63, 63.5, 64, 64.5, 65, 65.5, 66, 66.5, 67, 67.5, 68, 68.5, 69, 69.5, 70] },`,
+  columns: `    { key: "lineRel", label: "vs line", tip: "How far the close the down trend is read on sits above (+) or below (−) its line, the average or median of the closes before it, in percent." },`,
+  rest: '"tqqq"',
+  panel: 'TREND_PANEL',
+  setup: `    // The down trend at every close: TQQQ's close against its line, the average or the median of the N
+    // closes before it, by more than a set percentage (the user, 2026-11-23: "let me choose how many days
+    // (up to 500), let me choose average or median, and let me choose percentage how much").
+${bareFn(rollingMedian)}
+    // The fund the down trend is read on, and the fund traded (FUND, from the skeleton): TQQQ for both unless
+    // picked (the user, 2026-11-23: "make sure I can also choose tqqq, soxl or other tickets, right now it's
+    // frozen to tqqq").
+    const SIGNAL = p.trendFund || "qqq", SIG_NAME = SIGNAL.toUpperCase(), S = data[SIGNAL];
+    if (!S) throw new Error("No prices for " + SIG_NAME + " (data." + SIGNAL + ")");
+    const N = Math.max(2, Math.round(+p.trendDays || 30)), UNDER = +p.trendUnder || 0;   // under zero: the line sits that far over the average or median
+    if (p.trendLine != null && p.trendLine !== "average" && p.trendLine !== "median") throw new Error('The line must be "average" or "median", not ' + p.trendLine);
+    const LINE = p.trendLine === "average" ? "average" : "median";
+    const lineBefore = new Float64Array(p.endIdx + 1).fill(NaN);
+    if (LINE === "median") {
+      const med = rollingMedian(S, N, 0, p.endIdx);   // med[j]: the median of the N closes ending at row j
+      for (let i = N; i <= p.endIdx; i++) lineBefore[i] = med[i - 1];
+    } else {
+      for (let i = 0, sum = 0; i <= p.endIdx; i++) {
+        if (i >= N) lineBefore[i] = sum / N;
+        sum += S[i];
+        if (i >= N) sum -= S[i - N];
+      }
+    }
+    const levelAt = (i) => lineBefore[i] * (1 - UNDER / 100);   // a close under this is a down trend
+    const gapAt = (i) => (lineBefore[i] > 0 && S[i] > 0 ? (S[i] / lineBefore[i] - 1) * 100 : null);
+    const gapText = (i) => { const x = gapAt(i); return x === null ? "n/a" : (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(1) + "%"; };
+    const downAt = (i) => lineBefore[i] > 0 && S[i] < levelAt(i);
+    const TREND_PANEL = SIG_NAME + " vs its " + N + "-day " + LINE;
+    // The RSI skip: a week is not taken when the RSI is at the level or under at the close that would leave TQQQ.
+${bareFn(wilderRsi)}
+    const RSI_SKIP = p.rsiSkip !== false, RSI_FUND = p.rsiFund || "tqqq", RSI_DAYS = Math.max(2, Math.round(+p.rsiDays || 9)), RSI_LEVEL = p.rsiLevel == null ? 40 : +p.rsiLevel;
+    if (RSI_SKIP && !data[RSI_FUND]) throw new Error("No prices for " + RSI_FUND.toUpperCase() + " (data." + RSI_FUND + ")");
+    const rsi = RSI_SKIP ? wilderRsi(data[RSI_FUND], RSI_DAYS, p.endIdx) : null;
+    const RSI_NAME = RSI_FUND.toUpperCase() + "'s RSI(" + RSI_DAYS + ")";
+    const lowAt = (i) => RSI_SKIP && rsi[i] <= RSI_LEVEL;   // false while there is no RSI yet
+    const goAt = (i) => downAt(i) && !lowAt(i);             // a close that may start, or keep, a week's days out
+    // The week: the close that moves the money out of TQQQ and the close that brings it back.
+    const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+    const outDay = Math.round(+p.outDay) || 3, backDay = Math.round(+p.backDay) || 5;
+    if (!DAY_NAMES[outDay - 1] || !DAY_NAMES[backDay - 1]) throw new Error("The two days must be 1 (Monday) to 5 (Friday), not " + p.outDay + " and " + p.backDay);
+    const OUT_DAY = DAY_NAMES[outDay - 1], BACK_DAY = DAY_NAMES[backDay - 1];
+    const RULE = "Late-week " + OUT_NAME, OUT_DAYS = (OUT === "cash" ? "Cash" : OUT_NAME) + " days";
+    // The days out: the sessions after the first day through the second. The same day for both
+    // leaves none: TQQQ is then held all along. (Neither that nor two days side by side is refused:
+    // a run that fails takes its settings off the panel, and the way back with them.)
+    const outSpan = (backDay - outDay + 5) % 5;
+    // No days out, and why: the two closes are the same day, or the fund held in between is the fund itself.
+    const NO_DAYS = outSpan === 0 ? "both closes are set to " + OUT_DAY + "'s" : OUT === FUND ? FUND_NAME + " is also the fund held in between" : "", NONE_OUT = NO_DAYS !== "";
+    const outWeekday = (weekday) => { const after = (weekday - outDay + 5) % 5; return after >= 1 && after <= outSpan; };
+    // The weekday (1 = Monday) of the session at row j: the date's own, or past the data's last date the weekdays in a row.
+    const weekdayOf = (ds) => ((Math.floor(Date.parse(ds) / 86400000) + 4) % 7 + 7) % 7;   // 1970-01-01 was a Thursday
+    const lastRow = dates.length - 1;
+    const sessionDay = (j) => (j <= lastRow ? weekdayOf(dates[j]) : (weekdayOf(dates[lastRow]) - 1 + (j - lastRow)) % 5 + 1);
+    const outSession = (j) => j >= 0 && outWeekday(sessionDay(j));
+    // A leg is one week's stretch of days out. It starts at the close before its first session (the first
+    // day's close, or the last close before it in a week short of that day) and ends at the close of its last,
+    // where TQQQ is bought back. The down trend is read where the leg starts and not again inside it: the
+    // routine is weekly. startClose(i): the leg's first close, for a close i inside the leg or at its start.
+    const startClose = (i) => { let k = i; while (outSession(k)) k--; return k; };
+    // At one close (and for cash, which has no second leg): out from the leg's first close, if the down trend
+    // holds there, to its last.
+    const outDirect = (i) => outSession(i + 1) && goAt(startClose(i));
+    // One trade a day, with a fund to hold: each purchase stays at its close and the sale is the close before
+    // it. TQQQ is sold at the close before the fund's purchase if the down trend holds there; the fund is
+    // bought at its close if the trend still holds (TQQQ is bought back there if not), and sold at the close
+    // before the leg's last. A leg of one session (the two days side by side, or a week short of a day) has no
+    // close before its last that is not its purchase: the fund is then sold at the leg's last close and TQQQ
+    // bought a close after its day.
+    const TWO_DAYS = SPLIT && OUT !== "cash";
+    const legOn = (k) => goAt(k - 1) && goAt(k);
+    const outSplit = (i) => {
+      if (!outSession(i + 1)) return !outSession(i) && outSession(i + 2) && goAt(i);     // the close before the purchase close; else TQQQ's own days
+      if (!outSession(i)) return legOn(i);                                               // the purchase close
+      return outSession(i + 2) && legOn(startClose(i));                                  // inside the leg, up to the close before its last
+    };
+    const outAt = OUT === FUND ? () => false : TWO_DAYS ? outSplit : outDirect;
+    // A week the RSI skipped: its first close (or, with one trade a day, the close before) was a down trend with a low RSI.
+    const skippedBy = (k) => (lowAt(k) && downAt(k) ? k : TWO_DAYS && lowAt(k - 1) && downAt(k - 1) ? k - 1 : -1);
+    const rsiSays = (i) => RSI_NAME + " " + (rsi[i] === rsi[i] ? rsi[i].toFixed(0) : "n/a");
+    const trendSays = (i) => SIG_NAME + " " + gapText(i) + " against its " + N + "-day " + LINE + (UNDER > 0 ? ", the down trend starts " + UNDER + "% under it" : UNDER < 0 ? ", the down trend starts " + -UNDER + "% over it" : "") + (RSI_SKIP ? ", " + rsiSays(i) : "");`,
+  rule: `      const want = outAt(i) ? "cash" : "tqqq";   // the skeleton's two words: "tqqq" is in the fund, "cash" out of it, in the holding picked
+      const why = outAt(i) ? "The week's " + OUT_NAME + " days in a down trend (" + trendSays(i) + ")"
+        : NONE_OUT ? "No days out of " + FUND_NAME + ": " + NO_DAYS + " (" + trendSays(i) + ")"
+        : RSI_SKIP && outSession(i + 1) && skippedBy(startClose(i)) >= 0 ? "Week skipped: " + rsiSays(skippedBy(startClose(i))) + " at " + dates[skippedBy(startClose(i))] + "'s close, at " + RSI_LEVEL + " or under (" + trendSays(i) + ")"
+        : !downAt(i) ? "No down trend: " + trendSays(i)
+        : outSession(i + 1) ? "The down trend began after this week's close out of " + FUND_NAME + " (" + trendSays(i) + ")"
+        : "Down trend, the week's " + FUND_NAME + " days (" + trendSays(i) + ")";`,
+  row: `          trendClose: S[i] > 0 ? S[i] : null, lineRel: gapAt(i), trendLevel: lineBefore[i] > 0 ? -UNDER : null, trendPx: lineBefore[i] > 0 ? levelAt(i) : null,`,
+  dashboard: `    const downNow = downAt(p.endIdx), outNow = outAt(p.endIdx), lowNow = lowAt(p.endIdx);
+    const lines = [{ key: "lineRel", label: SIG_NAME + " vs " + LINE, unit: "%", priceKey: "trendClose" }, { key: "trendLevel", label: "Down trend under", unit: "%", priceKey: "trendPx" }];
+    const card = { label: RULE, icon: "clock", tone: downNow ? "bad" : "good", value: outNow ? OUT_DAYS : NONE_OUT ? "No days out" : downNow ? (lowNow ? "RSI low" : FUND_NAME + " days") : "No down trend",
+      sub: gapText(p.endIdx) + " vs " + LINE,
+      tip: SIG_NAME + "'s close against the " + LINE + " of the " + N + " closes before it. With the close " + (UNDER > 0 ? "more than " + UNDER + "% under it" : UNDER < 0 ? "less than " + -UNDER + "% over it" : "under it") + " at " + OUT_DAY + "'s close, the money moves to " + OUT_NAME + " there and back to " + FUND_NAME + " at " + BACK_DAY + "'s close"
+        + (TWO_DAYS ? ", each purchase a close after the sale of the other fund." : ".") + " The trend is read when the week's days out start and not again inside them. Otherwise " + FUND_NAME + " is held all week."
+        + (RSI_SKIP ? " A week is skipped when " + RSI_NAME + " is at " + RSI_LEVEL + " or under at that close; it is " + (rsi[p.endIdx] === rsi[p.endIdx] ? rsi[p.endIdx].toFixed(0) : "n/a") + " now." : "")
+        + (outSpan === 0 ? " Both closes are set to the same day, so there are no days out." : OUT === FUND ? " " + FUND_NAME + " is also the fund held in between, so there are no days out." : "") };
+    const decision = callOf(!outNow, RULE, gapText(p.endIdx) + " vs " + LINE,
+      outNow ? "the week's " + OUT_NAME + " days; " + FUND_NAME + " is bought back at " + BACK_DAY + "'s close" : NONE_OUT ? NO_DAYS + ": no days out" : downNow ? (lowNow ? "down trend, " + rsiSays(p.endIdx) + ": a week starting now is skipped" : "down trend: " + FUND_NAME + " until " + OUT_DAY + "'s close" + (RSI_SKIP ? " (" + rsiSays(p.endIdx) + ")" : "")) : "no down trend: " + FUND_NAME + " all week");`,
 });
 
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----

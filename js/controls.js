@@ -877,6 +877,11 @@ async function shareConfig() {
     const ci = openSavedConfigIndex(activeCfgs);
     if (ci >= 0) params.set('spc', String(ci));
   }
+  // Fit's frozen settings of the 9sig and SMA panels, where the user changed them (a strategy's own ride in `scz`).
+  if (typeof fitFreezeShareParam === 'function') {
+    const fz = fitFreezeShareParam();
+    if (fz) params.set('fz', fz);
+  }
 
   // Saved strategies, including custom ones (code + description). SECURITY:
   // shared custom code is never trusted on arrival — it arrives `_transient`

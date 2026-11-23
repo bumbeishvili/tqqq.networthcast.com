@@ -4245,7 +4245,23 @@
   .fit-menu-item { display: flex; flex-direction: column; gap: 2px; max-width: 280px; padding: 7px 9px; border-radius: 6px; cursor: pointer; }
   .fit-menu-item:hover { background: rgba(134, 118, 255, 0.08); }
   .fit-menu-item b { font-size: calc(12px * var(--ui-scale)); color: var(--text); }
-  .fit-menu-item span { font-size: calc(11px * var(--ui-scale)); line-height: 1.35; color: var(--text-muted); }
+  /* "Freeze" under the goals (js/saved-configs.js buildFitFreezeHtml): a head that opens the strategy's sentences, a tick box on each value. */
+  .fit-freeze { max-width: 280px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
+  .fit-freeze-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 9px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: left; cursor: pointer; }
+  .fit-freeze-head:hover { background: rgba(134, 118, 255, 0.08); }
+  .fit-freeze-arrow { width: 10px; color: var(--text-muted); }
+  .fit-freeze-notice { margin-left: auto; font-size: calc(10.5px * var(--ui-scale)); color: var(--accent-text); }   /* "2 changed": ticks that differ from the defaults */
+  .fit-freeze-body { padding: 0 9px 6px; font-size: calc(11px * var(--ui-scale)); line-height: 2; color: var(--text-muted); }
+  /* a section's name, as .custom-param-group writes it in Settings */
+  .fit-freeze-section { margin: 6px 0 0; font-size: calc(9px * var(--ui-scale)); font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; line-height: 1.6; }
+  .fit-freeze-glued { white-space: nowrap; }   /* a value and the text touching it stay on one line */
+  /* a value with its tick box: ticked = frozen */
+  .fit-freeze-value { display: inline-flex; align-items: center; gap: 4px; padding: 0 5px; border: 1px solid var(--border); border-radius: 5px; line-height: 1.5; color: var(--text); white-space: nowrap; vertical-align: baseline; cursor: pointer; }
+  .fit-freeze-value:has(input:checked) { border-color: var(--accent); background: rgba(134, 118, 255, 0.12); }
+  .fit-freeze-value input { flex: none; width: calc(11px * var(--ui-scale)); height: calc(11px * var(--ui-scale)); margin: 0; accent-color: var(--accent); cursor: pointer; }
+  .fit-freeze-reset { display: block; margin-top: 6px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: none; font: inherit; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); cursor: pointer; }
+  .fit-freeze-reset:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+  .fit-freeze-reset:disabled { opacity: 0.45; cursor: default; }
   .fit-note { margin: 6px 0 2px; font-size: calc(11.5px * var(--ui-scale)); line-height: 1.4; color: var(--text-muted); }
   .fit-changes { margin: 4px 0 0; padding: 0; list-style: none; }
   /* A code strategy's explanation (js/saved-configs.js buildExplainHtml), as the 9sig panel's rules box. */

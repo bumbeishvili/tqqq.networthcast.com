@@ -76,7 +76,7 @@ A new `select-*` control is not done until ALL of these are touched:
 7. **js/preview-dropdown.js** — THREE spots (this is what gives the dropdown its bar-chart
    preview and makes it look "data-driven like the others" — do NOT skip it):
    - register it in the `PREVIEW_SELECTS` map with `{ kind: 'sma', name: 'Short name', apply: (p, v) => { p.<field> = +v; } }`
-     (`name` labels it in the Fit summary; add `fit: false` when it is a cost or execution setting the Fit button must not tune),
+     (`name` labels it in the Fit summary and in the Fit menu's Freeze list; add `fit: false` when it is a cost or execution setting, which Fit leaves alone unless the user unticks it under Freeze),
    - add it to the `readSmaParams()` (or `read9sigParams()`) params object,
    - pass it through in the `simulateSMA({...})` / `simulate({...})` call inside `smaRun`/`nineSigRun`.
    Without the `PREVIEW_SELECTS` entry it renders as a plain native `<select>` with no bars, and Fit never tries it.

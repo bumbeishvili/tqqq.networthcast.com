@@ -570,7 +570,7 @@ Shape:  { id, label, text, options: [...], default: <one of the options> }
   its sentence: one or two plain sentences saying what the setting does. No filler.
 - Add fit: false to a setting that describes the market or the account rather than the rule
   (trading cost, cash interest, how a switch is executed). The sidebar's Fit button searches every
-  other setting for the best result and leaves these alone.
+  other setting for the best result and leaves these alone unless the user unfreezes them in its menu.
 - Add when: { otherId: value } (or [values]) to a setting that only matters while another setting
   holds that value: it shows only then. Example: when: { outAsset: "cash" } on the cash interest.
 
@@ -2690,6 +2690,7 @@ function libraryStampOf(cfg) {
 // (params) always ride along; they hold only what the sender changed.
 function sharedConfigOf(c) {
   const o = { type: c.type, name: c.name, params: c.params || {}, color: c.color };
+  if (c.fitFreeze && Object.keys(c.fitFreeze).length) o.fitFreeze = c.fitFreeze;   // Fit's frozen settings, where they differ from the usual ones
   if (c.type !== 'custom') return o;
   const n = libraryEntryNumber(c);
   const entry = n != null && typeof STRATEGY_LIBRARY !== 'undefined' ? STRATEGY_LIBRARY.find(e => e.n === n) : null;
@@ -2804,6 +2805,7 @@ function importSharedConfigs(arr) {
       _transient: true,
     };
     if (c.type === 'custom') { cfg.code = c.code || ''; cfg.desc = c.desc || ''; Object.assign(cfg, libraryStampOf(c)); } // safe to run: sandboxed
+    if (c.fitFreeze && typeof c.fitFreeze === 'object') cfg.fitFreeze = fitFreezeFromShared(c.fitFreeze);
     savedConfigs.push(cfg);
     existing.add(sig(c));
   }
@@ -3392,7 +3394,8 @@ function cpFillBars(popup, finals) {
 // drawdown" counts only settings whose final value beats buy & hold of the
 // fund the strategy holds most (the user's pick: the plain lowest drawdown
 // ends in cash). Settings marked fit: false (trading cost, cash interest, how
-// a switch is executed) stay as they are.
+// a switch is executed) stay as they are unless the user unfreezes them, and
+// any other setting can be frozen ("Fit: frozen settings" below, "Freeze" in the menu).
 //
 // The search runs on the chart's current period and money, like the bar
 // previews. Each setting in turn tries every option with the others held and
@@ -3417,6 +3420,128 @@ let _fitMenu = null;      // { menu, btn, key } while the goal menu is open
 // key (a code strategy's cfg id, or "panel:9sig" / "panel:sma") -> the last
 // fit's result { text, changes: [{ label, from, to }] }, until a setting is changed by hand
 const _fitNotes = {};
+
+// ---- Fit: frozen settings ----
+// The user (2026-11-23): "I want to be able to select parameters that can be frozen, so inside each
+// menu, have a settings arrow ... where I will be able to select non default freeze parameters (I can
+// also unfreeze it) and run the fit command based on that". Fit leaves a frozen setting as it is.
+// Frozen unless chosen otherwise: the settings marked fit: false (trading cost, cash interest, how a
+// switch is executed, and whatever a strategy marks so itself). What the user chose is kept as the
+// differences from that, { settingId: true (frozen) | false (fitted) }, so a setting a strategy gains
+// later takes its own default: on a strategy as cfg.fitFreeze, saved and shared with it; for the 9sig
+// and SMA panels under the panel's key in localStorage (LS_FIT_FREEZE_KEY) and in a share link's `fz`.
+const LS_FIT_FREEZE_KEY = 'tqqq_fit_freeze_v1';
+const fitIsPanel = (key) => key.startsWith('panel:');
+let _fitPanelFreeze = null;   // { 'panel:9sig': choices, 'panel:sma': choices }, read once
+function fitPanelFreeze() {
+  // localStorage can be missing or throw (private mode): the panels' choices then last the session.
+  if (!_fitPanelFreeze) { try { _fitPanelFreeze = JSON.parse(localStorage.getItem(LS_FIT_FREEZE_KEY)) || {}; } catch (e) { _fitPanelFreeze = {}; } }
+  return _fitPanelFreeze;
+}
+// The settings Fit can work on for a key (those with more than one choice), each with whether it is
+// frozen unless chosen otherwise.
+function fitSettings(key) {
+  if (fitIsPanel(key)) {
+    return window.previewFit.settings(key.slice(6))
+      .filter(s => { const el = document.getElementById(s.id); return el && !el.disabled && el.options.length > 1; })
+      .map(s => ({ id: s.id, frozenByDefault: !s.fit }));
+  }
+  const cfg = savedConfigs.find(c => c.id === key), schema = cfg ? getCustomSchema(cfg) : [];
+  return schema.filter(sp => sp && sp.id != null && customParamOptions(sp).length > 1)
+    .map(sp => ({ id: sp.id, frozenByDefault: sp.fit === false }));
+}
+// The strategy as the Freeze list shows it, the way its Settings read: section names ({ heading })
+// and sentences ({ parts }), a sentence being its text pieces with a { id, value } where a setting's
+// value sits. Every setting is there, also one Settings hides for now (a `when` that does not hold,
+// a hidden line of a panel): Fit can change it all the same. A panel's sentences each take a line
+// (`block`), as in the panel; a code strategy's run on.
+function fitFreezeLines(key) {
+  if (fitIsPanel(key)) {
+    const selects = window.previewFit.settings(key.slice(6)).map(s => document.getElementById(s.id)).filter(Boolean);
+    const lines = new Set(selects.map((el) => {
+      const line = el.closest('.adaptive-line');
+      if (!line) throw new Error('Fit: ' + el.id + ' is not inside an .adaptive-line, so the Freeze list has no sentence to show it in');
+      return line;
+    }));
+    return Array.from(lines).sort((a, b) => (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+      .map(line => ({ block: true, parts: fitLineParts(line) }));
+  }
+  const cfg = savedConfigs.find(c => c.id === key), schema = cfg ? getCustomSchema(cfg) : [];
+  return schema.filter(sp => sp && (sp.id != null || sp.section)).map((sp) => {
+    if (sp.id == null) return { heading: String(sp.section) };
+    const sentence = customParamSentence(sp), at = sentence.indexOf('{}');
+    return { parts: [sentence.slice(0, at), { id: sp.id, value: customOptionLabel(sp, customParamValue(cfg, sp)) }, sentence.slice(at + 2)] };
+  });
+}
+// The pieces of a panel's sentence, read off its markup (an .adaptive-line of index.html): the text
+// as it stands, a { id, value } where a select sits; the ⓘ icons and the dropdown buttons are left out.
+function fitLineParts(node) {
+  return Array.from(node.childNodes).flatMap((child) => {
+    if (child.nodeType === Node.TEXT_NODE) return [child.textContent];
+    if (child.nodeType !== Node.ELEMENT_NODE || child.matches('.info-icon, button')) return [];
+    if (child.matches('select')) {
+      const chosen = child.options[child.selectedIndex];   // none while the select holds a value its list lacks (an old link's)
+      return [{ id: child.id, value: chosen ? chosen.textContent.trim() : child.value }];
+    }
+    return fitLineParts(child);
+  });
+}
+function fitFreezeChoices(key) {
+  if (fitIsPanel(key)) return fitPanelFreeze()[key] || {};
+  const cfg = savedConfigs.find(c => c.id === key);
+  return (cfg && cfg.fitFreeze) || {};
+}
+const fitFrozen = (choices, setting) => (setting.id in choices ? choices[setting.id] === true : setting.frozenByDefault);
+// How many settings are frozen or fitted against their default (what Reset would undo), and the
+// notice beside "Freeze" that says so; '' for none.
+const fitFreezeChanged = (settings, choices) => settings.filter(s => s.id in choices).length;
+const fitFreezeNotice = (changed) => (changed ? changed + ' changed' : '');
+function setFitFreezeChoices(key, choices) {
+  if (fitIsPanel(key)) {
+    const all = fitPanelFreeze();
+    if (Object.keys(choices).length) all[key] = choices; else delete all[key];
+    try { localStorage.setItem(LS_FIT_FREEZE_KEY, JSON.stringify(all)); } catch (e) {}
+  } else {
+    const cfg = savedConfigs.find(c => c.id === key);
+    if (Object.keys(choices).length) cfg.fitFreeze = choices; else delete cfg.fitFreeze;
+    persistSavedConfigs();
+  }
+}
+// One setting frozen or fitted: kept only where that differs from its default.
+function setFitFrozen(key, setting, frozen) {
+  const choices = Object.assign({}, fitFreezeChoices(key));
+  if (frozen === setting.frozenByDefault) delete choices[setting.id]; else choices[setting.id] = frozen;
+  setFitFreezeChoices(key, choices);
+}
+// The ids Fit may change for a key: null when the strategy has no setting with a choice, an empty
+// set when every one is frozen.
+function fitFreeIds(key) {
+  const settings = fitSettings(key), choices = fitFreezeChoices(key);
+  return settings.length ? new Set(settings.filter(s => !fitFrozen(choices, s)).map(s => s.id)) : null;
+}
+function fitNothingFree(key) {
+  _fitNotes[key] = { text: 'Every setting is frozen, so nothing changed.', changes: [] };
+  render();
+}
+// A shared strategy's choices: true / false by setting id, nothing else.
+const fitFreezeFromShared = (choices) => Object.fromEntries(Object.entries(choices).filter(([, frozen]) => typeof frozen === 'boolean'));
+// The panels' choices in a share link: "select-9sig-cost:0,select-sma-window:1" (the setting's id,
+// then 1 frozen / 0 fitted). '' when there are none.
+function fitFreezeShareParam() {
+  return Object.values(fitPanelFreeze()).flatMap(choices => Object.entries(choices).map(([id, frozen]) => id + ':' + (frozen ? 1 : 0))).join(',');
+}
+// A link's choices replace this page's until it is reloaded without the link; like a link's
+// strategies, they are stored only once the reader changes one (setFitFreezeChoices).
+function restoreFitFreezeFromShare(text) {
+  const panelOf = new Map(Object.keys(FIT_PANELS).flatMap(kind => window.previewFit.settings(kind).map(s => [s.id, 'panel:' + kind])));
+  const all = {};
+  text.split(',').forEach((part) => {
+    const at = part.lastIndexOf(':'), id = part.slice(0, at), mark = part.slice(at + 1), key = panelOf.get(id);
+    if (!key || (mark !== '0' && mark !== '1')) return;   // a setting or a mark this version does not know: left out
+    (all[key] = all[key] || {})[id] = mark === '1';
+  });
+  _fitPanelFreeze = all;
+}
 
 // Sandbox workers sharing a job queue; run() resolves with the worker's
 // message, or null when the run failed, timed out or the pool was closed.
@@ -3674,9 +3799,10 @@ function fitNoHurdle(key, fund) {
 async function runCustomFit(cfgId, goal, round) {
   const cfg = savedConfigs.find(c => c.id === cfgId), ctx = window._customCtx;
   if (_fit || !cfg || !cfg.code || !ctx) return;
-  const schema = getCustomSchema(cfg);
-  const params = schema.filter(sp => sp && sp.id != null && sp.fit !== false && customParamOptions(sp).length > 1);
-  if (!params.length) return;
+  const schema = getCustomSchema(cfg), free = fitFreeIds(cfgId);
+  if (free === null) return;
+  if (!free.size) { fitNothingFree(cfgId); return; }
+  const params = schema.filter(sp => sp && sp.id != null && free.has(sp.id));
   let hurdle = null;
   if (goal === 'dd') {
     const h = fitHurdle(cfg);
@@ -3713,12 +3839,14 @@ const FIT_YIELD_MS = 25;
 // runs go one at a time with a pause every FIT_YIELD_MS for the progress and
 // Stop. Which selects it may change, their names and one run's result come
 // from js/preview-dropdown.js (window.previewFit), which owns those engines'
-// option previews.
+// option previews; which of them are frozen is the user's choice (fitFreeIds).
 async function runNativeFit(type, goal, round) {
   const pf = window.previewFit, key = 'panel:' + type;
   if (_fit || !FIT_PANELS[type] || !pf) return;
-  const selects = pf.selects(type).map(id => document.getElementById(id)).filter(el => el && !el.disabled && el.options.length > 1);
-  if (!selects.length) return;
+  const free = fitFreeIds(key);
+  if (free === null) return;
+  if (!free.size) { fitNothingFree(key); return; }
+  const selects = Array.from(free, id => document.getElementById(id));
   let hurdle = null;
   if (goal === 'dd') {
     const fund = document.getElementById(FIT_PANELS[type].fund).value, finals = window.previewBhFinals();
@@ -3788,7 +3916,7 @@ function fitNoteText(goal, round, cagrOf, start, best, hurdle, nChanged) {
 // The Fit button beside "Reset to default"; a running search shows its progress and stops on click.
 function buildFitButtonHtml(key) {
   const running = _fit && _fit.key === key;
-  const tip = "Searches the settings for the best result on the chart's current period and money, and sets them. Costs, cash interest and how trades execute stay as they are.";
+  const tip = "Searches the settings for the best result on the chart's current period and money, and sets them. Frozen settings stay as they are: costs, cash interest and how trades execute, unless chosen otherwise under Freeze in the menu.";
   return `<span class="settings-fit-wrap"><button type="button" class="settings-reset-btn settings-fit-btn${running ? ' running' : ''}" data-fit-key="${_escHtml(key)}"${_fit && !running ? ' disabled' : ''}${running ? ` title="${_escHtml(fitStepText(_fit))}" style="--fit-pct:${fitPercent(_fit)}%"` : ''}>${running ? _escHtml(fitProgressText(_fit)) : 'Fit ▾'}</button>`
     + `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span></span>`;
 }
@@ -3796,14 +3924,85 @@ function openFitMenu(btn, key) {
   closeFitMenu();
   const menu = document.createElement('div');
   menu.className = 'pdrop-popup fit-menu';
-  // Each goal, then the same goal on round values.
+  // Each goal, then the same goal on round values, by name alone (the user, 2026-11-23: "remove
+  // description texts"; what a goal does shows on hover); under them, the settings Fit leaves alone.
   menu.innerHTML = Object.keys(FIT_GOALS).flatMap(k => [false, true].map(round =>
-    `<div class="fit-menu-item" data-fit-goal="${k}"${round ? ' data-fit-round' : ''}><b>${_escHtml(fitGoalLabel(k, round))}</b><span>${_escHtml(round ? FIT_ROUND.tip : FIT_GOALS[k].tip)}</span></div>`)).join('');
+    `<div class="fit-menu-item" data-fit-goal="${k}"${round ? ' data-fit-round' : ''} title="${_escHtml(round ? FIT_ROUND.tip : FIT_GOALS[k].tip)}"><b>${_escHtml(fitGoalLabel(k, round))}</b></div>`)).join('')
+    + buildFitFreezeHtml(key, false);
   document.body.appendChild(menu);
   positionCpPopup(menu, btn);
-  menu.style.maxHeight = '';
+  fitMenuToWindow(menu);
   _fitMenu = { menu, btn, key };
+  // A tick freezes its setting, an empty box lets Fit change it.
+  menu.addEventListener('change', (e) => {
+    const box = e.target.closest('[data-fit-freeze-id]');
+    if (!box) return;
+    const settings = fitSettings(key), setting = settings.find(s => s.id === box.getAttribute('data-fit-freeze-id'));
+    setFitFrozen(key, setting, box.checked);
+    const changed = fitFreezeChanged(settings, fitFreezeChoices(key));
+    menu.querySelector('.fit-freeze-notice').textContent = fitFreezeNotice(changed);
+    menu.querySelector('[data-fit-freeze-reset]').disabled = !changed;
+  });
   document.addEventListener('keydown', _fitMenuKey, true);
+}
+// The "Freeze" part of the Fit menu: a head that opens it, then the strategy as its Settings read,
+// in small text, with a tick box on each value (ticked = frozen), and a way back to the usual ones.
+// The user (2026-11-23): "remove these additional texts, just say freeze" (no count, no tip line);
+// and, on a list of setting names: "not clearly mappable to strategy. So display the full strategy in
+// small text, the value in it, but checkbox over the value"; and "if non default values are chosen,
+// have a notice on the right side of Freeze button" ("2 changed").
+function buildFitFreezeHtml(key, open) {
+  const settings = fitSettings(key), choices = fitFreezeChoices(key);
+  if (!settings.length) return '';
+  const byId = new Map(settings.map(s => [s.id, s]));
+  // A value Fit can change carries the box; one with a single choice, or of a greyed-out dropdown, is plain.
+  const value = (slot) => {
+    const setting = byId.get(slot.id);
+    if (!setting) return `<b>${_escHtml(slot.value)}</b>`;
+    return `<label class="fit-freeze-value"><input type="checkbox" data-fit-freeze-id="${_escHtml(slot.id)}"${fitFrozen(choices, setting) ? ' checked' : ''}><span>${_escHtml(slot.value)}</span></label>`;
+  };
+  // A sentence's pieces in a row. Text that touches a value ("RSI(" before it; "-day", "'s", a comma
+  // or a full stop after it) is written with the value, so a line never breaks between the two.
+  const sentence = (parts) => {
+    const isSlot = (part) => part != null && typeof part !== 'string';
+    const pieces = parts.map((part, i) => {
+      if (isSlot(part)) return part;
+      const text = part.replace(/\s+/g, ' ');
+      const head = isSlot(parts[i - 1]) ? text.match(/^\S*/)[0] : '', rest = text.slice(head.length);
+      const tail = isSlot(parts[i + 1]) ? rest.match(/\S*$/)[0] : '';
+      return { head, body: rest.slice(0, rest.length - tail.length), tail };
+    });
+    return pieces.map((piece, i) => {
+      if (!isSlot(parts[i])) return _escHtml(piece.body);
+      const before = isSlot(parts[i - 1]) || i === 0 ? '' : pieces[i - 1].tail, after = isSlot(parts[i + 1]) || i === parts.length - 1 ? '' : pieces[i + 1].head;
+      return `<span class="fit-freeze-glued">${_escHtml(before)}${value(piece)}${_escHtml(after)}</span>`;
+    }).join('');
+  };
+  const rows = fitFreezeLines(key).map((line) => {
+    if (line.heading != null) return `<div class="fit-freeze-section">${_escHtml(line.heading)}</div>`;
+    const tag = line.block ? 'div' : 'span';
+    return `<${tag} class="fit-freeze-line">${sentence(line.parts)}</${tag}>`;
+  }).join(' ');
+  const changed = fitFreezeChanged(settings, choices);
+  return `<div class="fit-freeze"><button type="button" class="fit-freeze-head" data-fit-freeze-toggle aria-expanded="${open}"><span class="fit-freeze-arrow">${open ? '▾' : '▸'}</span><b>Freeze</b><span class="fit-freeze-notice">${fitFreezeNotice(changed)}</span></button>`
+    + `<div class="fit-freeze-body"${open ? '' : ' hidden'}>${rows}`
+    + `<button type="button" class="fit-freeze-reset" data-fit-freeze-reset${changed ? '' : ' disabled'}>Reset</button></div></div>`;
+}
+// Keeps the menu inside the window: it takes at most the room the window has on its side of the
+// button and scrolls inside that (the goals alone fit most windows; the open Freeze list can be long).
+const FIT_MENU_EDGE_GAP = 8;      // px kept between the menu and the window's edge
+const FIT_MENU_MIN_HEIGHT = 180;  // px the menu keeps however little room there is
+function fitMenuToWindow(menu) {
+  // The menu hangs under the button from its top edge, or stands on it from its bottom edge (positionCpPopup).
+  const box = menu.getBoundingClientRect(), room = menu.style.bottom === '' ? window.innerHeight - box.top : box.bottom;
+  menu.style.maxHeight = Math.max(FIT_MENU_MIN_HEIGHT, room - FIT_MENU_EDGE_GAP) + 'px';
+}
+// Opens or closes the Freeze list, or draws it again after a reset (open: true).
+function showFitFreeze(open) {
+  const { menu, key } = _fitMenu, scrolled = menu.scrollTop;
+  menu.querySelector('.fit-freeze').outerHTML = buildFitFreezeHtml(key, open);
+  fitMenuToWindow(menu);
+  menu.scrollTop = scrolled;
 }
 function closeFitMenu() {
   if (!_fitMenu) return;
@@ -4357,6 +4556,10 @@ document.addEventListener('click', (e) => {
   // Fit: the button opens the goal menu, or stops a running search; a menu item starts one.
   const fitGoal = e.target.closest('[data-fit-goal]');
   if (fitGoal && _fitMenu) { const key = _fitMenu.key; closeFitMenu(); runFit(key, fitGoal.getAttribute('data-fit-goal'), fitGoal.hasAttribute('data-fit-round')); return; }
+  // The menu's "Freeze": its head opens and closes the list, Reset goes back to the usual ones.
+  const freezeHead = e.target.closest('[data-fit-freeze-toggle]');
+  if (freezeHead && _fitMenu) { showFitFreeze(freezeHead.getAttribute('aria-expanded') !== 'true'); return; }
+  if (e.target.closest('[data-fit-freeze-reset]') && _fitMenu) { setFitFreezeChoices(_fitMenu.key, {}); showFitFreeze(true); return; }
   const fitBtn = e.target.closest('[data-fit-key]');
   if (fitBtn) {
     if (_fit && _fit.key === fitBtn.getAttribute('data-fit-key')) { _fit.stopped = true; _fit.close(); return; }

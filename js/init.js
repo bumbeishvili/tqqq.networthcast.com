@@ -330,6 +330,9 @@
       } catch (e) {}
     }
   }
+  // Fit's frozen settings of the 9sig and SMA panels (`fz`, written by shareConfig in js/controls.js).
+  const fz = params.get('fz');
+  if (fz && typeof restoreFitFreezeFromShare === 'function') restoreFitFreezeFromShare(fz);
   // Resolve any cfg:<index> analytics selection (see the asRaw/abRaw comment
   // above) now that _sharedCfgArr — the same array those indices point
   // into — and the freshly-imported savedConfigs both exist.
