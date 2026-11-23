@@ -988,7 +988,8 @@ const _miniLineY = (data, s, v) => _miniPanelY(data.panels[s.panel], v);
 // reading and the levels that move with the day. A level that never moves
 // (`fixed`) is left out: its value is on the chart's own label. `day` is
 // { t, d }: its time and its date as logged. `cy` is the cursor's height: the listed line nearest it, within the panel it is over,
-// is bold; null for a readout under hovered trades, where no line is.
+// is bold, over a trade's mark as over a plain day (the user, 2026-11-23: "make sure relevant tooltip row is bolded like when
+// hovering same place non event"); null for the readout under a band's trades, read from the strip above the plot, where no line is.
 function _miniDayReadout(data, day, cy) {
   const cx = _miniXAt(data, day.t).toFixed(1);
   const hits = data.series.map(s => ({ ...s, pt: _miniPtAt(s.pts, day.t), reading: s === data.series.find(o => o.panel === s.panel) })).filter(h => h.pt);
@@ -1406,7 +1407,7 @@ document.addEventListener('mousemove', (e) => {
   // A trade mark under the cursor: its trade, then the readout of the trade's day.
   const mark = drag ? null : _miniMarkAt(svg, e, data);
   if (mark) {
-    const day = _miniDayReadout(data, _miniTradesDay(svg, e, data, [mark.item]), null);
+    const day = _miniDayReadout(data, _miniTradesDay(svg, e, data, [mark.item]), _miniCursorY(svg, e, data));
     g.innerHTML = day.marks + `<circle cx="${mark.x.toFixed(2)}" cy="${mark.y.toFixed(2)}" r="${(mark.r + 2.5 / data.k).toFixed(2)}" fill="none" stroke="${mark.item.color}" stroke-width="${(1 / data.k).toFixed(2)}"/>`;
     tip.innerHTML = _miniEventRows({ items: [mark.item] }) + day.html;
     _miniPlaceTip(tip, e);
