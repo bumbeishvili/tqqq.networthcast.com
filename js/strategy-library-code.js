@@ -4721,7 +4721,8 @@ CODE[71] = withFitLeaving(withDefaults(withoutSoxlPile(CODE[53], { name: STEADY_
 // worst single one 27% (9 November 2022). Other days: Thursday alone 211.6%, Friday alone 213.3%,
 // Wednesday to Monday 223.1%, Monday to Wednesday 192.3%; GLD in SQQQ's place 192.6%. With the
 // rule off Fit is, day for day, what it was (scratchpad latebuild/verify.cjs).
-// Steady fit (#71) is built from Fit before this is added and does not take it.
+// Steady fit (#71) is built from Fit before this is added and takes the rule by a call of its
+// own below (the user, the same day, asked whether Steady fit had it: "the word").
 const LATE_WEEK_FUNDS = ["sqqq", "tqqq", "qqq", "gld", "spy", "qld", "sso", "spxl", "soxl", "soxx"];
 const LATE_WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 function withLateWeekCash(base, spec) {
@@ -4805,6 +4806,14 @@ function withLateWeekCash(base, spec) {
 }
 CODE[53] = withLateWeekCash(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", fund: "sqqq", outDay: 3, backDay: 5,
   tip: "Trades the rules' idle cash late in the week. Since 2010 that was 161 trades, 56% of them up, 1.5% each on average; about half of the gain came in 2022." });
+// Steady fit with it, Q1 2010 to Q4 2025: 155.6% a year to 175.5% with the same 39.3% drawdown
+// (2010-17 91.1% to 94.7%, 2018-25 241.6% to 289.7%), 2026 the same. It is less steady with it:
+// the worst 12 months go from -4.0% to -35.1% (May 2014 to May 2015), and 2015 and 2021 make 8%
+// each where they made 34% and 73%. 254 trades, 48% of them up, 0.8% each on average (Steady
+// fit sits in cash more than Fit: 2014 has 41 trades, 2021 39). Better in 8 of 17 years, worse
+// in 5. Its tip and its card say so.
+CODE[71] = withLateWeekCash(CODE[71], { name: STEADY_FIT, fund: "sqqq", outDay: 3, backDay: 5,
+  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 254 trades, 48% of them up, 0.8% each on average. It adds 20 points a year and takes the worst 12 months from -4% to -35%." });
 
 // ===== #55 Seasonal TQQQ, #56 Donchian breakout + ATR stop (the user, 2026-11-09:
 // "let's include 2x4", from a search for leveraged-fund strategies the library
