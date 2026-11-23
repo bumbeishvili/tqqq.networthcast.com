@@ -120,6 +120,8 @@
   .daily-grid{stroke:var(--border);stroke-dasharray:2 3}
   .daily-pct,.daily-date{font-family:var(--mono);font-size:10px;fill:var(--muted)}
   .daily-pct{text-anchor:end;dominant-baseline:middle}
+  .daily-price{fill:none;stroke:var(--accent);stroke-width:1.3;stroke-opacity:.6;stroke-linejoin:round}   /* the fund's price, behind the bars */
+  .daily-price-tick{font-family:var(--mono);font-size:10px;fill:var(--accent);dominant-baseline:middle}   /* its scale, at the plot's right, in the line's colour */
   .daily-bar{fill:var(--faint);fill-opacity:.8}
   .daily-bar.up{fill:var(--green)} .daily-bar.down{fill:var(--red)}
   /* Not a close yet (today so far, or a pre-market or after-hours print): hollow. */
@@ -1410,11 +1412,11 @@ function buildDailyBars(allDays, view, shownDays, extended) {
   const to = Math.min(total + (extended ? 1 : 0), Math.ceil(view.first + days - DAILY_VIEW_SLACK));
   const dayBar = (at) => {
     const day = allDays[at], iso = fmtIsoDay(day.date);
-    return { ...closeBar(day.closeVsPrevPct), id: day.id, date: day.date, at, shown: shown.has(day.id), today: iso === today, unclosed: iso === live, note: iso === live ? 'so far' : null };
+    return { ...closeBar(day.closeVsPrevPct), id: day.id, date: day.date, at, price: day.close, shown: shown.has(day.id), today: iso === today, unclosed: iso === live, note: iso === live ? 'so far' : null };
   };
   const printBar = () => {
     const iso = marketDateOf(new Date(extended.time));
-    return { ...closeBar(extended.changePct), id: 'extended', date: parseIsoDay(iso), at: total, shown: true, today: iso === today, unclosed: true, note: EXTENDED_SESSION_NAMES[extended.session] };
+    return { ...closeBar(extended.changePct), id: 'extended', date: parseIsoDay(iso), at: total, price: extended.price, shown: true, today: iso === today, unclosed: true, note: EXTENDED_SESSION_NAMES[extended.session] };
   };
   return {
     view: { first: view.first, days },
@@ -1429,6 +1431,8 @@ function buildDailyBars(allDays, view, shownDays, extended) {
 // day (a zoom or a slide under way): the bands and the bars are clipped to
 // the plot.
 const DAILY_PCT_TICKS = 4;               // about this many % ticks
+const DAILY_PRICE_TICKS = 4;             // and about this many $ ticks, at the plot's right
+const fmtDailyPrice = d3.format('$,~f'); // a $ tick: "$60", "$1,250", "$12.5"
 // The % scale is fixed, so a bar's height means the same whatever the period
 // and through a zoom (the user, 2026-11-23: "let's keep 30% above and 20%
 // bellow fixed scale and allow bars to go above it, even if it goes outside of
@@ -1500,7 +1504,7 @@ class DailyChangeChart extends ChartBase {
       svgHeight: UNDER_CHART_HEIGHT,
       marginTop: 16,            // the hovered day's date and change
       marginBottom: 18,         // the dates
-      marginRight: 8,
+      marginRight: 40,          // the $ ticks
       marginLeft: 40,           // the % ticks
       container: 'body',
       defaultFont: 'inherit',
@@ -1535,14 +1539,17 @@ class DailyChangeChart extends ChartBase {
   drawPlot() {
     this.drawScales();
     this.drawWeekBands();
+    this.drawPrice();
     this.drawAxes();
     this.drawBars();
     this.drawHover();
   }
 
   drawScales() {
-    const { chart, id, domain, view, chartWidth, chartHeight, marginTop, marginBottom, pointerX, pan } = this.getState();
+    const { chart, id, data, domain, view, chartWidth, chartHeight, marginTop, marginBottom, pointerX, pan } = this.getState();
     const y = d3.scaleLinear().domain(domain).range([chartHeight, 0]);   // not clamped: a bar past the scale runs out of the plot
+    // The price's own scale, over the plot's whole height: the prices of the days on the plot, out to round values.
+    const price = d3.scaleLinear().domain(d3.extent(data, d => d.price)).nice(DAILY_PRICE_TICKS).range([chartHeight, 0]);
     const slot = chartWidth / view.days;                    // px a day takes along the plot
     const left = at => (at - view.first) * slot;            // the left edge of a day's slot, in days of equal width
     const mid = at => left(at) + slot / 2;                  // and its middle
@@ -1561,14 +1568,14 @@ class DailyChangeChart extends ChartBase {
     chart._add('clipPath.daily-clip').attr('id', clip)._add('rect.daily-clip-box').attr('width', chartWidth).attr('height', chartHeight);
     chart._add('clipPath.daily-bars-clip').attr('id', barsClip)._add('rect.daily-bars-clip-box')
       .attr('width', chartWidth).attr('y', -marginTop - DAILY_HEAD_ROOM).attr('height', DAILY_HEAD_ROOM + marginTop + chartHeight + marginBottom);
-    this.setState({ y, slot, left, mid, lensed, span, center, clip: `url(#${clip})`, barsClip: `url(#${barsClip})` });
+    this.setState({ y, price, slot, left, mid, lensed, span, center, clip: `url(#${clip})`, barsClip: `url(#${barsClip})` });
   }
 
   // Every other calendar week stands on a grey band, from its first day's
   // slot to its last, so the eye finds where one week ends and the next
   // starts (the user, 2026-11-23: "strip color weekly so it's clear week
-  // change"). The bands, the axes and the bars each have a group of their
-  // own, made in this order on the first render: a week, a tick or a day that
+  // change"). The bands, the price, the axes and the bars each have a group of
+  // their own, made in this order on the first render: a week, a tick or a day that
   // comes into a later render lands in its own layer, under the hover overlay.
   drawWeekBands() {
     const { chart, data, chartHeight, span, clip } = this.getState();
@@ -1579,14 +1586,29 @@ class DailyChangeChart extends ChartBase {
       .attr('x', week => week.x).attr('width', week => week.width).attr('y', 0).attr('height', chartHeight);
   }
 
+  // The fund's price behind the bars (the user, 2026-11-23: "add a right axis
+  // chart, that will show currently chosen ticker chart behind those bars"):
+  // a line through each day's close at the middle of the day's slot as drawn,
+  // the price so far on a day still open and the print's own outside the
+  // session, read on the $ ticks at the plot's right (drawAxes). Its scale
+  // takes in the days on the plot, so it refits as the period moves; the
+  // bars' own scale does not.
+  drawPrice() {
+    const { chart, data, center, price, clip } = this.getState();
+    const line = d3.line().x(d => center(d.at)).y(d => price(d.price));
+    chart._add('g.daily-prices').attr('clip-path', clip)._add('path.daily-price').attr('d', line(data));
+  }
+
   drawAxes() {
-    const { chart, data, chartWidth, chartHeight, y, mid, center } = this.getState();
+    const { chart, data, chartWidth, chartHeight, y, price, mid, center } = this.getState();
     const axes = chart._add('g.daily-axes');
     const pctTicks = y.ticks(DAILY_PCT_TICKS).map(value => ({ id: `pct${value}`, value }));
     axes._add('line.daily-grid', pctTicks.filter(tick => tick.value !== 0))
       .attr('x1', 0).attr('x2', chartWidth).attr('y1', tick => y(tick.value)).attr('y2', tick => y(tick.value));
     axes._add('line.daily-zero').attr('x1', 0).attr('x2', chartWidth).attr('y1', y(0)).attr('y2', y(0));
     axes._add('text.daily-pct', pctTicks).attr('x', -6).attr('y', tick => y(tick.value)).text(tick => fmtAxisPct(tick.value));
+    const priceTicks = price.ticks(DAILY_PRICE_TICKS).map(value => ({ id: `price${value}`, value }));
+    axes._add('text.daily-price-tick', priceTicks).attr('x', chartWidth + 6).attr('y', tick => price(tick.value)).text(tick => fmtDailyPrice(tick.value));
 
     // The dates. At the plot's bottom corners, always, the first and the last
     // day on it by their actual dates, the last as "today" when it is (the
