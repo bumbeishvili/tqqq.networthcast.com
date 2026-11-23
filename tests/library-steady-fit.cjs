@@ -1,11 +1,13 @@
 /*
  * Library strategy #71, "SOXL, TQQQ, QQQ - steady fit": #53 (the 1983 fit) with a
- * ceiling of 100%, SOXL sold at a lead over 10%, no SOXL pile, and eleven settings
+ * ceiling of 100%, SOXL sold at a lead over 10%, no SOXL pile, no late-week SQQQ
+ * trade, and eleven settings
  * the Fit button leaves alone (the #71 section of js/strategy-library-code.js).
  * Pure Node — no browser/server. Checks, on the repo's own price history:
- *   1. its settings are #53's less the pile's three, with two defaults changed and
+ *   1. its settings are #53's less the pile's three and the late-week trade's
+ *      three, with two defaults changed and
  *      eleven marked fit: false, each saying so in its tip;
- *   2. it trades as #53 does with the same three changes made by hand, row for
+ *   2. it trades as #53 does with the same changes made by hand, row for
  *      row, with a lump sum and with contributions and a withdrawal, both with
  *      the sell level both ship with and with the turn sell chosen;
  *   3. nothing of the pile is left: no column, no row value, no note, no card.
@@ -24,6 +26,7 @@ const ck = (name, ok, detail) => {
 const FIT = 53, STEADY = 71;
 const CEILING = 100, SOXL_EXIT = 10;   // #71's two changed defaults
 const PILE_IDS = ['soxlPile', 'pileHandover', 'pileFloor'];
+const LATE_IDS = ['lateFund', 'lateOutDay', 'lateBackDay'];   // #53's late-week SQQQ trade, added after #71 is built from it
 const LEFT_ALONE = ['topLead', 'backLead', 'bearUnder', 'bearSlope', 'bearCloses', 'sqqqMaxDays', 'nfciVeto', 'soxlSell', 'soxlLeadExit', 'soxlTrail', 'soxlTrailFrom'];
 const START = data.dates.findIndex(d => d >= '2010-01-04'), END = data.dates.findIndex(d => d > '2025-12-31') - 1;
 const run = (n, settings, contributions) => { const strategy = strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions, startIdx: START, endIdx: END, dailyDisplay: true }); };
@@ -33,7 +36,8 @@ const fit = strategyOf(FIT), steady = strategyOf(STEADY);
 // ---- 1. The settings ----
 {
   const fitIds = settingsOf(fit).map(param => param.id), ids = settingsOf(steady).map(param => param.id);
-  ck('its settings are #53\'s less the pile\'s three, in the same order', ids.join() === fitIds.filter(id => !PILE_IDS.includes(id)).join(), ids.join());
+  ck('its settings are #53\'s less the pile\'s three and the late-week trade\'s three, in the same order', ids.join() === fitIds.filter(id => !PILE_IDS.includes(id) && !LATE_IDS.includes(id)).join(), ids.join());
+  ck('#53 has the late-week settings, and it has no late-week section', LATE_IDS.every(id => fitIds.includes(id)) && !steady.params.some(param => /Late-week/.test(param.section || '')));
   ck('it has no contributions section', !steady.params.some(param => /Contributions/.test(param.section || '')));
   const fitDefaults = defaultsOf(fit), defaults = defaultsOf(steady);
   const moved = ids.filter(id => JSON.stringify(defaults[id]) !== JSON.stringify(fitDefaults[id]));
@@ -50,7 +54,7 @@ const fit = strategyOf(FIT), steady = strategyOf(STEADY);
 
 // ---- 2. The same trades as #53 with the changes made by hand ----
 {
-  const BY_HAND = { topLead: CEILING, soxlLeadExit: SOXL_EXIT, soxlPile: false };
+  const BY_HAND = { topLead: CEILING, soxlLeadExit: SOXL_EXIT, soxlPile: false, lateFund: 'off' };
   // $4K at each month's first trading day and one withdrawal, so contributions and a sale to cover both happen.
   const monthly = Object.fromEntries(data.dates.slice(START + 1, END + 1).filter((date, k, all) => k === 0 || all[k - 1].slice(0, 7) !== date.slice(0, 7)).map(date => [date, 4000]));
   const withMoney = { ...monthly, '2020-06-15': -50000 };

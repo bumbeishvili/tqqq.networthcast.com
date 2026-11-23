@@ -4694,6 +4694,118 @@ function withFitLeaving(base, spec) {
 CODE[71] = withFitLeaving(withDefaults(withoutSoxlPile(CODE[53], { name: STEADY_FIT }), { name: STEADY_FIT, defaults: { topLead: 100, soxlLeadExit: 10 } }),
   { name: STEADY_FIT, ids: ["topLead", "backLead", "bearUnder", "bearSlope", "bearCloses", "sqqqMaxDays", "nfciVeto", "soxlSell", "soxlLeadExit", "soxlTrail", "soxlTrailFrom"] });
 
+// ===== #53: SQQQ late in the week, out of the idle cash (the user, 2026-11-23, on the row "SQQQ
+// Thu+Fri out of Fit's idle cash, on top of Monday" of that day's study: "let's do this").
+// The study (scratchpad latefit/) laid the Short strat's
+// late-week routine (#72) over the strategies that carry Turnaround Monday. Swapping TQQQ for SQQQ
+// on their TQQQ days paid only at that routine's fitted settings. What paid at every setting was
+// the short leg alone in the strategy's idle cash: SQQQ bought at Wednesday's close and sold at
+// Friday's while the rules sit in cash. A down-trend rule on top added nothing (all 72 ways of
+// reading the trend were ahead of Fit in both halves, none ahead of taking every week): the
+// weeks Fit sits in cash are the falling market the trade wants. In Bare Turnaround Monday's
+// cash, which is cash in any market, the same trade loses.
+//   - While the rules hold cash, the fund is held over the sessions after the first weekday's
+//     through the second's (Thursday and Friday). It is bought at the close before the first of
+//     them if the account sat in cash at the close before that as well: a fund sold that day
+//     leaves the money in cash for a close, as on any switch.
+//   - It is sold at the close of the last of those sessions, or as soon as the rules want
+//     anything else; a fund they want is then bought a close later, as on any switch.
+//   - A week short of a day keeps the sessions it has. Past the data's last row the market
+//     calendar says which day comes next.
+// It runs on the holding every other rule settled on, Big days included, so it only ever takes
+// cash that nothing else wants. Its trades are marked on the price panel.
+// Lump sum, Q1 2010 to Q4 2025: 196.8% a year to 229.9% with the same 51.9% drawdown (2010-17
+// 107.4% to 114.6%, 2018-25 324.5% to 406.8%); 2026 to 20 November the same either way, the rules
+// having sat in cash on 12 days. 161 trades, 56% of them up, 1.5% each on average: 36 in 2022
+// made 162% together (about half of the whole gain), 25 in 2011 43%, 18 in 2018 44%; the 46 of 2015 lost 17% together, the
+// worst single one 27% (9 November 2022). Other days: Thursday alone 211.6%, Friday alone 213.3%,
+// Wednesday to Monday 223.1%, Monday to Wednesday 192.3%; GLD in SQQQ's place 192.6%. With the
+// rule off Fit is, day for day, what it was (scratchpad latebuild/verify.cjs).
+// Steady fit (#71) is built from Fit before this is added and does not take it.
+const LATE_WEEK_FUNDS = ["sqqq", "tqqq", "qqq", "gld", "spy", "qld", "sso", "spxl", "soxl", "soxx"];
+const LATE_WEEK_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
+function withLateWeekCash(base, spec) {
+  const what = (part) => `withLateWeekCash(${spec.name}): ${part}`;
+  const days = JSON.stringify(LATE_WEEK_DAYS.map((label, k) => ({ value: k + 1, label })));
+  const params = `    { section: "Late-week SQQQ", tip: "${spec.tip}" },
+    { id: "lateFund", label: "Held late in the week", tip: "What the idle cash buys for those days. Nothing turns the rule off.", text: "In cash, hold {}", off: "off", default: "${spec.fund}", options:
+      ${JSON.stringify([{ value: "off", label: "nothing" }].concat(LATE_WEEK_FUNDS.map(fund => ({ value: fund, label: fund.toUpperCase() }))))} },
+    { id: "lateOutDay", label: "Late-week buy at", tip: "The weekday whose close buys it, when the account sat in cash at the close before as well.", text: "from a {} close", default: ${spec.outDay}, when: { lateFund: ${JSON.stringify(LATE_WEEK_FUNDS)} }, options:
+      ${days} },
+    { id: "lateBackDay", label: "Late-week sale at", tip: "The weekday whose close sells it. The same day as the first leaves no trade.", text: "to a {} close.", default: ${spec.backDay}, when: { lateFund: ${JSON.stringify(LATE_WEEK_FUNDS)} }, options:
+      ${days} },
+`;
+  const top = `    // Late-week SQQQ (the Late-week SQQQ settings): while the rules hold cash, the fund is held
+    // over the sessions after the first weekday's through the second's. Its settings and its
+    // calendar, here at the top of run for the dashboard at its end.
+    const lateFund = p.lateFund == null ? "${spec.fund}" : String(p.lateFund), LATE_NAME = lateFund.toUpperCase();
+    const LATE_ON = lateFund !== "off";
+    if (LATE_ON && !data[lateFund]) throw new Error("No prices for " + LATE_NAME + " (data." + lateFund + ")");
+    const LATE_DAYS = ${JSON.stringify(LATE_WEEK_DAYS)};
+    const lateOutDay = Math.round(+p.lateOutDay) || ${spec.outDay}, lateBackDay = Math.round(+p.lateBackDay) || ${spec.backDay};
+    if (LATE_ON && (!LATE_DAYS[lateOutDay - 1] || !LATE_DAYS[lateBackDay - 1])) throw new Error("The late-week days must be 1 (Monday) to 5 (Friday), not " + p.lateOutDay + " and " + p.lateBackDay);
+    const LATE_OUT = LATE_DAYS[lateOutDay - 1], LATE_BACK = LATE_DAYS[lateBackDay - 1];
+    const lateSpan = (lateBackDay - lateOutDay + 5) % 5;   // the sessions the fund is held over; none with the same day twice
+    const lateWeekdayOf = (ymd) => ((Math.floor(Date.parse(ymd) / 86400000) + 4) % 7 + 7) % 7;   // 1 = Monday (1970-01-01 was a Thursday)
+    // The date of the session after row i: the data's next row, or past its last row the next market day by the calendar.
+    const lateNextDate = (i) => {
+      if (i + 1 < data.dates.length) return data.dates[i + 1];
+      const d = new Date(data.dates[i] + "T00:00:00Z"); let ymd = data.dates[i];
+      do { d.setUTCDate(d.getUTCDate() + 1); ymd = d.toISOString().slice(0, 10); } while (!usMarketDay(ymd));
+      return ymd;
+    };
+    // Is the session after close i one the fund is held over: a weekday after the first day's, up to the second's.
+    const lateLeg = (i) => { const after = (lateWeekdayOf(lateNextDate(i)) - lateOutDay + 5) % 5; return after >= 1 && after <= lateSpan; };
+`;
+  const setup = `    // Late-week SQQQ at this close: read from the dates and the account's own holding. lateWeek
+    // runs last, on what every other rule settled on.
+    let lateOn = false, lateSince = "", lateWhy = "", lateOut = false;   // lateOn: the rule holds its fund from this close; lateWhy: its reason for a trade at this close; lateOut: its trade ended with the rules still in cash
+    const lateWeek = (i, want) => {
+      const was = lateOn;
+      lateWhy = ""; lateOut = false;
+      // It starts from cash the account already sat in (held is the holding going into this close), and goes on while the rules still want cash.
+      lateOn = LATE_ON && want === "cash" && lateLeg(i) && (was || held === "cash") && priceOf(lateFund, i) > 0;
+      if (lateOn) {
+        if (!was) { lateSince = dates[i]; lateWhy = "Late-week " + LATE_NAME + ": the rules hold cash; sold at " + LATE_BACK + "'s close"; }
+        return lateFund;
+      }
+      if (was && want === "cash") { lateOut = true; lateWhy = "Late-week " + LATE_NAME + " exit, " + LATE_DAYS[lateWeekdayOf(dates[i]) - 1] + "'s close"; }
+      return want;
+    };
+    // Its trades are marked on the price panel; another rule's (t) in its own.
+    const latePanel = (t) => (lateWhy ? PRICE : t);
+`;
+  const dashboard = `    // Late-week SQQQ on the dashboard: its card, and today's call while its trade is open.
+    if (res.signals && LATE_ON && lateSpan > 0) {
+      const row = res.log[res.log.length - 1] || {}, inTrade = !!row.lateTrade;
+      res.signals.cards = (res.signals.cards || []).concat([{ label: "Late-week " + LATE_NAME, icon: "clock", tone: inTrade ? "good" : "",
+        value: inTrade ? "In a trade" : "Waiting",
+        sub: inTrade ? LATE_NAME + " since " + row.lateTrade + ", sold at " + LATE_BACK + "'s close" : "buys at " + LATE_OUT + "'s close while the rules sit in cash",
+        tip: "Trades the idle cash late in the week: while the rules hold cash, " + LATE_NAME + " is bought at " + LATE_OUT + "'s close and sold at " + LATE_BACK + "'s." }]);
+      if (inTrade && res.signals.decision) {
+        const d = res.signals.decision;
+        res.signals.decision = { action: "Hold " + LATE_NAME, note: "Late-week trade since " + row.lateTrade + ", sold at " + LATE_BACK + "'s close; the rules themselves are in cash", tone: "good",
+          reasons: (d.reasons || []).concat([{ name: "Late-week " + LATE_NAME, val: "open since " + row.lateTrade, tag: "in · " + LATE_NAME, lean: "buy" }]) };
+      }
+    }
+`;
+  let t = replacedOnce(base, '    { section: "Execution & costs" },\n', params + '    { section: "Execution & costs" },\n', what('the costs section'));
+  t = replacedOnce(t, '  columns: [\n', '  columns: [\n    { key: "lateTrade", label: "Late-week trade", tip: "The day the open late-week trade was bought, while the rule holds its fund. Blank otherwise." },\n', what('the columns list'));
+  t = replacedOnce(t, '  run(data, p) {\n', '  run(data, p) {\n' + top, what('the run method'));
+  t = replacedOnce(t, '    for (let i = p.startIdx; i <= p.endIdx; i++) {', setup + '    for (let i = p.startIdx; i <= p.endIdx; i++) {', what('the main loop'));
+  t = replacedOnce(t, '      want = bigDay(i, want);\n', '      want = bigDay(i, want);\n      want = lateWeek(i, want);\n', what('the holding decision'));
+  t = replacedOnce(t, '      const trigger = dipPanel(bigPanel(i, soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i))));\n', '      const trigger = latePanel(dipPanel(bigPanel(i, soxlSwitch ? SOXL_PANEL : tmPanel(triggerAt(i)))));\n', what('the trade panel'));
+  // A trade's reason: the late-week rule's on its buy; on its exit its own, then why the rules hold cash; else as before.
+  t = replacedOnce(t, '    const reason = (i, w) => bigWhy ? bigWhy : !dipWhy ? ruleReason(i, w) : dipOut ? dipWhy + "; " + ruleReason(i, w)\n',
+    '    const reason = (i, w) => !lateWhy ? rulesReason(i, w) : lateOut ? lateWhy + "; " + rulesReason(i, w) : lateWhy;\n'
+    + '    const rulesReason = (i, w) => bigWhy ? bigWhy : !dipWhy ? ruleReason(i, w) : dipOut ? dipWhy + "; " + ruleReason(i, w)\n', what('the trade reason'));
+  t = replacedOnce(t, '          dipTrade: dipOn ? dates[dip.since[i]] : null,\n', '          dipTrade: dipOn ? dates[dip.since[i]] : null,\n          lateTrade: lateOn ? lateSince : null,\n', what('the log row'));
+  if (!t.endsWith('    return res;\n  }\n}')) throw new Error(what('the text must end with its dashboard'));
+  return t.slice(0, -'    return res;\n  }\n}'.length) + dashboard + '    return res;\n  }\n}';
+}
+CODE[53] = withLateWeekCash(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", fund: "sqqq", outDay: 3, backDay: 5,
+  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 161 trades, 56% of them up, 1.5% each on average; about half of the gain came in 2022." });
+
 // ===== #55 Seasonal TQQQ, #56 Donchian breakout + ATR stop (the user, 2026-11-09:
 // "let's include 2x4", from a search for leveraged-fund strategies the library
 // lacked: a calendar rule and a price-channel trend rule, both new mechanisms
