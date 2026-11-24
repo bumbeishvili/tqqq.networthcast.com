@@ -5856,21 +5856,32 @@ CODE[70] = bareStrategy({
 // seeing that the routine did better without the weeks that began deeply sold: "add it as option").
 // The fund traded and the fund the down trend is read on are settings too (the user, same day:
 // "make sure I can also choose tqqq, soxl or other tickets, right now it's frozen to tqqq").
-// The defaults are the user's, set twice that day. First ("make this as default"): the down trend
-// on QQQ against its 30-day median, back at Friday's close, the skip on with TQQQ's RSI over 9 days
-// at 40 or under. Then, on a screenshot of the settings ("set this as default"), the ones in force:
-// the down trend on TQQQ itself, back at Monday's close, the RSI over 10 days; the rest as before.
-// Q1 2010 to Q4 2025 these make 99.3% a year (max drawdown 58%, worst 12 months -50%) and 164% in
-// 2026 to 20 November; the first set made 106.1% (60%, -24%) and 103% in 2026; the entry's first
-// defaults (TQQQ's own 50-day average, Friday, no skip) 62.8% (70%). A step down on the RSI level
-// (39) makes 82% with a drawdown of 69%. The card says so. (All without the weekend check, below.)
+// The defaults are the user's, set three times. First, 2026-11-23 ("make this as default"): the
+// down trend on QQQ against its 30-day median, back at Friday's close, the skip on with TQQQ's RSI
+// over 9 days at 40 or under. Then, that day, on a screenshot of the settings ("set this as
+// default"): the down trend on TQQQ itself, back at Monday's close, the RSI over 10 days; the rest
+// as before. Q1 2010 to Q4 2025 those made 99.3% a year (max drawdown 58%, worst 12 months -50%)
+// and 164% in 2026 to 20 November; the first set made 106.1% (60%, -24%) and 103% in 2026; the
+// entry's first defaults (TQQQ's own 50-day average, Friday, no skip) 62.8% (70%). A step down on
+// the RSI level (39) made 82% with a drawdown of 69%. (All without the weekend check, below.)
+// Last, 2026-11-24, on a screenshot of the settings after a Fit with the weekend check in ("set this
+// as default"), the ones in force: the RSI over 9 days again; the rest as before. With the weekend
+// check these make 125.2% a year (50%, worst 12 months -18%) and 178% in 2026 to 23 November; the
+// RSI over 10 days 120.8% (50%, -30%). The RSI level is a narrow peak: 39 makes 106.9% with a
+// drawdown of 76%, 41 makes 102.9%. The card says so.
+// The same day the lagging-fund rule went in, on by default (the user, on the falls of 5 and 19-20
+// November 2026 in weeks the RSI skipped: "I want a rule, that keeps existing in line, but also
+// catches those thursdays falls"): a skipped week is taken for a day when SOXX's 20-day return is
+// under QQQ's by more than 2%. With it the defaults make 153.8% a year (51%, worst 12 months -33%)
+// and 251% in 2026 to 23 November. A fitted rule, and the card says how fitted.
 // It is a weekly routine: the down trend is read where the week's days out start (at the sale and
 // at the purchase with one trade a day) and not again inside them, so the money never leaves TQQQ
 // late in a week. It comes back early in one case, the weekend check, on by default since
 // 2026-11-24 (the user, on that day's study of where the routine wins and loses: "build it"): at
 // the last close before a weekend inside the days out, TQQQ is bought back if it is not under the
-// close it was sold at. With it the defaults make 120.8% a year (50%, -30%) and 133% in 2026; it
-// was ahead in all 396 versions of the routine tried, in 2010-17 and in 2018-25 alike.
+// close it was sold at. With it the defaults of that day made 120.8% a year (50%, -30%) and 133%
+// in 2026 to 20 November; it was ahead in all 396 versions of the routine tried, in 2010-17 and in
+// 2018-25 alike.
 // A week short of a day keeps the sessions: the days out are the sessions after the first day
 // through the second, so with no session on the second day TQQQ is bought back at the close of
 // the last session before it (a close later with one trade a day, when the fund's one session
@@ -5896,18 +5907,31 @@ CODE[72] = bareStrategy({
       { value: 1, label: "Monday" }, { value: 2, label: "Tuesday" }, { value: 3, label: "Wednesday" }, { value: 4, label: "Thursday" }, { value: 5, label: "Friday" } ] },`,
   park: { label: "Held in between", tip: "What the money is in between the two closes: SQQQ, cash or another fund.", text: "Hold {} in between.", default: "sqqq" },
   splitDefault: false,
-  after: `    { id: "weekendCheck", label: "Weekend check", tip: "Yes: at the last close before a weekend inside the days out, the fund is bought back if it is not under the close it was sold at. In the weeks taken in 2010-2025, TQQQ's Monday went the way of its Thursday and Friday: down 1.2% on average after a fall, up 1.1% after a rise. Left out with one trade per day and another fund held in between.", text: "Stay out over a weekend only if the fund is under the close it was sold at: {}.", type: "bool", default: true, options: [
+  after: `    { id: "weekendCheck", label: "Weekend check", tip: "Yes: at the last close before a weekend inside the days out, the fund is bought back if it is not under the close it was sold at. In the weeks taken in 2010-2025, TQQQ's Monday went the way of its Thursday and Friday: down 1.1% on average after a fall, up 1.5% after a rise. Left out with one trade per day and another fund held in between.", text: "Stay out over a weekend only if the fund is under the close it was sold at: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "rsiSkip", label: "Skip a week for a low RSI", tip: "Yes: a week is skipped, and the fund held through it, when the RSI is at the level or under at the close that would leave the fund. A low RSI in a down trend means the fall is already steep; in such weeks TQQQ rose on average over the days out, in 2010-2025 and in 2026.", text: "Skip a week for a low RSI: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "rsiFund", label: "RSI of", tip: "The fund whose closes the RSI is read on.", text: "Low is {}'s", default: "tqqq", when: { rsiSkip: true }, options:
       ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
-    { id: "rsiDays", label: "RSI over (days)", tip: "Wilder's RSI over this many closes. Fewer days swing faster.", text: "RSI over {} days", default: 10, when: { rsiSkip: true }, options: [
+    { id: "rsiDays", label: "RSI over (days)", tip: "Wilder's RSI over this many closes. Fewer days swing faster.", text: "RSI over {} days", default: 9, when: { rsiSkip: true }, options: [
       2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100] },
     { id: "rsiLevel", label: "Low at or under", tip: "The week is skipped with the RSI at this level or under. Skipping helped at every level from 25 to 45 in 2010-2025, most at 40; at 50 it skips too many weeks.", text: "at {} or under.", default: 40, when: { rsiSkip: true }, options: [
-      5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5, 17, 17.5, 18, 18.5, 19, 19.5, 20, 20.5, 21, 21.5, 22, 22.5, 23, 23.5, 24, 24.5, 25, 25.5, 26, 26.5, 27, 27.5, 28, 28.5, 29, 29.5, 30, 30.5, 31, 31.5, 32, 32.5, 33, 33.5, 34, 34.5, 35, 35.5, 36, 36.5, 37, 37.5, 38, 38.5, 39, 39.5, 40, 40.5, 41, 41.5, 42, 42.5, 43, 43.5, 44, 44.5, 45, 45.5, 46, 46.5, 47, 47.5, 48, 48.5, 49, 49.5, 50, 50.5, 51, 51.5, 52, 52.5, 53, 53.5, 54, 54.5, 55, 55.5, 56, 56.5, 57, 57.5, 58, 58.5, 59, 59.5, 60, 60.5, 61, 61.5, 62, 62.5, 63, 63.5, 64, 64.5, 65, 65.5, 66, 66.5, 67, 67.5, 68, 68.5, 69, 69.5, 70] },`,
+      5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5, 17, 17.5, 18, 18.5, 19, 19.5, 20, 20.5, 21, 21.5, 22, 22.5, 23, 23.5, 24, 24.5, 25, 25.5, 26, 26.5, 27, 27.5, 28, 28.5, 29, 29.5, 30, 30.5, 31, 31.5, 32, 32.5, 33, 33.5, 34, 34.5, 35, 35.5, 36, 36.5, 37, 37.5, 38, 38.5, 39, 39.5, 40, 40.5, 41, 41.5, 42, 42.5, 43, 43.5, 44, 44.5, 45, 45.5, 46, 46.5, 47, 47.5, 48, 48.5, 49, 49.5, 50, 50.5, 51, 51.5, 52, 52.5, 53, 53.5, 54, 54.5, 55, 55.5, 56, 56.5, 57, 57.5, 58, 58.5, 59, 59.5, 60, 60.5, 61, 61.5, 62, 62.5, 63, 63.5, 64, 64.5, 65, 65.5, 66, 66.5, 67, 67.5, 68, 68.5, 69, 69.5, 70] },
+    { id: "lagTake", label: "Take a lagging week", tip: "Yes: a week skipped for a low RSI is taken all the same when one fund's return trails another's at that close. In the skipped weeks where SOXX trailed QQQ by more than 2% over 20 days, TQQQ fell on the Thursday by 3.0% on average in 2010-2017, 1.2% in 2018-2025 and 2.3% in 2026; where SOXX led by more than 2% it rose. Left out with one trade per day and another fund held in between.", text: "Still take such a week when a fund lags: {}.", type: "bool", default: true, when: { rsiSkip: true }, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "lagFund", label: "Lagging fund", tip: "The fund whose return is read.", text: "Lagging is {}'s", default: "soxx", when: { rsiSkip: true, lagTake: true }, options:
+      ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
+    { id: "lagDays", label: "Return over (days)", tip: "Both returns are taken over this many closes.", text: "return over {} days", default: 20, when: { rsiSkip: true, lagTake: true }, options:
+      ${JSON.stringify(Array.from({ length: 59 }, (_, k) => 2 + k).concat(Array.from({ length: 38 }, (_, k) => 65 + 5 * k)))} },
+    { id: "lagVs", label: "Against", tip: "The fund it is compared with.", text: "under {}'s", default: "qqq", when: { rsiSkip: true, lagTake: true }, options:
+      ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
+    { id: "lagBy", label: "By more than", tip: "How far under the other fund's return, in points. Of the 20 settings from 15 to 25 days and 1.5% to 3%, 16 were ahead in both halves of 2010-2025; 20 days with 2% is the best of them.", text: "by more than {}.", unit: "%", default: 2, when: { rsiSkip: true, lagTake: true }, options:
+      ${JSON.stringify(Array.from({ length: 41 }, (_, k) => 0.5 * k).concat([22, 25, 30, 35, 40]))} },
+    { id: "lagHold", label: "Stay out for", tip: "One day: the fund is bought back at the next close. The days before the weekend: at the last close before a weekend, or where the days out end. In those weeks the fall was the Thursday's; Friday was flat on average in 2010-2025.", text: "Then stay out for {}.", default: "day", when: { rsiSkip: true, lagTake: true }, options: [
+      { value: "day", label: "one day" }, { value: "weekend", label: "the days before the weekend" } ] },`,
   columns: `    { key: "lineRel", label: "vs line", tip: "How far the close the down trend is read on sits above (+) or below (−) its line, the average or median of the closes before it, in percent." },
-    { key: "rsi", label: "RSI", tip: "Wilder's RSI of the fund and over the days set, 0 to 100. A week is skipped with it at the level or under. Blank with the skip off." },`,
+    { key: "rsi", label: "RSI", tip: "Wilder's RSI of the fund and over the days set, 0 to 100. A week is skipped with it at the level or under. Blank with the skip off." },
+    { key: "lag", label: "Lag", tip: "The lagging fund's return over the days set less the other fund's, in points. A skipped week is taken with it under the level. Blank with that rule off." },`,
   rest: '"tqqq"',
   panel: 'TREND_PANEL',
   setup: `    // The down trend at every close: TQQQ's close against its line, the average or the median of the N
@@ -5942,7 +5966,7 @@ ${bareFn(rollingMedian)}
     // The RSI skip: a week is not taken when the RSI is at the level or under at the close that would leave TQQQ.
 ${WILDER_RSI_SNIPPET}
 ${bareFn(rsiLevel)}
-    const RSI_SKIP = p.rsiSkip !== false, RSI_FUND = p.rsiFund || "tqqq", RSI_DAYS = Math.max(2, Math.round(+p.rsiDays || 10)), RSI_LEVEL = p.rsiLevel == null ? 40 : +p.rsiLevel;
+    const RSI_SKIP = p.rsiSkip !== false, RSI_FUND = p.rsiFund || "tqqq", RSI_DAYS = Math.max(2, Math.round(+p.rsiDays || 9)), RSI_LEVEL = p.rsiLevel == null ? 40 : +p.rsiLevel;
     if (RSI_SKIP && !data[RSI_FUND]) throw new Error("No prices for " + RSI_FUND.toUpperCase() + " (data." + RSI_FUND + ")");
     const R = data[RSI_FUND];
     const rsi = RSI_SKIP ? wilderRsi(R, RSI_DAYS, p.endIdx) : null;
@@ -5981,8 +6005,9 @@ ${bareFn(rsiLevel)}
     const startClose = (i) => { let k = i; while (outSession(k)) k--; return k; };
     const TWO_DAYS = SPLIT && OUT !== "cash";   // one trade a day, with a fund to hold in between
     // The weekend check (the user, 2026-11-24, on that day's study of the routine: "build it"). In the weeks
-    // taken since 2010 TQQQ's Monday went the way of its Thursday and Friday: down 1.2% on average after a
-    // fall, up 1.1% after a rise, in 2010-17 and in 2018-25 alike. So at the last close before a weekend
+    // taken since 2010 (at that day's defaults, the RSI over 10 days) TQQQ's Monday went the way of its
+    // Thursday and Friday: down 1.2% on average after a fall, up 1.1% after a rise, in 2010-17 and in
+    // 2018-25 alike. So at the last close before a weekend
     // inside a leg, the fund is bought back, and the leg is over, if it is not under the close the leg
     // started at, where it was sold. A leg with no session after the weekend (a holiday on the day back)
     // has no such close, and the day before a weekend that a leg starts at is not one either: only the days
@@ -6010,9 +6035,46 @@ ${bareFn(rsiLevel)}
       const s = startClose(i);
       return goAt(s) && i <= weekendClose(s) && F[s] > 0 ? F[s] : null;
     };
+    // A skipped week taken all the same (the user, 2026-11-24, on the falls of 5 and 19-20 November 2026,
+    // both in weeks the RSI skipped: "I want a rule, that keeps existing in line, but also catches those
+    // thursdays falls so we are holding sqqq, instead of tqqq by then"). Of 1,250 conditions read at the
+    // close that would leave the fund, one fund's return trailing another's told the skipped weeks that
+    // fell from those that bounced: where SOXX's 20-day return was under QQQ's by more than 2%, TQQQ fell
+    // 3.0% on average on the Thursday in 2010-17, 1.2% in 2018-25 and 2.3% in 2026; where it led by more
+    // than 2%, TQQQ rose 1.0%, 3.3% and 2.7%. The fall was the Thursday's (Friday was flat on average in
+    // 2010-25), so the week is taken for its first day unless the setting keeps it to the weekend. A week
+    // the routine takes anyway is not touched. Left out with one trade a day and a fund held in between,
+    // as the weekend check is.
+    if (p.lagHold != null && p.lagHold !== "day" && p.lagHold !== "weekend") throw new Error('The stay must be "day" or "weekend", not ' + p.lagHold);
+    const LAG_TAKE = RSI_SKIP && p.lagTake !== false && !TWO_DAYS && !NONE_OUT;
+    const LAG_FUND = p.lagFund || "soxx", LAG_VS = p.lagVs || "qqq", LAG_DAYS = Math.max(1, Math.round(+p.lagDays || 20)), LAG_BY = p.lagBy == null ? 2 : +p.lagBy, LAG_WEEKEND = p.lagHold === "weekend";
+    const lagMissing = [LAG_FUND, LAG_VS].find(id => !data[id]);
+    if (LAG_TAKE && lagMissing) throw new Error("No prices for " + lagMissing.toUpperCase() + " (data." + lagMissing + ")");
+    const LAG_NAME = LAG_FUND.toUpperCase(), LAG_VS_NAME = LAG_VS.toUpperCase(), LAG_PANEL = LAG_NAME + " vs " + LAG_VS_NAME + ", " + LAG_DAYS + " days", LAG_STAY = LAG_WEEKEND ? "the days before the weekend" : "one day";
+    const LA = data[LAG_FUND], LB = data[LAG_VS];
+    // The lagging fund's return over the days set less the other fund's, in points; null with the rule off and before both funds have that many closes.
+    const lagAt = (i) => (LAG_TAKE && i >= LAG_DAYS && LA[i - LAG_DAYS] > 0 && LB[i - LAG_DAYS] > 0 ? (LA[i] / LA[i - LAG_DAYS] - LB[i] / LB[i - LAG_DAYS]) * 100 : null);
+    const lagsAt = (i) => { const x = lagAt(i); return x !== null && x < -LAG_BY; };
+    const lagSays = (i) => LAG_NAME + " " + signedPct(lagAt(i)) + " against " + LAG_VS_NAME + " over " + LAG_DAYS + " days";
+    // A leg the RSI skipped that the lag takes: its first close is a down trend with a low RSI and the lag.
+    const lagLeg = (s) => downAt(s) && lowAt(s) && lagsAt(s);
+    // Out over the session after close i in such a leg: its first day, or with the longer stay every day
+    // before the weekend (the whole leg where it has none).
+    const lagOut = (i) => {
+      if (!outSession(i + 1)) return false;
+      const s = startClose(i);
+      if (!lagLeg(s)) return false;
+      if (!LAG_WEEKEND) return i === s;
+      const w = weekendClose(s);
+      return w < 0 || i < w;
+    };
+    // A close inside such a leg from which its days out are over: the fund is back.
+    const lagBack = (i) => outSession(i) && lagLeg(startClose(i)) && !lagOut(i);
+    const TRADES = ["buy", "sell", "switch"];   // the actions that are trades, for the panel a trade is marked in
     // At one close (and for cash, which has no second leg): out from the leg's first close, if the down trend
-    // holds there, to its last, or to the close before the weekend where the check sends the money back.
-    const outDirect = (i) => outSession(i + 1) && goAt(startClose(i)) && !backBefore(i);
+    // holds there, to its last, or to the close before the weekend where the check sends the money back. A
+    // leg the RSI skipped is out for the days the lag takes.
+    const outDirect = (i) => outSession(i + 1) && (goAt(startClose(i)) ? !backBefore(i) : lagOut(i));
     // One trade a day, with a fund to hold: each purchase stays at its close and the sale is the close before
     // it. TQQQ is sold at the close before the fund's purchase if the down trend holds there; the fund is
     // bought at its close if the trend still holds (TQQQ is bought back there if not), and sold at the close
@@ -6031,29 +6093,37 @@ ${bareFn(rsiLevel)}
     const rsiSays = (i) => RSI_NAME + " " + (rsi[i] === rsi[i] ? rsi[i].toFixed(0) : "n/a");
     const trendSays = (i) => SIG_NAME + " " + gapText(i) + " against its " + N + "-day " + LINE + (UNDER > 0 ? ", the down trend starts " + UNDER + "% under it" : UNDER < 0 ? ", the down trend starts " + -UNDER + "% over it" : "") + (RSI_SKIP ? ", " + rsiSays(i) : "");`,
   rule: `      const want = outAt(i) ? "cash" : "tqqq";   // the skeleton's two words: "tqqq" is in the fund, "cash" out of it, in the holding picked
-      const why = outAt(i) ? "The week's " + OUT_NAME + " days in a down trend (" + trendSays(i) + ")"
+      const why = outAt(i) ? (lagOut(i) ? "A skipped week taken for " + LAG_STAY + ": " + lagSays(startClose(i)) + ", more than " + LAG_BY + "% under (" + trendSays(i) + ")" : "The week's " + OUT_NAME + " days in a down trend (" + trendSays(i) + ")")
         : NONE_OUT ? "No days out of " + FUND_NAME + ": " + NO_DAYS + " (" + trendSays(i) + ")"
         : backBefore(i) ? "Back before the weekend: " + FUND_NAME + " " + signedPct(weekendMove(startClose(i))) + " against " + dates[startClose(i)] + "'s close, where it was sold (" + trendSays(i) + ")"
+        : lagBack(i) ? "Back from the stay for " + LAG_NAME + "'s lag, " + LAG_STAY + " (" + trendSays(i) + ")"
         : RSI_SKIP && outSession(i + 1) && skippedBy(startClose(i)) >= 0 ? "Week skipped: " + rsiSays(skippedBy(startClose(i))) + " at " + dates[skippedBy(startClose(i))] + "'s close, at " + RSI_LEVEL + " or under (" + trendSays(i) + ")"
         : !downAt(i) ? "No down trend: " + trendSays(i)
         : outSession(i + 1) ? "The down trend began after this week's close out of " + FUND_NAME + " (" + trendSays(i) + ")"
         : "Down trend, the week's " + FUND_NAME + " days (" + trendSays(i) + ")";`,
   row: `          trendClose: S[i] > 0 ? S[i] : null, lineRel: gapAt(i), trendLevel: lineBefore[i] > 0 ? -UNDER : null, trendPx: lineBefore[i] > 0 ? levelAt(i) : null,
-          ...rsiRow(i), soldAt: soldAt(i),
-          ...((action === "buy" || action === "switch") && backBefore(i) ? { firedBy: PRICE_PANEL } : {}),   // a purchase the weekend check made is marked on the fund's price, where its level is`,
+          ...rsiRow(i), soldAt: soldAt(i), lag: lagAt(i), lagLevel: lagAt(i) === null ? null : -LAG_BY,
+          // A trade is marked where its rule reads: a purchase the weekend check made on the fund's price, where its
+          // level is; a skipped week's sale and purchase in the lag's panel.
+          ...(!TRADES.includes(action) ? {} : backBefore(i) ? { firedBy: PRICE_PANEL } : lagOut(i) || lagBack(i) ? { firedBy: LAG_PANEL } : {}),`,
   dashboard: `    const downNow = downAt(p.endIdx), outNow = outAt(p.endIdx), lowNow = lowAt(p.endIdx), backNow = backBefore(p.endIdx), soldNow = soldAt(p.endIdx);
+    const lagNow = lagAt(p.endIdx), lagOutNow = lagOut(p.endIdx), lagsNow = lagsAt(p.endIdx);
     const lines = [{ key: "lineRel", label: SIG_NAME + " vs " + LINE, unit: "%", priceKey: "trendClose" }, { key: "trendLevel", label: "Down trend under", unit: "%", priceKey: "trendPx" }]
       .concat(RSI_SKIP ? [{ key: "rsi", label: RSI_PANEL, unit: "num", group: RSI_PANEL, priceKey: "rsiClose" }, { key: "rsiSkipLevel", label: "Skip at or under", unit: "num", group: RSI_PANEL, priceKey: "rsiSkipClose" }] : [])
+      .concat(LAG_TAKE ? [{ key: "lag", label: LAG_NAME + " vs " + LAG_VS_NAME, unit: "%", group: LAG_PANEL }, { key: "lagLevel", label: "Lagging under", unit: "%", group: LAG_PANEL }] : [])
       .concat(WEEKEND_CHECK ? [{ key: "soldAt", label: "Sold at", group: PRICE_PANEL }] : []);
     const card = { label: RULE, icon: "clock", tone: downNow ? "bad" : "good", value: outNow ? OUT_DAYS : NONE_OUT ? "No days out" : backNow ? "Back early" : downNow ? (lowNow ? "RSI low" : FUND_NAME + " days") : "No down trend",
       sub: gapText(p.endIdx) + " vs " + LINE,
       tip: SIG_NAME + "'s close against the " + LINE + " of the " + N + " closes before it. With the close " + (UNDER > 0 ? "more than " + UNDER + "% under it" : UNDER < 0 ? "less than " + -UNDER + "% over it" : "under it") + " at " + OUT_DAY + "'s close, the money moves to " + OUT_NAME + " there and back to " + FUND_NAME + " at " + BACK_DAY + "'s close"
         + (TWO_DAYS ? ", each purchase a close after the sale of the other fund." : WEEKEND_CHECK ? ", or at the last close before the weekend if " + FUND_NAME + " is not under the close it was sold at." : ".") + " The trend is read when the week's days out start and not again inside them. Otherwise " + FUND_NAME + " is held all week."
         + (RSI_SKIP ? " A week is skipped when " + RSI_NAME + " is at " + RSI_LEVEL + " or under at that close; it is " + (rsi[p.endIdx] === rsi[p.endIdx] ? rsi[p.endIdx].toFixed(0) : "n/a") + " now." : "")
+        + (LAG_TAKE ? " A skipped week is taken all the same, for " + LAG_STAY + ", when " + LAG_NAME + "'s return over " + LAG_DAYS + " days is under " + LAG_VS_NAME + "'s by more than " + LAG_BY + "%" + (lagNow === null ? "." : "; it is " + signedPct(lagNow) + " against it now.") : "")
         + (outSpan === 0 ? " Both closes are set to the same day, so there are no days out." : OUT === FUND ? " " + FUND_NAME + " is also the fund held in between, so there are no days out." : "") };
     const decision = callOf(!outNow, RULE, gapText(p.endIdx) + " vs " + LINE,
-      outNow ? "the week's " + OUT_NAME + " days; " + FUND_NAME + " is bought back at " + BACK_DAY + "'s close" + (soldNow ? ", or before the weekend with a close at " + priceText(soldNow) + " or over" : "")
-        : NONE_OUT ? NO_DAYS + ": no days out" : backNow ? "back before the weekend: " + FUND_NAME + " is not under the close it was sold at" : downNow ? (lowNow ? "down trend, " + rsiSays(p.endIdx) + ": a week starting now is skipped" : "down trend: " + FUND_NAME + " until " + OUT_DAY + "'s close" + (RSI_SKIP ? " (" + rsiSays(p.endIdx) + ")" : "")) : "no down trend: " + FUND_NAME + " all week");`,
+      lagOutNow ? "a skipped week taken for " + LAG_STAY + ": " + lagSays(startClose(p.endIdx)) + "; " + FUND_NAME + " is bought back at " + (LAG_WEEKEND ? "the last close before the weekend" : "the next close")
+        : outNow ? "the week's " + OUT_NAME + " days; " + FUND_NAME + " is bought back at " + BACK_DAY + "'s close" + (soldNow ? ", or before the weekend with a close at " + priceText(soldNow) + " or over" : "")
+        : NONE_OUT ? NO_DAYS + ": no days out" : backNow ? "back before the weekend: " + FUND_NAME + " is not under the close it was sold at"
+        : downNow ? (lowNow ? "down trend, " + rsiSays(p.endIdx) + (lagsNow ? ", " + lagSays(p.endIdx) + ": a week starting now is taken for " + LAG_STAY : ": a week starting now is skipped") : "down trend: " + FUND_NAME + " until " + OUT_DAY + "'s close" + (RSI_SKIP ? " (" + rsiSays(p.endIdx) + ")" : "")) : "no down trend: " + FUND_NAME + " all week");`,
 });
 
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----
