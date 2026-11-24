@@ -3004,7 +3004,12 @@ function render() {
     // (value / max) reads as a bar chart across cards, the way the rows did
     // in the old single box. The width is the widest card's natural width,
     // capped at TT_CARD_MAX; longer names ellipsize.
-    const TT_CARD_MAX = 320, TT_CARD_GAP = 4, TT_CARD_LEAD = 16;
+    // On a touch screen a card is the value alone, small (the user, 25 November
+    // 2026: "Remove these tooltips on mobile and just show value, in very
+    // compact form"): a full card is as wide as a phone's chart and covered the
+    // lines it reads. Its tint and its leader line say whose value it is.
+    const valuesOnly = isTouchChart;
+    const TT_CARD_MAX = 320, TT_CARD_GAP = valuesOnly ? 2 : 4, TT_CARD_LEAD = valuesOnly ? 10 : 16;
     const panelRect = c.canvas.closest('.panel').getBoundingClientRect();
     const canvasRect = c.canvas.getBoundingClientRect();
     const toPanelX = x => x + canvasRect.left - panelRect.left;
@@ -3019,12 +3024,17 @@ function render() {
         <line x1="0" y1="2" x2="20" y2="2" stroke="${col}" stroke-width="2" stroke-linecap="round" ${dashAttr}/>
       </svg>`;
       const pointY = toPanelY(c.getDatasetMeta(i).data[idx].y);
-      const html = `
+      const value = `<span class="tt-val">${fmtFull(Math.round(v))}</span>`;
+      const html = valuesOnly ? `
+        <div class="tt-card tt-card-value" style="border-color:${rgba(col, 0.6)}">
+          <div class="tt-fill" style="width:100%;background:${rgba(col, 0.20)}"></div>
+          ${value}
+        </div>` : `
         <div class="tt-card">
           <div class="tt-fill" style="width:${pct}%;background:${rgba(col, 0.20)}"></div>
           <div class="tt-row">
             <div class="tt-row-left">${sample}<span class="tt-name" title="${n}">${n}</span></div>
-            <span class="tt-val">${fmtFull(Math.round(v))}</span>
+            ${value}
           </div>
         </div>`;
       return { html, pointY, col };

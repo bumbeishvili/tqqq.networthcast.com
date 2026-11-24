@@ -2132,7 +2132,8 @@
        handle: a finger on a handle pressed the calendar button and nothing
        moved (the user, 24 November 2026: "Sliders not working"). */
     --thumb: 18px;
-    --thumb-top: max(39px, var(--disp-h, 0px));
+    /* 3px clear of the groups, the gap a wide window has at 39px. */
+    --thumb-top: max(39px, calc(var(--disp-h, 0px) + 3px));
     --track-top: calc(var(--thumb-top) + (var(--thumb) - 6px) / 2);
     position: relative;
     height: calc(var(--thumb-top) + var(--thumb) + 7px);
@@ -4609,6 +4610,20 @@
   }
   #custom-tooltip .tt-card .tt-val {
     flex-shrink: 0;
+  }
+  /* On a touch screen a card is its value alone (js/chart.js, valuesOnly): a
+     small tinted tag beside the point, its numbers lined up on the right. */
+  #custom-tooltip .tt-card.tt-card-value {
+    padding: 1px 5px;
+    border-radius: 5px;
+    box-shadow: var(--shadow-sm);
+  }
+  #custom-tooltip .tt-card-value .tt-val {
+    position: relative;   /* over the tint */
+    display: block;
+    margin-left: 0;
+    font-size: calc(9px * var(--ui-scale));
+    text-align: right;
   }
   #custom-tooltip .tt-date-chip {
     position: absolute;
