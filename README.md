@@ -52,6 +52,7 @@ Every start year and holding period at once, coloured against a baseline (here c
 | `data/` | Price, rate and intraday series, refreshed by the workflow. Format, synthesis and known biases: [data/README.md](data/README.md). |
 | `experiments/` | The intraday page and the 9sig and SMA overfit explorers, linked from the site. |
 | `widget.html`, `widget/` | The widget page and its installer. |
+| `manifest.webmanifest`, `sw.js`, `js/app-install.js` | The site as an installable app that opens offline: its manifest, its offline copy and the menu entry. `sw.js` stays at the root, which is the part of the site it can serve. Icons: `scripts/build-app-icons.cjs`. |
 | `scripts/` | The data updaters the workflow runs. |
 | `tests/` | Node checks: library parity, withdrawals, daily display. |
 | `research/` | Notes and scripts behind the library. |

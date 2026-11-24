@@ -1,0 +1,17 @@
+{
+  "name": "Strategies Simulator",
+  "short_name": "Strategies",
+  "description": "Backtests of TQQQ strategies on daily prices from 1953: SMA timing, 9Sig, a strategy library and your own rules.",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f5f6fb",
+  "theme_color": "#f5f6fb",
+  "categories": ["finance"],
+  "icons": [
+    { "src": "images/icons/app-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "images/icons/app-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "images/icons/app-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

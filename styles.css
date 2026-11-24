@@ -4851,6 +4851,7 @@
     box-shadow: 0 8px 24px rgba(20, 30, 50, 0.12);
     z-index: 50;
   }
+  .resources-list button,
   .analytics-menu-list button {
     width: 100%;
     border: 0;
@@ -4860,6 +4861,7 @@
     cursor: pointer;
   }
   .resources-list a,
+  .resources-list button,
   .analytics-menu-list button {
     display: flex;
     align-items: center;
@@ -4886,7 +4888,11 @@
   .menu-icon--intraday        { --icon: url("images/icons/intraday.svg"); }
   .menu-icon--ninesig         { --icon: url("images/icons/ninesig.svg"); }
   .menu-icon--sma             { --icon: url("images/icons/sma.svg"); }
+  .menu-icon--install         { --icon: url("images/icons/install.svg"); }
+  /* "Install app" stays out of the menu until the browser offers the installation: the flex above would show it. */
+  .resources-list button[hidden] { display: none; }
   .resources-list a:hover,
+  .resources-list button:hover,
   .analytics-menu-list button:hover {
     background: rgba(134, 118, 255, 0.12);
     color: var(--accent-text);
