@@ -72,7 +72,7 @@ const site = 'https://tqqq.networthcast.com', local = 'http://127.0.0.1:5500';
 
 let r = await call('/quotes', { origin: site }); let b = await r.json();
 const n = Object.keys(b.quotes || {}).length, prices = Object.values(b.quotes || {}).map(q => q.price);
-check('site origin: /quotes answers 200 with ten quotes', r.status === 200 && n === 10 && prices.every(p => p > 0), r.status + ' ' + n + ' quotes, TQQQ ' + JSON.stringify(b.quotes && b.quotes.TQQQ));
+check('site origin: /quotes answers 200 with eleven quotes', r.status === 200 && n === 11 && prices.every(p => p > 0), r.status + ' ' + n + ' quotes, TQQQ ' + JSON.stringify(b.quotes && b.quotes.TQQQ));
 check('site origin: CORS header names the origin', r.headers.get('Access-Control-Allow-Origin') === site && r.headers.get('Vary') === 'Origin');
 check('first call was a cache miss', r.headers.get('X-Cache') === 'MISS');
 

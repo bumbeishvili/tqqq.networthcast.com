@@ -176,6 +176,17 @@ SPXL_SWAP_SPREAD  = 0.005
 SQQQ_INVERSE_LEVERAGE = 3
 SQQQ_CASH_MULTIPLE    = 4.028      # fitted; theory = L + 1
 SQQQ_DRAG_DAILY       = -6.099e-05 # fitted intercept (~ -1.537 %/yr)
+# SOXS (Direxion Daily Semiconductor Bear 3x, 2010-03-11+) by the same model on
+# the semiconductor index (semis_index). Fitted over SOXS_FIT_WINDOW, the years
+# the fund tracked the PHLX index before moving to the ICE Semiconductor Index
+# (as SOXL did). The index is price-only, so the drag also carries the dividends
+# a short pays (about 1%/yr for semiconductors, 3 pp at -3x) on top of the fee,
+# the swap spread and slippage. --soxs-history prints the regression and how the
+# replayed model tracks the real fund each time it runs (inverse_fit, inverse_replay).
+SOXS_INVERSE_LEVERAGE = 3
+SOXS_CASH_MULTIPLE    = 4.0        # theory = L + 1; rates sat near zero for most of the window, so the fitted slope (4.577) says little
+SOXS_DRAG_DAILY       = -2.8964e-04 # the drag at which the replay ends level with the real fund (~ -7.30 %/yr; the regression's intercept is -8.17 %/yr)
+SOXS_FIT_WINDOW       = ('2010-03-11', '2021-05-31')
 
 # === Financing-cost model =================================================
 # A leveraged ETF holding $1 of investor NAV achieves $L of index exposure by
@@ -211,6 +222,7 @@ tickers = [
     ('GLD',    'synthetic-gld.tsv'),
     ('SOXL',   'synthetic-soxl.tsv'),
     ('SOXX',   'synthetic-soxx.tsv'),
+    ('SOXS',   'synthetic-soxs.tsv'),
 ]
 # Daily highs and lows of the funds the Turnaround Monday rule can read (its
 # signal: a Monday close under the prior day's low buys, a close over the
@@ -547,6 +559,77 @@ def walk_forward(source_pairs, anchor_date, anchor_price, leverage, expense_dail
     pairs = [(post[i][0], synth[i]) for i in range(n)]
     rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in pairs]
     return rows, pairs
+
+
+# Inverse funds don't fit walk_backward's long formula: instead of paying
+# financing on a borrowed leg, a -3x fund sits on (1+L) units of cash EARNING
+# the short rate. The leverage, the cash multiple and the daily drag are fitted
+# against the real fund: SQQQ's by default, SOXS's passed in (build_soxs_prefix).
+def walk_backward_inverse(source_pairs, anchor_date, anchor_price, rate_map,
+                          leverage=SQQQ_INVERSE_LEVERAGE, cash_multiple=SQQQ_CASH_MULTIPLE, drag_daily=SQQQ_DRAG_DAILY):
+    pre = [(d, c) for d, c in source_pairs if d <= anchor_date]
+    n = len(pre)
+    if n < 2:
+        return [], []
+    synth = [0.0] * n
+    synth[-1] = anchor_price
+    for i in range(n - 1, 0, -1):
+        ret = (pre[i][1] - pre[i - 1][1]) / pre[i - 1][1]
+        r_daily = (rate_lookup(rate_map, pre[i - 1][0]) / 100.0) / 252.0
+        step = (-leverage * ret) + cash_multiple * r_daily + drag_daily
+        synth[i - 1] = max(synth[i] / (1 + step), 0) if (1 + step) > 0 else 0
+    exact = pre[-1][0] == anchor_date
+    output_n = n - 1 if exact else n
+    pairs = [(pre[i][0], synth[i]) for i in range(output_n)]
+    rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in pairs]
+    return rows, pairs
+
+
+def inverse_days(real_pairs, index_pairs, rate_map, window):
+    """The days of `window` (first, last; ISO dates) both series have, as
+    [(fund return, index return, daily short rate)], each from the day before
+    in the same list: what the inverse model is fitted on and replayed over."""
+    index = dict(index_pairs)
+    days = [(d, c, index[d]) for d, c in real_pairs if d in index and window[0] <= d.strftime('%Y-%m-%d') <= window[1]]
+    return [(c / days[i - 1][1] - 1, x / days[i - 1][2] - 1, (rate_lookup(rate_map, days[i - 1][0]) / 100.0) / 252.0)
+            for i, (d, c, x) in enumerate(days) if i > 0]
+
+
+def inverse_fit(days, leverage):
+    """Least squares of (fund return + leverage x index return) on the daily
+    short rate over inverse_days: (cash multiple, drag a day), the inverse
+    model's two fitted numbers."""
+    xs = [r for _, _, r in days]
+    ys = [fund + leverage * index for fund, index, _ in days]
+    mean_x, mean_y = sum(xs) / len(xs), sum(ys) / len(ys)
+    slope = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys)) / sum((x - mean_x) ** 2 for x in xs)
+    return slope, mean_y - slope * mean_x
+
+
+def inverse_replay(days, leverage, cash_multiple, drag_daily):
+    """The model run forward over inverse_days beside the real fund: (model's
+    end value over the fund's, median absolute daily error, widest gap of the
+    two cumulative values on the way)."""
+    model, real, errors, widest = 1.0, 1.0, [], 0.0
+    for fund, index, rate in days:
+        step = -leverage * index + cash_multiple * rate + drag_daily
+        model, real = model * (1 + step), real * (1 + fund)
+        errors.append(abs(step - fund))
+        widest = max(widest, abs(model / real - 1))
+    return model / real, sorted(errors)[len(errors) // 2], widest
+
+
+def inverse_level_drag(days, leverage, cash_multiple):
+    """The daily drag at which the model, replayed over inverse_days, ends level
+    with the real fund: found by halving, the end value falling as the drag does."""
+    low, high = -0.01, 0.01
+    for _ in range(60):
+        middle = (low + high) / 2
+        if inverse_replay(days, leverage, cash_multiple, middle)[0] > 1:
+            high = middle
+        else:
+            low = middle
+    return (low + high) / 2
 
 
 def rate_lookup(rate_map, d, fallback_days=10):
@@ -937,6 +1020,43 @@ def write_soxl_file(soxl_df):
           f"{prefix[0][0].strftime('%Y-%m-%d')} to {soxl_df.index[-1].strftime('%Y-%m-%d')}")
 
 
+def build_soxs_prefix(soxs_df, days, rate_map):
+    """SOXS's rows before its launch, as [(Timestamp, close)]: the semiconductor
+    index on the given trading days (semis_index) walked back from SOXS's first
+    close by the inverse model at SOXS's fitted numbers."""
+    first_real = normalize_ts(soxs_df.index[0])
+    sox = [(d, c) for d, c in semis_index(days) if d <= first_real]
+    _, pairs = walk_backward_inverse(sox, first_real, cell(soxs_df['Close'].iloc[0]), rate_map,
+                                     leverage=SOXS_INVERSE_LEVERAGE, cash_multiple=SOXS_CASH_MULTIPLE, drag_daily=SOXS_DRAG_DAILY)
+    return pairs
+
+
+def write_soxs_file(soxs_df):
+    """synthetic-soxs.tsv from scratch: build_soxs_prefix on the committed QQQ
+    file's trading days with the committed short rates, then SOXS's real closes.
+    Prints the model's fit to the real fund over SOXS_FIT_WINDOW first."""
+    data_dir = os.path.join(basedir, DATA_DIR)
+    price_file = dict(tickers)
+    days = [d for d, _ in read_price_tsv(os.path.join(data_dir, price_file['QQQ']))]
+    rate_map = dict(read_rate_tsv(os.path.join(data_dir, 'short-rates.tsv')))
+    fit_days = inverse_days(df_to_pairs(soxs_df), semis_index(days), rate_map, SOXS_FIT_WINDOW)
+    slope, drag = inverse_fit(fit_days, SOXS_INVERSE_LEVERAGE)
+    end, median_error, widest = inverse_replay(fit_days, SOXS_INVERSE_LEVERAGE, SOXS_CASH_MULTIPLE, SOXS_DRAG_DAILY)
+    print(f"  SOXS model over {SOXS_FIT_WINDOW[0]}..{SOXS_FIT_WINDOW[1]} ({len(fit_days)} days): fitted cash multiple "
+          f"{slope:.3f} (used {SOXS_CASH_MULTIPLE}), fitted drag {drag:.4e} a day = {drag * 252 * 100:.3f} %/yr "
+          f"(used {SOXS_DRAG_DAILY:.4e})")
+    with_theory = sum(fund + SOXS_INVERSE_LEVERAGE * index - SOXS_CASH_MULTIPLE * rate for fund, index, rate in fit_days) / len(fit_days)
+    print(f"  drag with the cash multiple held at {SOXS_CASH_MULTIPLE}: {with_theory:.4e} a day = {with_theory * 252 * 100:.3f} %/yr")
+    level = inverse_level_drag(fit_days, SOXS_INVERSE_LEVERAGE, SOXS_CASH_MULTIPLE)
+    print(f"  drag at which the replay ends level with the real fund: {level:.4e} a day = {level * 252 * 100:.3f} %/yr")
+    print(f"  replay with the numbers used: model ends at {end:.4f} of the real fund, median daily error "
+          f"{median_error * 100:.3f}%, widest gap on the way {widest * 100:.1f}%")
+    prefix = build_soxs_prefix(soxs_df, days, rate_map)
+    write_price_tsv(os.path.join(data_dir, price_file['SOXS']), prefix, soxs_df)
+    print(f"  {price_file['SOXS']}: {len(prefix)} synthesized + {len(soxs_df)} real, "
+          f"{prefix[0][0].strftime('%Y-%m-%d')} to {soxs_df.index[-1].strftime('%Y-%m-%d')}")
+
+
 def yahoo_splits(ticker):
     """Every split Yahoo lists for `ticker`, oldest first, as (day, shares
     ratio: 3.0 for a 3-for-1, 0.2 for a 1-for-5 reverse). Each one that
@@ -1049,6 +1169,12 @@ _argp.add_argument('--soxx-history', action='store_true',
                         'pre-launch rows from the PHLX Semiconductor index at 1x '
                         'less its fee, and before the index from Ken French\'s '
                         'Chips industry, on the committed QQQ file\'s trading days.')
+_argp.add_argument('--soxs-history', action='store_true',
+                   help='Rewrite synthetic-soxs.tsv: SOXS\'s real closes plus its '
+                        'pre-launch rows from the semiconductor index at -3x by the '
+                        'inverse model (cash earning the short rate, fitted drag), '
+                        'on the committed QQQ file\'s trading days and short rates. '
+                        'Prints the model\'s fit to the real fund. Nothing else is touched.')
 _argp.add_argument('--gold-history', action='store_true',
                    help='Rewrite synthetic-gld.tsv: GLD\'s real closes plus its '
                         'pre-launch rows from gold prices (see gold_history), on '
@@ -1086,6 +1212,11 @@ if _args.soxx_history:
     print("Done.")
     sys.exit(0)
 
+if _args.soxs_history:
+    write_soxs_file(fetch('SOXS'))
+    print("Done.")
+    sys.exit(0)
+
 if not _args.rebuild:
     incremental_refresh()
     print("Done.")
@@ -1107,6 +1238,7 @@ gld_df          = fetch('GLD')                              # SPDR Gold Shares, 
 sqqq_df         = fetch('SQQQ')                             # ProShares UltraPro Short QQQ, 2010-02-11+
 soxl_df         = fetch('SOXL')                             # Direxion 3× semiconductors, 2010-03-11+
 soxx_df         = fetch('SOXX')                             # iShares Semiconductor, 2001-07-13+
+soxs_df         = fetch('SOXS')                             # Direxion -3× semiconductors, 2010-03-11+
 ndx_df          = fetch('^NDX')
 gspc_df         = fetch('^GSPC')
 sp500tr_df      = fetch('^SP500TR')
@@ -1283,28 +1415,6 @@ else:
 
 
 # ---- SQQQ: real ProShares UltraPro Short QQQ (-3x) from 2010-02-11 ----
-# Inverse funds don't fit walk_backward's long formula: instead of paying
-# financing on a borrowed leg, a -3x fund sits on (1+L) units of cash EARNING
-# the short rate. Both coefficients below were fitted against real SQQQ.
-def walk_backward_inverse(source_pairs, anchor_date, anchor_price, rate_map):
-    pre = [(d, c) for d, c in source_pairs if d <= anchor_date]
-    n = len(pre)
-    if n < 2:
-        return [], []
-    synth = [0.0] * n
-    synth[-1] = anchor_price
-    for i in range(n - 1, 0, -1):
-        ret = (pre[i][1] - pre[i - 1][1]) / pre[i - 1][1]
-        r_daily = (rate_lookup(rate_map, pre[i - 1][0]) / 100.0) / 252.0
-        step = (-SQQQ_INVERSE_LEVERAGE * ret) + SQQQ_CASH_MULTIPLE * r_daily + SQQQ_DRAG_DAILY
-        synth[i - 1] = max(synth[i] / (1 + step), 0) if (1 + step) > 0 else 0
-    exact = pre[-1][0] == anchor_date
-    output_n = n - 1 if exact else n
-    pairs = [(pre[i][0], synth[i]) for i in range(output_n)]
-    rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in pairs]
-    return rows, pairs
-
-
 sqqq_p1_rows, sqqq_p1_pairs = walk_backward_inverse(
     ndx_tr_pairs, sqqq_df.index[0], cell(sqqq_df['Close'].iloc[0]), rate_map)
 if sqqq_p1_pairs:
@@ -1323,14 +1433,15 @@ gld_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_gld_
 # ---- SOXL: real from 2010-03-11, 3× the semiconductor index with financing before (semis_index) ----
 soxl_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxl_prefix(soxl_df, qqq_days, rate_map)]
 soxx_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxx_prefix(soxx_df, qqq_days)]
+soxs_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxs_prefix(soxs_df, qqq_days, rate_map)]
 
 
 prefix_by_ticker = {'QQQ': qqq_prefix_rows, 'QLD': qld_prefix_rows,
                     'TQQQ': tqqq_prefix_rows, 'SPY': spy_prefix_rows,
                     'SSO': sso_prefix_rows, 'SPXL': spxl_prefix_rows,
-                    'SQQQ': sqqq_prefix_rows, 'GLD': gld_prefix_rows, 'SOXL': soxl_prefix_rows, 'SOXX': soxx_prefix_rows}
+                    'SQQQ': sqqq_prefix_rows, 'GLD': gld_prefix_rows, 'SOXL': soxl_prefix_rows, 'SOXX': soxx_prefix_rows, 'SOXS': soxs_prefix_rows}
 real_by_ticker   = {'QQQ': qqq_df, 'QLD': qld_df, 'TQQQ': tqqq_df, 'SPY': spy_df,
-                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df, 'GLD': gld_df, 'SOXL': soxl_df, 'SOXX': soxx_df}
+                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df, 'GLD': gld_df, 'SOXL': soxl_df, 'SOXX': soxx_df, 'SOXS': soxs_df}
 
 data_dir = os.path.join(basedir, DATA_DIR)
 os.makedirs(data_dir, exist_ok=True)

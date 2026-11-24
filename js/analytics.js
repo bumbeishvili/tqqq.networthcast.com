@@ -52,6 +52,7 @@ const STRATEGY_REGISTRY = {
   'bh-gld':  { label: 'B&H GLD',  pointsKey: 'gldPoints',      valueOf: (p) => p.value, prependStart: true  },
   'bh-soxl': { label: 'B&H SOXL', pointsKey: 'soxlPoints',     valueOf: (p) => p.value, prependStart: true  },
   'bh-soxx': { label: 'B&H SOXX', pointsKey: 'soxxPoints',     valueOf: (p) => p.value, prependStart: true  },
+  'bh-soxs': { label: 'B&H SOXS', pointsKey: 'soxsPoints',     valueOf: (p) => p.value, prependStart: true  },
   'sma':     { label: 'SMA', pointsKey: 'smaPoints',           valueOf: (p) => p.value, prependStart: false,
                // SMA depends on the current asset+window — earliest valid
                // quarter is when the SMA series first becomes non-null.
@@ -1254,7 +1255,7 @@ const METRIC_OPTS = {
   monthly: [0, 50, 100, 150, 200, 250, 300, 400, 500, 600, 750, 1000, 1250, 1500, 2000, 2500, 3000, 4000, 5000, 7500, 10000, 15000, 20000, 25000, 50000, 100000],
   raise:   [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 6, 7, 8, 10, 12, 15, 20],
   rate:    [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8, 10, 12, 15, 20, 25, 30, 40, 50, 75, 100],
-  sa:      ['qqq', 'spy', 'tqqq', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'],
+  sa:      ['qqq', 'spy', 'tqqq', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'],
   sw:      [100, 150, 200, 250],
   // SMA enrichment: hysteresis buffers + RSI overheat exit.
   seb:     [0, 1, 2, 3, 4, 5],
@@ -1262,28 +1263,28 @@ const METRIC_OPTS = {
   sro:     [0, 60, 70, 80, 90],
   src:     [0, 40, 50, 60, 70],
   // SMA out-asset, DCA ladders, bodyguard rules.
-  soa:     ['cash', 'qqq', 'spy', 'tqqq', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'],
-  sbga:    ['qqq', 'spy', 'tqqq', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'],
+  soa:     ['cash', 'qqq', 'spy', 'tqqq', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'],
+  sbga:    ['qqq', 'spy', 'tqqq', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'],
   sdi:     [0, 3, 6, 12],
   sdo:     [0, 3, 6, 12],
   sbg:     [0, 30, 35, 40, 45, 50],
   // 9sig: which leveraged ETF to trade, and signal-line growth.
-  nu:      ['tqqq', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'],
+  nu:      ['tqqq', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'],
   ng:      [0.5, 0.6, 0.7, 0.8, 0.9, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150],
   // 9sig rule customization:
   //   nc = 30-down no-sell drop % below 2-yr high (≥100 effectively disables)
   //   ns = spike-reset trigger (quarterly gain %; 0 disables)
   nc:      [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 110, 120, 130, 140, 150, 180],
   nbp:     [50, 60, 70, 75, 80, 85, 90, 95, 100],
-  npa:     ['cash', 'qqq', 'spy', 'qld', 'tqqq', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'],
+  npa:     ['cash', 'qqq', 'spy', 'qld', 'tqqq', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'],
   ncw:     [3, 6, 9, 12, 15, 18, 21, 24, 36, 48, 60],
   ns:      [0, 25, 50, 60, 70, 75, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 225, 250, 275, 300, 350, 400, 500],
   np:      ['weekly', 'monthly', 'quarterly', 'yearly'],
   nh:      [0, 10, 20, 30, 40, 50, 60, 70, 80, 90],
   // SMA: which leveraged ETF the strategy holds when the signal is "in".
-  su:      ['tqqq', 'qld', 'sso', 'spxl', 'qqq', 'spy', 'sqqq', 'gld', 'soxl', 'soxx'],
+  su:      ['tqqq', 'qld', 'sso', 'spxl', 'qqq', 'spy', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'],
   // Buy & Hold: which ETF is bought and held.
-  bu:      ['tqqq', 'qld', 'qqq', 'spy', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'],
+  bu:      ['tqqq', 'qld', 'qqq', 'spy', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'],
   // Per-strategy parked-cash interest rates (% per year).
   nr:      [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 16, 18, 20],
   scr:     [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 14, 15, 16, 18, 20],
@@ -1587,7 +1588,7 @@ function strategyDateValues(sim, strat) {
 // 'custom-pct' (per-cell flat target derived from prior cell × (1+pct)).
 function baselineDateValues(sim, key, cellBaselineVal, stratSeries) {
   if (!sim) return [];
-  if (key === '9sig' || key === 'bh-tqqq' || key === 'bh-qld' || key === 'bh-qqq' || key === 'bh-spy' || key === 'bh-sso' || key === 'bh-spxl' || key === 'bh-sqqq' || key === 'bh-gld' || key === 'bh-soxl' || key === 'bh-soxx' || key === 'sma') {
+  if (key === '9sig' || key === 'bh-tqqq' || key === 'bh-qld' || key === 'bh-qqq' || key === 'bh-spy' || key === 'bh-sso' || key === 'bh-spxl' || key === 'bh-sqqq' || key === 'bh-gld' || key === 'bh-soxl' || key === 'bh-soxx' || key === 'bh-soxs' || key === 'sma') {
     return strategyDateValues(sim, key);
   }
   if (key === 'compounded') {
@@ -1696,7 +1697,7 @@ function analyticsConfigPoints(cfg, initial, monthly, rate, annualRaise, entryId
   if (!cfg || typeof simulate !== 'function') return [];
   const p = cfg.params || {};
   const get = (typeof pget === 'function') ? pget : (pp, id, d) => (pp && id in pp) ? pp[id] : d;
-  const ul  = (typeof ulColFromVal === 'function') ? ulColFromVal : (v) => (v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : 1);
+  const ul  = ulColFromVal;
   if (cfg.type === '9sig') {
     const cd = +get(p, 'select-9sig-crashdrop', 30), sp = +get(p, 'select-9sig-spike', 100);
     const opts = {
@@ -1748,7 +1749,7 @@ function analyticsConfigPoints(cfg, initial, monthly, rate, annualRaise, entryId
   if (cfg.type === 'bh') {
     const r = simulate(initial, monthly, 0, entryIdx, exitIdx, annualRaise, {});
     const key = get(p, 'select-bh-underlying', 'tqqq');
-    const arr = key === 'qqq' ? r.qqqPoints : key === 'spy' ? r.spyPoints : key === 'qld' ? (r.qldPoints || []) : key === 'sso' ? (r.ssoPoints || []) : key === 'spxl' ? (r.spxlPoints || []) : r.bhPoints;
+    const arr = r[STRATEGY_REGISTRY['bh-' + key].pointsKey];   // the picked fund's own line, by the registry: every fund, where a chain of its own stopped at SPXL
     return (arr || []).map(pt => ({ date: pt.date, value: pt.value }));
   }
   if (cfg.type === 'invested') {

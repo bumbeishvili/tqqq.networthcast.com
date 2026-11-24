@@ -100,12 +100,12 @@ const MINI_EVENT = { halfW: 1.2, minPx: 6, gapPx: 2, thinPx: 12, mergeX: 4, maxS
 // Marks at the trade crossings: the main chart's symbol and colour per action
 // (CUSTOM_EVENT_STYLE: buy circle, sell hexagon, switch diamond) inside a
 // light ring per asset — the asset sold on a sell, the one bought otherwise —
-// so "sell TQQQ" and "buy SQQQ" read apart without a dark stroke; SQQQ, the
-// one inverse fund, gets a dashed ring. Sizes in px, divided by k when drawn;
+// so "sell TQQQ" and "buy SQQQ" read apart without a dark stroke; SQQQ and SOXS,
+// the two inverse funds, get a dashed ring. Sizes in px, divided by k when drawn;
 // hitPad is how far outside a mark the hover still counts as on it.
 const MINI_MARK = { r: 2.6, ring: 1.2, hitPad: 4 };
-const MINI_ASSET_RING = { tqqq: '#9cc0ff', qqq: '#ffcf8a', spy: '#dcb3ff', qld: '#8fe1ef', sso: '#ffb0d9', spxl: '#dcc0a0', sqqq: '#c4c4d4', gld: '#e6dc8c', soxl: '#8cd1ca', soxx: '#c6c3ea', cash: '#e3e3ec' };
-const MINI_ASSET_DASHED = { sqqq: true };
+const MINI_ASSET_RING = { tqqq: '#9cc0ff', qqq: '#ffcf8a', spy: '#dcb3ff', qld: '#8fe1ef', sso: '#ffb0d9', spxl: '#dcc0a0', sqqq: '#c4c4d4', gld: '#e6dc8c', soxl: '#8cd1ca', soxx: '#c6c3ea', soxs: '#a8d08d', cash: '#e3e3ec' };
+const MINI_ASSET_DASHED = { sqqq: true, soxs: true };
 // 'TQQQ' / 'tqqq+cash' → the first known ticker, as assetStrokeFor does.
 function _miniAssetKey(held) {
   return String(held || '').toLowerCase().split(/[+/,\s]+/).find(part => MINI_ASSET_RING[part]) || null;

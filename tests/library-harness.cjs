@@ -13,11 +13,11 @@ const ROOT = path.join(__dirname, '..');
 vm.runInThisContext(fs.readFileSync(path.join(ROOT, 'js/data.js'), 'utf8'));   // parseDataFile, buildDaily, buildNfciDaily
 const CODE = require(path.join(ROOT, 'js/strategy-library-code.js'));
 
-const TICKERS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'];
+const TICKERS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'];
 const series = file => parseDataFile(fs.readFileSync(path.join(ROOT, 'data', file), 'utf8'));
 const daily = buildDaily(series('synthetic-qqq.tsv'), series('synthetic-tqqq.tsv'), series('spy.tsv'),
   series('synthetic-qld.tsv'), series('synthetic-sso.tsv'), series('synthetic-spxl.tsv'), series('synthetic-sqqq.tsv'),
-  series('synthetic-gld.tsv'), series('synthetic-soxl.tsv'), series('synthetic-soxx.tsv'));
+  series('synthetic-gld.tsv'), series('synthetic-soxl.tsv'), series('synthetic-soxx.tsv'), series('synthetic-soxs.tsv'));
 const data = {
   dates: daily.map(d => d.date),
   nfci: buildNfciDaily(daily, series('nfci.tsv')),

@@ -6,7 +6,7 @@ The site's price history is committed to git by the GitHub Action. This worker s
 
 | route | answer |
 | --- | --- |
-| `GET /quotes` | `{ fetchedAt, quotes: { TQQQ: { price, prevClose, changePct, time, open, high, low, volume }, ... } }` for the ten funds in `SYMBOLS` |
+| `GET /quotes` | `{ fetchedAt, quotes: { TQQQ: { price, prevClose, changePct, time, open, high, low, volume }, ... } }` for the eleven funds in `SYMBOLS` |
 | `GET /quotes?symbols=TQQQ,SOXL` | the same for a subset |
 | `GET /bars/TQQQ?range=1d&interval=1m` | `{ symbol, range, interval, timezone, bars: [{ t, o, h, l, c, v }] }`; `range` 1d with 1m or 5m bars, 5d with 5m |
 | `GET /bars/TQQQ?range=1d&interval=1m&format=tsv` | the same bars in the layout of `data/intraday/tqqq-today-1m.tsv` (`Date Open High Low Close Volume`, the bar's open time in New York as `M/D/YYYY HH:MM:SS`, regular session 09:30-15:59 only, four decimals, integer volume): today's session for the intraday page, at most a minute old. Outside market days it is the last session, as the committed file is. |

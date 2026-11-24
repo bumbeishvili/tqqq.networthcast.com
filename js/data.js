@@ -60,7 +60,7 @@ function minutesBeforeClose(lastDate, fetchedAt) {
 // adjustment bases (a split, as SOXX on 2026-11-05) and the fund keeps the file's
 // price. The intraday page keeps its own copy of the URL (experiments/tqqq-intraday.html).
 const QUOTES_PROXY = 'https://tqqq-quotes.infoicy.workers.dev';
-const LIVE_FUNDS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx'];
+const LIVE_FUNDS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'];
 const LIVE_PREV_CLOSE_TOLERANCE = 0.03;
 // Outside the regular session a quote carries `extended`: the fund's latest
 // pre-market, after-hours or overnight print, its time and its change against
@@ -152,7 +152,7 @@ function applyLiveQuotes(dailyArr, highLowRows, live) {
 // 15 and 6, the dataviz validator's floors), as do the funds that share a
 // panel in the library (SPY and QQQ). TQQQ beside SPY or GLD is a red/green
 // pair, told apart by the end labels.
-const FUND_COLORS = { tqqq: '#ff2d2e', qqq: '#0b6399', spy: '#00b929', qld: '#7c3aed', sso: '#c026d3', spxl: '#be185d', sqqq: '#7f1d1d', gld: '#a16207', soxl: '#e8890b', soxx: '#0ea5e9' };
+const FUND_COLORS = { tqqq: '#ff2d2e', qqq: '#0b6399', spy: '#00b929', qld: '#7c3aed', sso: '#c026d3', spxl: '#be185d', sqqq: '#7f1d1d', gld: '#a16207', soxl: '#e8890b', soxx: '#0ea5e9', soxs: '#1f2937' };
 
 // Daily highs and lows (data/<fund>-hl.tsv, written by scripts/update_data.py) of the
 // funds the Turnaround Monday rule can read. A row also carries its bar's own
@@ -193,13 +193,14 @@ async function loadSQQQDaily() { return loadSeries('synthetic-sqqq.tsv'); }
 async function loadGLDDaily()  { return loadSeries('synthetic-gld.tsv'); }
 async function loadSOXLDaily() { return loadSeries('synthetic-soxl.tsv'); }
 async function loadSOXXDaily() { return loadSeries('synthetic-soxx.tsv'); }
+async function loadSOXSDaily() { return loadSeries('synthetic-soxs.tsv'); }
 
 // Merge daily TSVs by date. The synthetic TSVs already contain synthesized
 // pre-inception rows (baked by scripts/update_data.py), so this is a straight join —
 // no synthesis here. monthlyData column layout:
-//   [date, tqqq, qqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx]   (cols
-//   0..10, the order of js/simulate.js COL_TO_DAILY_KEY).
-function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily, sqqqDaily, gldDaily, soxlDaily, soxxDaily) {
+//   [date, tqqq, qqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, soxs]   (cols
+//   0..11, the order of js/simulate.js COL_TO_DAILY_KEY).
+function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily, sqqqDaily, gldDaily, soxlDaily, soxxDaily, soxsDaily) {
   const tqqqMap = new Map(tqqqDaily.map(d => [d[0], d[1]]));
   const spyMap  = new Map(spyDaily.map(d => [d[0], d[1]]));
   const qldMap  = qldDaily  ? new Map(qldDaily.map(d  => [d[0], d[1]])) : null;
@@ -209,6 +210,7 @@ function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily
   const gldMap  = gldDaily  ? new Map(gldDaily.map(d  => [d[0], d[1]])) : null;
   const soxlMap = soxlDaily ? new Map(soxlDaily.map(d => [d[0], d[1]])) : null;
   const soxxMap = soxxDaily ? new Map(soxxDaily.map(d => [d[0], d[1]])) : null;
+  const soxsMap = soxsDaily ? new Map(soxsDaily.map(d => [d[0], d[1]])) : null;
   const result = [];
   for (const [date, qqqPrice] of qqqDaily) {
     const tqqqPrice = tqqqMap.get(date);
@@ -225,6 +227,7 @@ function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily
         gld:  gldMap  ? (gldMap.get(date)  || 0) : 0,
         soxl: soxlMap ? (soxlMap.get(date) || 0) : 0,
         soxx: soxxMap ? (soxxMap.get(date) || 0) : 0,
+        soxs: soxsMap ? (soxsMap.get(date) || 0) : 0,
       });
     }
   }
@@ -235,7 +238,7 @@ function buildDaily(qqqDaily, tqqqDaily, spyDaily, qldDaily, ssoDaily, spxlDaily
   // synthetic-soxl.tsv and synthetic-soxx.tsv reached 1953 on 2026-11-10;
   // data/README.md). So a 0 reaches an engine only for a fund with no data at
   // all, and a price before a fund's first row is flat, never 0.
-  for (const key of ['spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx']) {
+  for (const key of ['spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs']) {
     let last = 0;
     for (const row of result) { if (row[key] > 0) last = row[key]; else if (last > 0) row[key] = last; }
     const first = result.find(row => row[key] > 0);
@@ -288,11 +291,11 @@ function getMonth(dateStr) {
 }
 
 // Each quarter's or month's last daily row as [date, tqqq, qqq, spy, qld, sso,
-// spxl, sqqq, gld, soxl, soxx]: the page's quarterlyData and monthlyData (js/init.js), and the
+// spxl, sqqq, gld, soxl, soxx, soxs]: the page's quarterlyData and monthlyData (js/init.js), and the
 // same rows the code version of the SMA strategy rebuilds in its sandbox
 // (js/strategy-library-code.js smaStrategyCode).
 function periodRows(daily, periodFn) {
-  return lastOfPeriod(daily, periodFn).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx]);
+  return lastOfPeriod(daily, periodFn).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx, d.soxs]);
 }
 
 function getYear(dateStr) {
@@ -352,7 +355,7 @@ let monthlyByQuarter = null;
 // for the named period. Mirrors the existing monthlyData / quarterlyData
 // shape — same columns, same date format. Called once after `daily` loads.
 function buildPeriodData(periodFn) {
-  return lastOfPeriod(daily, periodFn).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx]);
+  return lastOfPeriod(daily, periodFn).map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx, d.soxs]);
 }
 
 // Build the months-in-period index for the given periodData. monthsInPeriod[i]
@@ -432,7 +435,7 @@ function buildEnvelopeQData(period, dayOffset, entryDate, exitDate) {
   if (entryDailyIdx == null) return [];
   const periodDays = PERIOD_DAYS[period] || 63;
   const entryD = daily[entryDailyIdx];
-  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx];
+  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx, d.soxs];
   const result = [rowFor(entryD)];
   let dailyIdx = entryDailyIdx + Math.max(1, dayOffset);
   while (dailyIdx < daily.length) {
@@ -457,7 +460,7 @@ function buildExactRangeQData(period, entryDate, exitDate) {
   const xIdx = dailyDateToIdx.get(exitDate);
   if (eIdx == null || xIdx == null || eIdx >= xIdx) return [];
   const src = (periodDataByName && periodDataByName[period]) || quarterlyData;
-  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx];
+  const rowFor = (d) => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx, d.soxs];
   const result = [rowFor(daily[eIdx])];
   for (const p of src) { if (p[0] > entryDate && p[0] < exitDate) result.push(p); }
   result.push(rowFor(daily[xIdx]));
@@ -492,16 +495,26 @@ let rsiAtDailyByKey   = null;   // { 'qqq_10':  [rsi per daily entry, or null] }
 // sso, spxl]) so the SMA loop can step over days when checking daily.
 let dailyRows = null;
 
+// The average of each row's last `window` values, null until a full window of positive ones.
+// The sum is taken afresh from the window's own values every `window` rows and slid in between. Carried
+// on from the series' first row it kept the rounding of prices that were once many orders larger: an
+// inverse fund's reconstructed history falls from about 1e27 (SOXS in 1953) or 1e15 (SQQQ) to 1e2,
+// and its 200-day average came out trillions away (SOXS) or 18% off (SQQQ, 2026).
 function rollingSMA(values, window) {
   const out = new Array(values.length);
   let sum = 0;
   let count = 0;
   for (let i = 0; i < values.length; i++) {
-    const v = values[i];
-    if (v > 0) { sum += v; count++; }
-    if (i >= window) {
-      const drop = values[i - window];
-      if (drop > 0) { sum -= drop; count--; }
+    if ((i + 1) % window === 0) {
+      sum = 0; count = 0;
+      for (let k = i - window + 1; k <= i; k++) if (values[k] > 0) { sum += values[k]; count++; }
+    } else {
+      const v = values[i];
+      if (v > 0) { sum += v; count++; }
+      if (i >= window) {
+        const drop = values[i - window];
+        if (drop > 0) { sum -= drop; count--; }
+      }
     }
     out[i] = count === window ? sum / window : null;
   }
@@ -592,6 +605,7 @@ function precomputeSMASeries() {
     sso:  daily.map(d => d.sso),  spxl: daily.map(d => d.spxl),
     sqqq: daily.map(d => d.sqqq), gld:  daily.map(d => d.gld),
     soxl: daily.map(d => d.soxl), soxx: daily.map(d => d.soxx),
+    soxs: daily.map(d => d.soxs),
   };
 
   const sma = makeLazyIndicator(seriesByAsset, toMonthly, rollingSMA);
@@ -599,5 +613,5 @@ function precomputeSMASeries() {
   const rsi = makeLazyIndicator(seriesByAsset, toMonthly, rollingRSI);
   rsiAtDailyByKey = rsi.daily; rsiAtMonthlyByKey = rsi.monthly;
 
-  dailyRows = daily.map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx]);
+  dailyRows = daily.map(d => [d.date, d.tqqq, d.qqq, d.spy, d.qld, d.sso, d.spxl, d.sqqq, d.gld, d.soxl, d.soxx, d.soxs]);
 }
