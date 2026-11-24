@@ -3224,14 +3224,22 @@ function render() {
       : [day.portfolio - day.invested, ydayPortfolio - (day.invested - day.flowToday)];
     return computeDayChange(todayVal, todayVal * yday / today);
   };
-  const deltaLabelText = (delta) => `(${delta.session ? EXTENDED_SESSION_NAMES[delta.session] + ' ' : ''}${fmtDayChange(delta)})`;
-  // The end-of-line labels' column in its two layouts. Compact (a phone-width window) draws
-  // the name only; full draws the name over its value.
-  //   namePx                 the name's font size
-  //   touchScaled            whether a touch screen's type scale enlarges it. The compact name
-  //                          stays at its size (the user, 24 November 2026: "Ok to reduce font
-  //                          size here"): at the scale's 10px a phone's label column took 130px
-  //                          of a canvas 333px wide, and most names needed two lines.
+  // The day's change as the end label words it: in full, "(-8.4% · -$483.6K)"; on a phone-width
+  // chart the percent alone. Outside the regular session either names the session first.
+  const deltaSession = (delta) => delta.session ? EXTENDED_SESSION_NAMES[delta.session] + ' ' : '';
+  const deltaLabelText = (delta) => `(${deltaSession(delta)}${fmtDayChange(delta)})`;
+  const deltaPercentText = (delta) => deltaSession(delta) + fmtDayChangePct(delta);
+  // The end-of-line labels' column in its two layouts, compact (a phone-width window) and
+  // full. Both draw a line's name over its value, with the day's change beside the value while
+  // the chart ends on the latest day. Compact is the smaller: until 25 November 2026 it drew
+  // the name alone, and the user, on the phone: "Does not show most important, value and
+  // percent change".
+  //   namePx, valuePx, badgePx   the font sizes of the name, the value and the day's change
+  //   touchScaled            whether a touch screen's type scale enlarges them. Compact stays
+  //                          at its sizes (the user, 24 November 2026: "Ok to reduce font size
+  //                          here"): at the scale's 10px a phone's label column took 130px of
+  //                          a canvas 333px wide, and most names needed two lines.
+  //   badgeText              how the day's change is worded
   //   marginMin, marginMax   the floor and the ceiling of the right margin kept for the labels
   //   marginGaps             END_LABEL_GAP plus the room kept past the text
   //   gap                    the least distance between the anchors of two one-line labels
@@ -3240,13 +3248,17 @@ function render() {
   // edge, and a long name of the user's own was cut on a desktop too). A name that fits it,
   // even with none of the room past the text left, stays on one line as it always did.
   const END_LABEL_GAP = 8;   // from the plot's right edge to the labels' text
+  const END_LABEL_BADGE_GAP = 5;   // from the value to the day's change on the same row
   const END_LABEL = {
-    compact: { namePx: 8, touchScaled: false, marginMin: 40, marginMax: 130, marginGaps: 12, gap: 13 },
-    full: { namePx: 9, touchScaled: true, marginMin: 100, marginMax: 260, marginGaps: 16, gap: 26 },
+    compact: { namePx: 8, valuePx: 10, badgePx: 9, touchScaled: false, badgeText: deltaPercentText, marginMin: 40, marginMax: 130, marginGaps: 12, gap: 24 },
+    full: { namePx: 9, valuePx: 11, badgePx: 9, touchScaled: true, badgeText: deltaLabelText, marginMin: 100, marginMax: 260, marginGaps: 16, gap: 26 },
   };
-  // The name's font size on screen, and its font.
-  const endLabelNamePx = (spec) => spec.namePx * (spec.touchScaled ? uiScale() : 1);
+  // A font size of the layout on screen, and the three fonts.
+  const endLabelPx = (spec, px) => px * (spec.touchScaled ? uiScale() : 1);
+  const endLabelNamePx = (spec) => endLabelPx(spec, spec.namePx);
   const endLabelFont = (spec) => `600 ${endLabelNamePx(spec).toFixed(2)}px "Open Sans", sans-serif`;
+  const endLabelValueFont = (spec) => `500 ${endLabelPx(spec, spec.valuePx).toFixed(2)}px "JetBrains Mono", monospace`;
+  const endLabelBadgeFont = (spec) => `600 ${endLabelPx(spec, spec.badgePx).toFixed(2)}px "JetBrains Mono", monospace`;
   // A label's name as drawn: upper case, on the lines its column allows, with the widest
   // line's width. Leaves the context on the name's font.
   const endLabelName = (cx, spec, name) => {
@@ -3256,6 +3268,23 @@ function render() {
   };
   // From one line of a wrapped name to the next.
   const endLabelLineHeight = (spec) => Math.round(endLabelNamePx(spec) * 1.2);
+  // A label as drawn: its name's lines, its value, and the day's change (only while the chart
+  // ends on the latest day: a historical exit has no "since yesterday"). The change sits beside
+  // the value, or on a row of its own under it when the two are wider than the column may be,
+  // so the margin's ceiling clips neither. `width` is the widest row's.
+  const endLabelParts = (c, cx, spec, i, ds, val) => {
+    const name = endLabelName(cx, spec, ds.label || lineNames[i] || '');
+    const value = fmtFull(Math.round(val));
+    cx.font = endLabelValueFont(spec);
+    const valueW = cx.measureText(value).width;
+    const delta = c._isLatestDaySelected ? dayChangeFor(i, ds, val) : null;
+    if (!delta) return { lines: name.lines, value, valueW, badge: null, width: Math.max(name.width, valueW) };
+    const text = spec.badgeText(delta);
+    cx.font = endLabelBadgeFont(spec);
+    const badgeW = cx.measureText(text).width, besideW = valueW + END_LABEL_BADGE_GAP + badgeW;
+    const under = besideW > spec.marginMax - END_LABEL_GAP;
+    return { lines: name.lines, value, valueW, badge: { text, up: delta.pct >= 0, under }, width: Math.max(name.width, under ? Math.max(valueW, badgeW) : besideW) };
+  };
   const endLabelPlugin = {
     id: 'endLabels',
     // Size the reserved right margin to whatever the widest current label
@@ -3269,34 +3298,14 @@ function render() {
       const lastIdx = c.data.labels.length - 1;
       if (lastIdx < 0) return;
       const cx = c.ctx;
-      // Compact mode (narrow viewports): name only, no $ value line — a
-      // full label (name + value) doesn't fit next to a phone-width plot,
-      // but the plot NEEDS some identification directly on the lines. Fully
-      // suppressing labels left the chart as unlabeled colored squiggles —
-      // the legend chips are a separate scroll away, not a substitute for
-      // "which line is which" while actually looking at the lines.
-      const compact = window.innerWidth <= 600;
-      const spec = compact ? END_LABEL.compact : END_LABEL.full;
+      // A phone-width window gets the compact layout (END_LABEL).
+      const spec = window.innerWidth <= 600 ? END_LABEL.compact : END_LABEL.full;
       let maxW = 0;
       c.data.datasets.forEach((ds, i) => {
         if (ds._isShift || !c.isDatasetVisible(i)) return;
         const val = ds.data[lastIdx];
         if (typeof val !== 'number' || !isFinite(val)) return;
-        maxW = Math.max(maxW, endLabelName(cx, spec, ds.label || lineNames[i] || '').width);
-        if (!compact) {
-          cx.font = canvasFont(500, 11, '"JetBrains Mono", monospace');
-          let rowW = cx.measureText(fmtFull(Math.round(val))).width;
-          // Delta badge draws inline right after the value on the same row —
-          // its width adds to that row's total instead of getting its own line.
-          if (c._isLatestDaySelected) {
-            const delta = dayChangeFor(i, ds, val);
-            if (delta) {
-              cx.font = canvasFont(600, 9, '"JetBrains Mono", monospace');
-              rowW += 5 + cx.measureText(deltaLabelText(delta)).width;
-            }
-          }
-          maxW = Math.max(maxW, rowW);
-        }
+        maxW = Math.max(maxW, endLabelParts(c, cx, spec, i, ds, val).width);
       });
       if (maxW === 0) return;
       // The gap from the plot edge to the text and breathing room past it
@@ -3323,10 +3332,10 @@ function render() {
         }
       }
       fitChartZoomUi(c);
-      // Compact mode below — see the matching comment in beforeLayout.
-      const compact = window.innerWidth <= 600;
-      const spec = compact ? END_LABEL.compact : END_LABEL.full;
+      const spec = window.innerWidth <= 600 ? END_LABEL.compact : END_LABEL.full;
       const lineHeight = endLabelLineHeight(spec);
+      // The value's row to a change drawn under it.
+      const valueRowHeight = Math.round(endLabelPx(spec, spec.valuePx) * 1.2);
       const lastIdx = c.data.labels.length - 1;
       if (lastIdx < 0) return;
 
@@ -3359,14 +3368,12 @@ function render() {
         // colour all show without a chart rebuild. Fall back to the init arrays.
         const color = (typeof ds.borderColor === 'string' ? ds.borderColor : null) || lineColors[i] || "#7a7aa6";
         // The room the label takes above and below its anchor: half the layout's
-        // gap each way for a one-line name (compact draws the name alone, so it
-        // needs much less than the name-over-value layout), plus the name's further
-        // lines. Compact centres the name on the anchor, so they split evenly; the
-        // full layout stacks the name over the value, so they all go above.
-        const lines = endLabelName(cx, spec, ds.label || lineNames[i]).lines;
-        const more = (lines.length - 1) * lineHeight;
-        const up = spec.gap / 2 + (compact ? more / 2 : more), down = spec.gap / 2 + (compact ? more / 2 : 0);
-        return { y, origY: y, i, color, lines, val, up, down };
+        // gap each way for a one-line name over its value, plus the name's further
+        // lines above and a day's change drawn under the value below.
+        const parts = endLabelParts(c, cx, spec, i, ds, val);
+        const up = spec.gap / 2 + (parts.lines.length - 1) * lineHeight;
+        const down = spec.gap / 2 + (parts.badge && parts.badge.under ? valueRowHeight : 0);
+        return { y, origY: y, i, color, parts, up, down };
       }).filter(Boolean);
 
       // Sort by y position and de-overlap: two neighbours' anchors stay at least
@@ -3419,47 +3426,30 @@ function render() {
         cx.fillStyle = it.color;
         cx.fill();
 
-        if (compact) {
-          // Name only, its lines vertically centered on the line — there's no
-          // value line underneath to share the row with.
-          cx.font = endLabelFont(spec);
-          cx.fillStyle = it.color;
-          cx.globalAlpha = 0.88;
-          cx.textBaseline = 'middle';
-          const firstY = it.y - (it.lines.length - 1) * lineHeight / 2;
-          it.lines.forEach((line, n) => cx.fillText(line, x, firstY + n * lineHeight));
-          cx.globalAlpha = 1;
-          return;
-        }
-
+        const { lines, value, valueW, badge } = it.parts;
         // Label name: its last line sits on the anchor, the lines before it stack above.
         cx.font = endLabelFont(spec);
         cx.fillStyle = it.color;
         cx.globalAlpha = 0.88;   // light theme: 0.7 washed labels out on white
         cx.textBaseline = 'bottom';
-        it.lines.forEach((line, n) => cx.fillText(line, x, it.y - 1 - (it.lines.length - 1 - n) * lineHeight));
+        lines.forEach((line, n) => cx.fillText(line, x, it.y - 1 - (lines.length - 1 - n) * lineHeight));
         cx.globalAlpha = 1;
 
         // Value
-        cx.font = canvasFont(500, 11, '"JetBrains Mono", monospace');
+        cx.font = endLabelValueFont(spec);
         cx.fillStyle = it.color;
         cx.textBaseline = 'top';
-        const valStr = fmtFull(Math.round(it.val));
-        cx.fillText(valStr, x, it.y + 1);
+        cx.fillText(value, x, it.y + 1);
 
-        // Day-over-day change badge — inline right after the value, only
-        // when the chart is actually showing the latest available day (a
-        // historical exit date has no "since yesterday" to speak of).
-        if (c._isLatestDaySelected) {
-          const delta = dayChangeFor(it.i, c.data.datasets[it.i], it.val);
-          if (delta) {
-            const valW = cx.measureText(valStr).width;
-            cx.font = canvasFont(600, 9, '"JetBrains Mono", monospace');
-            cx.fillStyle = delta.pct >= 0 ? DELTA_POS_COLOR : DELTA_NEG_COLOR;
-            cx.globalAlpha = 0.95;
-            cx.fillText(deltaLabelText(delta), x + valW + 5, it.y + 2);
-            cx.globalAlpha = 1;
-          }
+        // Day-over-day change badge: right after the value, or under it
+        // (endLabelParts).
+        if (badge) {
+          cx.font = endLabelBadgeFont(spec);
+          cx.fillStyle = badge.up ? DELTA_POS_COLOR : DELTA_NEG_COLOR;
+          cx.globalAlpha = 0.95;
+          if (badge.under) cx.fillText(badge.text, x, it.y + 1 + valueRowHeight);
+          else cx.fillText(badge.text, x + valueW + END_LABEL_BADGE_GAP, it.y + 2);
+          cx.globalAlpha = 1;
         }
       });
       cx.restore();
