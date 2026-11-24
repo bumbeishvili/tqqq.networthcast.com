@@ -4967,9 +4967,10 @@ ${bareFn(wilderRsi)}
   if (!t.endsWith('    return res;\n  }\n}')) throw new Error(what('the text must end with its dashboard'));
   return t.slice(0, -'    return res;\n  }\n}'.length) + dashboard + '    return res;\n  }\n}';
 }
-CODE[53] = withLateWeekCash(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", fund: "sqqq", outDay: 3, backDay: 1, weekend: true, rsiSkip: false, lag: true, trend: true, trendDays: 40,
-  mondayFell: "1.18%", mondayElse: "+0.65%", trendTip: "On here, at 40 days, since your fit of 24 November 2026.",
-  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 118 trades, 46% of them up, 2.0% each on average; about a third of the gain came in 2022." });
+const FIT_LATE_WEEK = { name: "SOXL, TQQQ, QQQ - 1983 fit", fund: "sqqq", outDay: 3, backDay: 1, weekend: true, rsiSkip: false, lag: true, trend: true, trendDays: 40,
+  mondayFell: "1.36%", mondayElse: "+0.54%", trendTip: "On here, at 40 days, since your fit of 24 November 2026.",
+  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 122 trades, 47% of them up, 2.1% each on average; about a third of the gain came in 2022." };
+CODE[53] = withLateWeekCash(CODE[53], FIT_LATE_WEEK);
 // ===== #53: the defaults of 24 November 2026 (the user, pasting the settings of their copy after a
 // Fit that day: "set these defaults for fit"). Twenty-one settings moved, the late-week trade's three
 // through its own spec above. Steady fit (#71) was built from this strategy's text before these are
@@ -4996,6 +4997,38 @@ const FIT_DEFAULTS_2026_11_24 = {
   overWindow: 245, sqqqMaxDays: 9, soxlLeadDays: 330, soxlLeadEnter: -75, soxlLeadExit: 325, soxlPile: false,
   bigDrop: 20, dipDay: 3, dipUnder: 60, dipSellDay: 4, splitDays: false };
 CODE[53] = withDefaults(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: FIT_DEFAULTS_2026_11_24 });
+// ===== #74: "SOXL, TQQQ - 2010-2025 fit" (the user, 2026-11-24, after fitting their copy of #53 on Q1
+// 2010 to Q4 2025: "create new strategy, call it 2010-2025 fit", then the copy's whole panel: "here ,
+// call it soxl,tqqq - 2010-2025 fit") =====
+// #53's rules with sixteen defaults moved, fifteen of them to that panel's values: the start averaged
+// over ±60 days; SQQQ at the ceiling for 10 days; the bear exit 25% under the median, only while the
+// median falls; no limit on days in SQQQ; SOXL's lead over 360 days, held from under -20% until over
+// 150%; Big days out after a rise of 8.5%; the Month-end dip from the 10th to last day to the first of
+// the next month; the late-week trade in SOXS, with the RSI skip over 7 days and a 45-day down trend.
+// The panel read CAGR 304.3%, max drawdown 47.2% (24 April to 31 May 2019), end $532.0T: these values
+// with $80K and $3K a month give $532.0T and that drawdown to the day. The numbers are on the card
+// (js/strategy-library.js). It is fitted on the years strategies are judged on here, so those years
+// are no test of it: the card says so.
+// One value is not the panel's: "Go back to TQQQ once the lead is down to" is 40%, where the panel had
+// 30% (the user, the same day, on seeing where 30% sits: "ok do 40%"). Four times since 2010 the lead
+// bottomed between 27% and 30% (June 2012, December 2018, April 2022, April 2025), and 30% caught each
+// by 0.5 to 2.6 points: at 27% the buy of 8 April 2025 is missed and the fit makes 242% a year in place
+// of 300%. From 28% to 45% it makes 281% to 302% with the same drawdown.
+// Three texts of #53's late-week settings state facts of #53's own trades; #74 carries its own.
+const FIT_2010_2025 = "SOXL, TQQQ - 2010-2025 fit";
+const FIT_2010_2025_DEFAULTS = {
+  startAvgDays: 60, topDays: 10, backLead: 40, bearUnder: 25, bearSlope: 0, sqqqMaxDays: 0, soxlLeadDays: 360, soxlLeadEnter: -20, soxlLeadExit: 150,
+  bigRise: 8.5, dipDay: 10, dipSellDay: 1, lateFund: "soxs", lateRsiSkip: true, lateRsiDays: 7, lateTrendDays: 45 };
+const FIT_2010_2025_LATE_WEEK = { section: "Late-week SOXS", mondayFell: "2.30%", mondayElse: "+1.41%", trendTip: "On here, at 45 days.",
+  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 67 trades, 66% of them up, 7.6% each on average; about 40% of the gain came in 2022." };
+// A late-week text as #53's spec writes it into the settings, and as #74's does.
+const lateWeekTexts = (late) => [
+  `{ section: "${late.section}", tip: "${late.tip}" }`,
+  `TQQQ fell ${late.mondayFell} on average on the Monday after such a close and moved ${late.mondayElse} after the others.`,
+  late.trendTip];
+CODE[74] = lateWeekTexts(Object.assign({ section: "Late-week SQQQ" }, FIT_LATE_WEEK)).reduce(
+  (text, was, k) => replacedOnce(text, was, lateWeekTexts(FIT_2010_2025_LATE_WEEK)[k], `#74: #53's late-week text ${k + 1}`),
+  withDefaults(CODE[53], { name: FIT_2010_2025, defaults: FIT_2010_2025_DEFAULTS }));
 // Steady fit with it, Q1 2010 to Q4 2025: 155.6% a year to 175.5% with the same 39.3% drawdown
 // (2010-17 91.1% to 94.7%, 2018-25 241.6% to 289.7%), 2026 the same. It is less steady with it:
 // the worst 12 months go from -4.0% to -35.1% (May 2014 to May 2015), and 2015 and 2021 make 8%
