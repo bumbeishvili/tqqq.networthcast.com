@@ -13,6 +13,7 @@
  *   node tests/library-steady-fit.cjs
  */
 const { data, strategyOf, settingsOf, defaultsOf } = require('./library-harness.cjs');
+const { testDefaults } = require('./fit-round-settings.cjs');   // #53 at the settings #71 was built from; #53's own defaults moved on 24 November 2026
 
 let failures = 0;
 const ck = (name, ok, detail) => {
@@ -26,7 +27,7 @@ const CEILING = 100, SOXL_EXIT = 10;   // #71's two changed defaults
 const PILE_IDS = ['soxlPile', 'pileHandover', 'pileFloor'];
 const LEFT_ALONE = ['topLead', 'backLead', 'bearUnder', 'bearSlope', 'bearCloses', 'sqqqMaxDays', 'nfciVeto', 'soxlSell', 'soxlLeadExit', 'soxlTrail', 'soxlTrailFrom'];
 const START = data.dates.findIndex(d => d >= '2010-01-04'), END = data.dates.findIndex(d => d > '2025-12-31') - 1;
-const run = (n, settings, contributions) => { const strategy = strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions, startIdx: START, endIdx: END, dailyDisplay: true }); };
+const run = (n, settings, contributions) => { const strategy = strategyOf(n); return strategy.run(data, { ...testDefaults(n, defaultsOf(strategy)), ...settings, initial: 100000, contributions, startIdx: START, endIdx: END, dailyDisplay: true }); };
 
 const fit = strategyOf(FIT), steady = strategyOf(STEADY);
 
@@ -35,7 +36,7 @@ const fit = strategyOf(FIT), steady = strategyOf(STEADY);
   const fitIds = settingsOf(fit).map(param => param.id), ids = settingsOf(steady).map(param => param.id);
   ck('its settings are #53\'s less the pile\'s three, in the same order', ids.join() === fitIds.filter(id => !PILE_IDS.includes(id)).join(), ids.join());
   ck('it has no contributions section', !steady.params.some(param => /Contributions/.test(param.section || '')));
-  const fitDefaults = defaultsOf(fit), defaults = defaultsOf(steady);
+  const fitDefaults = testDefaults(FIT, defaultsOf(fit)), defaults = defaultsOf(steady);
   const moved = ids.filter(id => JSON.stringify(defaults[id]) !== JSON.stringify(fitDefaults[id]));
   ck('two defaults differ from #53\'s: the ceiling and the SOXL sell level', moved.join() === 'topLead,soxlLeadExit' && defaults.topLead === CEILING && defaults.soxlLeadExit === SOXL_EXIT,
     moved.map(id => `${id} ${fitDefaults[id]} -> ${defaults[id]}`).join(', '));

@@ -4841,7 +4841,7 @@ function withLateWeekCash(base, spec) {
     { id: "lateLagBy", label: "Late-week lag by more than", tip: "How far under QQQ's return, in points.", text: "under QQQ's by more than {}.", unit: "%", default: 2, when: { lateFund: ${funds}, lateRsiSkip: true, lateLag: true }, options:
       ${JSON.stringify(Array.from({ length: 41 }, (_, k) => 0.5 * k).concat([22, 25, 30, 35, 40]))} },
     { id: "lateTrend", label: "Late-week down trend", tip: "Yes: a week is taken only if TQQQ closes under the median of the closes before it at the close before the week's first day. ${spec.trendTip}", text: "Only in a down trend: {}.", type: "bool", default: ${spec.trend}, when: { lateFund: ${funds} }, options: ${LATE_WEEK_YES_NO} },
-    { id: "lateTrendDays", label: "Late-week median over (days)", tip: "How many closes before the day the median covers.", text: "A down trend is TQQQ under its {}-day median.", default: 30, when: { lateFund: ${funds}, lateTrend: true }, options:
+    { id: "lateTrendDays", label: "Late-week median over (days)", tip: "How many closes before the day the median covers.", text: "A down trend is TQQQ under its {}-day median.", default: ${spec.trendDays}, when: { lateFund: ${funds}, lateTrend: true }, options:
       ${JSON.stringify(Array.from({ length: 59 }, (_, k) => 2 + k).concat(Array.from({ length: 38 }, (_, k) => 65 + 5 * k)))} },
 `;
   const params = `    { section: "Late-week SQQQ", tip: "${spec.tip}" },
@@ -4882,7 +4882,7 @@ ${bareFn(wilderRsi)}
     const LATE_WEEKEND = lateFlag(p.lateWeekend, ${spec.weekend}), LATE_RSI_SKIP = lateFlag(p.lateRsiSkip, ${spec.rsiSkip}), LATE_LAG = LATE_RSI_SKIP && lateFlag(p.lateLag, ${spec.lag}), LATE_TREND = lateFlag(p.lateTrend, ${spec.trend});
     const LATE_RSI_DAYS = Math.max(2, Math.round(+p.lateRsiDays || 10)), LATE_RSI_LEVEL = p.lateRsiLevel == null ? 40 : +p.lateRsiLevel;
     const LATE_LAG_DAYS = Math.max(1, Math.round(+p.lateLagDays || 20)), LATE_LAG_BY = p.lateLagBy == null ? 2 : +p.lateLagBy;
-    const LATE_TREND_DAYS = Math.max(2, Math.round(+p.lateTrendDays || 30));
+    const LATE_TREND_DAYS = Math.max(2, Math.round(+p.lateTrendDays || ${spec.trendDays}));
     if (LATE_ON && LATE_LAG && !(data.soxx && data.qqq)) throw new Error("No prices for SOXX and QQQ (data.soxx, data.qqq)");
     const lateT = data.tqqq;
     const lateRsi = LATE_ON && LATE_RSI_SKIP ? wilderRsi(lateT, LATE_RSI_DAYS, p.endIdx) : null;
@@ -4967,16 +4967,32 @@ ${bareFn(wilderRsi)}
   if (!t.endsWith('    return res;\n  }\n}')) throw new Error(what('the text must end with its dashboard'));
   return t.slice(0, -'    return res;\n  }\n}'.length) + dashboard + '    return res;\n  }\n}';
 }
-CODE[53] = withLateWeekCash(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", fund: "sqqq", outDay: 3, backDay: 1, weekend: true, rsiSkip: true, lag: true, trend: false,
-  mondayFell: "1.34%", mondayElse: "+0.14%", trendTip: "Off here: with it the strategy makes 240.9% a year since 2010 in place of 253.9%.",
-  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 151 trades, 54% of them up, 2.9% each on average; more than half of the gain came in 2022." });
+CODE[53] = withLateWeekCash(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", fund: "sqqq", outDay: 3, backDay: 1, weekend: true, rsiSkip: false, lag: true, trend: true, trendDays: 40,
+  mondayFell: "1.18%", mondayElse: "+0.65%", trendTip: "On here, at 40 days, since your fit of 24 November 2026.",
+  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 118 trades, 46% of them up, 2.0% each on average; about a third of the gain came in 2022." });
+// ===== #53: the defaults of 24 November 2026 (the user, pasting the settings of their copy after a
+// Fit that day: "set these defaults for fit"). Twenty-one settings moved, the late-week trade's three
+// through its own spec above. Steady fit (#71) was built from this strategy's text before these are
+// applied and keeps the values it had.
+// Lump sum, Q1 2010 to Q4 2025: 170.1% a year (max drawdown 60.7%, August 2022 to January 2023;
+// worst 12 months -33.7%) against 253.9% (51.9%, -21.9%) at the defaults before; 2010-17 102.7%
+// against 118.0%, 2018-25 259.7% against 474.3%; behind in 11 of those 16 years. 2026 to 23 November
+// up 771% against 587%. Over the long history, on reconstructed prices before 2010, they are ahead:
+// 1953-2025 56.8% a year against 38.1%, 1983-2025 104.7% against 78.9%, 1986-2009 78.9% against
+// 28.0%. A fit of the whole chart: it gives up the years since 2010 for the ones before. The card
+// says so (js/strategy-library.js).
+const FIT_DEFAULTS_2026_11_24 = {
+  lookbackDays: 555, startAvgDays: 65, topLead: 105, topHold: "cash", topDays: 55, backLead: 30, bearSlope: 999, bearCloses: 35,
+  overWindow: 245, sqqqMaxDays: 3, soxlLeadDays: 330, soxlLeadEnter: -75, soxlLeadExit: 325, soxlPile: false,
+  bigDrop: 20, dipDay: 5, dipUnder: 55, dipSellDay: 4 };
+CODE[53] = withDefaults(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: FIT_DEFAULTS_2026_11_24 });
 // Steady fit with it, Q1 2010 to Q4 2025: 155.6% a year to 175.5% with the same 39.3% drawdown
 // (2010-17 91.1% to 94.7%, 2018-25 241.6% to 289.7%), 2026 the same. It is less steady with it:
 // the worst 12 months go from -4.0% to -35.1% (May 2014 to May 2015), and 2015 and 2021 make 8%
 // each where they made 34% and 73%. 254 trades, 48% of them up, 0.8% each on average (Steady
 // fit sits in cash more than Fit: 2014 has 41 trades, 2021 39). Better in 8 of 17 years, worse
 // in 5. Its tip and its card say so.
-CODE[71] = withLateWeekCash(CODE[71], { name: STEADY_FIT, fund: "sqqq", outDay: 3, backDay: 1, weekend: true, rsiSkip: true, lag: true, trend: false,
+CODE[71] = withLateWeekCash(CODE[71], { name: STEADY_FIT, fund: "sqqq", outDay: 3, backDay: 1, weekend: true, rsiSkip: true, lag: true, trend: false, trendDays: 30,
   mondayFell: "1.28%", mondayElse: "+0.55%", trendTip: "Off here. With it on the strategy makes 194.6% a year since 2010 in place of 202.4%, and its worst 12 months are -4% in place of -39%.",
   tip: "Trades the rules' idle cash late in the week. Since 2010 that was 247 trades, 47% of them up, 1.8% each on average. It adds 47 points a year and takes the worst 12 months from -4% to -39%; with the down trend on it adds 39 points and leaves them at -4%." });
 
@@ -6220,6 +6236,89 @@ ${bareFn(rsiLevel)}
         : NONE_OUT ? NO_DAYS + ": no days out" : backNow ? "back before the weekend: " + FUND_NAME + " is not under the close it was sold at"
         : downNow ? (lowNow ? "down trend, " + rsiSays(p.endIdx) + (lagsNow ? ", " + lagSays(p.endIdx) + ": a week starting now is taken for " + LAG_STAY : ": a week starting now is skipped") : "down trend: " + FUND_NAME + " until " + OUT_DAY + "'s close" + (RSI_SKIP ? " (" + rsiSays(p.endIdx) + ")" : "")) : "no down trend: " + FUND_NAME + " all week");`,
 });
+
+// ===== #73: #72 with the overextended line of the fits (the user, 2026-11-24, on that day's study of
+// the two in one account: "I like this, put it in a separate strategy") =====
+// #72 acts in a down trend, the fund under its 30-day median. The line acts at the other end: the
+// fund is left while it closes more than 55% above the median of its last 255 closes, today's
+// included, and bought back at the first close that does not. It is the SQQQ line of #53 and #71,
+// read the same way. The two rules almost never act at once: since 2010 TQQQ closed over the line
+// on 450 days, and #72 held SQQQ on 5 of them.
+// Q1 2010 to Q4 2025 at the defaults: 198.3% a year (max drawdown 56%, worst 12 months -21%)
+// against 149.1% (56%, -39%) for #72; 2026 to 23 November +582% against +251%. The 68 stays over
+// the line of those years: SQQQ up in 54, x4.8 in all, x3.0 without the five best. The stays of
+// 11 sessions or more lose (SQQQ up in 5 of 15). 255 days and 55% were fitted inside #53 on these
+// same years; the drawdown is #72's own (March to November 2018) and the line leaves it alone.
+// withOverextendedLine adds the rule to #72's text, so #72's rules stay written once:
+//   - five settings in a section of their own: the rule on or off, the fund read, the level, the
+//     median's length, and what is held (SQQQ, cash or another fund);
+//   - the week's own days out come first: on them the money is in #72's fund held in between,
+//     whatever the line holds, so with the rule off the entry trades as #72 does, row for row;
+//   - the line's reading and level as a chart panel of their own, where its trades are marked, a
+//     log column, a dashboard card, and its reading among the reasons of today's call.
+// The reading needs only the closes, so the Entry day holds what a strategy running all along holds.
+function withOverextendedLine(base, spec) {
+  const once = (text, find, repl, what) => replacedOnce(text, find, repl, `withOverextendedLine(${spec.name}): ${what}`);
+  const shown = { when: { overTake: true } };
+  const params = `    { section: "Overextended" },
+    { id: "overTake", label: "Overextended", tip: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 2010-2025 TQQQ closed more than 55% above its 255-day median in 68 stretches, and SQQQ rose over 54 of them.", text: "Leave the fund while a fund is overextended: {}.", type: "bool", default: true, options: [
+      { value: true, label: "Yes" }, { value: false, label: "No" } ] },
+    { id: "overFund", label: "Overextended fund", tip: "The fund whose closes are read.", text: "Overextended is {} closing", default: "tqqq", when: { overTake: true }, options:
+      ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
+${withoutOff(hostParam(spec.host, "overPct", { ...shown, label: "Overextended by", text: "more than {} above", default: spec.pct, tip: "How far above its median the close must be. With the 255-day median in 2010-2025: 50% made 164.3% a year, 55% 198.3%, 60% 188.0%. At 45% the rule costs more than it adds." }))}
+${hostParam(spec.host, "overWindow", { ...shown, label: "Median over (days)", text: "the median of its last {} closes.", default: spec.days, tip: "How many closes the median covers, today's included. 250 is about a year." })}
+    { id: "overHold", label: "Held overextended", tip: "What the money is in while overextended. Cash in SQQQ's place made 177.2% a year in 2010-2025 against 198.3%. On the week's own days out the fund held in between comes first.", text: "Hold {} until the first close back under that.", default: "${spec.hold}", when: { overTake: true }, options:
+      ${JSON.stringify([{ value: "cash", label: "cash" }].concat(bareFundOptions(BARE_FUNDS)))} },
+`;
+  const setup = `    // The overextended line: a fund's close against the median of its last closes, today's included, as
+    // #53 and #71 read it. Over the level the fund is left; the first close that is not buys it back.
+    const OVER_TAKE = p.overTake !== false, OVER_FUND = p.overFund || "tqqq", OVER_NAME = OVER_FUND.toUpperCase(), OVER_HOLD = p.overHold || "${spec.hold}";
+    const OVER_PCT = p.overPct == null ? ${spec.pct} : +p.overPct, OVER_DAYS = Math.max(2, Math.round(+p.overWindow || ${spec.days}));
+    if (OVER_TAKE && !data[OVER_FUND]) throw new Error("No prices for " + OVER_NAME + " (data." + OVER_FUND + ")");
+    if (OVER_TAKE && OVER_HOLD !== "cash" && !data[OVER_HOLD]) throw new Error("No prices for " + OVER_HOLD.toUpperCase() + " (data." + OVER_HOLD + ")");
+    const OVER_ON = OVER_TAKE && OVER_HOLD !== FUND;   // nothing to trade where the fund held while overextended is the fund itself
+    const OV = data[OVER_FUND], OVER_HOLD_NAME = nameOf(OVER_HOLD), OVER_PANEL = OVER_NAME + " vs its " + OVER_DAYS + "-day median";
+    const overMed = OVER_TAKE ? rollingMedian(OV, OVER_DAYS, 0, p.endIdx) : null;   // overMed[j]: the median of the closes ending at row j, that close included
+    // The close against that median, in percent; null with the rule off and before the fund has that many closes.
+    const overRel = (i) => (OVER_TAKE && i >= OVER_DAYS - 1 && OV[i - OVER_DAYS + 1] > 0 && OV[i] > 0 ? (OV[i] / overMed[i] - 1) * 100 : null);
+    const overAt = (i) => { const x = OVER_ON ? overRel(i) : null; return x !== null && x > OVER_PCT; };
+    const overSays = (i) => OVER_NAME + " " + (overRel(i) === null ? "n/a" : signedPct(overRel(i))) + " against its " + OVER_DAYS + "-day median";
+`;
+  let t = base.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
+  t = once(t, '    { section: "Execution & costs" },\n', params + '    { section: "Execution & costs" },\n', 'the settings before the execution section');
+  t = once(t, '    { key: "assetPrice", label: "Fund"', `    { key: "overRel", label: "vs median", tip: "How far the close the overextended rule reads sits above (+) or below (−) the median of its last closes, today's included, in percent. Blank with the rule off." },
+    { key: "assetPrice", label: "Fund"`, 'the columns');
+  t = once(t, '    const REST_HOLD = ', setup + '    const REST_HOLD = ', 'the end of the setup');
+  // The rule: out for the line at a close over the level, outside the week's own days out; and the
+  // close the line lets go at, when it was the line that held the money at the close before.
+  t = once(t, '      const want = outAt(i) ? "cash" : "tqqq";', `      const overHeld = overAt(i) && !outAt(i);
+      const overEnded = !overAt(i) && !outAt(i) && i > p.startIdx && overAt(i - 1) && !outAt(i - 1);
+      const want = outAt(i) || overHeld ? "cash" : "tqqq";`, 'the rule\'s choice');
+  t = once(t, '      const why = outAt(i) ? ', `      const why = overHeld ? "Overextended: " + overSays(i) + ", more than " + OVER_PCT + "% above it"
+        : overEnded ? "Back under the overextended level: " + overSays(i) + ", the level is " + OVER_PCT + "% above it"
+        : outAt(i) ? `, 'the rule\'s note');
+  t = once(t, '      const dest = want === "tqqq" ? FUND : OUT;', '      const dest = want === "tqqq" ? FUND : overHeld ? OVER_HOLD : OUT;', 'the holding');
+  t = once(t, 'lagOut(i) || lagBack(i) ? { firedBy: LAG_PANEL } : {}),', `lagOut(i) || lagBack(i) ? { firedBy: LAG_PANEL } : {}),
+          overRel: overRel(i), overLevel: overRel(i) === null ? null : OVER_PCT, overClose: OVER_TAKE && OV[i] > 0 ? OV[i] : null, overPx: overRel(i) === null ? null : overMed[i] * (1 + OVER_PCT / 100),
+          ...(TRADES.includes(action) && (overHeld || overEnded) ? { firedBy: OVER_PANEL } : {}),   // a trade the line made is marked in its panel`, 'the log row');
+  t = once(t, '    const chartLines = [', `    // The line on the chart and the dashboard: its panel, its card, and its reading among the reasons of today's call.
+    const overNow = overAt(p.endIdx), overHeldNow = overNow && !outAt(p.endIdx);
+    const overReading = (overRel(p.endIdx) === null ? "n/a" : signedPct(overRel(p.endIdx))) + " vs +" + OVER_PCT + "%";
+    const overLines = !OVER_TAKE ? [] : [{ key: "overRel", label: OVER_NAME + " vs median", unit: "%", group: OVER_PANEL, priceKey: "overClose" }, { key: "overLevel", label: "Overextended over", unit: "%", group: OVER_PANEL, priceKey: "overPx" }];
+    const overCards = !OVER_TAKE ? [] : [{ label: "Overextended", icon: "activity", tone: overNow ? "bad" : "good", value: !OVER_ON ? "No trades" : overNow ? (OVER_HOLD === "cash" ? "Cash" : OVER_HOLD_NAME) : "Under the level", sub: overReading,
+      tip: OVER_NAME + "'s close against the median of its last " + OVER_DAYS + " closes, today's included. With the close more than " + OVER_PCT + "% above it the money is in " + OVER_HOLD_NAME + ", and back in " + FUND_NAME + " at the first close that is not. On the week's own days out it is in " + OUT_NAME + "."
+        + (OVER_ON ? "" : " " + FUND_NAME + " is also the fund held while overextended, so the rule trades nothing.") }];
+    const overReason = { name: "Overextended", val: overReading, tag: overNow ? OVER_HOLD_NAME : "in · " + FUND_NAME, lean: !overNow ? "buy" : OVER_HOLD === "cash" ? "cash" : "out" };
+    const overDecision = !OVER_ON ? decision
+      : overHeldNow ? { action: OVER_HOLD === "cash" ? "Stay in cash" : "Hold " + OVER_HOLD_NAME, tone: "bad", reasons: [overReason].concat(decision.reasons),
+          note: "overextended: " + overSays(p.endIdx) + "; " + FUND_NAME + " is bought back at the first close not more than " + OVER_PCT + "% above it" }
+      : Object.assign({}, decision, { reasons: decision.reasons.concat([overReason]) });
+    const chartLines = [`, 'the chart lines');
+  t = once(t, '.concat(lines.map(', '.concat(lines.concat(overLines).map(', 'the chart\'s panels');
+  t = once(t, 'cards: [card].concat(tripCards), decision: decision }', 'cards: [card].concat(overCards, tripCards), decision: overDecision }', 'the dashboard');
+  return t;
+}
+CODE[73] = withOverextendedLine(CODE[72], { name: "Late-week + overextended SQQQ", host: CODE[71], pct: 55, days: 255, hold: "sqqq" });
 
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----
 // #10, #19, #7 and #20 chart the fund or the measure their rule reads. As bare entries they get

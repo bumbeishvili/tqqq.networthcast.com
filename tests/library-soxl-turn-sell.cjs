@@ -22,6 +22,7 @@
  *   node tests/library-soxl-turn-sell.cjs
  */
 const { data, strategyOf, settingsOf, defaultsOf } = require('./library-harness.cjs');
+const { testDefaults } = require('./fit-round-settings.cjs');   // #53 at the settings these checks were written at; its own defaults moved on 24 November 2026
 
 let failures = 0;
 const ck = (name, ok, detail) => {
@@ -32,7 +33,7 @@ const ck = (name, ok, detail) => {
 
 const START = data.dates.findIndex(d => d >= '2010-01-04'), END = data.dates.length - 1;
 const TURN = { soxlSell: 'turn' };
-const run = (n, settings = {}) => { const strategy = strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions: {}, startIdx: START, endIdx: END, dailyDisplay: true }); };
+const run = (n, settings = {}) => { const strategy = strategyOf(n); return strategy.run(data, { ...testDefaults(n, defaultsOf(strategy)), ...settings, initial: 100000, contributions: {}, startIdx: START, endIdx: END, dailyDisplay: true }); };
 
 // The rule, written again here from the prices: the lead at every close, and the turn sell's state.
 // held[i]: the rule holds SOXL at close i; line[i]: the lead under which it sells at close i (NaN: none yet).
@@ -58,7 +59,7 @@ function turnState({ days, enter, points, from }) {
 }
 
 for (const [n, name] of [[53, '#53'], [71, '#71']]) {
-  const strategy = strategyOf(n), defaults = defaultsOf(strategy), byId = Object.fromEntries(settingsOf(strategy).map(param => [param.id, param]));
+  const strategy = strategyOf(n), defaults = testDefaults(n, defaultsOf(strategy)), byId = Object.fromEntries(settingsOf(strategy).map(param => [param.id, param]));
 
   // ---- 1. The settings ----
   ck(`${name} ships the level, with the turn sell set to 30 points, counted from 50%`, defaults.soxlSell === 'level' && defaults.soxlTrail === 30 && defaults.soxlTrailFrom === 50, JSON.stringify([defaults.soxlSell, defaults.soxlTrail, defaults.soxlTrailFrom]));

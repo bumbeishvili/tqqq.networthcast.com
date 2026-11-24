@@ -43,15 +43,16 @@ const data = {
   ...Object.fromEntries(TICKERS.map(t => [t, daily.map(d => d[t] || 0)])),
 };
 
+const { testDefaults } = require('./fit-round-settings.cjs');   // #53 at the settings these checks were written at; its own defaults moved on 24 November 2026
 const FIT = 53, NFCI = 44, BARE_FLOOR = 65, BARE_DEEP_BUY = 66;
 const strategyOf = n => new Function('"use strict"; return (' + CODE[n] + '\n);')();
 const defaultOf = param => (param.default && typeof param.default === 'object' && 'value' in param.default) ? param.default.value : param.default;
 const defaultsOf = strategy => Object.fromEntries(strategy.params.filter(param => param.id != null).map(param => [param.id, defaultOf(param)]));
 // Settled history with the bear market of 2022 and the fast crash of 2020 in it.
 const START = data.dates.findIndex(d => d >= '2010-01-04'), END = data.dates.findIndex(d => d > '2025-12-31') - 1;
-const run = (n, settings = {}) => { const strategy = strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions: {}, startIdx: START, endIdx: END, dailyDisplay: true }); };
+const run = (n, settings = {}) => { const strategy = strategyOf(n); return strategy.run(data, { ...testDefaults(n, defaultsOf(strategy)), ...settings, initial: 100000, contributions: {}, startIdx: START, endIdx: END, dailyDisplay: true }); };
 
-const fit = strategyOf(FIT), fitDefaults = defaultsOf(fit), ids = fit.params.filter(param => param.id != null).map(param => param.id);
+const fit = strategyOf(FIT), fitDefaults = testDefaults(FIT, defaultsOf(fit)), ids = fit.params.filter(param => param.id != null).map(param => param.id);
 
 // ---- 1. The settings ----
 {
