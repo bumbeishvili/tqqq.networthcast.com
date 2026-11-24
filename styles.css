@@ -198,6 +198,11 @@
        overflowed and Chrome on Android shrank it to fit (2026-11-05). */
     .layout { grid-template-columns: minmax(0, 1fr); }
     .layout > .panel { min-width: 0; }
+    /* The body is padded here, and 97vw beside that padding is wider than the window
+       (12px + 97vw below 400px, 24px + 97vw from 601 to 799px): the page ran a pixel or
+       two past the right edge, the cards lost their right margin and the page could be
+       dragged sideways. The block is as wide as the room the padding leaves. */
+    .layout { width: auto; }
     /* Reorder the chart panel so the chart canvas comes first and the
        legend chips sit below it — desktop has them above the chart, but on
        narrow screens it reads better with the visualization first and the
@@ -401,6 +406,11 @@
     background: var(--accent);
     cursor: pointer;
     border: none;
+  }
+  /* Under a finger a slider's handle is the size a finger can hold. */
+  @media (hover: none) and (pointer: coarse) {
+    input[type="range"]::-webkit-slider-thumb { width: var(--finger-handle); height: var(--finger-handle); }
+    input[type="range"]::-moz-range-thumb { width: var(--finger-handle); height: var(--finger-handle); }
   }
 
   /* Line 1: Monthly Contribution title (left) + $ value (right). */
@@ -2116,8 +2126,16 @@
   .heatmap-table th[data-c] { cursor: pointer; }
 
   .dual-range {
+    /* The handles' size, and where they start: under the Entry / Exit groups,
+       whose height js/controls.js measures into --disp-h. At a fixed 39px the
+       groups, taller on a narrow or touch screen, covered the top 12px of each
+       handle: a finger on a handle pressed the calendar button and nothing
+       moved (the user, 24 November 2026: "Sliders not working"). */
+    --thumb: 18px;
+    --thumb-top: max(39px, var(--disp-h, 0px));
+    --track-top: calc(var(--thumb-top) + (var(--thumb) - 6px) / 2);
     position: relative;
-    height: 64px;
+    height: calc(var(--thumb-top) + var(--thumb) + 7px);
     user-select: none;
     touch-action: none;
   }
@@ -2145,7 +2163,7 @@
   }
   .dual-range .track {
     position: absolute;
-    top: 45px;
+    top: var(--track-top);
     left: 0;
     right: 0;
     height: 5px;
@@ -2154,7 +2172,7 @@
   }
   .dual-range .fill {
     position: absolute;
-    top: 45px;
+    top: var(--track-top);
     height: 5px;
     background: var(--accent2);
     border-radius: 3px;
@@ -2163,9 +2181,9 @@
   .dual-range .fill:active { cursor: grabbing; }
   .dual-range .thumb {
     position: absolute;
-    top: 39px;
-    width: 18px;
-    height: 18px;
+    top: var(--thumb-top);
+    width: var(--thumb);
+    height: var(--thumb);
     border-radius: 50%;
     background: var(--accent2);
     cursor: pointer;
@@ -2183,6 +2201,12 @@
     cursor: not-allowed;
     opacity: 0.5;
     box-shadow: none;
+  }
+  /* Under a finger the handles are bigger, and their grab area reaches 10px
+     past them at the sides and below (above them is the calendar button). */
+  @media (hover: none) and (pointer: coarse) {
+    .dual-range { --thumb: var(--finger-handle); }
+    .dual-range .thumb::after { content: ""; position: absolute; inset: 0 -10px -10px; }
   }
 
   .period-play {
@@ -4393,7 +4417,7 @@
   /* Zoom controls in the chart's bottom-right corner, right of the last x-axis
      label (js/chart.js's renderChartZoomUi, fitChartZoomUi): a hint, and
      Latest → and Reset zoom after a zoom. The buttons wear the LOG pill's
-     look. Touch screens get no wheel, so no controls either. */
+     look. */
   .chart-zoom-ui {
     position: absolute;
     right: 0;
@@ -4426,7 +4450,14 @@
     background: var(--state-hover-bg);
     border-color: var(--state-hover-border);
   }
-  @media (hover: none) { .chart-zoom-ui { display: none; } }
+  /* On a phone-width chart the two buttons stack: side by side they would
+     take 200px of the canvas for themselves (the labels' margin keeps their
+     width free, js/chart.js's chartZoomButtonsWidth). */
+  @media (max-width: 600px) { .chart-zoom-ui { flex-direction: column; align-items: flex-end; gap: 4px; } }
+  /* A finger over the chart: up or down scrolls the page, across reads values,
+     and two fingers zoom and slide the period (js/chart.js) instead of the
+     browser zooming the whole page. */
+  #mainChart { touch-action: pan-y; }
   body.chart-panning, body.chart-panning * { cursor: grabbing; user-select: none; }
 
   /* "deinflated $" toggle — JS parks it at the plot's top-left corner (endLabels
@@ -5010,7 +5041,8 @@
    follows through js/utils.js uiScale(). */
 :root { --ui-scale: 1; }
 @media (hover: none) and (pointer: coarse) {
-  :root { --ui-scale: 1.25; }
+  /* --finger-handle: a slider handle a finger can hold (the handles are 16px and 18px for a mouse). */
+  :root { --ui-scale: 1.25; --finger-handle: 28px; }
   /* At the larger size a signal-metrics card's one-line reason ("$2.5K put in;
      sold for the strategy at ...") outgrew half a phone's width and, since a
      1fr column is at least its content, pushed the page past the screen, which

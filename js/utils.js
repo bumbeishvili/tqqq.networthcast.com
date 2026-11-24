@@ -14,6 +14,41 @@ function readUiScale() {
 }
 function uiScale() { return _uiScale; }
 function canvasFont(weight, px, family) { return weight + ' ' + (px * _uiScale).toFixed(2) + 'px ' + family; }
+// Text for a canvas on as few lines as a column allows, those lines as even as they can be
+// (so the last one is never a lone short word), measured in the context's current font. A
+// word wider than the column by itself is cut where it stops fitting, so nothing is clipped.
+function wrapCanvasText(cx, text, maxWidth) {
+  const widthOf = (s) => cx.measureText(s).width;
+  const cut = (word) => {
+    if (widthOf(word) <= maxWidth || word.length === 1) return [word];
+    let head = word.length - 1;
+    while (head > 1 && widthOf(word.slice(0, head)) > maxWidth) head--;
+    return [word.slice(0, head)].concat(cut(word.slice(head)));
+  };
+  const words = text.split(/\s+/).filter(Boolean).flatMap(cut);
+  const textOf = ([first, last]) => words.slice(first, last + 1).join(' ');
+  // A run of neighbouring words' width, measured once however often it is asked for.
+  const known = new Map();
+  const runWidth = (first, last) => {
+    const key = first * words.length + last;
+    if (!known.has(key)) known.set(key, widthOf(textOf([first, last])));
+    return known.get(key);
+  };
+  // Words fill a line while it stays within `width`. A line is [its first word, its last].
+  const fill = (width) => words.reduce((lines, word, at) => {
+    const line = lines[lines.length - 1];
+    if (line && runWidth(line[0], at) <= width) line[1] = at;
+    else lines.push([at, at]);
+    return lines;
+  }, []);
+  const lines = fill(maxWidth);
+  if (lines.length < 2) return lines.map(textOf);
+  // The same number of lines in the narrowest column that still gives it: every run of
+  // neighbouring words that fits is a column width worth trying, narrowest first.
+  const widths = words.flatMap((word, first) => words.slice(first).map((next, more) => runWidth(first, first + more)));
+  const narrowest = widths.filter(width => width <= maxWidth).sort((a, b) => a - b).find(width => fill(width).length === lines.length);
+  return fill(narrowest).map(textOf);
+}
 
 // A JS Date → "HH:MM", local time. Same zero-padding as the header's "Data
 // last fetched" stamp (js/init.js) — pulled out so any other "as of" label

@@ -543,6 +543,10 @@ if (inflPill) inflPill.addEventListener('click', () => {
     const eL = document.getElementById('thumb-disp-entry');
     const xL = document.getElementById('thumb-disp-exit');
     if (!eL || !xL) return;
+    // How tall the groups are, for the handles to start under them (styles.css,
+    // .dual-range): bigger type and the 30px calendar button make them taller
+    // on a narrow or touch screen than the 39px the handles used to start at.
+    container.style.setProperty('--disp-h', Math.max(eL.offsetHeight, xL.offsetHeight) + 'px');
     const w = container.clientWidth;
     if (!w) return;
     let ex = ep / 100 * w, xx = xp / 100 * w;
@@ -567,7 +571,10 @@ if (inflPill) inflPill.addEventListener('click', () => {
   window.refreshPeriodThumbLabels = function () {
     positionThumbLabels(valToPercent(+entryInput.value), valToPercent(+exitInput.value));
   };
-  new ResizeObserver(window.refreshPeriodThumbLabels).observe(container);
+  // The groups themselves are watched too: a font that arrives late or a new
+  // date makes one taller or wider with the track unchanged.
+  const periodLabelSizes = new ResizeObserver(window.refreshPeriodThumbLabels);
+  [container, document.getElementById('thumb-disp-entry'), document.getElementById('thumb-disp-exit')].forEach(el => periodLabelSizes.observe(el));
 
   // `side` identifies which thumb actually moved this time ('entry' or
   // 'exit') — only THAT side's exact-day override (js/date-picker.js) gets

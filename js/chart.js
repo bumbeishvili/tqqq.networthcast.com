@@ -1895,6 +1895,11 @@ let _zoomHome = null;
 const ZOOM_INPUT_IDS = ['slider-entry', 'slider-exit', 'entry-exact-date', 'exit-exact-date'];
 // Set while a ⌘/Ctrl + drag slides the period: where it started.
 let _chartPan = null;
+// Set while two fingers zoom and slide the period: the period, the fingers'
+// distance and the date under their midpoint when the second finger landed.
+let _chartPinch = null;
+// A screen worked by finger: the zoom's hint names the pinch instead of a key.
+const TOUCH_SCREEN = window.matchMedia('(hover: none) and (pointer: coarse)');
 // True while a wheel or drag gesture changes the period every frame: the open
 // strategy panel waits until the gesture ends (refreshAllLegends).
 let _zoomGesture = false, _zoomSettleTimer = null, _zoomRenderRaf = null;
@@ -1972,15 +1977,20 @@ function renderChartZoomUi() {
   if (!hint || !latest || !reset) return;
   reset.hidden = !_zoomHome;
   latest.hidden = !_zoomHome || chart._periodDates[1] === daily[daily.length - 1].date;
-  hint._wordings = [_zoomHome ? `${MOD_KEY} + drag to pan` : `${MOD_KEY} + scroll to zoom`];
+  // By finger the buttons say enough once zoomed, and a phone has no room for a line over them.
+  hint._wordings = TOUCH_SCREEN.matches
+    ? (_zoomHome ? [] : ['pinch to zoom'])
+    : [_zoomHome ? `${MOD_KEY} + drag to pan` : `${MOD_KEY} + scroll to zoom`];
 }
 // The width the visible zoom buttons take, which the end-label margin keeps
 // for them (endLabelPlugin); 0 when none shows.
 function chartZoomButtonsWidth() {
   const ui = document.getElementById('chart-zoom-ui');
   if (!_zoomHome || !ui) return 0;
-  const shown = [...ui.querySelectorAll('.chart-zoom-btn')].filter(b => !b.hidden);
-  return shown.reduce((w, b) => w + b.offsetWidth, 0) + Math.max(0, shown.length - 1) * parseFloat(getComputedStyle(ui).columnGap);
+  const widths = [...ui.querySelectorAll('.chart-zoom-btn')].filter(b => !b.hidden).map(b => b.offsetWidth);
+  // On a phone-width chart the buttons stack (styles.css), so they are as wide as the widest.
+  if (getComputedStyle(ui).flexDirection === 'column') return Math.max(0, ...widths);
+  return widths.reduce((w, width) => w + width, 0) + Math.max(0, widths.length - 1) * parseFloat(getComputedStyle(ui).columnGap);
 }
 // The controls get the room right of the last x-axis label; the hint takes
 // the longest wording that fits there, or is dropped (the buttons' tooltips
@@ -2214,6 +2224,14 @@ function fitChartHeight() {
   });
 }
 window.addEventListener('resize', fitChartHeight);
+
+// The chart measures its own text before drawing it: the right margin kept for the
+// end-of-line labels is the widest label, and a name too wide for it is wrapped. The first
+// measuring can come before the page's fonts are in, and the fallback font's widths then stay
+// in the layout while the text is drawn in the real font: a margin some pixels off, and a name
+// wrapped at one place for the margin and at another on screen. So when fonts finish loading
+// the chart lays itself out again.
+document.fonts.addEventListener('loadingdone', () => { if (chart) chart.update('none'); });
 
 // The ~15 select-sma-* knobs simulateSMA() needs beyond asset/window/underlying
 // (those three differ by caller — see below). Both the main chart's live SMA
@@ -2948,7 +2966,7 @@ function render() {
     // hover tooltip otherwise.
     if (rangeSelectDragging || hasRangeSelection()) { el.style.display = 'none'; return; }
     // Nor while a ⌘/Ctrl + drag pans the chart.
-    if (_chartPan) { el.style.display = 'none'; return; }
+    if (_chartPan || _chartPinch) { el.style.display = 'none'; return; }
     if (tooltip.opacity === 0) {
       if (isTouchChart && chartTooltipPinned) return; // stay open until dismissed
       el.style.display = 'none';
@@ -3197,6 +3215,37 @@ function render() {
     return computeDayChange(todayVal, todayVal * yday / today);
   };
   const deltaLabelText = (delta) => `(${delta.session ? EXTENDED_SESSION_NAMES[delta.session] + ' ' : ''}${fmtDayChange(delta)})`;
+  // The end-of-line labels' column in its two layouts. Compact (a phone-width window) draws
+  // the name only; full draws the name over its value.
+  //   namePx                 the name's font size
+  //   touchScaled            whether a touch screen's type scale enlarges it. The compact name
+  //                          stays at its size (the user, 24 November 2026: "Ok to reduce font
+  //                          size here"): at the scale's 10px a phone's label column took 130px
+  //                          of a canvas 333px wide, and most names needed two lines.
+  //   marginMin, marginMax   the floor and the ceiling of the right margin kept for the labels
+  //   marginGaps             END_LABEL_GAP plus the room kept past the text
+  //   gap                    the least distance between the anchors of two one-line labels
+  // A name too wide for the widest margin wraps onto more lines (the user, 24 November 2026:
+  // "Wrap chart texts"; on a phone "LATE-WEEK + OVEREXTENDED SQQQ" ran 51px past the canvas
+  // edge, and a long name of the user's own was cut on a desktop too). A name that fits it,
+  // even with none of the room past the text left, stays on one line as it always did.
+  const END_LABEL_GAP = 8;   // from the plot's right edge to the labels' text
+  const END_LABEL = {
+    compact: { namePx: 8, touchScaled: false, marginMin: 40, marginMax: 130, marginGaps: 12, gap: 13 },
+    full: { namePx: 9, touchScaled: true, marginMin: 100, marginMax: 260, marginGaps: 16, gap: 26 },
+  };
+  // The name's font size on screen, and its font.
+  const endLabelNamePx = (spec) => spec.namePx * (spec.touchScaled ? uiScale() : 1);
+  const endLabelFont = (spec) => `600 ${endLabelNamePx(spec).toFixed(2)}px "Open Sans", sans-serif`;
+  // A label's name as drawn: upper case, on the lines its column allows, with the widest
+  // line's width. Leaves the context on the name's font.
+  const endLabelName = (cx, spec, name) => {
+    cx.font = endLabelFont(spec);
+    const lines = wrapCanvasText(cx, name.toUpperCase(), spec.marginMax - END_LABEL_GAP);
+    return { lines, width: Math.max(0, ...lines.map(line => cx.measureText(line).width)) };
+  };
+  // From one line of a wrapped name to the next.
+  const endLabelLineHeight = (spec) => Math.round(endLabelNamePx(spec) * 1.2);
   const endLabelPlugin = {
     id: 'endLabels',
     // Size the reserved right margin to whatever the widest current label
@@ -3217,13 +3266,13 @@ function render() {
       // the legend chips are a separate scroll away, not a substitute for
       // "which line is which" while actually looking at the lines.
       const compact = window.innerWidth <= 600;
+      const spec = compact ? END_LABEL.compact : END_LABEL.full;
       let maxW = 0;
       c.data.datasets.forEach((ds, i) => {
         if (ds._isShift || !c.isDatasetVisible(i)) return;
         const val = ds.data[lastIdx];
         if (typeof val !== 'number' || !isFinite(val)) return;
-        cx.font = compact ? canvasFont(600, 8, '"Open Sans", sans-serif') : canvasFont(600, 9, '"Open Sans", sans-serif');
-        maxW = Math.max(maxW, cx.measureText((ds.label || lineNames[i] || '').toUpperCase()).width);
+        maxW = Math.max(maxW, endLabelName(cx, spec, ds.label || lineNames[i] || '').width);
         if (!compact) {
           cx.font = canvasFont(500, 11, '"JetBrains Mono", monospace');
           let rowW = cx.measureText(fmtFull(Math.round(val))).width;
@@ -3240,18 +3289,15 @@ function render() {
         }
       });
       if (maxW === 0) return;
-      // 8px gap from the plot edge to the text, 8px breathing room past it;
-      // clamped so one absurdly long custom-strategy name can't eat the plot.
-      // Compact mode's ceiling is lower than desktop's — it's only ever one
-      // short line of text, not name-over-value — but still needs to clear
-      // "INVESTED COMPOUNDED" (the longest built-in name) at the smaller 8px
-      // font without silently clipping it against the canvas edge the same
-      // way an under-sized fixed margin did before this whole plugin existed.
+      // The gap from the plot edge to the text and breathing room past it
+      // (marginGaps); clamped so one absurdly long custom-strategy name can't
+      // eat the plot: a name too wide for the ceiling wraps (endLabelName), so
+      // the ceiling never clips one. Compact mode's ceiling is lower than
+      // desktop's: its plot is a phone's.
       // After a zoom the margin also keeps room under the labels for its buttons.
       const zoomW = _zoomHome ? Math.ceil(chartZoomButtonsWidth()) + CHART_ZOOM.uiGapPx : 0;
-      c.options.layout.padding.right = Math.max(zoomW, compact
-        ? Math.max(40, Math.min(130, Math.round(maxW) + 12))
-        : Math.max(100, Math.min(260, Math.round(maxW) + 16)));
+      c.options.layout.padding.right = Math.max(zoomW,
+        Math.max(spec.marginMin, Math.min(spec.marginMax, Math.round(maxW) + spec.marginGaps)));
     },
     afterDraw(c) {
       const { ctx: cx, chartArea: area } = c;
@@ -3269,6 +3315,8 @@ function render() {
       fitChartZoomUi(c);
       // Compact mode below — see the matching comment in beforeLayout.
       const compact = window.innerWidth <= 600;
+      const spec = compact ? END_LABEL.compact : END_LABEL.full;
+      const lineHeight = endLabelLineHeight(spec);
       const lastIdx = c.data.labels.length - 1;
       if (lastIdx < 0) return;
 
@@ -3300,33 +3348,44 @@ function render() {
         // ("15sig", "SMA 150"), colour overrides, and the shared 9sig-family
         // colour all show without a chart rebuild. Fall back to the init arrays.
         const color = (typeof ds.borderColor === 'string' ? ds.borderColor : null) || lineColors[i] || "#7a7aa6";
-        return { y, origY: y, i, color, name: ds.label || lineNames[i], val };
+        // The room the label takes above and below its anchor: half the layout's
+        // gap each way for a one-line name (compact draws the name alone, so it
+        // needs much less than the name-over-value layout), plus the name's further
+        // lines. Compact centres the name on the anchor, so they split evenly; the
+        // full layout stacks the name over the value, so they all go above.
+        const lines = endLabelName(cx, spec, ds.label || lineNames[i]).lines;
+        const more = (lines.length - 1) * lineHeight;
+        const up = spec.gap / 2 + (compact ? more / 2 : more), down = spec.gap / 2 + (compact ? more / 2 : 0);
+        return { y, origY: y, i, color, lines, val, up, down };
       }).filter(Boolean);
 
-      // Sort by y position and de-overlap. Compact mode only ever draws one
-      // line of text (name, no value), so it needs much less vertical room
-      // between neighbors than the name-over-value desktop layout.
+      // Sort by y position and de-overlap: two neighbours' anchors stay at least
+      // the upper one's room below plus the lower one's room above apart.
       items.sort((a, b) => a.y - b.y);
-      const gap = compact ? 13 : 26;
+      const apart = (k) => items[k - 1].down + items[k].up;
+      // A label's anchor stays this far inside the plot's top and bottom.
+      const highest = (it) => area.top + 10 + it.up - spec.gap / 2;
+      const lowest = (it) => area.bottom - 5 - (it.down - spec.gap / 2);
       // Push down pass
       for (let k = 1; k < items.length; k++) {
-        if (items[k].y - items[k - 1].y < gap) {
-          items[k].y = items[k - 1].y + gap;
+        if (items[k].y - items[k - 1].y < apart(k)) {
+          items[k].y = items[k - 1].y + apart(k);
         }
       }
       // Push up pass if overflowing bottom
+      let maxY = items.length ? lowest(items[items.length - 1]) : 0;
       for (let k = items.length - 1; k >= 0; k--) {
-        const maxY = area.bottom - 5 - (items.length - 1 - k) * gap;
         if (items[k].y > maxY) items[k].y = maxY;
+        if (k > 0) maxY -= apart(k);
       }
       // Final clamp
       items.forEach(it => {
-        if (it.y < area.top + 10) it.y = area.top + 10;
-        if (it.y > area.bottom - 5) it.y = area.bottom - 5;
+        if (it.y < highest(it)) it.y = highest(it);
+        if (it.y > lowest(it)) it.y = lowest(it);
       });
 
       cx.save();
-      const x = area.right + 8;
+      const x = area.right + END_LABEL_GAP;
       const activeI = activePanelDatasetIdx(); // -1 when no detail panel is open
       items.forEach(it => {
         const isActive = it.i === activeI;
@@ -3351,23 +3410,24 @@ function render() {
         cx.fill();
 
         if (compact) {
-          // Name only, vertically centered on the line — there's no value
-          // line underneath to share the row with.
-          cx.font = canvasFont(600, 8, '"Open Sans", sans-serif');
+          // Name only, its lines vertically centered on the line — there's no
+          // value line underneath to share the row with.
+          cx.font = endLabelFont(spec);
           cx.fillStyle = it.color;
           cx.globalAlpha = 0.88;
           cx.textBaseline = 'middle';
-          cx.fillText(it.name.toUpperCase(), x, it.y);
+          const firstY = it.y - (it.lines.length - 1) * lineHeight / 2;
+          it.lines.forEach((line, n) => cx.fillText(line, x, firstY + n * lineHeight));
           cx.globalAlpha = 1;
           return;
         }
 
-        // Label name
-        cx.font = canvasFont(600, 9, '"Open Sans", sans-serif');
+        // Label name: its last line sits on the anchor, the lines before it stack above.
+        cx.font = endLabelFont(spec);
         cx.fillStyle = it.color;
         cx.globalAlpha = 0.88;   // light theme: 0.7 washed labels out on white
         cx.textBaseline = 'bottom';
-        cx.fillText(it.name.toUpperCase(), x, it.y - 1);
+        it.lines.forEach((line, n) => cx.fillText(line, x, it.y - 1 - (it.lines.length - 1 - n) * lineHeight));
         cx.globalAlpha = 1;
 
         // Value
@@ -4207,6 +4267,50 @@ function render() {
     endZoomGesture();
   });
   chart.canvas.addEventListener('dblclick', resetChartZoom);
+  // By finger: two fingers on the chart zoom and slide the period, as ⌘/Ctrl +
+  // wheel and ⌘/Ctrl + drag do for a mouse (the user, 24 November 2026: a
+  // pinch on the chart zoomed the whole screen). The period scales with the
+  // fingers' distance, and the date that was under their midpoint stays under
+  // it, so the same two fingers also slide the period. One finger keeps its
+  // jobs: across the chart it reads values, up or down it scrolls the page
+  // (touch-action: pan-y on the canvas, styles.css, which is also what keeps
+  // the browser's own pinch zoom off the chart).
+  const fingers = new Map();   // pointerId → where that finger is
+  const fingersNow = () => { const [a, b] = [...fingers.values()]; return { dist: Math.hypot(b.x - a.x, b.y - a.y) || 1, midX: (a.x + b.x) / 2 }; };
+  // How far along the plot, 0 at its left edge to 1 at its right, a screen x is.
+  const alongPlot = (clientX) => { const area = chart.chartArea; return (clientX - chart.canvas.getBoundingClientRect().left - area.left) / (area.right - area.left); };
+  chart.canvas.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch' || !chart.chartArea) return;
+    fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (fingers.size !== 2) return;
+    const cur = currentZoomWindow(), now = fingersNow();
+    _chartPinch = { t0: cur.t0, t1: cur.t1, dist: now.dist, pivot: cur.t0 + alongPlot(now.midX) * (cur.t1 - cur.t0) };
+    _zoomGesture = true;
+    clearRangeSelection();
+    // The first finger put up that day's values, which stay until closed on a touch screen.
+    dismissChartTooltip();
+  });
+  chart.canvas.addEventListener('pointermove', (e) => {
+    if (!fingers.has(e.pointerId)) return;
+    fingers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (!_chartPinch || fingers.size !== 2) return;
+    const { T0, T1 } = zoomBounds(), full = T1 - T0, now = fingersNow();
+    const next = Math.max(Math.min(CHART_ZOOM.minSpanMs, full), Math.min(full, (_chartPinch.t1 - _chartPinch.t0) * _chartPinch.dist / now.dist));
+    let n0 = _chartPinch.pivot - alongPlot(now.midX) * next, n1 = n0 + next;
+    if (n0 < T0) { n0 = T0; n1 = T0 + next; }
+    if (n1 > T1) { n1 = T1; n0 = T1 - next; }
+    setPeriodFromZoom(n0, n1);
+  });
+  // A finger lifted, or taken by the page's scroll: with fewer than two the pinch is over.
+  const fingerGone = (e) => {
+    if (!fingers.delete(e.pointerId) || !_chartPinch) return;
+    _chartPinch = null;
+    // Nor do the fingers leave a day picked: the redraw would put its values back up.
+    chart.tooltip.setActiveElements([], { x: 0, y: 0 });
+    endZoomGesture();
+  };
+  chart.canvas.addEventListener('pointerup', fingerGone);
+  chart.canvas.addEventListener('pointercancel', fingerGone);
   const zoomReset = document.getElementById('chart-zoom-reset');
   zoomReset.title = `Back to the Entry and Exit from before the zoom. ${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.`;
   zoomReset.addEventListener('click', resetChartZoom);
