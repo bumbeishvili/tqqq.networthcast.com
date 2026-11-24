@@ -5846,31 +5846,35 @@ CODE[70] = bareStrategy({
 // moves out of TQQQ at one weekday's close and back into it at another's. Out, it is in SQQQ, or as a setting in cash or
 // another fund (the user, same day: "also show the cash option").
 // A switch between two funds is made at one close here unless the setting says otherwise (the
-// user, same day: "suppose switch can happen in the same day"): SQQQ over Thursday and Friday. With
-// one trade a day the two closes named are the closes of the PURCHASES and each sale is the close
-// before: TQQQ sold at Tuesday's close, SQQQ bought at Wednesday's and sold at Thursday's, TQQQ
-// bought at Friday's, so SQQQ is held over Thursday. Cash has no second leg: TQQQ is sold and
-// bought at the two closes named.
+// user, same day: "suppose switch can happen in the same day"): with the default closes, Wednesday's
+// and Monday's, SQQQ over Thursday, Friday and Monday. With one trade a day the two closes named
+// are the closes of the PURCHASES and each sale is the close before: TQQQ sold at Tuesday's close,
+// SQQQ bought at Wednesday's and sold at Friday's, TQQQ bought at Monday's, so SQQQ is held over
+// Thursday and Friday. Cash has no second leg: TQQQ is sold and bought at the two closes named.
 // A week is skipped when RSI is low at the close that would leave TQQQ (the user, same day, on
 // seeing that the routine did better without the weeks that began deeply sold: "add it as option").
 // The fund traded and the fund the down trend is read on are settings too (the user, same day:
 // "make sure I can also choose tqqq, soxl or other tickets, right now it's frozen to tqqq").
-// The defaults are the settings the user fitted and picked that day ("make this as default"): the
-// down trend on QQQ against its 30-day median, the skip on with TQQQ's RSI over 9 days at 40 or
-// under. Q1 2010 to Q4 2025 they make 106.1% a year (max drawdown 60%) against 62.8% (70%) for the
-// entry's first defaults (TQQQ's own 50-day average, no skip). It is a narrow peak: a step away on
-// the RSI level makes 83% to 87%. The card says so.
+// The defaults are the user's, set twice that day. First ("make this as default"): the down trend
+// on QQQ against its 30-day median, back at Friday's close, the skip on with TQQQ's RSI over 9 days
+// at 40 or under. Then, on a screenshot of the settings ("set this as default"), the ones in force:
+// the down trend on TQQQ itself, back at Monday's close, the RSI over 10 days; the rest as before.
+// Q1 2010 to Q4 2025 these make 99.3% a year (max drawdown 58%, worst 12 months -50%) and 164% in
+// 2026 to 20 November; the first set made 106.1% (60%, -24%) and 103% in 2026; the entry's first
+// defaults (TQQQ's own 50-day average, Friday, no skip) 62.8% (70%). A step down on the RSI level
+// (39) makes 82% with a drawdown of 69%. The card says so.
 // It is a weekly routine: the down trend is read where the week's days out start (at the sale and
 // at the purchase with one trade a day) and not again inside them, so the money never leaves TQQQ
 // late in a week and never comes back early.
 // A week short of a day keeps the sessions: the days out are the sessions after the first day
-// through the second, so with no Friday session TQQQ is bought back at Thursday's close (a close
-// later with one trade a day, when the fund's one session leaves no close for its sale). Past the
+// through the second, so with no session on the second day TQQQ is bought back at the close of
+// the last session before it (a close later with one trade a day, when the fund's one session
+// leaves no close for its sale). Past the
 // last date of the data the weekdays run on in a row: a holiday there is not known yet.
 CODE[72] = bareStrategy({
   name: "Short strat - late-week SQQQ",
   fund: true,
-  params: `    { id: "trendFund", label: "Down trend of", tip: "The fund whose closes the down trend is read on.", text: "While {} closes", default: "qqq", options:
+  params: `    { id: "trendFund", label: "Down trend of", tip: "The fund whose closes the down trend is read on.", text: "While {} closes", default: "tqqq", options:
       ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
     { id: "trendUnder", label: "Down trend: under the line by", tip: "How far under its line the close must be for a down trend. 0 is any close under the line; a negative number also takes closes less than that far over it.", text: "{} under", unit: "%", off: 0, default: 0, options: [
       -60, -59, -58, -57, -56, -55, -54, -53, -52, -51, -50, -49, -48, -47, -46, -45, -44, -43, -42, -41, -40, -39.5, -39, -38.5, -38, -37.5, -37, -36.5, -36, -35.5, -35, -34.5, -34, -33.5, -33, -32.5, -32, -31.5, -31, -30.5, -30, -29.5, -29, -28.5, -28, -27.5, -27, -26.5, -26, -25.5, -25, -24.5, -24, -23.5, -23, -22.5, -22, -21.5, -21, -20.5, -20, -19.5, -19, -18.5, -18, -17.5, -17, -16.5, -16, -15.5, -15, -14.5, -14, -13.5, -13, -12.5, -12, -11.5, -11, -10.5, -10, -9.5, -9, -8.5, -8, -7.5, -7, -6.5, -6, -5.5, -5, -4.5, -4, -3.5, -3, -2.5, -2, -1.5, -1, -0.5,
@@ -5883,17 +5887,17 @@ CODE[72] = bareStrategy({
       ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
     { id: "outDay", label: "Out of the fund at", tip: "The weekday whose close moves the money out of the fund, if the down trend holds there. With one trade per day and another fund held in between, the fund is sold at the close before it and the other one is bought at this one.", text: "at a {} close", default: 3, options: [
       { value: 1, label: "Monday" }, { value: 2, label: "Tuesday" }, { value: 3, label: "Wednesday" }, { value: 4, label: "Thursday" }, { value: 5, label: "Friday" } ] },
-    { id: "backDay", label: "Back in the fund at", tip: "The weekday whose close buys the fund back. With one trade per day and another fund held in between, that one is sold at the close before it; with the two days side by side it has one session and the fund comes back a close later. The same day as the first leaves no days out.", text: "and back into it at a {} close.", default: 5, options: [
+    { id: "backDay", label: "Back in the fund at", tip: "The weekday whose close buys the fund back. With one trade per day and another fund held in between, that one is sold at the close before it; with the two days side by side it has one session and the fund comes back a close later. The same day as the first leaves no days out.", text: "and back into it at a {} close.", default: 1, options: [
       { value: 1, label: "Monday" }, { value: 2, label: "Tuesday" }, { value: 3, label: "Wednesday" }, { value: 4, label: "Thursday" }, { value: 5, label: "Friday" } ] },`,
   park: { label: "Held in between", tip: "What the money is in between the two closes: SQQQ, cash or another fund.", text: "Hold {} in between.", default: "sqqq" },
   splitDefault: false,
-  after: `    { id: "rsiSkip", label: "Skip a week for a low RSI", tip: "Yes: a week is skipped, and the fund held through it, when the RSI is at the level or under at the close that would leave the fund. A low RSI in a down trend means the fall is already steep; in such weeks TQQQ rose on average over the days out in 2010-2025. In 2026 skipping them made less than taking them.", text: "Skip a week for a low RSI: {}.", type: "bool", default: true, options: [
+  after: `    { id: "rsiSkip", label: "Skip a week for a low RSI", tip: "Yes: a week is skipped, and the fund held through it, when the RSI is at the level or under at the close that would leave the fund. A low RSI in a down trend means the fall is already steep; in such weeks TQQQ rose on average over the days out, in 2010-2025 and in 2026.", text: "Skip a week for a low RSI: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "rsiFund", label: "RSI of", tip: "The fund whose closes the RSI is read on.", text: "Low is {}'s", default: "tqqq", when: { rsiSkip: true }, options:
       ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
-    { id: "rsiDays", label: "RSI over (days)", tip: "Wilder's RSI over this many closes. Fewer days swing faster.", text: "RSI over {} days", default: 9, when: { rsiSkip: true }, options: [
+    { id: "rsiDays", label: "RSI over (days)", tip: "Wilder's RSI over this many closes. Fewer days swing faster.", text: "RSI over {} days", default: 10, when: { rsiSkip: true }, options: [
       2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100] },
-    { id: "rsiLevel", label: "Low at or under", tip: "The week is skipped with the RSI at this level or under. From 30 to 40 skipping helped in 2010-2025; from 45 up it skips too many weeks.", text: "at {} or under.", default: 40, when: { rsiSkip: true }, options: [
+    { id: "rsiLevel", label: "Low at or under", tip: "The week is skipped with the RSI at this level or under. Skipping helped at every level from 25 to 45 in 2010-2025, most at 40; at 50 it skips too many weeks.", text: "at {} or under.", default: 40, when: { rsiSkip: true }, options: [
       5, 5.5, 6, 6.5, 7, 7.5, 8, 8.5, 9, 9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13, 13.5, 14, 14.5, 15, 15.5, 16, 16.5, 17, 17.5, 18, 18.5, 19, 19.5, 20, 20.5, 21, 21.5, 22, 22.5, 23, 23.5, 24, 24.5, 25, 25.5, 26, 26.5, 27, 27.5, 28, 28.5, 29, 29.5, 30, 30.5, 31, 31.5, 32, 32.5, 33, 33.5, 34, 34.5, 35, 35.5, 36, 36.5, 37, 37.5, 38, 38.5, 39, 39.5, 40, 40.5, 41, 41.5, 42, 42.5, 43, 43.5, 44, 44.5, 45, 45.5, 46, 46.5, 47, 47.5, 48, 48.5, 49, 49.5, 50, 50.5, 51, 51.5, 52, 52.5, 53, 53.5, 54, 54.5, 55, 55.5, 56, 56.5, 57, 57.5, 58, 58.5, 59, 59.5, 60, 60.5, 61, 61.5, 62, 62.5, 63, 63.5, 64, 64.5, 65, 65.5, 66, 66.5, 67, 67.5, 68, 68.5, 69, 69.5, 70] },`,
   columns: `    { key: "lineRel", label: "vs line", tip: "How far the close the down trend is read on sits above (+) or below (−) its line, the average or median of the closes before it, in percent." },
     { key: "rsi", label: "RSI", tip: "Wilder's RSI of the fund and over the days set, 0 to 100. A week is skipped with it at the level or under. Blank with the skip off." },`,
@@ -5906,7 +5910,7 @@ ${bareFn(rollingMedian)}
     // The fund the down trend is read on, and the fund traded (FUND, from the skeleton): TQQQ for both unless
     // picked (the user, 2026-11-23: "make sure I can also choose tqqq, soxl or other tickets, right now it's
     // frozen to tqqq").
-    const SIGNAL = p.trendFund || "qqq", SIG_NAME = SIGNAL.toUpperCase(), S = data[SIGNAL];
+    const SIGNAL = p.trendFund || "tqqq", SIG_NAME = SIGNAL.toUpperCase(), S = data[SIGNAL];
     if (!S) throw new Error("No prices for " + SIG_NAME + " (data." + SIGNAL + ")");
     const N = Math.max(2, Math.round(+p.trendDays || 30)), UNDER = +p.trendUnder || 0;   // under zero: the line sits that far over the average or median
     if (p.trendLine != null && p.trendLine !== "average" && p.trendLine !== "median") throw new Error('The line must be "average" or "median", not ' + p.trendLine);
@@ -5930,7 +5934,7 @@ ${bareFn(rollingMedian)}
     // The RSI skip: a week is not taken when the RSI is at the level or under at the close that would leave TQQQ.
 ${WILDER_RSI_SNIPPET}
 ${bareFn(rsiLevel)}
-    const RSI_SKIP = p.rsiSkip !== false, RSI_FUND = p.rsiFund || "tqqq", RSI_DAYS = Math.max(2, Math.round(+p.rsiDays || 9)), RSI_LEVEL = p.rsiLevel == null ? 40 : +p.rsiLevel;
+    const RSI_SKIP = p.rsiSkip !== false, RSI_FUND = p.rsiFund || "tqqq", RSI_DAYS = Math.max(2, Math.round(+p.rsiDays || 10)), RSI_LEVEL = p.rsiLevel == null ? 40 : +p.rsiLevel;
     if (RSI_SKIP && !data[RSI_FUND]) throw new Error("No prices for " + RSI_FUND.toUpperCase() + " (data." + RSI_FUND + ")");
     const R = data[RSI_FUND];
     const rsi = RSI_SKIP ? wilderRsi(R, RSI_DAYS, p.endIdx) : null;
@@ -5946,7 +5950,7 @@ ${bareFn(rsiLevel)}
     const goAt = (i) => downAt(i) && !lowAt(i);             // a close that may start, or keep, a week's days out
     // The week: the close that moves the money out of TQQQ and the close that brings it back.
     const DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
-    const outDay = Math.round(+p.outDay) || 3, backDay = Math.round(+p.backDay) || 5;
+    const outDay = Math.round(+p.outDay) || 3, backDay = Math.round(+p.backDay) || 1;
     if (!DAY_NAMES[outDay - 1] || !DAY_NAMES[backDay - 1]) throw new Error("The two days must be 1 (Monday) to 5 (Friday), not " + p.outDay + " and " + p.backDay);
     const OUT_DAY = DAY_NAMES[outDay - 1], BACK_DAY = DAY_NAMES[backDay - 1];
     const RULE = "Late-week " + OUT_NAME, OUT_DAYS = (OUT === "cash" ? "Cash" : OUT_NAME) + " days";
