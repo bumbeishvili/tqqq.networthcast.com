@@ -69,7 +69,7 @@ const MINI_POINTS_PER_PX = 2;
 // the plot (the event hover lives there, apart from the value hover on the
 // plot), the room under the plot for the date labels, and the baseline gap
 // between plot and labels.
-const MINI_PX = { strip: 12, axis: 14, labelGap: 10, edge: 4 };   // edge: above a plot with no strip; axis: the date band under the plot, and above the strip on a chart taller than wide
+const MINI_PX = { strip: 12, axis: 14, labelGap: 10, edge: 4, steps: 34 };   // edge: above a plot with no strip; axis: the date band under the plot, and above the strip on a chart taller than wide; steps: the band under that for a touch screen's − and +
 // Chart width (px) up to which text keeps its px size; the panel's default
 // width. Beyond it text scales by sqrt(width / this): 1.6× at 1000px.
 const MINI_TEXT_REF_W = 400;
@@ -335,13 +335,18 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const shares = panelSpecs.map((sp, p) => p === 0 || sp.tall ? 1 : sp.count <= 3 ? MINI_PANEL.minShare : Math.min(1, sp.count / MINI_PANEL.fullAt));
 
   const { W, padL } = MINI_CHART;
-  const H = opts && opts.aspect ? Math.max(60, Math.round(W * opts.aspect)) : MINI_CHART.H + shares.slice(1).reduce((sum, f) => sum + f * MINI_PANEL.addH, 0);
+  const plotsH = opts && opts.aspect ? Math.max(60, Math.round(W * opts.aspect)) : MINI_CHART.H + shares.slice(1).reduce((sum, f) => sum + f * MINI_PANEL.addH, 0);
   const kPx = Math.max(1, (cw || W) / W);   // render scale: screen px per viewBox unit
   // Text, margins, ticks and buttons are sized in px and divided by k: the
   // render scale up to MINI_TEXT_REF_W, eased past it so they grow with the
   // square root of the extra width (see the module comment above).
   const textW = opts && opts.textWidth ? opts.textWidth : (cw || W);
   const k = kPx / Math.sqrt(Math.max(1, textW / MINI_TEXT_REF_W)) / uiScale();   // the touch type scale (js/utils.js)
+  // On a touch screen the chart is taller by a band under its date axis, for
+  // the − and + that zoom it (zoomSteps below). The compact layout, the
+  // desktop widget's, has none.
+  const stepsH = MINI_TOUCH_UI && !compact ? MINI_PX.steps / k : 0;
+  const H = plotsH + stepsH;
   // The trades, once: the strip above the plot holds their caps. The compact
   // layout drops the strip when the log has none (the whole log, so zooming
   // never moves the plot), unless the first of several panels needs its name there.
@@ -359,8 +364,8 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // user, 2026-11-05: "if complete chart height is too much, show axis at the
   // bottom and at the top too"): a band above the strip, the strip's own
   // content (caps, the first panel's name, the zoom hint and buttons) below it.
-  const topAxis = !compact && H > W, axisTopH = topAxis ? MINI_PX.axis / k : 0;
-  const padT = axisTopH + (compact && !markerEvents.length && nPanels === 1 ? MINI_PX.edge : MINI_PX.strip) / k, padB = MINI_PX.axis / k;
+  const topAxis = !compact && plotsH > W, axisTopH = topAxis ? MINI_PX.axis / k : 0;
+  const padT = axisTopH + (compact && !markerEvents.length && nPanels === 1 ? MINI_PX.edge : MINI_PX.strip) / k, padB = MINI_PX.axis / k + stepsH;
   // The full extent, then the zoom window inside it. A zoom saved from an
   // older, longer run is clamped so it can never show an empty plot.
   let T0 = Infinity, T1 = -Infinity;
@@ -618,12 +623,13 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     // At rest. A resting view that ends before the latest date (the main
     // chart's range, its Exit earlier) gets the Latest chip too, the hint
     // to its left where both fit.
-    const hint = MINI_TOUCH_UI ? 'pinch to zoom' : `${MOD_KEY} + scroll to zoom`;
+    // No hint on a touch screen: its − and + under the chart need none.
+    const hint = MINI_TOUCH_UI ? '' : `${MOD_KEY} + scroll to zoom`;
     const hintRight = atEnd ? W - 2 / k : restChipX - 4 / k, room = padR - 4 / k - (atEnd ? 0 : chipW + 4 / k);
-    zoomUi = (!compact && hintW(hint) <= room ? `<text x="${hintRight.toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.6)">${hint}</text>` : '') + (atEnd ? '' : latestChip(restChipX));
+    zoomUi = (!compact && hint && hintW(hint) <= room ? `<text x="${hintRight.toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.6)">${hint}</text>` : '') + (atEnd ? '' : latestChip(restChipX));
   } else {
     const factor = ((T1 - T0) / (t1 - t0)).toFixed(1);
-    const resetBtn = `<g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MINI_TOUCH_UI ? 'A pinch zooms, a drag pans.' : `${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.`}</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
+    const resetBtn = `<g class="mini-zoom-reset" role="button"><title>Back to the full range. ${MINI_TOUCH_UI ? 'The − and + under the chart zoom, a drag pans.' : `${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.`}</title><rect x="${btnX.toFixed(1)}" y="${btnY.toFixed(2)}" width="${btnW.toFixed(1)}" height="${btnH.toFixed(2)}" rx="${(3 / k).toFixed(2)}"/><text x="${(btnX + btnW / 2).toFixed(1)}" y="${(btnY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600">Reset zoom</text></g>`;
     if (atEnd) {
       const long = MINI_TOUCH_UI ? `×${factor} · drag to pan` : `×${factor} · ${MOD_KEY} + drag to pan`;
       const hint = hintW(long) <= padR - btnW - 8 / k ? long : `×${factor}`;
@@ -635,6 +641,20 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
       const hint = !compact && hintW(short) <= padR - btnW - chipW - 12 / k ? `<text x="${(chipX - 4 / k).toFixed(1)}" ${hintAttrs} fill="rgba(122,122,166,0.9)">${short}</text>` : '';
       zoomUi = `${hint}${latestChip(chipX)}${resetBtn}`;
     }
+  }
+  // − and +, a touch screen's zoom, in their band under the date axis, each
+  // the size of a finger: the window halves or doubles with its right end
+  // where it is (_miniZoomStep). The user, 25 November 2026: "let's have a
+  // different zoom, like buttons or slider, that will zoom from the end of
+  // the chart"; on their phone a pinch still zoomed the browser's own page.
+  // A chip with nowhere to go is dimmed and takes no tap.
+  let zoomSteps = '';
+  if (stepsH) {
+    const stepW = 38 / k, stepH = 26 / k, stepY = H - stepsH + (stepsH - stepH) / 2;
+    const inX = W - 2 / k - stepW, outX = inX - 8 / k - stepW;
+    const chip = (x, step, sign, title, off) => `<g class="mini-zoom-step${off ? ' is-off' : ''}" data-step="${step}" role="button"><title>${title}</title><rect x="${x.toFixed(1)}" y="${stepY.toFixed(2)}" width="${stepW.toFixed(1)}" height="${stepH.toFixed(2)}" rx="${(6 / k).toFixed(2)}"/><text x="${(x + stepW / 2).toFixed(1)}" y="${(stepY + stepH / 2).toFixed(2)}" text-anchor="middle" dominant-baseline="central" font-family="JetBrains Mono" font-size="${(15 / k).toFixed(2)}" font-weight="600">${sign}</text></g>`;
+    zoomSteps = chip(outX, 'out', '−', 'A longer stretch, ending where this one ends.', t1 - t0 >= T1 - T0)
+      + chip(inX, 'in', '+', 'A shorter stretch, ending where this one ends.', t1 - t0 <= minSpan);
   }
   // The end of the data, when it is on screen: a dotted line at the latest
   // date with its date above it, and a dot closing each line. Drawn outside
@@ -790,7 +810,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
       + '</g>';
   }
 
-  return `<svg class="custom-lines-chart" data-mini-id="${_escHtml(String(cfg.id))}" viewBox="0 0 ${W} ${H}"><defs>${clips}</defs>${grid}<g clip-path="url(#${clipId})">${eventBands}</g>${panelLayers}${latestMark}${lineTags}${eventCaps}${panelTitles}${endLabels}${xAxis}${zoomUi}${latestTradeSvg}</svg>`;
+  return `<svg class="custom-lines-chart" data-mini-id="${_escHtml(String(cfg.id))}" viewBox="0 0 ${W} ${H}"><defs>${clips}</defs>${grid}<g clip-path="url(#${clipId})">${eventBands}</g>${panelLayers}${latestMark}${lineTags}${eventCaps}${panelTitles}${endLabels}${xAxis}${zoomUi}${zoomSteps}${latestTradeSvg}</svg>`;
 }
 
 // The panel opens through a width transition (and can be resized), so the
@@ -1176,15 +1196,31 @@ function _miniZoomReset(svg) {
   _miniChartClearHover();
   _miniChartRerender(d.cfgId);
 }
+// − and + (zoomSteps): the window times `factor`, its right end kept; at the
+// start of the data it grows forward instead.
+function _miniZoomStep(svg, factor) {
+  const d = _miniDataOf(svg);
+  if (!d) return;
+  const full = d.T1 - d.T0, next = Math.max(Math.min(MINI_ZOOM.minSpanMs, full), Math.min(full, (d.t1 - d.t0) * factor));
+  let t1 = d.t1, t0 = t1 - next;
+  if (t0 < d.T0) { t0 = d.T0; t1 = t0 + next; }
+  if (next >= full && !d.home) delete window._miniZooms[d.cfgId];
+  else window._miniZooms[d.cfgId] = { t0, t1 };
+  _miniChartClearHover();
+  _miniChartRerender(d.cfgId);
+}
 document.addEventListener('dblclick', (e) => {
   const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
-  if (svg && !e.target.closest('.mini-line-toggle')) _miniZoomReset(svg);   // two quick clicks on an eye are two toggles, not a reset
+  // Two quick clicks on an eye are two toggles, and on − or + two steps: neither is a reset.
+  if (svg && !e.target.closest('.mini-line-toggle, .mini-zoom-step')) _miniZoomReset(svg);
 });
 document.addEventListener('click', (e) => {
   const svg = e.target && e.target.closest && e.target.closest('.custom-lines-chart');
   if (!svg) return;
   if (e.target.closest('.mini-zoom-reset')) _miniZoomReset(svg);
   if (e.target.closest('.mini-latest')) _miniJumpToLatest(svg);
+  const step = e.target.closest('.mini-zoom-step');
+  if (step) _miniZoomStep(svg, step.getAttribute('data-step') === 'in' ? 0.5 : 2);
 });
 // Touch, through pointer events so the mouse handlers stay as they are: a
 // pinch zooms the time axis around the fingers' midpoint, a one-finger drag
@@ -1332,6 +1368,8 @@ document.addEventListener('mousemove', (e) => {
   if (!svg) { if (window._miniHoverActive && !window._miniDragAnchor) _miniChartClearHover(); return; }
   const data = _miniDataOf(svg);
   if (!data || !data.series.length) return;
+  // Over − and + there is no day to read.
+  if (e.target.closest('.mini-zoom-step')) { if (window._miniHoverActive && !window._miniDragAnchor) _miniChartClearHover(); return; }
   const plotBottom = data.H - data.padB;
   const g = _miniHoverGroup(svg);
   const tip = _miniChartTipEl();

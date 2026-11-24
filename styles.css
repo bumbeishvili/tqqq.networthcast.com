@@ -3314,6 +3314,11 @@
   .custom-lines-chart .mini-zoom-reset rect { fill: rgba(134, 118, 255, 0.16); stroke: rgba(134, 118, 255, 0.55); stroke-width: 0.3; }
   .custom-lines-chart .mini-zoom-reset:hover rect { fill: rgba(134, 118, 255, 0.34); }
   .custom-lines-chart .mini-zoom-reset text { fill: #383874; }
+  /* − and + under the chart on a touch screen (js/signal-chart.js, zoomSteps). */
+  .custom-lines-chart .mini-zoom-step { cursor: pointer; }
+  .custom-lines-chart .mini-zoom-step rect { fill: rgba(134, 118, 255, 0.16); stroke: rgba(134, 118, 255, 0.55); stroke-width: 0.3; }
+  .custom-lines-chart .mini-zoom-step text { fill: #383874; pointer-events: none; }
+  .custom-lines-chart .mini-zoom-step.is-off { opacity: 0.35; pointer-events: none; }
   /* The eye on each end label hides its line (the shared .cfg-sub-chip handler flips it). */
   /* A finger over the chart: the page still scrolls under a vertical drag; a
      pinch or a sideways drag goes to the chart's own zoom and pan
@@ -4451,6 +4456,11 @@
     background: var(--state-hover-bg);
     border-color: var(--state-hover-border);
   }
+  /* − and +, a touch screen's zoom (js/chart.js, zoomFromEnd): a pair the size of a finger. */
+  .chart-zoom-steps { display: inline-flex; gap: 6px; }
+  .chart-zoom-steps[hidden] { display: none; }
+  .chart-zoom-steps .chart-zoom-btn { min-width: 34px; padding: 4px 0; font-size: calc(14px * var(--ui-scale)); line-height: 1; }
+  .chart-zoom-btn:disabled { opacity: 0.35; cursor: default; }
   /* On a phone-width chart the two buttons stack: side by side they would
      take 200px of the canvas for themselves (the labels' margin keeps their
      width free, js/chart.js's chartZoomButtonsWidth). */

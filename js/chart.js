@@ -1967,6 +1967,17 @@ function zoomToLatest() {
   setPeriodFromZoom(T1 - (cur.t1 - cur.t0), T1);
   endZoomGesture();
 }
+// − and +, a touch screen's zoom: the period halves or doubles with its end
+// where it is (the user, 25 November 2026: "let's have a different zoom, like
+// buttons or slider, that will zoom from the end of the chart"; on their phone
+// a pinch still zoomed the browser's own page, which a browser set to always
+// allow zooming does whatever the page asks).
+function zoomFromEnd(factor) {
+  const { T0, T1 } = zoomBounds(), cur = currentZoomWindow();
+  const span = Math.max(Math.min(CHART_ZOOM.minSpanMs, T1 - T0), Math.min(cur.t1 - T0, (cur.t1 - cur.t0) * factor));
+  setPeriodFromZoom(cur.t1 - span, cur.t1);
+  endZoomGesture();
+}
 // The controls in the chart's bottom-right corner (index.html #chart-zoom-ui):
 // a hint, and Latest → and Reset zoom after a zoom. The hint's wordings,
 // longest first, go on to fitChartZoomUi, which shows the first that fits.
@@ -1977,17 +1988,19 @@ function renderChartZoomUi() {
   if (!hint || !latest || !reset) return;
   reset.hidden = !_zoomHome;
   latest.hidden = !_zoomHome || chart._periodDates[1] === daily[daily.length - 1].date;
-  // By finger the buttons say enough once zoomed, and a phone has no room for a line over them.
-  hint._wordings = TOUCH_SCREEN.matches
-    ? (_zoomHome ? [] : ['pinch to zoom'])
-    : [_zoomHome ? `${MOD_KEY} + drag to pan` : `${MOD_KEY} + scroll to zoom`];
+  // A touch screen has − and + in the hint's place; each is off where it has nowhere to go.
+  const { T0, T1 } = zoomBounds(), cur = currentZoomWindow();
+  document.getElementById('chart-zoom-steps').hidden = !TOUCH_SCREEN.matches;
+  document.getElementById('chart-zoom-in').disabled = cur.t1 - cur.t0 <= Math.min(CHART_ZOOM.minSpanMs, T1 - T0);
+  document.getElementById('chart-zoom-out').disabled = cur.t0 <= T0;
+  hint._wordings = TOUCH_SCREEN.matches ? [] : [_zoomHome ? `${MOD_KEY} + drag to pan` : `${MOD_KEY} + scroll to zoom`];
 }
 // The width the visible zoom buttons take, which the end-label margin keeps
-// for them (endLabelPlugin); 0 when none shows.
+// for them (endLabelPlugin); 0 when none shows. The − and + pair counts as one.
 function chartZoomButtonsWidth() {
   const ui = document.getElementById('chart-zoom-ui');
-  if (!_zoomHome || !ui) return 0;
-  const widths = [...ui.querySelectorAll('.chart-zoom-btn')].filter(b => !b.hidden).map(b => b.offsetWidth);
+  if (!ui) return 0;
+  const widths = [...ui.children].filter(el => el.id !== 'chart-zoom-hint' && !el.hidden).map(el => el.offsetWidth);
   // On a phone-width chart the buttons stack (styles.css), so they are as wide as the widest.
   if (getComputedStyle(ui).flexDirection === 'column') return Math.max(0, ...widths);
   return widths.reduce((w, width) => w + width, 0) + Math.max(0, widths.length - 1) * parseFloat(getComputedStyle(ui).columnGap);
@@ -3314,7 +3327,7 @@ function render() {
       // the ceiling never clips one. Compact mode's ceiling is lower than
       // desktop's: its plot is a phone's.
       // After a zoom the margin also keeps room under the labels for its buttons.
-      const zoomW = _zoomHome ? Math.ceil(chartZoomButtonsWidth()) + CHART_ZOOM.uiGapPx : 0;
+      const buttonsW = Math.ceil(chartZoomButtonsWidth()), zoomW = buttonsW ? buttonsW + CHART_ZOOM.uiGapPx : 0;
       c.options.layout.padding.right = Math.max(zoomW,
         Math.max(spec.marginMin, Math.min(spec.marginMax, Math.round(maxW) + spec.marginGaps)));
     },
@@ -4315,6 +4328,8 @@ function render() {
   zoomReset.title = `Back to the Entry and Exit from before the zoom. ${MOD_KEY} + scroll zooms, ${MOD_KEY} + drag pans.`;
   zoomReset.addEventListener('click', resetChartZoom);
   document.getElementById('chart-zoom-latest').addEventListener('click', zoomToLatest);
+  document.getElementById('chart-zoom-in').addEventListener('click', () => zoomFromEnd(0.5));
+  document.getElementById('chart-zoom-out').addEventListener('click', () => zoomFromEnd(2));
 
   // Reverse link: hovering a transaction-log row highlights that trade's action
   // point on the chart. Rows carry data-mkey = their smaLog index, which is the
