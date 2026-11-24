@@ -78,6 +78,13 @@ function customActionKind(action) {
   if (s.includes('buy')) return 'buy';
   return 'hold';
 }
+// Is a custom strategy's log row a trade of its own? The log table's "Strategy trades only" keeps
+// it and the library counts it: the kinds the chart marks, the slices of an eased buy, and an
+// opening row that holds a fund. A contribution, a snapshot and the closing row are none of these.
+function customRowTraded(row) {
+  const kind = customActionKind(row && row.action);
+  return kind in CUSTOM_EVENT_STYLE || kind === 'ease' || (kind === 'start' && logHoldsFund(row && row.held));
+}
 // Human label for a custom row's action: the strategy's own text when it wrote
 // more than the bare keyword, otherwise the kind's stock label.
 function customActionLabel(action) {

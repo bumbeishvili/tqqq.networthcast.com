@@ -3855,6 +3855,27 @@ function fitShownWith(schema, sp, values) {
 }
 const fitInUse = (s, values) => s.shown(values) && !(s.off !== undefined && String(values[s.id]) === String(s.off));
 const fitInUseCount = (space, values) => space.filter(s => fitInUse(s, values)).length;
+// A code strategy's setting as the search and the complexity score read it: its choices, the value
+// that switches it off, and whether it shows with a set of values.
+const customSettingSpace = (schema, sp) => ({ id: sp.id, values: customParamOptions(sp).map(o => fitStored(o.value)),
+  off: fitOffValue(sp), shown: values => fitShownWith(schema, sp, values) });
+// How complex a strategy is (the user, 2026-11-24: "how complex are the strategies"), from the
+// settings in use as Fit's "fewest settings" counts them: how many there are, and points that weigh
+// each by its choices, one point for each doubling of them. A yes/no switch is 1 point, a list of ten
+// funds about 3, a number with a hundred values about 7: a number gives a fit far more room than a
+// switch, and no weight is picked by hand.
+function strategyComplexity(space, values) {
+  const used = space.filter(s => fitInUse(s, values));
+  return { settings: used.length, points: d3.sum(used, s => Math.log2(s.values.length)) };
+}
+// A code strategy's complexity at a config's values (a config with none stored is the strategy at its
+// defaults). Costs and execution (fit: false) are no rule and are left out, as are settings with one choice.
+function customComplexity(schema, cfg) {
+  const all = schema.filter(sp => sp && sp.id != null);
+  const values = Object.fromEntries(all.map(sp => [sp.id, fitStored(customParamValue(cfg, sp))]));
+  const rules = all.filter(sp => sp.fit !== false && customParamOptions(sp).length > 1);
+  return strategyComplexity(rules.map(sp => customSettingSpace(schema, sp)), values);
+}
 // Does a simpler strategy's result keep its share of the best found? `room`: how much it may fall short by.
 function fitKeeps(goal, r, ref, hurdleFinal, cagrOf, room = 1 - FIT_FEWEST_KEEPS) {
   if (!r) return false;
@@ -4065,9 +4086,8 @@ async function runCustomFit(cfgId, goal, variant) {
   };
   await fitRun({
     key: cfgId, goal, variant, hurdle, cur, close: pool.close,
-    space: params.map(sp => ({ id: sp.id, label: fitLabel(schema, sp), values: customParamOptions(sp).map(o => fitStored(o.value)),
-      between: v => fitBetween(sp, v), text: v => customOptionLabel(sp, v), number: numberOf(sp),
-      off: fitOffValue(sp), shown: values => fitShownWith(schema, sp, values) })),
+    space: params.map(sp => ({ ...customSettingSpace(schema, sp), label: fitLabel(schema, sp),
+      between: v => fitBetween(sp, v), text: v => customOptionLabel(sp, v), number: numberOf(sp) })),
     measure: fitMemo(new Map(), p => pool.run(cfg.code, globals, p).then(fitScore)),
     cagrOf: f => cfgMoneyWeightedCAGR(ctx, f),
     apply: (values, changed) => {
@@ -4384,16 +4404,12 @@ function buildCustomLogTableHtml(log, columns, lines) {
   const kindOf = (r) => (typeof customActionKind === 'function') ? customActionKind(r && r.action) : 'hold';
   const ACT_CLASS = { buy: 'action-buy', sell: 'action-sell', switch: 'action-switch', rebalance: 'action-rebal',
                       ease: 'action-buy', contribution: 'action-hold', start: 'action-hold', end: 'action-hold', hold: 'action-hold' };
-  // A trade of the strategy's own ("Strategy trades only" keeps it): the kinds the chart marks, the
-  // slices of an eased buy, and an opening row that holds a fund. A contribution, a snapshot and the
-  // closing row are none of these.
-  const traded = (row, kind) => kind in CUSTOM_EVENT_STYLE || kind === 'ease' || (kind === 'start' && logHoldsFund(row && row.held));
   let contribCount = 0, easeCount = 0, tradeCount = 0;
   const body = log.map((row, i) => {
     const kind = kindOf(row);
     if (kind === 'contribution') contribCount++;
     if (kind === 'ease') easeCount++;
-    const isTrade = traded(row, kind);
+    const isTrade = customRowTraded(row);   // a trade of the strategy's own: "Strategy trades only" keeps it
     if (isTrade) tradeCount++;
     const hasMarker = !!(typeof CUSTOM_EVENT_STYLE !== 'undefined' && CUSTOM_EVENT_STYLE[kind] && +((row || {}).value) > 0);
     const cls = hasMarker ? 'log-row-mk' : kind === 'contribution' ? 'log-row-contrib' : kind === 'ease' ? 'log-row-dca' : '';

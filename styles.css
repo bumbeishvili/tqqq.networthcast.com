@@ -804,6 +804,7 @@
   .strategy-library-header {
     display: flex;
     align-items: center;
+    flex-wrap: wrap;   /* the page buttons drop under the title on a narrow window */
     gap: 14px;
     padding: 16px 20px;
     border-bottom: 1px solid var(--border);
@@ -816,13 +817,13 @@
     color: var(--text);
     flex: 0 0 auto;
   }
-  .strategy-library-header .modal-close { flex: 0 0 auto; }
+  .strategy-library-header .modal-close { flex: 0 0 auto; margin-left: auto; }   /* at the right edge, the title its only neighbour */
   .strategy-library-body {
     padding: 16px 20px 20px;
     overflow: auto;
     flex: 1 1 auto;
   }
-  /* Search + legend + pager stay pinned to the top of the scroll area while
+  /* The search and the sort stay pinned to the top of the scroll area while
      the card grid scrolls underneath — same background as the modal so
      scrolled-past cards don't show through. */
   .sl-sticky-head {
@@ -834,33 +835,18 @@
     margin-bottom: 4px;
     border-bottom: 1px solid var(--border);
   }
-  .sl-intro {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin: 0 0 12px;
-    font-size: calc(11px * var(--ui-scale));
-  }
-  /* Legend / note row */
-  .sl-legend { display: inline-flex; align-items: center; gap: 6px; color: var(--text); }
-  .sl-legend i { width: 14px; height: 2px; border-radius: 2px; display: inline-block; }
-  .sl-leg-strat { background: var(--accent2); }
-  .sl-leg-spy { background: var(--text-muted); margin-left: 6px; }
-  .sl-intro-note { color: var(--text-muted); }
-  .sl-intro-note b { color: var(--green-text); font-weight: 600; }
-
-  /* Pager — sits between the legend and the "N backtested" note in .sl-intro
-     now (was a standalone bar under the card grid), so it's compact, not
-     full-width. */
+  /* Pager — in the window's title bar, after the title (was a row of its own
+     above the search). On a narrow window it takes the line under the title. */
   .sl-pager {
     display: flex;
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    min-width: 0;
   }
-  .sl-page-info { font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
+  @media (max-width: 780px) {
+    .strategy-library-header .sl-pager { order: 3; flex: 1 1 100%; }
+  }
   .sl-page-btns { display: flex; gap: 4px; flex-wrap: wrap; }
   .sl-page {
     min-width: 26px;
@@ -883,9 +869,34 @@
   }
   .sl-page:disabled { opacity: 0.35; cursor: default; }
 
-  .sl-search {
-    width: 100%;
+  /* The search, the sort and its direction on one line; the sort drops under the search on a narrow window. */
+  .sl-tools {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
     margin: 0 0 10px;
+  }
+  .sl-sort,
+  .sl-sort-dir {
+    flex: 0 0 auto;
+    padding: 7px 10px;
+    font-family: inherit;
+    font-size: calc(12px * var(--ui-scale));
+    color: var(--text);
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    cursor: pointer;
+  }
+  .sl-sort:focus,
+  .sl-sort-dir:focus-visible { outline: none; border-color: var(--accent2); }
+  .sl-sort-dir:hover { background: var(--surface2); }
+  /* How many of the runs a return sort still needs are done, while they are made. */
+  .sl-sort-status { font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); font-variant-numeric: tabular-nums; }
+  .sl-search {
+    flex: 1 1 calc(220px * var(--ui-scale));
+    min-width: 0;
     padding: 7px 10px;
     font-family: inherit;
     font-size: calc(12px * var(--ui-scale));
@@ -1072,23 +1083,6 @@
   }
   .sl-dot-strat { background: var(--accent2); }
   .sl-dot-spy { background: var(--text-muted); }
-  /* Work-in-progress banner — lives beside the modal title now, so it has to
-     stay to a single line regardless of viewport width; full text on hover. */
-  .sl-wip {
-    flex: 1 1 auto;
-    min-width: 0;
-    padding: 5px 10px;
-    background: rgba(232, 137, 11, 0.10);
-    border: 1px solid rgba(232, 137, 11, 0.35);
-    border-radius: 7px;
-    color: var(--orange-text);
-    font-size: calc(11px * var(--ui-scale));
-    line-height: 1.4;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    cursor: help;
-  }
   .sl-spark-empty {
     height: 56px;
     display: flex;

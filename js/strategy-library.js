@@ -405,14 +405,31 @@ const SL_SPARK_START = '1995-01-01';  // left edge of every sparkline
 const SL_START_CAPITAL = 10000;       // opening lump sum
 const SL_MONTHLY = 1000;              // added at the start of each new month
 
-// Bounds for the four card windows. `null` end → last available bar.
+// Bounds for the card's era windows and the catalog's "2010–today". `null` end → last available bar.
 const SL_ERA_BOUNDS = {
   '1953': ['1953-01-01', null],   // whole span — overlaps the four below by design
   '1980': ['1980-01-01', '2000-03-31'],
   '2000': ['2000-03-31', '2009-03-31'],
   '2009': ['2009-03-31', '2025-12-31'],
   '2026': ['2025-12-31', null],   // shares the 2009-era boundary, like the others
+  '2010': ['2010-01-01', null],
 };
+// The last twelve months: a window that ends at the last bar and starts at the close a year before it.
+const SL_LAST_YEAR = 'year';
+// The windows a card's ⓘ gives, with no column in its era table: the two the catalog sorts by besides
+// the whole span (the user, 2026-11-24: "sort based on name, difficulty 2010-today return, last year
+// return, all time return"). `unit` follows the return; `trades`: with the count of trades the catalog sorts by.
+const SL_FACT_WINDOWS = [
+  { key: '2010', label: '2010–today', unit: ' a year', trades: true },
+  { key: SL_LAST_YEAR, label: 'Last 12 months', unit: '' },
+];
+// A window's bounds: [from, to, exact]. The eras and 2010–today enter a quarter early, as the app's
+// Entry does (slRunner); the last twelve months start at their exact close.
+function slWindowBounds(key, dates) {
+  if (key !== SL_LAST_YEAR) return SL_ERA_BOUNDS[key].concat(false);
+  const last = dates[dates.length - 1];
+  return [(+last.slice(0, 4) - 1) + last.slice(4), null, true];
+}
 
 let SL_STATS = null;  // { quarters, spy, byN } — built by computeLibraryStats()
 
@@ -508,9 +525,23 @@ function slCurveFromLog(log, quarters) {
   return out;
 }
 
+// A library entry's code as its strategy object (first-party code, evaluated here: see above).
+const slModule = (code) => new Function('"use strict"; return (' + code + '\n);')();
+
+// An entry's complexity at its defaults: { settings, points } (customComplexity in
+// js/saved-configs.js, the count Fit's "fewest settings" goes by), null for an entry with no code.
+let _slComplexity = {};
+function slComplexity(s) {
+  if (!(s.n in _slComplexity)) {
+    const code = strategyHasCode(s.n);
+    _slComplexity[s.n] = code ? customComplexity(slModule(code).params || [], libraryEntryConfig(s)) : null;
+  }
+  return _slComplexity[s.n];
+}
+
 // Evaluate a library strategy's code and run it over [si, ei] at its defaults.
 function slRunCode(code, data, si, ei) {
-  const mod = new Function('"use strict"; return (' + code + '\n);')();
+  const mod = slModule(code);
   const entryDate = data.dates[si], exitDate = data.dates[ei];
   // p.contributions is what every CODE[n] entry actually reads for its
   // monthly cash (js/strategy-library-code.js, rewritten this session to
@@ -664,8 +695,48 @@ function computeLibraryStats() {
   if (!data || !data.dates || !data.dates.length) return null;
   const dates = data.dates;
   const quarters = slQuarterEnds(dates);
-  SL_STATS = { quarters, spy: slBuyHoldCurve(data.spy, dates, quarters), byN: {}, data, dates };
+  SL_STATS = { quarters, spy: slBuyHoldCurve(data.spy, dates, quarters), byN: {}, windows: {}, data, dates };
   return SL_STATS;
+}
+
+// How an entry runs over a window (from, to, exact): its result as slCagrDD and the sparkline read
+// it. null for an entry with neither code nor a preset.
+function slRunner(st, s) {
+  const code = strategyHasCode(s.n);
+  if (!code && !s.preset) return null;
+  const { data, dates } = st, lastIdx = dates.length - 1;
+  // Code entries index the daily series; presets index quarterlyData. Both start
+  // one quarter EARLIER than the era's nominal boundary, because that is what the
+  // app does: picking "Entry Q1 2000" buys at the previous quarter's close
+  // (chart.js — `simEntryIdx = entryIdx - 1`). Running a card from the boundary
+  // itself skipped that quarter, and for the 2000 era it holds the dot-com top —
+  // worth up to 7.7pp of drawdown between a card and the strategy added from it.
+  // An exact window starts at the last close on or before its first date instead.
+  const entryQIdx = (d) => { const qi = slQIdx(d, false); return qi > 0 ? qi - 1 : qi; };
+  const qDateAt = (qi, fallback) =>
+    (qi >= 0 && typeof quarterlyData !== 'undefined' && quarterlyData[qi]) ? quarterlyData[qi][0] : fallback;
+  if (code) {
+    return (from, to, exact) => slRunCode(code, data,
+      slIdxOnOrBefore(dates, exact ? from : qDateAt(entryQIdx(from), from)),
+      to === null ? lastIdx : slIdxOnOrBefore(dates, qDateAt(slQIdx(to, true), to)));
+  }
+  return (from, to, exact) => {
+    if (exact) throw new Error('a preset runs on the quarter grid and has no window from an exact date');
+    return slRunPreset(s.preset, entryQIdx(from), slQIdx(to, true));
+  };
+}
+
+// One window's result for a runnable entry: { cagr, dd, trades }, null where there is too little to
+// measure. `trades` counts the strategy's own trades in a code entry's log, as its log table's
+// "Strategy trades only" does (customRowTraded); a preset's result is no log and has none.
+// Run once and kept, for the cards and for the sorts alike. A run that throws is the caller's to handle.
+function slWindowMetric(st, s, key) {
+  const kept = st.windows[s.n] || (st.windows[s.n] = {});
+  if (!(key in kept)) {
+    const res = slRunner(st, s)(...slWindowBounds(key, st.dates)), m = slCagrDD(res);
+    kept[key] = m ? { cagr: m.cagr, dd: m.dd, trades: Array.isArray(res) ? res.filter(customRowTraded).length : null } : null;
+  }
+  return kept[key];
 }
 
 // Simulate ONE strategy and memoize it. Called per rendered card, so a page of
@@ -676,34 +747,14 @@ function slStatsFor(n) {
   if (n in st.byN) return st.byN[n];
   const s = STRATEGY_LIBRARY.find(x => x.n === n);
   if (!s) return null;
-  const code = strategyHasCode(n);
-  if (!code && !s.preset) return (st.byN[n] = null);
-  const { data, dates, quarters } = st;
-  const sparkEi = dates.length - 1;
-  // Code entries index the daily series; presets index quarterlyData. Both start
-  // one quarter EARLIER than the era's nominal boundary, because that is what the
-  // app does: picking "Entry Q1 2000" buys at the previous quarter's close
-  // (chart.js — `simEntryIdx = entryIdx - 1`). Running a card from the boundary
-  // itself skipped that quarter, and for the 2000 era it holds the dot-com top —
-  // worth up to 7.7pp of drawdown between a card and the strategy added from it.
-  const entryQIdx = (d) => { const qi = slQIdx(d, false); return qi > 0 ? qi - 1 : qi; };
-  const qDateAt = (qi, fallback) =>
-    (qi >= 0 && typeof quarterlyData !== 'undefined' && quarterlyData[qi]) ? quarterlyData[qi][0] : fallback;
-  const run = code
-    ? (from, to) => slRunCode(code, data,
-        slIdxOnOrBefore(dates, qDateAt(entryQIdx(from), from)),
-        to === null ? sparkEi : slIdxOnOrBefore(dates, qDateAt(slQIdx(to, true), to)))
-    : (from, to) => slRunPreset(s.preset, entryQIdx(from), slQIdx(to, true));
+  const run = slRunner(st, s);
+  if (!run) return (st.byN[n] = null);
   try {
-    const metrics = {};
-    for (const era of STRATEGY_ERAS) {
-      const b = SL_ERA_BOUNDS[era.key];
-      if (!b) continue;
-      const m = slCagrDD(run(b[0], b[1]));
-      if (m) metrics[era.key] = { cagr: m.cagr, dd: m.dd };
-    }
+    // The card's eras, and the two windows its ⓘ gives.
+    const windows = STRATEGY_ERAS.filter(era => SL_ERA_BOUNDS[era.key]).concat(SL_FACT_WINDOWS);
+    const metrics = Object.fromEntries(windows.map(w => [w.key, slWindowMetric(st, s, w.key)]).filter(([, m]) => m));
     const sp = run(SL_SPARK_START, null);
-    st.byN[n] = { metrics, curve: slCurveFromLog((Array.isArray(sp) ? sp : (sp && sp.points)) || [], quarters) };
+    st.byN[n] = { metrics, curve: slCurveFromLog((Array.isArray(sp) ? sp : (sp && sp.points)) || [], st.quarters) };
   } catch (e) {
     console.warn('Strategy library: #' + n + ' failed to run —', (e && e.message) || e);
     st.byN[n] = { metrics: {}, curve: null };
@@ -712,7 +763,7 @@ function slStatsFor(n) {
 }
 
 // Drop the cache so the next open recomputes (data refresh, edited code).
-function slInvalidateStats() { SL_STATS = null; _strategyLibraryBuilt = false; _slPage = 1; }
+function slInvalidateStats() { SL_STATS = null; _slComplexity = {}; _strategyLibraryBuilt = false; _slPage = 1; }
 
 
 // Four contiguous windows, cut at the two turning points that matter for a
@@ -746,6 +797,21 @@ function strategyHasCode(n) {
 function fmtPct(v) {
   if (v == null || !isFinite(v)) return '—';
   return (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+}
+
+// What the ⓘ says of an entry's figures the catalog sorts by: its complexity, and its return over the
+// windows with no column in the era table, with the trades since 2010. Kept off the card itself (the
+// user, 2026-11-24: "put this inside info icon ... it should stay as clean as possible"). [] for an
+// entry that cannot run.
+function slFactLines(s, m) {
+  const c = slComplexity(s);
+  if (!c) return [];
+  const returns = SL_FACT_WINDOWS.map((w) => {
+    const cell = m && m[w.key];
+    if (!cell) return w.label + ': —';
+    return w.label + ': ' + fmtPct(cell.cagr) + w.unit + (w.trades && cell.trades !== null ? ', ' + cell.trades.toLocaleString('en-US') + ' trades' : '');
+  });
+  return [`Complexity: ${Math.round(c.points)} points from ${c.settings} ${c.settings === 1 ? 'setting' : 'settings'} in use`].concat(returns);
 }
 
 // One row per measure, one column per window, with a labelled first column.
@@ -800,7 +866,9 @@ function slYearTicks() {
 
 // Log-scaled SVG sparkline: SPY (muted) vs this strategy over the full computed
 // span, with the start value (at the line's origin) and end values (at each
-// line's tip) drawn inside the graph.
+// line's tip) drawn inside the graph. SPY's end value carries its name, which is
+// the chart's legend (the user, 2026-11-24: "remove legend, and instead display
+// it in the chart (number and SPY)"); the other line is the card's strategy.
 function sparklineHtml(n) {
   const st = slStatsFor(n);
   const curve = st && st.curve, spy = SL_STATS && SL_STATS.spy;
@@ -841,7 +909,7 @@ function sparklineHtml(n) {
     <span class="sl-logtag">log ⬍</span>
     <span class="sl-lbl sl-lbl-start" style="top:${yPct(start).toFixed(0)}%">${fmtMoney(start)}</span>
     <span class="sl-lbl sl-lbl-strat" style="top:${yStrat.toFixed(0)}%">${fmtMoney(curve[N - 1])}</span>
-    <span class="sl-lbl sl-lbl-spy" style="top:${ySpy.toFixed(0)}%">${fmtMoney(spy[spy.length - 1])}</span>
+    <span class="sl-lbl sl-lbl-spy" style="top:${ySpy.toFixed(0)}%">SPY ${fmtMoney(spy[spy.length - 1])}</span>
     <span class="sl-years">${slYearTicks().map(y => `<b>${y}</b>`).join('')}</span>
     <span class="sl-cross"></span>
     <span class="sl-dot sl-dot-spy"></span>
@@ -874,8 +942,9 @@ function slFormatRules(text) {
 
 // Full detail for a card's ⓘ. Newlines become &#10; so the shared
 // .info-icon[data-tip] tooltip (white-space: pre-line) renders them as breaks.
-function slInfoTip(s) {
-  const parts = [s.name, '', slFormatRules(s.rules)];
+function slInfoTip(s, m) {
+  const facts = slFactLines(s, m);
+  const parts = [s.name, ''].concat(facts.length ? facts.concat('') : [], slFormatRules(s.rules));
   if (s.needs) parts.push('', 'Needs data this app does not carry: ' + s.needs);
   if (s.reported && s.reported !== '\u2014') parts.push('', 'Source note: ' + s.reported);
   return esc(parts.join('\n')).replace(/\n/g, '&#10;');
@@ -902,7 +971,7 @@ function buildStrategyCards(list) {
           ? `<a class="sl-card-name" href="${link}" target="_blank" rel="noopener" title="${esc(s.rules)}">${esc(s.name)}</a>`
           : `<span class="sl-card-name" title="${esc(s.rules)}">${esc(s.name)}</span>`}
         ${add}
-        <span class="info-icon sl-info" tabindex="0" data-tip-wide data-tip="${slInfoTip(s)}">\u24d8</span>
+        <span class="info-icon sl-info" tabindex="0" data-tip-wide data-tip="${slInfoTip(s, m)}">\u24d8</span>
       </div>
       ${has ? sparklineHtml(s.n) : '<div class="sl-spark sl-spark-empty">no data series</div>'}
       ${eras}
@@ -967,37 +1036,120 @@ function addStrategyFromLibrary(n) {
 let _strategyLibraryBuilt = false;
 const SL_PAGE_SIZE = 8;   // cards per page — each one costs a full set of sims
 let _slPage = 1, _slQuery = '';
+
+// ---- The catalog's order (the user, 2026-11-24: "ability to sort based on name, difficulty
+// 2010-today return, last year return, all time return", "ascending and descending both") ----
+// Each sort starts in the direction that reads best for it (`first`) and the button beside it turns
+// it round. A sort on a run reads one figure (`field`) of one window (`window`) of every entry in the
+// list, not only of the cards on screen: the runs still missing are made when it is picked, and kept.
+// The trades are counted from 2010 (the user, 2026-11-24: "also one sort rule should be count of
+// transactions (from 2010 - today)").
+const SL_SORTS = [
+  { key: 'library', label: 'Library order', first: 'asc' },
+  { key: 'name', label: 'Name', first: 'asc' },
+  { key: 'complexity', label: 'Complexity', first: 'asc' },
+  { key: '2010', label: 'Return, 2010–today', first: 'desc', window: '2010', field: 'cagr' },
+  { key: SL_LAST_YEAR, label: 'Return, last 12 months', first: 'desc', window: SL_LAST_YEAR, field: 'cagr' },
+  { key: '1953', label: 'Return, all time', first: 'desc', window: '1953', field: 'cagr' },
+  { key: 'trades', label: 'Trades, 2010–today', first: 'asc', window: '2010', field: 'trades' },
+];
+const SL_DIRECTIONS = { asc: '↑ Ascending', desc: '↓ Descending' };
+const SL_YIELD_MS = 25;   // a return sort's runs pause this often, so its count shows and the window responds
+let _slSort = SL_SORTS[0], _slSortDir = _slSort.first;
+let _slSortJob = 0;       // the latest sort asked for: runs made for an earlier one stop
+
+// An entry's window for a sort (slWindowMetric), or null where it has none. A run that throws is said
+// in the console and kept as none, so the entry sorts last and is not run again.
+function slSortWindow(st, s, key) {
+  try {
+    return slWindowMetric(st, s, key);
+  } catch (e) {
+    console.warn('Strategy library: #' + s.n + ' failed to run —', (e && e.message) || e);
+    return ((st.windows[s.n] || (st.windows[s.n] = {}))[key] = null);
+  }
+}
+// What a sort orders an entry by; null for an entry it has nothing for.
+function slSortValue(st, s, sort) {
+  if (sort.key === 'library') return STRATEGY_LIBRARY.indexOf(s);
+  if (sort.key === 'name') return s.name.toLowerCase();
+  if (sort.key === 'complexity') { const c = slComplexity(s); return c ? c.points : null; }
+  const m = strategyRunnable(s) ? slSortWindow(st, s, sort.window) : null;
+  return m ? m[sort.field] : null;
+}
+// The list in the picked order. Entries the sort has nothing for come last in either direction;
+// equal ones keep the library's order.
+function slSorted(list) {
+  const st = computeLibraryStats(), sign = _slSortDir === 'asc' ? 1 : -1;
+  const rows = list.map(s => ({ s, value: slSortValue(st, s, _slSort) }));
+  const ordered = d3.sort(rows.filter(r => r.value !== null), (a, b) => sign * d3.ascending(a.value, b.value));
+  return ordered.concat(rows.filter(r => r.value === null)).map(r => r.s);
+}
+// The entries of a list whose window the picked sort still has to run.
+function slSortRunsMissing(list) {
+  const st = computeLibraryStats();
+  if (!_slSort.window || !st) return [];
+  return list.filter(s => strategyRunnable(s) && !(st.windows[s.n] && _slSort.window in st.windows[s.n]));
+}
+// Makes those runs, pausing every SL_YIELD_MS with the count beside the sort. Resolves to false when
+// another sort was picked meanwhile.
+async function slRunForSort(body, missing) {
+  const st = computeLibraryStats(), job = ++_slSortJob, sort = _slSort, status = body.querySelector('.sl-sort-status');
+  let lastYield = performance.now();
+  for (let k = 0; k < missing.length && job === _slSortJob; k++) {
+    slSortWindow(st, missing[k], sort.window);
+    if (performance.now() - lastYield > SL_YIELD_MS) {
+      status.textContent = `${k + 1} / ${missing.length}`;
+      status.hidden = false;
+      await new Promise(r => setTimeout(r, 0));
+      lastYield = performance.now();
+    }
+  }
+  if (job === _slSortJob) status.hidden = true;
+  return job === _slSortJob;
+}
+
 function buildStrategyLibrary() {
   if (_strategyLibraryBuilt) return;
   const body = document.getElementById('strategy-library-body');
   if (!body) return;
   computeLibraryStats();   // quarter grid + SPY baseline only; sims are per-card
-  const shown = STRATEGY_LIBRARY.filter(s => !s.hidden), ready = shown.filter(strategyRunnable).length;
-  const span = SL_STATS && SL_STATS.quarters.length
-    ? SL_STATS.quarters[0].key.slice(0, 4) + '–' + SL_STATS.quarters[SL_STATS.quarters.length - 1].key.slice(0, 4)
-    : '';
   body.innerHTML = `
     <div class="sl-sticky-head">
-      <div class="sl-intro">
-        <span class="sl-legend"><i class="sl-leg-strat"></i>strategy <i class="sl-leg-spy"></i>SPY · log · ${span}</span>
-        <div class="sl-pager"></div>
-        <span class="sl-intro-note">${ready}/${shown.length} backtested · hover a name for rules</span>
+      <div class="sl-tools">
+        <input id="sl-search" class="sl-search" type="search" autocomplete="off" spellcheck="false"
+               placeholder="Search strategies — name, tag, or rule text…" aria-label="Search strategies">
+        <select id="sl-sort" class="sl-sort" aria-label="Sort strategies by">
+          ${SL_SORTS.map(sort => `<option value="${sort.key}"${sort === _slSort ? ' selected' : ''}>${sort.label}</option>`).join('')}
+        </select>
+        <button type="button" id="sl-sort-dir" class="sl-sort-dir" title="Turn the order round">${SL_DIRECTIONS[_slSortDir]}</button>
+        <span class="sl-sort-status" hidden></span>
       </div>
-      <input id="sl-search" class="sl-search" type="search" autocomplete="off" spellcheck="false"
-             placeholder="Search strategies — name, tag, or rule text…" aria-label="Search strategies">
     </div>
     <div class="sl-noresults" hidden>No strategy matches that.</div>
     <div class="sl-cards"></div>`;
   body.onclick = (e) => {
     const add = e.target.closest('[data-sl-add]');
-    if (add) { addStrategyFromLibrary(+add.getAttribute('data-sl-add')); return; }
+    if (add) addStrategyFromLibrary(+add.getAttribute('data-sl-add'));
+  };
+  // The page buttons sit in the window's title bar (index.html), outside the body.
+  document.getElementById('sl-pager').onclick = (e) => {
     const pg = e.target.closest('[data-sl-page]');
     if (pg) { _slPage = +pg.getAttribute('data-sl-page'); renderLibraryPage(body); }
   };
   setupSparkTooltip(body);
   setupLibrarySearch(body);
+  setupLibrarySort(body);
   renderLibraryPage(body);
   _strategyLibraryBuilt = true;
+}
+
+// The sort's dropdown and its direction button. A new sort starts on the first page, in its own
+// first direction; the button turns the order round and says which it now is.
+function setupLibrarySort(body) {
+  const select = body.querySelector('#sl-sort'), button = body.querySelector('#sl-sort-dir');
+  const apply = (direction) => { _slSortDir = direction; button.textContent = SL_DIRECTIONS[direction]; _slPage = 1; renderLibraryPage(body); };
+  select.addEventListener('change', () => { _slSort = SL_SORTS.find(sort => sort.key === select.value); apply(_slSort.first); });
+  button.addEventListener('click', () => apply(_slSortDir === 'asc' ? 'desc' : 'asc'));
 }
 
 // Entries matching the current query. Text-only, so filtering costs no sims.
@@ -1011,12 +1163,17 @@ function slFilteredEntries() {
   });
 }
 
-// Render just the current page. Each card pulls its own stats, so only the
-// strategies actually on screen get simulated.
+// Render just the current page of the matching entries, in the picked order. Each card pulls its
+// own stats, so only the strategies actually on screen get simulated; a return sort first makes
+// the runs it still lacks (slRunForSort), and the page shows once they are in.
 function renderLibraryPage(body) {
   body = body || document.getElementById('strategy-library-body');
   if (!body) return;
-  const list = slFilteredEntries();
+  const list = slFilteredEntries(), missing = slSortRunsMissing(list);
+  if (!missing.length) { slShowPage(body, slSorted(list)); return; }
+  slRunForSort(body, missing).then((done) => { if (done) slShowPage(body, slSorted(list)); });
+}
+function slShowPage(body, list) {
   const pages = Math.max(1, Math.ceil(list.length / SL_PAGE_SIZE));
   if (_slPage > pages) _slPage = pages;
   if (_slPage < 1) _slPage = 1;
@@ -1024,21 +1181,22 @@ function renderLibraryPage(body) {
   const slice = list.slice(from, from + SL_PAGE_SIZE);
   const cards = body.querySelector('.sl-cards');
   const empty = body.querySelector('.sl-noresults');
-  const pager = body.querySelector('.sl-pager');
+  const pager = document.getElementById('sl-pager');
   if (cards) cards.innerHTML = buildStrategyCards(slice);
   if (empty) empty.hidden = list.length > 0;
-  if (pager) pager.innerHTML = slPagerHtml(list.length, pages, from, slice.length);
-  if (cards) cards.scrollIntoView({ block: 'nearest' });
+  if (pager) pager.innerHTML = slPagerHtml(list.length, pages);
+  // A new page, search or order is read from its top. (Scrolling the cards "into view" put their first
+  // row under the pinned head: the body is the scroll area and the head sticks to its top.)
+  body.scrollTop = 0;
 }
 
-function slPagerHtml(total, pages, from, shown) {
+function slPagerHtml(total, pages) {
   if (!total) return '';
   const btn = (page, label, disabled, current) =>
     `<button type="button" class="sl-page${current ? ' on' : ''}" data-sl-page="${page}"${disabled ? ' disabled' : ''}>${label}</button>`;
   let nums = '';
   for (let i = 1; i <= pages; i++) nums += btn(i, i, false, i === _slPage);
-  return `<span class="sl-page-info">${from + 1}–${from + shown} of ${total}</span>
-    <span class="sl-page-btns">
+  return `<span class="sl-page-btns">
       ${btn(_slPage - 1, '‹', _slPage <= 1, false)}${nums}${btn(_slPage + 1, '›', _slPage >= pages, false)}
     </span>`;
 }
