@@ -59,9 +59,10 @@ jobs:
         run: python3 scripts/update_data.py || (sleep 120 && python3 scripts/update_data.py)
 
       # Two Alpaca requests a fund per run (calendar + bars since the last day
-      # on disk) for the site's ten funds, well inside the free plan's
-      # 200/minute. A fund with no file yet gets its full three-year pull, so a
-      # new ticker fills in on its first run. Kept independent of the
+      # on disk) for the site's funds, well inside the free plan's
+      # 200/minute. A fund with no file yet, or with a file shorter than the
+      # ten years the script asks for, gets the full pull (about fifty requests,
+      # once), so a new ticker fills in on its first run. Kept independent of the
       # daily prices: an Alpaca outage shows as a failed step in the log but
       # must not block committing the yfinance refresh above.
       - name: Refresh 5-minute bars (Alpaca)

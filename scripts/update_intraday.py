@@ -6,14 +6,18 @@ one file a fund. These are the intraday page's history, whichever ticker it
 shows; the daily price files the main chart uses come from Yahoo via
 scripts/update_data.py, and the two are kept separate on purpose.
 
-Alpaca is free with an account and serves bars back to 2016 from the
+Alpaca is free with an account and serves bars back to January 2016 from the
 consolidated SIP feed, split-adjusted here. It needs ALPACA_API_KEY and
 ALPACA_API_SECRET in the environment or in a .env file at the repo root.
---years sets how far back a full pull goes; --incremental instead starts
-from the last day already in the file (that day is re-fetched so a partial
-session gets completed). The cron uses --incremental: two requests a fund per
-run. A fund with no file yet gets the full pull, so a new ticker fills in on
-its first run. --tickers limits a run to some of the funds.
+--years sets how far back a full pull goes (ten by default, never before
+Alpaca's own start); --incremental instead starts from the last day already
+in the file (that day is re-fetched so a partial session gets completed). The
+cron uses --incremental: two requests a fund per run. A fund with no file yet
+gets the full pull, so a new ticker fills in on its first run, and so does a
+fund whose file starts later than the years wanted: that is how the files
+written with three years grew to ten on the first run after the default
+changed (about fifty requests a fund, once). --tickers limits a run to some of
+the funds.
 
 One fund failing does not stop the others: its error is printed with its
 traceback, the rest are written, and the run then exits with a failure so the
@@ -55,6 +59,13 @@ DATE_FORMAT = '%-m/%-d/%Y %H:%M:%S'
 ALPACA_BARS_URL = 'https://data.alpaca.markets/v2/stocks/bars'
 ALPACA_CALENDAR_URL = 'https://paper-api.alpaca.markets/v2/calendar'
 ALPACA_PAGE_LIMIT = 10000
+# Alpaca serves nothing from before this day, however far back it is asked.
+ALPACA_HISTORY_START = datetime(2016, 1, 1, tzinfo=timezone.utc)
+# A file may start this much after the day a full pull asks from and still
+# count as reaching it: a pull that starts on a weekend or a holiday gets its
+# first bar on the next session. Later than that and the file is short of the
+# years wanted.
+BACKFILL_SLACK = timedelta(days=10)
 # A bar's close on disk against the same bar fetched again: further apart than
 # this and the fund has split since the file was written (the smallest split
 # ratio is 2-for-1; a bar still forming moves by far less).
@@ -155,14 +166,20 @@ def stored_midnight(date_str):
 
 
 def alpaca_start(existing, args, path):
-    """UTC instant to fetch from. Incremental mode restarts at New York
-    midnight of the last day on disk; with nothing on disk it says so and
-    does the full --years pull instead."""
+    """UTC instant to fetch from. A full pull starts --years back, no earlier
+    than Alpaca's history. Incremental mode restarts at New York midnight of
+    the last day on disk; with nothing on disk, or with a file that starts
+    later than the years wanted, it says so and does the full pull instead."""
+    wanted = max(datetime.now(timezone.utc) - timedelta(days=365 * args.years), ALPACA_HISTORY_START)
     if args.incremental and existing:
-        return stored_midnight(max(existing, key=parse_key))
-    if args.incremental:
+        first = stored_midnight(min(existing, key=parse_key))
+        if first - wanted <= BACKFILL_SLACK:
+            return stored_midnight(max(existing, key=parse_key))
+        print(f"  {os.path.relpath(path)} starts on {first:%Y-%m-%d}, short of the {args.years} years wanted; "
+              f"doing the full pull instead")
+    elif args.incremental:
         print(f"  {os.path.relpath(path)} is empty; doing the full {args.years}-year pull instead")
-    return datetime.now(timezone.utc) - timedelta(days=365 * args.years)
+    return wanted
 
 
 def read_existing(path):
@@ -231,7 +248,7 @@ def refresh(ticker, args):
 
 
 argp = argparse.ArgumentParser(description=f'Refresh {BAR_MINUTES}-minute bars from Alpaca, one file a fund.')
-argp.add_argument('--years', type=int, default=3, help='how many years back a full pull goes')
+argp.add_argument('--years', type=int, default=10, help='how many years back a full pull goes')
 argp.add_argument('--incremental', action='store_true',
                   help='fetch from the last day already in each file instead of --years back')
 argp.add_argument('--tickers', nargs='+', default=TICKERS, type=str.upper,

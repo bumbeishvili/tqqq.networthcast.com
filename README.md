@@ -20,7 +20,7 @@ $10K plus $500 a month from 2010: TQQQ vs QQQ + Turnaround Monday from the libra
 
 ![A strategy's panel docked beside the chart](images/readme-strategy-panel.png)
 
-A library strategy's settings read as sentences. Every dropdown shows what each value would have made, and Fit searches them. Its window asks, in order: what to freeze, CAGR or drawdown, the limit the other one has to keep, a cliff or a plateau, round or any numbers, the fewest or any settings. Map, in that window, draws every set of settings that has been run as a dot, max drawdown across and CAGR up, with dashed lines through the settings as they are. It fills itself from the moment it opens: every setting at each of its values, the search the window is set to (as a cliff and as a plateau, each result marked Fit), then new sets bred from the best found, until nothing new shows. A picked dot lists what differs and can be set with Use. Fit and Map share their runs, so each makes the other quicker.
+A library strategy's settings read as sentences. Every dropdown shows what each value would have made, and Fit searches them. Its window asks, in order: what to freeze, the years to fit on (each end follows the chart's Entry or Exit until a year is picked; a picked year stays), CAGR or drawdown, the limit the other one has to keep, a cliff or a plateau, round or any numbers, the fewest or any settings. Map, in that window, draws every set of settings that has been run as a dot, max drawdown across and CAGR up, with dashed lines through the settings as they are. It fills itself from the moment it opens: every setting at each of its values, the search the window is set to (as a cliff and as a plateau, each result marked Fit), then new sets bred from the best found, until nothing new shows. A picked dot lists what differs and can be set with Use. Fit and Map share their runs, so each makes the other quicker.
 
 ![The signal chart inside the panel](images/readme-signal-chart.png)
 
@@ -36,7 +36,7 @@ Every start year and holding period at once, coloured against a baseline (here c
 
 ![TQQQ intraday paths](images/readme-intraday.png)
 
-[experiments/tqqq-intraday.html](experiments/tqqq-intraday.html): every session's 5-minute path over about three years (from September 2023 for TQQQ), for TQQQ or another of the eleven funds (a dropdown, or `?ticker=SOXL` in the address), the mean and median path, the usual close by weekday, and filters by the day's open and close. Hover for the path nearest the pointer; drag across the plot for the move over that span on today's path, the mean, the median and the nearest day.
+[experiments/tqqq-intraday.html](experiments/tqqq-intraday.html): every session's 5-minute path over ten years (as far back as the data refresh has pulled; Alpaca's history starts in January 2016), for TQQQ or another of the eleven funds (a dropdown, or `?ticker=SOXL` in the address), the mean and median path, the usual close by weekday, and filters: one month of the year, one weekday (both together keep, say, the Fridays of every November), and the day's open and close. Hover for the path nearest the pointer; drag across the plot for the move over that span on today's path, the mean, the median and the nearest day.
 
 ### Desktop widget
 

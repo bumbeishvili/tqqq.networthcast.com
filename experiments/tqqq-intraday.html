@@ -28,13 +28,17 @@
   .back-link{display:inline-block;margin:0 0 10px;font-size:12.5px;color:var(--muted);text-decoration:none}
   .back-link:hover{color:var(--accent)}
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:12px 16px 8px}
-  .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 28px;margin:0 0 4px}
+  /* One row from a 1280-px window up: the ticker, the month and the weekday,
+     the two switches, the two histograms and the period. The gaps and the
+     histograms' least width are what lets the two dropdowns in without the
+     period dropping to a row of its own, which the chart would pay for in height. */
+  .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;margin:0 0 4px}
   /* Metric filters: one block per day statistic, each a labelled brushable
      histogram. Fixed sizes so the row never moves. */
   /* The two histograms share the room between the toggle and the period
      block equally; each is measured once, after layout, so bars and brush
      match the width it got. */
-  .metric{display:flex;flex-direction:column;gap:3px;flex:1 1 0;min-width:160px;max-width:420px;padding-bottom:12px;font-family:var(--mono);font-size:11.5px}
+  .metric{display:flex;flex-direction:column;gap:3px;flex:1 1 0;min-width:110px;max-width:420px;padding-bottom:12px;font-family:var(--mono);font-size:11.5px}
   .metric-head{display:flex;align-items:center;justify-content:space-between;gap:8px;height:18px;white-space:nowrap}
   .metric-name{font-family:var(--sans);font-size:12.5px;color:var(--muted)}
   .metric-range{color:var(--faint)}
@@ -73,7 +77,7 @@
   .switch input:checked+.track::after{transform:translateX(14px)}
   .switch input:focus-visible+.track{outline:2px solid var(--accent);outline-offset:2px}
   .switch.unavailable{opacity:.5;cursor:default}
-  .switches{display:flex;flex-wrap:wrap;align-items:center;gap:8px 20px}
+  .switches{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
   /* The ticker choice, first in the toolbar. */
   .ticker-pick select{font:600 12.5px var(--mono);color:var(--text);background:var(--panel);border:1px solid var(--border2);border-radius:6px;padding:3px 6px;cursor:pointer}
   .ticker-pick select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -82,6 +86,7 @@
   .no-data{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;padding:0 24px;text-align:center;font-size:13px;color:var(--muted)}
   .no-data[hidden]{display:none}
   .panel.no-history #chart svg,.panel.no-history .scale-toggle,.panel.no-history .weekday,.panel.no-history .daily{display:none}
+  .panel.no-days #chart svg,.panel.no-days .scale-toggle{display:none}
   .panel.no-history .metric,.panel.no-history .period,.panel.no-history .switch{visibility:hidden}
   /* Out of reach too: a brush's own rects take the pointer whatever their visibility. */
   .panel.no-history .metric *,.panel.no-history .period *,.panel.no-history .switch *{pointer-events:none}
@@ -235,6 +240,12 @@
       <div class="switches">
         <label class="ticker-pick" title="The fund whose days the chart draws.">
           <select id="select-ticker" aria-label="Ticker"></select>
+        </label>
+        <label class="ticker-pick" title="Keep the days of one month, in every year. &quot;Month&quot; keeps them all.">
+          <select id="select-month" aria-label="Month"></select>
+        </label>
+        <label class="ticker-pick" title="Keep the days of one weekday. &quot;Day&quot; keeps them all.">
+          <select id="select-weekday" aria-label="Weekday"></select>
         </label>
         <label class="switch" id="similar-switch">
           <input type="checkbox" id="toggle-similar">
@@ -433,18 +444,24 @@ const shortZoneName = timeZone =>
 // basis a quote screen uses, so a day starts at its opening gap rather than
 // at zero and the 0% line is where yesterday closed. The first day in the
 // file has no previous close and is dropped.
+// A ten-year file is about 195,000 rows, and the page reads the data again
+// every minute: a day's rows are told by the Date column's own "M/D/YYYY"
+// prefix and a bar's minute is read off its "HH:MM" text, so only one stamp a
+// day goes through the date parser (parsing every row three times took half a
+// second on ten years, measured 2026-11-25).
 function buildDays(rows) {
-  const byDay = d3.groups(rows, r => d3.timeDay.floor(parseStamp(r.Date)).getTime());
-  const sessions = d3.sort(byDay.map(([dayMs, bars]) => {
-    const sorted = d3.sort(bars, r => parseStamp(r.Date));
+  const minuteOfDay = (stamp) => { const [hours, minutes] = stamp.slice(stamp.indexOf(' ') + 1).split(':'); return +hours * 60 + +minutes; };
+  const sessions = d3.sort(d3.groups(rows, dayOf).map(([, bars]) => {
+    const date = d3.timeDay.floor(parseStamp(bars[0].Date));
+    const sorted = d3.sort(bars.map(r => ({ row: r, opens: minuteOfDay(r.Date) })), bar => bar.opens);
     return {
-      id: dayMs,
-      date: new Date(dayMs),
-      open: +sorted[0].Open,
+      id: date.getTime(),
+      date,
+      open: +sorted[0].row.Open,
       // A bar's minute is its END, so a 5-minute bar opening 09:30 lands on
       // 09:35 and a 1-minute bar opening 09:34 on the same 09:35; the two
       // resolutions share the minute grid the aggregates and matching use.
-      bars: sorted.map(r => { const t = parseStamp(r.Date); return { minute: t.getHours() * 60 + t.getMinutes() + (r.barMinutes || BAR_MINUTES), close: +r.Close }; }),
+      bars: sorted.map(({ row, opens }) => ({ minute: opens + (row.barMinutes || BAR_MINUTES), close: +row.Close })),
     };
   }), d => d.date);
   return sessions.slice(1).map((day, i) => {
@@ -494,10 +511,14 @@ function sameTrendDays(days, reference) {
   return days.filter(d => d === reference || (d.marketState && d.marketState.trend === trend && d.marketState.volatility === volatility));
 }
 
+// A day's % by minute, made on first use and kept on the day: every move of
+// the period slider reads it for each day on the chart.
+const pctByMinute = day => day.byMinute || (day.byMinute = new Map(day.points.map(p => [p.minute, p.pct])));
+
 // Mean and median of every day's % at each minute of the session.
 function buildAggregates(days) {
   const minutes = d3.range(SESSION_OPEN_MIN, SESSION_CLOSE_MIN + 1, BAR_MINUTES);
-  const byMinute = days.map(d => new Map(d.points.map(p => [p.minute, p.pct])));
+  const byMinute = days.map(pctByMinute);
   return minutes.map(minute => {
     const values = byMinute.map(m => m.get(minute)).filter(v => v !== undefined);
     return {
@@ -693,14 +714,14 @@ function weightedDistance(a, b) {
 // session shorter than the reference) is left out.
 const KEEP_SHARE = 0.08;
 function similarDays(days, reference) {
-  const refByMinute = new Map(reference.points.map(p => [p.minute, p.pct]));
+  const refByMinute = pctByMinute(reference);
   const cutoff = reference.points[reference.points.length - 1].minute;
   const minutes = d3.range(SESSION_OPEN_MIN, cutoff + 1, BAR_MINUTES);   // the open, now a real value, takes part
   const refSeries = minutes.map(m => refByMinute.get(m));
   const scored = days
     .filter(d => d !== reference)
     .map(d => {
-      const byMinute = new Map(d.points.map(p => [p.minute, p.pct]));
+      const byMinute = pctByMinute(d);
       if (!minutes.every(m => byMinute.has(m))) return null;
       return { day: d, distance: weightedDistance(refSeries, minutes.map(m => byMinute.get(m))) };
     })
@@ -872,7 +893,7 @@ class IntradayOverlayChart extends ChartBase {
     const x = d3.scaleLinear().domain([SESSION_OPEN_MIN, SESSION_CLOSE_MIN]).range([0, chartWidth]);
     // Log: a fixed, symmetric extent from all days, so filtering never
     // rescales. Linear: the extent of the days on screen, since on a linear
-    // axis the full three-year range would flatten a quiet selection.
+    // axis the file's full range would flatten a quiet selection.
     const [lo, hi] = d3.extent(allPct);
     const limit = this.getState().yLimit || Math.ceil(Math.max(-lo, hi));
     const y = yScaleType === 'symlog'
@@ -888,7 +909,9 @@ class IntradayOverlayChart extends ChartBase {
       if (yTicks.every(k => Math.abs(y(k) - y(t)) >= MIN_TICK_GAP_PX)) yTicks.push(t);
     }
     const line = d3.line().x(p => x(p.minute)).y(p => y(p.pct));
-    this.setState({ x, y, yTicks, line });
+    // What a day's line stands on: while it is the same, so is the line's text (drawDays).
+    const lineKey = [yScaleType, symlogLinearPct, x.range(), y.domain(), y.range()].join('|');
+    this.setState({ x, y, yTicks, line, lineKey });
   }
 
   drawAxes() {
@@ -931,8 +954,13 @@ class IntradayOverlayChart extends ChartBase {
     // The similar-days reference is only picked out while the session is
     // live; after the close the latest day looks like any other.
     const highlighted = d => live && d.id === referenceId;
+    // A step of the period slider redraws the chart with nearly every day as it
+    // was: a day's line is worked out once for the scales in use and kept on
+    // the day, and written to its path only when it is not there already.
+    const { lineKey } = this.getState();
+    const lineOf = d => { if (!d.line || d.line.key !== lineKey) d.line = { key: lineKey, text: line(d.points) }; return d.line.text; };
     chart._add('g.days')._add('path.day-path', faint)
-      .attr('d', d => line(d.points))
+      .each(function (d) { const text = lineOf(d); if (this.__line !== text) { this.setAttribute('d', text); this.__line = text; } })
       .classed('reference', highlighted)
       .style('opacity', d => highlighted(d) ? 1 : opacity);
   }
@@ -1785,8 +1813,10 @@ class DailyChangeChart extends ChartBase {
 
 function renderCoverage(days) {
   const fmtDate = d3.timeFormat('%b %-d, %Y');
-  d3.select('#coverage').html(
-    `<b>${days.length}</b> days, <b>${fmtDate(days[0].date)}</b> to <b>${fmtDate(days[days.length - 1].date)}</b>`);
+  // The filters can leave no day at all: a month the period does not reach.
+  d3.select('#coverage').html(days.length
+    ? `<b>${days.length}</b> days, <b>${fmtDate(days[0].date)}</b> to <b>${fmtDate(days[days.length - 1].date)}</b>`
+    : '<b>0</b> days');
 }
 
 // The slider position survives reloads. A thumb resting on an edge is saved
@@ -2079,6 +2109,50 @@ function setupMetricFilters(fund, allDays, latestId, onChange) {
   return { filter: days => days.filter(d => d.id === latestId || filters.every(f => f.pass(d))) };
 }
 
+// Calendar filter (the user, 2026-11-25: "an option to filter out data, like
+// specific months, or specific days (like november fridays for example) so two
+// dropdowns"): a month of the year and a weekday, each a dropdown whose first
+// choice, its own name, keeps them all. Both together keep, say, the Fridays of every
+// November. It runs first, on the period's days, and unlike the histograms it
+// can leave the latest day out: a Wednesday is no Friday. Each pick is saved.
+// The desktop widget shows the chart alone, with no dropdowns: nothing is
+// filtered there. The day stamps are the file's calendar dates at local
+// midnight, so getMonth() and getDay() are New York's.
+// The names are short ("Month", "Nov"; "Day", "Fri"): the two dropdowns share
+// a row with the ticker and the switches, and wider ones pushed the period
+// slider onto a row of its own, which the chart paid for in height.
+const CALENDAR_PICKS = [
+  { select: '#select-month', all: 'Month', storageKey: 'tqqq-intraday-month',
+    names: d3.range(12).map(month => d3.timeFormat('%b')(new Date(2000, month, 1))), of: day => day.date.getMonth() },
+  { select: '#select-weekday', all: 'Day', storageKey: 'tqqq-intraday-weekday',
+    names: WEEKDAYS, of: day => day.date.getDay() - 1 },   // getDay(): 1 is Monday
+];
+// A pick as it is kept: '' for all, else the choice's place in its names.
+function readSavedPick(pick) {
+  if (EMBED) return '';
+  try {
+    const saved = localStorage.getItem(pick.storageKey);
+    return saved !== null && pick.names[+saved] !== undefined && saved !== '' ? saved : '';
+  } catch { return ''; }
+}
+function writeSavedPick(pick, value) {
+  try { localStorage.setItem(pick.storageKey, value); } catch { /* storage unavailable */ }
+}
+function setupCalendarFilter(onChange) {
+  const picked = CALENDAR_PICKS.map((pick) => {
+    const state = { pick, value: readSavedPick(pick) };
+    d3.select(pick.select).on('change', function () {
+      state.value = this.value;
+      writeSavedPick(pick, state.value);
+      onChange();
+    }).selectAll('option').data([{ value: '', text: pick.all }].concat(pick.names.map((text, k) => ({ value: String(k), text }))))
+      .join('option').attr('value', d => d.value).text(d => d.text);
+    d3.select(pick.select).property('value', state.value);
+    return state;
+  });
+  return { filter: days => days.filter(day => picked.every(state => state.value === '' || state.pick.of(day) === +state.value)) };
+}
+
 // Similar-days control: just the toggle. With nothing saved it starts on
 // while a session is open, when "days like today so far" is the question,
 // and off outside market hours, when the reference would be a finished day.
@@ -2327,18 +2401,40 @@ function showHistoryNote(text) {
   if (!EMBED) fitChartsToWindow();   // the bars' room goes and comes back with the note
 }
 
+// The filters left no day (a month the period does not reach): said in the
+// chart's place, the chart itself out of sight until a day is back. The
+// toolbar and the bars under the chart stay: the way back is in them.
+function showNoDaysNote(none) {
+  d3.select('.panel').classed('no-days', none);
+  d3.select('#no-data').property('hidden', !none).text(none ? 'No day matches the filters.' : '');
+}
+
+// What the page last drew from: the fund, its history file's text with the
+// rows read from it, and a stamp of everything else a load reads. The page
+// asks for the data every minute. A history file that came back unchanged is
+// not parsed again, and a load with nothing new at all (the same file, no new
+// bar today, the same print, the same day and session state) leaves the page
+// as it stands: on ten years a rebuild is a visible hitch.
+let loaded = null;
 function loadData() {
   const asked = ticker;   // a pick made while these load wins over them
   return Promise.all([
-    d3.tsv(historyUrl(asked), { cache: 'no-cache' }),
+    d3.text(historyUrl(asked), { cache: 'no-cache' }),
     // 404 until the day's first pipeline run has written it.
-    d3.tsv(todayUrl(asked), { cache: 'no-cache' }).catch(() => []),
+    d3.text(todayUrl(asked), { cache: 'no-cache' }).catch(() => ''),
     loadLiveQuote(),
-  ]).then(([history, today, quotes]) => {
+  ]).then(([historyText, todayText, quotes]) => {
     if (asked !== ticker) return;
+    const print = extendedPrint(quotes);
+    const sameHistory = !!loaded && loaded.fund === asked && loaded.historyText === historyText;
+    // The day and whether a session is open decide how today's rows merge and where "Similar days only" starts.
+    const stamp = JSON.stringify([todayText, print, marketDateNow(), marketMinuteNow() !== null]);
+    if (sameHistory && loaded.stamp === stamp && drawnTicker === asked) return;
+    const history = sameHistory ? loaded.history : d3.tsvParse(historyText);
+    const today = d3.tsvParse(todayText);
+    loaded = { fund: asked, historyText, history, stamp };
     drawnTicker = asked;
     showHistoryNote(null);
-    const print = extendedPrint(quotes);
     chart.extended(print);
     const allDays = withMarketState(buildDays(mergeTodayRows(history, today)));
     const allPct = allDays.flatMap(d => d.points.map(p => p.pct));
@@ -2354,20 +2450,24 @@ function loadData() {
     };
 
     const refresh = () => {
-      const inRange = metric.filter(periodDays);
+      const inRange = metric.filter(calendar.filter(periodDays));
       // The state to match is the latest day's, whatever the period and the histograms keep.
       const filtered = trend.on ? sameTrendDays(inRange, allDays[allDays.length - 1]) : inRange;
       let days = filtered, cutoff = null, reference = null;
-      if (similar.on) {
+      if (similar.on && filtered.length) {   // no day left (a month the period lacks): none to compare with
         reference = filtered[filtered.length - 1];
         ({ days, cutoff } = similarDays(filtered, reference));
       }
       renderCoverage(days);
-      chart.data(days).aggregates(buildAggregates(days))
-        .referenceId(reference ? reference.id : null).matchCutoff(cutoff)
-        .todayId(latestId)
-        .opacityCount(filtered.filter(d => d.id !== latestId).length)
-        .render();
+      // The chart needs a day to draw: with none it steps aside for a note, and the filters stay in reach.
+      showNoDaysNote(days.length === 0);
+      if (days.length) {
+        chart.data(days).aggregates(buildAggregates(days))
+          .referenceId(reference ? reference.id : null).matchCutoff(cutoff)
+          .todayId(latestId)
+          .opacityCount(filtered.filter(d => d.id !== latestId).length)
+          .render();
+      }
       if (!EMBED) {
         const stat = WEEKDAY_STATS[weekday.stat];
         weekdayChart.leastExtent(stat.leastExtent).data(buildWeekdayBars(days, stat)).render();
@@ -2377,6 +2477,7 @@ function loadData() {
     };
     let ready = false;                                 // one render once every control is wired
     const guarded = () => { if (ready) refresh(); };
+    const calendar = setupCalendarFilter(guarded);
     const metric = setupMetricFilters(asked, allDays, latestId, guarded);
     const similar = setupSimilarFilter(guarded);
     const trend = setupTrendFilter(allDays[allDays.length - 1], guarded);
