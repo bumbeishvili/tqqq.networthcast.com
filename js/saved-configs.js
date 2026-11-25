@@ -2470,18 +2470,26 @@ function savedConfigInPanel(type) {
 }
 // "Reset to default" on a 9sig, SMA, Buy & Hold or Invested panel. The render
 // that follows saves a saved strategy's new values (syncEditingConfig).
+// What "Reset to default" sets a built-in panel to: every setting's default, a frozen one as it
+// stands now. The user (2026-11-25): "reset, should not reset frozen properties".
+function panelResetParams(type) {
+  const now = captureParams(type), frozen = fitFrozenIds('panel:' + type);
+  return Object.assign(strategyDefaultParams(type, savedConfigInPanel(type)), Object.fromEntries(Object.keys(now).filter(id => frozen.has(id)).map(id => [id, now[id]])));
+}
 function resetPanelToDefaults(type) {
   delete _fitNotes['panel:' + type];
-  applyControlParams(type, strategyDefaultParams(type, savedConfigInPanel(type)));
+  applyControlParams(type, panelResetParams(type));
   if (typeof saveSliders === 'function') saveSliders();
   if (typeof render === 'function') render();
 }
 // "Reset to default" on a code strategy: cfg.params holds only the settings
-// the user changed, so emptying it puts each back to its declared default.
+// the user changed, so dropping one puts it back to its declared default. A
+// frozen setting keeps what it holds (panelResetParams).
 function resetCustomToDefaults(cfgId) {
   const cfg = savedConfigs.find(c => c.id === cfgId);
   if (!cfg) return;
-  cfg.params = {};
+  const frozen = fitFrozenIds(cfg.id);
+  cfg.params = Object.fromEntries(Object.entries(cfg.params || {}).filter(([id]) => frozen.has(id)));
   delete _fitNotes[cfg.id];
   persistSavedConfigs();
   if (typeof render === 'function') render();
@@ -3016,11 +3024,11 @@ function buildPanelSaveBarHtml(type) {
 // A built-in panel's Settings header, above its controls (js/chart.js
 // renderStrategyPanelBody), as code strategies have one: Fit where the panel
 // can be searched (FIT_PANELS), then "Reset to default", greyed out while
-// every setting is at its default or a fit is running; the last fit's result under it.
+// every setting it would change is at its default (a frozen one is left alone) or a fit is running; the last fit's result under it.
 function buildNativeSettingsHeaderHtml(type) {
   if (!CONFIG_PARAM_IDS[type]) return '';
   const key = 'panel:' + type;
-  const atDefaults = paramsEqual(captureParams(type), strategyDefaultParams(type, savedConfigInPanel(type)), type);
+  const atDefaults = paramsEqual(captureParams(type), panelResetParams(type), type);
   const note = _fitNotes[key] ? buildFitNoteHtml(_fitNotes[key]) : '';
   return `<div class="strategy-panel-section-label settings-head"><span>Settings</span><span class="settings-actions">`
     + `${FIT_PANELS[type] ? buildFitButtonHtml(key) : ''}`
@@ -3577,6 +3585,11 @@ function setFitFrozen(key, setting, frozen) {
 function fitFreeIds(key) {
   const settings = fitSettings(key), choices = fitFreezeChoices(key);
   return settings.length ? new Set(settings.filter(s => !fitFrozen(choices, s)).map(s => s.id)) : null;
+}
+// The ids frozen for a key now: what a search, the map and "Reset to default" leave as they are.
+function fitFrozenIds(key) {
+  const choices = fitFreezeChoices(key);
+  return new Set(fitSettings(key).filter(s => fitFrozen(choices, s)).map(s => s.id));
 }
 function fitNothingFree(key) {
   _fitNotes[key] = { text: 'Every setting is frozen, so nothing changed.', changes: [] };
@@ -5117,7 +5130,9 @@ function renderCustomPanelBody(cfgId) {
   // Each change is passed back into run() as p.<id>.
   const schema = getCustomSchema(cfg), controls = buildCustomControlsHtml(cfg, schema);
   if (controls) {
-    const atDefaults = schema.every(sp => sp.id == null || String(customParamValue(cfg, sp)) === String(coerceCustomVal(sp, sp.default)));
+    // "Reset to default" leaves a frozen setting as it is, so it has nothing to do while every other one is at its default.
+    const frozen = fitFrozenIds(cfg.id);
+    const atDefaults = schema.every(sp => sp.id == null || frozen.has(sp.id) || String(customParamValue(cfg, sp)) === String(coerceCustomVal(sp, sp.default)));
     const fitNote = _fitNotes[cfg.id] ? buildFitNoteHtml(_fitNotes[cfg.id]) : '';
     html += `<div class="strategy-panel-section-label settings-head" style="margin-top:14px"><span>Settings</span>`
       + `<span class="settings-actions">${buildFitButtonHtml(cfg.id)}`

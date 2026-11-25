@@ -4355,9 +4355,11 @@
   .map-chart { margin: 4px 0; }
   /* The chart's colours: js/settings-map-chart.js reads them off the plot at every render, and the legend under it draws its marks in them. */
   .settings-map-plot, .map-legend {
-    --map-dot: rgba(134, 118, 255, 0.42);         /* a set of settings */
-    --map-dot-sized: rgba(134, 118, 255, 0.78);   /* a checked one, sized by how it holds */
-    --map-ring: var(--surface);                   /* the edge that keeps touching dots apart */
+    /* Dots are see-through with a thin line around them, so a pile of them reads darker than one. */
+    --map-dot: rgba(134, 118, 255, 0.2);                /* a combination of settings */
+    --map-dot-edge: rgba(96, 82, 214, 0.42);            /* the line around it */
+    --map-dot-sized: rgba(134, 118, 255, 0.26);         /* a tested one, sized by how it holds */
+    --map-dot-sized-edge: rgba(96, 82, 214, 0.85);      /* the line around that */
     --map-better: rgba(134, 118, 255, 0.1);       /* the quarter better on both counts */
     --map-worse: rgba(56, 56, 116, 0.07);         /* the quarter worse on both */
     --map-grid: rgba(56, 56, 116, 0.1);
@@ -4404,8 +4406,8 @@
   .map-key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .map-key .info-icon { margin: 0; }
   .map-key i { flex: none; }
-  .map-key-dot { border-radius: 50%; background: var(--map-dot-sized); }
-  .map-key-dot.is-pale { width: 4px; height: 4px; background: var(--map-dot); }
+  .map-key-dot { box-sizing: border-box; border: 1px solid var(--map-dot-sized-edge); border-radius: 50%; background: var(--map-dot-sized); }
+  .map-key-dot.is-pale { width: 4px; height: 4px; border-color: var(--map-dot-edge); background: var(--map-dot); }
   .map-key-dot.is-small { width: 7px; height: 7px; }
   .map-key-dot.is-big { width: 18px; height: 18px; }
   .map-key-line { width: 18px; border-top: 1px solid var(--map-frontier); }

@@ -43,6 +43,7 @@ class SettingsMapChart {
       resetLabel: 'Reset zoom',        // the button in the plot's corner while zoomed in
       emptyText: '',       // shown in place of the plot while there is no dot
       dotRadius: 2,        // px, a dot with no size
+      edgeWidth: [0.75, 1.25],   // px, the line around a dot with no size and around a sized one
       sizeRadius: [3.5, 9],   // px, a sized dot at 0 and at 1 (by area)
       hitRadius: 14,       // px around the pointer in which the nearest dot counts
       interactive: true,   // false: a picture alone, with no hover, pick or zoom
@@ -122,7 +123,7 @@ class SettingsMapChart {
     const chart = svg._add('g.chart').attr('transform', `translate(${marginLeft},${marginTop})`);
     const colour = (name) => getComputedStyle(plot.node()).getPropertyValue(name).trim();
     this.setState({ plot, canvas, svg, chart, ratio, colours: {
-      dot: colour('--map-dot'), dotSized: colour('--map-dot-sized'), ring: colour('--map-ring'),
+      dot: colour('--map-dot'), dotEdge: colour('--map-dot-edge'), dotSized: colour('--map-dot-sized'), dotSizedEdge: colour('--map-dot-sized-edge'),
       better: colour('--map-better'), worse: colour('--map-worse'), grid: colour('--map-grid'), frontier: colour('--map-frontier'),
     } });
   }
@@ -153,7 +154,7 @@ class SettingsMapChart {
   // frontier's step line, the plain dots, the sized ones (the largest first,
   // so a small one is never hidden under a large one).
   drawDots() {
-    const { canvas, ratio, data, now, frontier, x, y, chartWidth, chartHeight, colours, dotRadius, sizeRadius } = this.getState();
+    const { canvas, ratio, data, now, frontier, x, y, chartWidth, chartHeight, colours, dotRadius, sizeRadius, edgeWidth } = this.getState();
     const cx = canvas.node().getContext('2d');
     cx.setTransform(ratio, 0, 0, ratio, 0, 0);
     cx.clearRect(0, 0, chartWidth, chartHeight);
@@ -181,14 +182,16 @@ class SettingsMapChart {
     const radius = d3.scaleSqrt().domain([0, 1]).range(sizeRadius).clamp(true);
     const seen = data.map(d => ({ d, px: x(d.x), py: y(d.y), r: d.size == null ? dotRadius : radius(d.size) }))
       .filter(m => m.px >= -m.r && m.px <= chartWidth + m.r && m.py >= -m.r && m.py <= chartHeight + m.r);
-    cx.fillStyle = colours.dot;
-    cx.beginPath();
-    seen.filter(m => m.d.size == null).forEach((m) => { cx.moveTo(m.px + m.r, m.py); cx.arc(m.px, m.py, m.r, 0, 2 * Math.PI); });
-    cx.fill();
-    cx.fillStyle = colours.dotSized; cx.strokeStyle = colours.ring; cx.lineWidth = 1;
-    seen.filter(m => m.d.size != null).sort((a, b) => b.r - a.r).forEach((m) => {
-      cx.beginPath(); cx.arc(m.px, m.py, m.r, 0, 2 * Math.PI); cx.fill(); cx.stroke();
-    });
+    // Each dot is painted by itself, see-through, with a thin line around it, so dots lying on one
+    // another add up: the darker a spot, the more results meet there (the user, 2026-11-25: "Is it
+    // possible them to have a opacity of stroke or something so I can clearly see where they
+    // converge?"). One fill for them all would paint a pile of fifty like a single dot.
+    const paint = (dots, fill, edge, width) => {
+      cx.fillStyle = fill; cx.strokeStyle = edge; cx.lineWidth = width;
+      dots.forEach((m) => { cx.beginPath(); cx.arc(m.px, m.py, m.r, 0, 2 * Math.PI); cx.fill(); cx.stroke(); });
+    };
+    paint(seen.filter(m => m.d.size == null), colours.dot, colours.dotEdge, edgeWidth[0]);
+    paint(seen.filter(m => m.d.size != null).sort((a, b) => b.r - a.r), colours.dotSized, colours.dotSizedEdge, edgeWidth[1]);   // the largest first, so a small one on a large one shows
     this.setState({ seen });
   }
 
