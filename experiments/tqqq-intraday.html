@@ -28,11 +28,31 @@
   .back-link{display:inline-block;margin:0 0 10px;font-size:12.5px;color:var(--muted);text-decoration:none}
   .back-link:hover{color:var(--accent)}
   .panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:12px 16px 8px}
-  /* One row from a 1280-px window up: the ticker, the month and the weekday,
-     the two switches, the two histograms and the period. The gaps and the
-     histograms' least width are what lets the two dropdowns in without the
-     period dropping to a row of its own, which the chart would pay for in height. */
+  /* One row: the ticker and the button that opens the filters. */
   .toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 20px;margin:0 0 4px}
+  /* The filters, under one button (the user, 2026-11-25: "all of these
+     existing filter under one button, when clicked it will expand filter
+     panel"). The button carries the number of filters that are on, so a shut
+     panel still says the days are a part of the whole. */
+  .filters-toggle{display:inline-flex;align-items:center;gap:6px;font:600 12.5px var(--sans);color:var(--text);background:var(--panel);border:1px solid var(--border2);border-radius:6px;padding:3px 10px;cursor:pointer}
+  .filters-toggle:hover,.filters-toggle[aria-expanded="true"]{border-color:var(--accent);color:var(--accent)}
+  .filters-toggle:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .filters-count{min-width:16px;padding:0 5px;border-radius:8px;font:600 10.5px/16px var(--mono);text-align:center;color:var(--panel);background:var(--accent)}
+  .filters-count:empty{display:none}
+  .filters{display:flex;flex-direction:column;gap:10px;margin:6px 0;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+  /* Shut, the panel takes no room but is still laid out (not display:none),
+     so the histograms inside it measure their real width when they draw. */
+  .filters[inert]{height:0;margin:0;padding-top:0;padding-bottom:0;border-width:0;overflow:hidden;visibility:hidden}
+  .filters-row{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px}
+  /* A rule on the trend reads as a line: what is read, over how many days, more or less than what. */
+  .trend-rule-list{display:flex;flex-wrap:wrap;align-items:center;gap:6px 18px;min-width:0}
+  .trend-rule{display:inline-flex;flex-wrap:wrap;align-items:center;gap:5px;max-width:100%;font-size:12.5px;color:var(--muted)}   /* it wraps inside a phone's panel */
+  .trend-rule select,.trend-rule input{font:600 12.5px var(--mono);color:var(--text);background:var(--panel);border:1px solid var(--border2);border-radius:6px;padding:3px 6px}
+  .trend-rule select{field-sizing:content}   /* as wide as its choice, where the browser can */
+  .trend-rule input{width:6.5ch;text-align:right}
+  .trend-rule select:focus-visible,.trend-rule input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  .trend-add,.trend-rule button{font:600 12.5px var(--sans);color:var(--muted);background:var(--panel);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer}
+  .trend-add:hover,.trend-rule button:hover{border-color:var(--accent);color:var(--accent)}
   /* Metric filters: one block per day statistic, each a labelled brushable
      histogram. Fixed sizes so the row never moves. */
   /* The two histograms share the room between the toggle and the period
@@ -50,10 +70,14 @@
   .metric-hist .handle{fill:var(--panel);stroke:var(--accent);stroke-width:1.5}
   .metric-hist .overlay{cursor:crosshair}
   .metric-hist .handle-label{font-family:var(--mono);font-size:10px;font-weight:600;fill:var(--accent);dominant-baseline:hanging}
-  /* Fixed width in mono characters, enough for the longest coverage line, so
-     the block and its slider never resize as the dates and day count change. */
-  .period{margin-left:auto;display:flex;flex-direction:column;align-items:stretch;gap:3px;flex:0 0 auto;width:42ch;font-family:var(--mono);font-size:11.5px}
-  .coverage{color:var(--faint);white-space:nowrap;text-align:right}
+  /* The period: its slider, and over it what every filter leaves (how many
+     days, from when to when). The block's own width starts from the longest
+     such line in mono characters and never from the line itself, so the
+     slider does not resize as the dates and the day count change. */
+  .period{display:flex;flex-direction:column;align-items:stretch;gap:3px;flex:1 1 42ch;min-width:0;max-width:520px;padding-bottom:12px;font-family:var(--mono);font-size:11.5px}
+  /* Where the name and the line do not fit side by side, the line goes under the name. */
+  .period .metric-head{flex-wrap:wrap;height:auto;min-height:18px;white-space:normal}
+  .coverage{margin-left:auto;color:var(--faint);text-align:right}
   .coverage b{color:var(--muted);font-weight:500}
   /* Two native sliders stacked on one track; only the thumbs take pointer events. */
   .range{position:relative;width:100%;height:16px}
@@ -87,9 +111,9 @@
   .no-data[hidden]{display:none}
   .panel.no-history #chart svg,.panel.no-history .scale-toggle,.panel.no-history .weekday,.panel.no-history .daily{display:none}
   .panel.no-days #chart svg,.panel.no-days .scale-toggle{display:none}
-  .panel.no-history .metric,.panel.no-history .period,.panel.no-history .switch{visibility:hidden}
+  .panel.no-history .filters-toggle,.panel.no-history .filters{visibility:hidden}
   /* Out of reach too: a brush's own rects take the pointer whatever their visibility. */
-  .panel.no-history .metric *,.panel.no-history .period *,.panel.no-history .switch *{pointer-events:none}
+  .panel.no-history .filters *{pointer-events:none}
   /* Embedded, the chart's box has no height of its own once the chart is hidden. */
   .embed .no-data{position:static;height:100vh}
   .match-window{fill:var(--violet);fill-opacity:.05;pointer-events:none}
@@ -126,6 +150,7 @@
   .daily-pct,.daily-date{font-family:var(--mono);font-size:10px;fill:var(--muted)}
   .daily-pct{text-anchor:end;dominant-baseline:middle}
   .daily-price{fill:none;stroke:var(--accent);stroke-width:1.3;stroke-opacity:.6;stroke-linejoin:round}   /* the fund's price, behind the bars */
+  .daily-price-kept{fill:none;stroke:var(--accent);stroke-width:3;stroke-linecap:round;stroke-linejoin:round}   /* in bold over it: the days the filters keep */
   .daily-price-tick{font-family:var(--mono);font-size:10px;fill:var(--accent);dominant-baseline:middle}   /* its scale, at the plot's right, in the line's colour */
   .daily-bar{fill:var(--faint);fill-opacity:.8}
   .daily-bar.up{fill:var(--green)} .daily-bar.down{fill:var(--red)}
@@ -150,7 +175,7 @@
   .embed .back-link{display:none}
   /* Laid out off screen rather than display:none, so the hidden histograms
      still measure their real size when they draw. */
-  .embed .toolbar{position:absolute;left:-10000px;top:0;width:900px;visibility:hidden}
+  .embed .toolbar,.embed .filters{position:absolute;left:-10000px;top:0;width:900px;visibility:hidden}
   .embed .scale-toggle,.embed .weekday,.embed .daily{display:none}
   /* The widget's other two charts label at 8-9px; the embedded chart matches. */
   .embed .axis text,.embed .now-label,.embed .annotation text{font-size:9px}
@@ -241,6 +266,11 @@
         <label class="ticker-pick" title="The fund whose days the chart draws.">
           <select id="select-ticker" aria-label="Ticker"></select>
         </label>
+        <button type="button" class="filters-toggle" id="filters-toggle" aria-expanded="false" aria-controls="filters" title="Which days the charts show: month, weekday, trend, open and close, period. The number is how many filters are on.">Filters<span class="filters-count" id="filters-count"></span></button>
+      </div>
+    </div>
+    <div class="filters" id="filters" inert>
+      <div class="filters-row">
         <label class="ticker-pick" title="Keep the days of one month, in every year. &quot;Month&quot; keeps them all.">
           <select id="select-month" aria-label="Month"></select>
         </label>
@@ -258,21 +288,28 @@
           <span class="switch-label">Similar trends only</span>
         </label>
       </div>
-      <div class="metric" data-metric="open" title="Open vs the previous session's close. Drag across the bars to keep only days in that range. Double-click to clear.">
-        <div class="metric-head"><span class="metric-name">Open</span><span class="metric-range"></span></div>
-        <svg class="metric-hist" height="28"></svg>
+      <div class="filters-row trend-rules" title="Keep the days on which a reading of the trend was more, or less, than a value. Each reading is taken at the close before the day: that close against the mean or the median of the last N closes, in percent, or the RSI over N days. Every rule must hold.">
+        <span class="metric-name">Trend</span>
+        <div class="trend-rule-list" id="trend-rule-list"></div>
+        <button type="button" class="trend-add" id="trend-add">Add</button>
       </div>
-      <div class="metric" data-metric="close" title="Close vs the previous session's close. Drag across the bars to keep only days in that range. Double-click to clear.">
-        <div class="metric-head"><span class="metric-name">Close</span><span class="metric-range"></span></div>
-        <svg class="metric-hist" height="28"></svg>
-      </div>
-      <div class="period">
-        <div class="coverage" id="coverage"></div>
-        <div class="range" id="period-range">
-          <div class="range-track"></div>
-          <div class="range-fill" id="range-fill"></div>
-          <input type="range" id="range-start" min="0" value="0" step="1" aria-label="Period start">
-          <input type="range" id="range-end" min="0" value="0" step="1" aria-label="Period end">
+      <div class="filters-row">
+        <div class="metric" data-metric="open" title="Open vs the previous session's close. Drag across the bars to keep only days in that range. Double-click to clear.">
+          <div class="metric-head"><span class="metric-name">Open</span><span class="metric-range"></span></div>
+          <svg class="metric-hist" height="28"></svg>
+        </div>
+        <div class="metric" data-metric="close" title="Close vs the previous session's close. Drag across the bars to keep only days in that range. Double-click to clear.">
+          <div class="metric-head"><span class="metric-name">Close</span><span class="metric-range"></span></div>
+          <svg class="metric-hist" height="28"></svg>
+        </div>
+        <div class="period" title="The days between the two thumbs. Drag a thumb, or the stretch between them.">
+          <div class="metric-head"><span class="metric-name">Period</span><div class="coverage" id="coverage"></div></div>
+          <div class="range" id="period-range">
+            <div class="range-track"></div>
+            <div class="range-fill" id="range-fill"></div>
+            <input type="range" id="range-start" min="0" value="0" step="1" aria-label="Period start">
+            <input type="range" id="range-end" min="0" value="0" step="1" aria-label="Period end">
+          </div>
         </div>
       </div>
     </div>
@@ -1662,10 +1699,21 @@ class DailyChangeChart extends ChartBase {
   // session, read on the $ ticks at the plot's right (drawAxes). Its scale
   // takes in the days on the plot, so it refits as the period moves; the
   // bars' own scale does not.
+  // The price line, and over it in bold the days the filters keep (the user,
+  // 2026-11-25: "make sure parts are highlighted on the line chart too, in
+  // bold or something"): a kept day's part of the line is its own move, from
+  // the close before it to its close, so kept days in a row join into one
+  // bold stretch. With every day kept nothing is bold: there is no part to
+  // tell from the rest. A pre-market or after-hours print is no day of the
+  // filters' and stays thin.
   drawPrice() {
     const { chart, data, center, price, clip } = this.getState();
     const line = d3.line().x(d => center(d.at)).y(d => price(d.price));
-    chart._add('g.daily-prices').attr('clip-path', clip)._add('path.daily-price').attr('d', line(data));
+    const layer = chart._add('g.daily-prices').attr('clip-path', clip);
+    layer._add('path.daily-price').attr('d', line(data));
+    const days = data.filter(bar => bar.id !== 'extended'), partly = days.some(bar => !bar.shown);
+    const kept = partly ? d3.pairs(data).filter(([, bar]) => bar.shown && bar.id !== 'extended') : [];
+    layer._add('path.daily-price-kept').attr('d', kept.map(pair => line(pair)).join(''));
   }
 
   drawAxes() {
@@ -2101,12 +2149,13 @@ function setupMetricHistogram(key, fund, allDays, onChange) {
   brushG.call(brush.move, [x(typeof saved.lo === 'number' ? Math.max(min, saved.lo) : min), x(typeof saved.hi === 'number' ? Math.min(max, saved.hi) : max)]);
 
   state.pass = d => { const v = METRICS[key].value(d); return v !== null && v >= state.lo && v <= state.hi; };
+  state.narrowed = () => state.lo > min || state.hi < max;   // the range is less than the whole
   return state;
 }
 
 function setupMetricFilters(fund, allDays, latestId, onChange) {
   const filters = Object.keys(METRICS).map(key => setupMetricHistogram(key, fund, allDays, onChange));
-  return { filter: days => days.filter(d => d.id === latestId || filters.every(f => f.pass(d))) };
+  return { filter: days => days.filter(d => d.id === latestId || filters.every(f => f.pass(d))), active: () => filters.filter(f => f.narrowed()).length };
 }
 
 // Calendar filter (the user, 2026-11-25: "an option to filter out data, like
@@ -2150,7 +2199,132 @@ function setupCalendarFilter(onChange) {
     d3.select(pick.select).property('value', state.value);
     return state;
   });
-  return { filter: days => days.filter(day => picked.every(state => state.value === '' || state.pick.of(day) === +state.value)) };
+  return { filter: days => days.filter(day => picked.every(state => state.value === '' || state.pick.of(day) === +state.value)), active: () => picked.filter(state => state.value !== '').length };
+}
+
+// The filters' panel: shut until its button is pressed, and as it was left on
+// the next visit. Shut, it is inert: out of the tab order and the pointer's reach.
+const FILTERS_OPEN_STORAGE_KEY = 'tqqq-intraday-filters-open';
+function setupFiltersPanel() {
+  const button = d3.select('#filters-toggle'), panel = d3.select('#filters');
+  const show = (open) => { button.attr('aria-expanded', String(open)); panel.property('inert', !open); };
+  show(readSavedSwitch(FILTERS_OPEN_STORAGE_KEY, false));
+  button.on('click', () => {
+    const open = button.attr('aria-expanded') !== 'true';
+    writeSavedSwitch(FILTERS_OPEN_STORAGE_KEY, open);
+    show(open);
+  });
+}
+// How many filters are on, beside the button's name; nothing while none is.
+const showFilterCount = count => d3.select('#filters-count').text(count || '');
+
+// Trend rules (the user, 2026-11-25: "I want to be able to filter based on
+// the trend. So for example, all days where median/mean/rsi were (more than,
+// or less than, or less value than) x days"). A rule keeps the days on which
+// a reading of the trend was more, or less, than a value. A reading is taken
+// at the close BEFORE the day, from that close and the closes before it, so
+// it is what was known at the day's open:
+//   mean, median   that close against the mean, or the median, of the last N
+//                  closes (itself among them), in percent: +5 is 5% over it;
+//   rsi            Wilder's RSI over N days, 0 to 100.
+// Every rule must hold. A day with too few days before it for a rule has no
+// reading and is left out, the latest day like any other. The rules are kept
+// (localStorage); the desktop widget shows the chart alone and applies none.
+const rollingGap = of => (closes, n) => closes.map((close, k) => (k < n - 1 ? null : (close / of(closes.slice(k - n + 1, k + 1)) - 1) * 100));
+// Wilder's RSI at each close: the first n changes averaged, each later one smoothed in at 1/n.
+function rsiSeries(closes, n) {
+  let gain = 0, loss = 0;
+  return closes.map((close, k) => {
+    if (k === 0) return null;
+    const change = close - closes[k - 1], up = Math.max(change, 0), down = Math.max(-change, 0);
+    gain = k <= n ? gain + up / n : (gain * (n - 1) + up) / n;
+    loss = k <= n ? loss + down / n : (loss * (n - 1) + down) / n;
+    return k < n ? null : loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
+  });
+}
+const TREND_RULE_MEASURES = {
+  mean: { name: 'Price vs mean', unit: '%', days: 50, value: 0, series: rollingGap(d3.mean) },
+  median: { name: 'Price vs median', unit: '%', days: 50, value: 0, series: rollingGap(d3.median) },
+  rsi: { name: 'RSI', unit: '', days: 14, value: 30, series: rsiSeries },
+};
+const TREND_RULE_SIDES = {
+  more: { name: 'more than', holds: (reading, value) => reading > value },
+  less: { name: 'less than', holds: (reading, value) => reading < value },
+};
+const TREND_RULE_DAYS = [2, 400];        // the fewest and the most days a rule reads over
+const TREND_RULE_DEFAULT = { measure: 'mean', side: 'more' };
+const TREND_RULES_STORAGE_KEY = 'tqqq-intraday-trend-rules';
+const newTrendRule = (measure, side) => ({ measure, side, days: TREND_RULE_MEASURES[measure].days, value: TREND_RULE_MEASURES[measure].value });
+const validTrendRule = rule => !!rule && rule.measure in TREND_RULE_MEASURES && rule.side in TREND_RULE_SIDES
+  && Number.isInteger(rule.days) && rule.days >= TREND_RULE_DAYS[0] && rule.days <= TREND_RULE_DAYS[1] && Number.isFinite(rule.value);
+function readSavedTrendRules() {
+  if (EMBED) return [];
+  try {
+    const saved = JSON.parse(localStorage.getItem(TREND_RULES_STORAGE_KEY));
+    return Array.isArray(saved) ? saved.filter(validTrendRule) : [];
+  } catch { return []; }
+}
+function writeSavedTrendRules(rules) {
+  try { localStorage.setItem(TREND_RULES_STORAGE_KEY, JSON.stringify(rules)); } catch { /* storage unavailable */ }
+}
+// The rules' line in the panel and the filter they make. Each rule is a
+// sentence: what is read, of how many days, more or less than what, and a
+// button that takes it out; "Add" puts in one more. A number typed that is no
+// number, or a count of days out of range, goes back to what it was.
+function setupTrendRules(allDays, onChange) {
+  const state = { rules: readSavedTrendRules() };
+  const place = new Map(allDays.map((day, k) => [day.id, k])), closes = allDays.map(day => day.close);
+  const series = new Map();   // a rule's reading at every close, worked out once for its measure and days
+  const readingsOf = (rule) => {
+    const key = `${rule.measure}|${rule.days}`;
+    if (!series.has(key)) series.set(key, TREND_RULE_MEASURES[rule.measure].series(closes, rule.days));
+    return series.get(key);
+  };
+  const holds = (rule, day) => {
+    const before = place.get(day.id) - 1, reading = before < 0 ? null : readingsOf(rule)[before];
+    return reading !== null && TREND_RULE_SIDES[rule.side].holds(reading, rule.value);
+  };
+  const changed = () => { writeSavedTrendRules(state.rules); draw(false); onChange(); };
+  const options = (select, names) => select.selectAll('option').data(Object.keys(names)).join('option').attr('value', key => key).text(key => names[key].name);
+  // A number's field: it shows the rule's own, takes a valid number typed into it, and goes back on any other.
+  // typing: the rules are drawn for a data refresh, which must not reset a field under the cursor.
+  const numberField = (inputs, typing, read, isValid, write) => {
+    inputs.filter(function () { return !typing || this !== document.activeElement; }).property('value', read);
+    inputs.on('change', function (event, rule) {
+      const typed = this.value.trim() === '' ? NaN : +this.value;
+      if (!isValid(typed)) { this.value = read(rule); return; }
+      write(rule, typed);
+      changed();
+    });
+  };
+  function draw(typing) {
+    const lines = d3.select('#trend-rule-list').selectAll('span.trend-rule').data(state.rules).join(enter => {
+      const line = enter.append('span').attr('class', 'trend-rule');
+      line.append('select').attr('class', 'rule-measure').attr('aria-label', 'What is read');
+      line.append('span').text('of');
+      line.append('input').attr('class', 'rule-days').attr('type', 'number').attr('min', TREND_RULE_DAYS[0]).attr('max', TREND_RULE_DAYS[1]).attr('step', 1).attr('aria-label', 'Days');
+      line.append('span').text('days is');
+      line.append('select').attr('class', 'rule-side').attr('aria-label', 'More or less');
+      line.append('input').attr('class', 'rule-value').attr('type', 'number').attr('step', 'any').attr('aria-label', 'Value');
+      line.append('span').attr('class', 'rule-unit');
+      line.append('button').attr('type', 'button').attr('class', 'rule-remove').attr('aria-label', 'Remove this rule').text('×');
+      return line;
+    });
+    options(lines.select('.rule-measure'), TREND_RULE_MEASURES);
+    options(lines.select('.rule-side'), TREND_RULE_SIDES);
+    lines.select('.rule-measure').property('value', rule => rule.measure).on('change', function (event, rule) {
+      Object.assign(rule, newTrendRule(this.value, rule.side));   // another reading: its own usual days and value
+      changed();
+    });
+    lines.select('.rule-side').property('value', rule => rule.side).on('change', function (event, rule) { rule.side = this.value; changed(); });
+    numberField(lines.select('.rule-days'), typing, rule => rule.days, days => Number.isInteger(days) && days >= TREND_RULE_DAYS[0] && days <= TREND_RULE_DAYS[1], (rule, days) => { rule.days = days; });
+    numberField(lines.select('.rule-value'), typing, rule => rule.value, Number.isFinite, (rule, value) => { rule.value = value; });
+    lines.select('.rule-unit').text(rule => TREND_RULE_MEASURES[rule.measure].unit);
+    lines.select('.rule-remove').on('click', (event, rule) => { state.rules = state.rules.filter(other => other !== rule); changed(); });
+  }
+  d3.select('#trend-add').on('click', () => { state.rules = state.rules.concat(newTrendRule(TREND_RULE_DEFAULT.measure, TREND_RULE_DEFAULT.side)); changed(); });
+  draw(true);
+  return { filter: days => (state.rules.length ? days.filter(day => state.rules.every(rule => holds(rule, day))) : days), active: () => state.rules.length };
 }
 
 // Similar-days control: just the toggle. With nothing saved it starts on
@@ -2289,14 +2463,17 @@ function fitChartsToWindow() {
 }
 if (!EMBED) {
   fitChartsToWindow();
-  // Refit when the window changes, and when the toolbar does: its controls
-  // wrap onto another row in a narrow window or once the web fonts land.
+  // Refit when the window changes, and when the toolbar or the filters' panel
+  // does: the panel opens and shuts, and its controls wrap onto another row in
+  // a narrow window or once the web fonts land.
   const refit = () => {
     fitChartsToWindow();
     [chart, ...UNDER_CHARTS].filter(drawn => drawn.data()).map(drawn => drawn.render());
   };
   window.addEventListener('resize', refit);
-  new ResizeObserver(refit).observe(document.querySelector('.toolbar'));
+  // The toolbar's row and the filters' panel: either changing height changes what is left for the charts.
+  const rows = new ResizeObserver(refit);
+  ['.toolbar', '.filters'].map(selector => rows.observe(document.querySelector(selector)));
 }
 
 // Log / linear toggle for the y-axis. Log (symmetric, linear inside ±0.1%)
@@ -2450,7 +2627,9 @@ function loadData() {
     };
 
     const refresh = () => {
-      const inRange = metric.filter(calendar.filter(periodDays));
+      // The button's number: every filter that is on, the period among them when it is less than the whole file.
+      showFilterCount(calendar.active() + rules.active() + metric.active() + (trend.on ? 1 : 0) + (similar.on ? 1 : 0) + (periodDays.length < allDays.length ? 1 : 0));
+      const inRange = metric.filter(rules.filter(calendar.filter(periodDays)));
       // The state to match is the latest day's, whatever the period and the histograms keep.
       const filtered = trend.on ? sameTrendDays(inRange, allDays[allDays.length - 1]) : inRange;
       let days = filtered, cutoff = null, reference = null;
@@ -2478,6 +2657,7 @@ function loadData() {
     let ready = false;                                 // one render once every control is wired
     const guarded = () => { if (ready) refresh(); };
     const calendar = setupCalendarFilter(guarded);
+    const rules = setupTrendRules(allDays, guarded);
     const metric = setupMetricFilters(asked, allDays, latestId, guarded);
     const similar = setupSimilarFilter(guarded);
     const trend = setupTrendFilter(allDays[allDays.length - 1], guarded);
@@ -2501,6 +2681,7 @@ function loadData() {
 }
 
 setupTickerPick();
+setupFiltersPanel();
 loadData().then(() => {
   setInterval(() => { if (chart.data()) chart.drawNow(); }, NOW_REFRESH_MS);   // nothing to mark until a first load has drawn the chart
   setInterval(loadData, DATA_REFRESH_MS);            // the pipeline appends bars through the day

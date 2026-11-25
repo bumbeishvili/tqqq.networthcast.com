@@ -34,7 +34,7 @@ class SettingsMapChart {
       link: null,          // { x, y }: a second point the picked dot is tied to with a line
       linkLabel: '',       // the name written at that point
       frontier: null,      // [{ x, y }] by x: a step line through them
-      flags: null,         // [{ id, x, y, label }]: named places, each a ring with its name
+      flags: null,         // [{ id, x, y, label, kind }]: named places, each a ring with its name; kind: a class of its own for the two
       xTitle: 'max drawdown',
       yTitle: 'CAGR',
       nowLabel: 'Now',
@@ -242,9 +242,11 @@ class SettingsMapChart {
     const { chart, flags, x, y, chartWidth, chartHeight } = this.getState();
     const seen = (flags || []).map(f => Object.assign({}, f, { px: x(f.x), py: y(f.y) })).filter(f => f.px >= 0 && f.px <= chartWidth && f.py >= 0 && f.py <= chartHeight);
     const layer = chart._add('g.flags').attr('pointer-events', 'none');
-    layer._add('circle.flag-ring', seen).attr('cx', f => f.px).attr('cy', f => f.py).attr('r', 5.5);
+    // _add sets the class anew at each render: a flag's own kind goes on after it.
+    const kindOf = (name) => (f) => name + (f.kind ? ' ' + f.kind : '');
+    layer._add('circle.flag-ring', seen).attr('class', kindOf('flag-ring')).attr('cx', f => f.px).attr('cy', f => f.py).attr('r', 5.5);
     const left = (f) => f.px > 40;   // the name goes left of the ring, away from the name of the settings as they are
-    layer._add('text.flag-label', seen).attr('x', f => f.px + (left(f) ? -8 : 8)).attr('y', f => f.py + (f.py > 16 ? -8 : 14))
+    layer._add('text.flag-label', seen).attr('class', kindOf('flag-label')).attr('x', f => f.px + (left(f) ? -8 : 8)).attr('y', f => f.py + (f.py > 16 ? -8 : 14))
       .attr('text-anchor', f => (left(f) ? 'end' : 'start')).text(f => f.label);
   }
 

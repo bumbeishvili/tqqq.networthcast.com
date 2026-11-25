@@ -4362,6 +4362,8 @@
     --map-dot-edge: rgba(96, 82, 214, 0.42);            /* the line around it */
     --map-dot-sized: rgba(134, 118, 255, 0.26);         /* a tested one, sized by how it holds */
     --map-dot-sized-edge: rgba(96, 82, 214, 0.85);      /* the line around that */
+    --map-hold: #ffcc00;                                /* buy and hold TQQQ */
+    --map-hold-text: #8a6a00;                           /* and its name */
     --map-better: rgba(134, 118, 255, 0.1);       /* the quarter better on both counts */
     --map-worse: rgba(56, 56, 116, 0.07);         /* the quarter worse on both */
     --map-grid: rgba(56, 56, 116, 0.1);
@@ -4380,6 +4382,9 @@
   .settings-map-svg .now-label { fill: var(--text); font-weight: 700; }
   .settings-map-svg .flag-ring { fill: var(--surface); stroke: var(--accent-text); stroke-width: 2; }
   .settings-map-svg .flag-label { fill: var(--accent-text); font-weight: 700; }
+  /* Buy and hold TQQQ: a yellow point with a dark edge, its name in the same yellow, darkened to read as text. */
+  .settings-map-svg .flag-ring.hold { fill: var(--map-hold); stroke: var(--text); stroke-width: 1.5; }
+  .settings-map-svg .flag-label.hold { fill: var(--map-hold-text); }
   .settings-map-svg .quarter-label { font-weight: 600; }
   .settings-map-svg .pick-ring { fill: none; stroke: var(--text); stroke-width: 2; }
   .settings-map-svg .hover-ring { fill: none; stroke: var(--accent-text); stroke-width: 1.5; }
@@ -4411,6 +4416,7 @@
   .map-key-dot { box-sizing: border-box; border: 1px solid var(--map-dot-sized-edge); border-radius: 50%; background: var(--map-dot-sized); }
   .map-key-dot.is-pale { width: 4px; height: 4px; border-color: var(--map-dot-edge); background: var(--map-dot); }
   .map-key-dot.is-small { width: 7px; height: 7px; }
+  .map-key-dot.is-hold { width: 11px; height: 11px; border: 1.5px solid var(--text); background: var(--map-hold); }
   .map-key-dot.is-big { width: 18px; height: 18px; }
   .map-key-line { width: 18px; border-top: 1px solid var(--map-frontier); }
   .map-key-link { width: 18px; border-top: 1px dashed var(--text); }

@@ -116,7 +116,10 @@ const MAP_FREEZE_TIP = [
 ].join('\n');
 const MAP_LINK_TIP = 'Copy a link that opens this map and starts it running.';
 const MAP_CSV_TIP = "Download every dot as a CSV file: CAGR, max drawdown, and each setting's value.";
+const MAP_HOLD_LABEL = 'B&H TQQQ';   // buy and hold TQQQ, the yellow point
+const MAP_HOLD_TIP = 'Buy and hold TQQQ over the same years, with the same money.';
 const MAP_LEGEND = [
+  { mark: 'dot is-hold', name: MAP_HOLD_LABEL, tip: MAP_HOLD_TIP, hold: true },
   { mark: 'dot is-pale', name: 'not tested', tip: MAP_UNTESTED_TIP },
   { mark: 'dot is-small', name: 'cliff' },
   { mark: 'dot is-big', name: 'plateau', tip: MAP_PLATEAU_TIP },
@@ -492,6 +495,10 @@ function setMapJob(map, found, period) {
   const job = found.job || null;
   Object.assign(map, { job, frozen: !!found.frozen, space: job ? job.space.map(mapSetting) : [], years: period ? period.text : null,
     dots: new Map(), byResult: new Map(), twins: new Set(), failed: new Set(), version: 0, places: null, fronts: null, most: 0, drawn: null });
+  // Buy and hold TQQQ over the same years with the same money (the user, 2026-11-25: "also include
+  // buy hold tqqq point as yellow in the map, for given period whatever was drawdown and cagr").
+  const hold = job ? window.previewBhTqqq(period) : null;
+  map.hold = hold && hold.final > 0 ? hold : null;
   setMapPlan(map, period);
   mapSync(map);
 }
@@ -505,14 +512,14 @@ function setMapPlan(map, period) {
     doneKey: job ? job.space.map(s => s.id).join(',') + '|' + JSON.stringify(Object.assign({}, plan, { plateau: null })) : '',
     plans: plan.plateau ? [plan] : [plan, Object.assign({}, plan, { plateau: true })] });
 }
-const mapTipIcon = (tip) => `<span class="info-icon" tabindex="0" data-tip-wide data-tip="${_escHtml(tip)}">ⓘ</span>`;
+const mapTipIcon = (tip, mark = '') => `<span class="info-icon" tabindex="0" data-tip-wide${mark} data-tip="${_escHtml(tip)}">ⓘ</span>`;
 // years: the Fit window's years when the map is for them (fitPeriodOf's text), named after the strategy.
 function buildMapWindowHtml(key, years) {
   return `<div class="modal-backdrop" data-map-close></div>`
     + `<div class="modal-content fit-window map-window" role="dialog" aria-modal="true" aria-label="Map">`
     + `<div class="fit-window-head"><h3>Map</h3>${mapTipIcon(MAP_TIP)}<span class="fit-window-name">${_escHtml(fitKeyName(key) + (years ? ', ' + years : ''))}</span><button type="button" class="modal-close" data-map-close aria-label="Close">×</button></div>`
     + `<div class="fit-window-body map-body"><div class="map-main"><div class="map-chart"></div>`
-    + `<div class="map-legend">${MAP_LEGEND.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${key.name}${key.tip ? mapTipIcon(key.tip) : ''}</span>`).join('')}</div></div>`
+    + `<div class="map-legend">${MAP_LEGEND.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${_escHtml(key.name)}${key.tip ? mapTipIcon(key.tip, key.hold ? ' data-map-hold-tip' : '') : ''}</span>`).join('')}</div></div>`
     + `<div class="map-side"><div class="map-detail"></div></div></div>`
     + `<div class="fit-window-foot map-foot"><span class="map-status"><span class="map-count"></span>${mapTipIcon(MAP_RUN_TIP)}</span>`
     + `<button type="button" class="map-csv-btn" data-map-link title="${_escHtml(MAP_LINK_TIP)}">Link</button>`
@@ -627,8 +634,14 @@ function useMapDot(map) {
 // The chart, the picked dot's lines and the foot: all that moves while a map fills.
 function showMap() {
   drawMap();
+  showMapHold();
   showMapDetail();
   showMapFoot();
+}
+// The legend's tip for buy & hold TQQQ, with its numbers on these years once they are known.
+function showMapHold() {
+  const map = _map, { hold, job } = map;
+  map.el.querySelector('[data-map-hold-tip]').dataset.tip = hold ? `${MAP_HOLD_TIP}\nCAGR ${fitCagrText(job.cagrOf, hold)}, max drawdown ${fitDdText(hold)}.` : MAP_HOLD_TIP;
 }
 // Where a dot stands, and where its worst result among its neighbours does, in percent.
 const mapOwnAt = (dot) => ({ x: dot.r.dd * 100, y: dot.cagr });
@@ -661,12 +674,14 @@ function drawMap() {
 // ones, the settings as they are and the Fit mark. The window's chart, and the picture of the
 // map in the Fit window.
 function mapPlot(map, chart) {
-  const now = mapNowDot(map), fit = mapFitDot(map);
+  const now = mapNowDot(map), fit = mapFitDot(map), { hold } = map;
   return chart
     .data(mapDotList(map).map(dot => Object.assign({ id: dot.id, size: dot.flat ? mapHolds(dot) : null }, mapOwnAt(dot))))
     .frontier(mapFronts(map).own.map(mapOwnAt))
     .now(now ? mapOwnAt(now) : null)
-    .flags(fit ? [Object.assign({ id: 'fit', label: MAP_FIT_LABEL }, mapOwnAt(fit))] : []);
+    // Named places: the Fit window's pick, and buy & hold TQQQ in yellow.
+    .flags([].concat(fit ? Object.assign({ id: 'fit', label: MAP_FIT_LABEL }, mapOwnAt(fit)) : [],
+      hold ? { id: 'hold', kind: 'hold', label: MAP_HOLD_LABEL, x: hold.dd * 100, y: map.job.cagrOf(hold.final) } : []));
 }
 // ---- The map's picture in the Fit window ----
 // The map as it stands, from the runs kept so far and with nothing run, drawn into `box`: what a

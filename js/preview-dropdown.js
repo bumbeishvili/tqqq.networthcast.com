@@ -213,16 +213,16 @@
       return { final: nineSigFinalOf(r), dd: computeDailyMaxDrawdown(nineSigDDControls(r.log), daily, fund).pct };
     },
   };
-  // One 9sig sim (no skipBH) yields all four Buy & Hold finals at once.
+  // One 9sig sim (no skipBH) yields every Buy & Hold line at once.
   // period: as for readBaseParams.
-  function bhFinals(period) {
+  function bhRun(period) {
     const p = read9sigParams(period);
     let _qd;
     if (p.hasExactOverride && typeof buildExactRangeQData === 'function') {
       const q2 = buildExactRangeQData(p.rebalancePeriod, p.entryDateOverride, p.exitDateOverride);
       if (q2 && q2.length >= 2) _qd = q2;
     }
-    const r = simulate(p.initial, p.monthly, p.cashRate, p.simEntryIdx, p.exitIdx, p.annualRaise, {
+    return simulate(p.initial, p.monthly, p.cashRate, p.simEntryIdx, p.exitIdx, p.annualRaise, {
       schedule: p.schedule,
       ...(_qd ? { qData: _qd } : {}),
       ...(p.hasExactOverride ? { entryDateOverride: p.entryDateOverride, exitDateOverride: p.exitDateOverride } : {}),
@@ -231,7 +231,17 @@
       rebalancePeriod: p.rebalancePeriod, cashPct: p.cashPct, contribDeployPct: p.contribDeployPct,
       buyThrottlePct: p.buyThrottlePct, parkAsset: p.parkAsset, baselineRate: p.baselineRate,
     });
-    const lastVal = (arr) => (arr && arr.length) ? arr[arr.length - 1].value : 0;
+  }
+  const lastVal = (arr) => (arr && arr.length) ? arr[arr.length - 1].value : 0;
+  // Buy & hold TQQQ with the chart's money over a period: its final value, and its max drawdown
+  // revalued at every daily close, as the chart's own Buy & Hold TQQQ line measures it. The
+  // settings map marks it (js/settings-map.js).
+  function bhTqqq(period) {
+    const points = bhRun(period).bhPoints || [];
+    return { final: lastVal(points), dd: computeDailyMaxDrawdown(points.map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 })), daily, 'tqqq').pct };
+  }
+  function bhFinals(period) {
+    const r = bhRun(period);
     return { tqqq: lastVal(r.bhPoints), qqq: lastVal(r.qqqPoints), spy: lastVal(r.spyPoints), qld: lastVal(r.qldPoints), sso: lastVal(r.ssoPoints), spxl: lastVal(r.spxlPoints), sqqq: lastVal(r.sqqqPoints), gld: lastVal(r.gldPoints), soxl: lastVal(r.soxlPoints), soxx: lastVal(r.soxxPoints), soxs: lastVal(r.soxsPoints) };
   }
 
@@ -507,6 +517,7 @@
   // Buy & hold final values per fund, with the chart's money and period: the
   // Fit search's drawdown hurdle (js/saved-configs.js fitHurdle).
   window.previewBhFinals = bhFinals;
+  window.previewBhTqqq = bhTqqq;
   window.refreshPreviewTriggers = function () {
     PREVIEW_SELECT_IDS.forEach(id => { const s = document.getElementById(id); if (s) syncTrigger(s); });
   };
