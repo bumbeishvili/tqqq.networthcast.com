@@ -411,6 +411,9 @@ const liveMarketDate = () => marketMinuteNow() !== null ? marketDateNow() : null
 const isLiveDay = day => fmtIsoDay(day.date) === liveMarketDate();
 const NOW_TICK_SHARE = 0.05;             // the "now" tick spans this share of the plot height, from the top
 const LINE_LABEL_MIN_GAP = 13;           // px between the mean and median end labels
+// A label set beside its dot (today's, an extended-hours print's): its 11px
+// type above and under the baseline, for the box the callouts keep clear of.
+const PLACED_LABEL_RISE = 9, PLACED_LABEL_DROP = 3;
 const HOVER_LABEL_GAP = 14;              // px between stacked crosshair value labels
 const HOVER_LABEL_ROOM = 150;            // px from the right edge inside which hover labels flip to the left
 const HOVER_END_HEIGHT = 26;             // px the two-line end label needs
@@ -541,16 +544,18 @@ const labelHeight = p => LABEL_CHROME + LABEL_LINE_HEIGHT * (1 + Math.ceil(p.rea
 // just past each placed box); plus a side spot on either side of the point.
 // They are ranked cheapest first: levels out, then pixels sideways, then the
 // side spot, then the wrong side of the line. A spot is valid when its box
-// stays inside the plot, does not sit on the highlighted line, and neither
-// its box nor its connector touches any other label's box or connector.
+// stays inside the plot, does not sit on the highlighted line, neither its
+// box nor its connector touches any other label's box or connector, and
+// neither touches a text already on the plot (`taken`, their boxes: today's
+// label and an extended-hours print's).
 //
 // A bounded depth-first search assigns every label a valid spot, trying
 // cheaper spots first and backing up when a later label is boxed in by an
 // earlier choice. If the search runs out of budget, a greedy pass places the
-// labels one by one, relaxing the constraints in order (off the line, then
-// clear of others, then inside the plot) and taking the cheapest spot as a
-// last resort.
-function layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits) {
+// labels one by one, relaxing the constraints in order (off the texts, off
+// the line, then clear of others, then inside the plot) and taking the
+// cheapest spot as a last resort.
+function layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits, taken) {
   const C = LABEL_CLEARANCE;
   const overlaps = (a, b) => a.left < b.right + C && b.left < a.right + C && a.top < b.bottom + C && b.top < a.bottom + C;
   const segHits = (seg, box) => seg.x1 < box.right + C && box.left - C < seg.x2 && seg.y1 < box.bottom + C && box.top - C < seg.y2;
@@ -583,6 +588,7 @@ function layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits)
     !overlaps(g.box, o.box) && !segHits(g.drop, o.box) && !segHits(g.leg, o.box) && !segHits(o.drop, g.box) && !segHits(o.leg, g.box));
   const inside = g => g.box.top >= 0 && g.box.bottom <= chartHeight && g.box.left >= 0 && g.box.right <= chartWidth;
   const offLine = g => !lineHits(g.box);
+  const offTexts = g => taken.every(box => !overlaps(g.box, box) && !segHits(g.drop, box) && !segHits(g.leg, box));
 
   // Every candidate spot for a point, cheapest first. extraLefts lets the
   // greedy pass add spots just past boxes it has already placed.
@@ -590,10 +596,15 @@ function layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits)
     const px = x(p.minute), py = yOf(p), h = labelHeight(p);
     const preferredSide = sideOf(p);
     const preferredLeft = px + LABEL_LEAD + LABEL_WIDTH <= chartWidth ? px + LABEL_LEAD : px - LABEL_LEAD - LABEL_WIDTH;
-    const lefts = [preferredLeft, px - LABEL_LEAD - LABEL_WIDTH]
+    const fits = l => l >= 0 && l + LABEL_WIDTH <= chartWidth;
+    const besidePoint = [preferredLeft, px - LABEL_LEAD - LABEL_WIDTH]
       .concat(extraLefts)
       .concat(d3.range(1, 4).flatMap(k => [px + LABEL_LEAD + k * (LABEL_WIDTH + C), px - LABEL_LEAD - (k + 1) * LABEL_WIDTH - k * C]))
-      .filter(l => l >= 0 && l + LABEL_WIDTH <= chartWidth);
+      .filter(fits);
+    // On a plot too narrow for a label and its lead on either side of the
+    // point (a phone's, under 290px), no spot beside the point is inside it:
+    // the label then goes flush with an edge of the plot, over or under the point.
+    const lefts = besidePoint.length ? besidePoint : [0, chartWidth - LABEL_WIDTH].filter(fits);
     const candidates = [preferredSide, -preferredSide].flatMap(sign =>
       d3.range(MAX_LEVELS).flatMap(level => lefts.flatMap(left => ['dropFirst', 'legFirst'].map(route => ({
         g: stacked(px, py, h, sign, level, left, route),
@@ -604,7 +615,7 @@ function layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits)
   };
 
   // Search: valid spots only, cheapest first, backing up when stuck.
-  const valid = points.map(p => candidatesFor(p).filter(g => inside(g) && offLine(g)).slice(0, SEARCH_CANDIDATES));
+  const valid = points.map(p => candidatesFor(p).filter(g => inside(g) && offLine(g) && offTexts(g)).slice(0, SEARCH_CANDIDATES));
   const chosen = [];
   let budget = SEARCH_BUDGET;
   const search = i => {
@@ -624,7 +635,8 @@ function layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits)
   const placed = [];
   return points.map(p => {
     const ordered = candidatesFor(p, placed.map(o => o.box.right + C));
-    const pick = ordered.find(g => inside(g) && clearOf(g, placed) && offLine(g))
+    const pick = ordered.find(g => inside(g) && clearOf(g, placed) && offLine(g) && offTexts(g))
+      || ordered.find(g => inside(g) && clearOf(g, placed) && offLine(g))
       || ordered.find(g => inside(g) && clearOf(g, placed))
       || ordered.find(g => inside(g))
       || ordered[0];
@@ -789,8 +801,16 @@ class IntradayOverlayChart extends ChartBase {
       svgHeight: 600,
       marginTop: 8,
       marginBottom: 50,         // axis labels, then a row for the log toggle beneath them
-      marginRight: 108,         // room for the mean / median labels and the hovered day's date at the line ends
+      marginRight: 108,         // the label gutter: set from labelGutter on every render, or kept as set when that is null
       marginLeft: 52,
+      // The gutter right of the plot: the mean / median names at the line ends
+      // and, from `full` px, the hovered day's date beside them (in a narrower
+      // one the date moves in over the plot's end, drawHover). It takes `share`
+      // of the chart's width, so it is `full` on a chart 600px wide and up, and
+      // never under `names`, what the two names need at the page's 10.5px type.
+      // A fixed 108px left a phone's 300px chart a plot under half its width
+      // (the user, 2026-11-25: "why are we displaying only half of the chart here").
+      labelGutter: { full: 108, names: 48, share: 0.18 },
       container: 'body',
       defaultFont: 'inherit',
       data: null,
@@ -819,6 +839,7 @@ class IntradayOverlayChart extends ChartBase {
 
   render() {
     this.setDynamicContainer();
+    this.fitLabelGutter();
     this.calculateProperties();
     this.drawSvgAndWrappers();
     this.drawScales();
@@ -826,12 +847,23 @@ class IntradayOverlayChart extends ChartBase {
     this.drawDays();
     this.drawAggregates();
     this.drawNow();
-    this.drawAnnotations();
+    // The callouts' layer, made here so it stays under today's line. The
+    // callouts go in last: they are laid out clear of the two labels drawn
+    // after this (today's, an extended-hours print's).
+    this.getState().chart._add('g.annotations');
     this.drawToday();
     this.drawExtended();
+    this.drawAnnotations();
     this.drawHover();
     this.setState({ firstRender: false });
     return this;
+  }
+
+  fitLabelGutter() {
+    const { labelGutter, svgWidth } = this.getState();
+    if (!labelGutter) return;
+    const { full, names, share } = labelGutter;
+    this.setState({ marginRight: Math.round(Math.max(names, Math.min(full, share * svgWidth))) });
   }
 
   drawScales() {
@@ -913,6 +945,7 @@ class IntradayOverlayChart extends ChartBase {
     const today = data.find(d => d.id === todayId);
     const live = today && isLiveDay(today);
     const g = chart._add('g.today').style('display', live ? null : 'none');
+    this.setState({ todayLabelBox: null });
     if (!live) return;
     const last = today.points[today.points.length - 1];
     const d = line(today.points);
@@ -930,7 +963,7 @@ class IntradayOverlayChart extends ChartBase {
     // Today's change vs the previous close and the price itself, beside the dot.
     const label = g._add('text.today-label').attr('text-anchor', nearRightEdge ? 'end' : 'start')
       .html(`today ${moveHtml(last.pct, last.close)}`);
-    this.placeLabel(label, cx, cy, nearRightEdge, today.points);
+    this.setState({ todayLabelBox: this.placeLabel(label, cx, cy, nearRightEdge, today.points) });
   }
 
   // A dot with two rings pulsing out of it: today's last bar while the
@@ -962,6 +995,7 @@ class IntradayOverlayChart extends ChartBase {
       else { const lo = Math.max(...ys), hi = Math.min(...ys); ly = lo - cy <= cy - hi ? lo + 22 : hi - 14; }
     }
     label.attr('x', lx).attr('y', ly);
+    return { left: x0, right: x1, top: ly - PLACED_LABEL_RISE, bottom: ly + PLACED_LABEL_DROP };
   }
 
   // Outside the regular session the proxy's quote for the ticker carries the latest
@@ -972,12 +1006,13 @@ class IntradayOverlayChart extends ChartBase {
   drawExtended() {
     const { chart, extended, x, y, chartHeight } = this.getState();
     const g = chart._add('g.extended').style('display', extended ? null : 'none');
+    this.setState({ extendedLabelBox: null });
     if (!extended) return;
     const cx = x(SESSION_OPEN_MIN), cy = Math.max(0, Math.min(chartHeight, y(extended.changePct)));
     this.drawPulse(g, cx, cy);
     const label = g._add('text.extended-label').attr('text-anchor', 'start')
       .html(`${EXTENDED_SESSION_NAMES[extended.session]} ${moveHtml(extended.changePct, extended.price)}`);
-    this.placeLabel(label, cx, cy, false, []);
+    this.setState({ extendedLabelBox: this.placeLabel(label, cx, cy, false, []) });
   }
 
   drawAggregates() {
@@ -1018,7 +1053,9 @@ class IntradayOverlayChart extends ChartBase {
     const yOf = p => y(p.agg[p.anchor]);
     const sideOf = p => p.kind === 'buy' ? 1 : -1;
     const lineHits = this.highlightedLineHitTest();
-    const annotations = layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits).map(({ p, mode, route, dx, dy }) => {
+    const { todayLabelBox, extendedLabelBox } = this.getState();
+    const taken = [todayLabelBox, extendedLabelBox].filter(Boolean);
+    const annotations = layoutLabels(points, x, yOf, sideOf, chartWidth, chartHeight, lineHits, taken).map(({ p, mode, route, dx, dy }) => {
       const px = x(p.minute), py = yOf(p);
       const stacked = mode === 'stacked';
       return {
@@ -1193,7 +1230,11 @@ class IntradayOverlayChart extends ChartBase {
 
         marks.style('display', null);
         const hx = x(agg.minute);
-        const onRight = hx > chartWidth - HOVER_LABEL_ROOM;
+        // Left of the crosshair near the plot's right edge, and only where the
+        // left has more room: on a phone's plot, under HOVER_LABEL_ROOM wide,
+        // every place is "near the right edge" and the labels left the chart.
+        const { marginLeft, marginRight } = this.getState();
+        const onRight = hx > chartWidth - HOVER_LABEL_ROOM && hx + marginLeft > chartWidth - hx + marginRight;
 
         // Time chip on the axis under the crosshair.
         const timeText = fmtClock(agg.minute + minuteOffset);
@@ -2120,7 +2161,7 @@ let period = null;   // the period slider of the data on screen (setupPeriodSlid
 // mean / median names at the embed's 9.5px type, and its plot top level with
 // the signal chart's beside it in the widget.
 if (EMBED) {
-  chart.marginTop(12).marginBottom(20).marginRight(44).marginLeft(44);
+  chart.marginTop(12).marginBottom(20).labelGutter(null).marginRight(44).marginLeft(44);
   chart.svgHeight(window.innerHeight);
   window.addEventListener('resize', () => { chart.svgHeight(window.innerHeight); if (chart.data()) chart.render(); });
 }
