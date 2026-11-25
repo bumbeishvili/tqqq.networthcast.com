@@ -3759,9 +3759,10 @@ function fitBetween(sp, picked) {
 //            value is judged with its neighbours ("Plateau" above).
 //   round    only round values ("Round fit" below).
 //   fewest   the fewest settings that keep 95% of the best found ("Fewest settings" below).
-// The window's choices as they are kept (FIT_CHOICES_KEY): the two limits as typed, one for each goal.
+// The window's choices as they are kept (FIT_CHOICES_KEY): the two limits as typed, one for each
+// goal, and the two years ("Fit years" below), '' while one follows the chart.
 const FIT_CHOICES_KEY = 'tqqq_fit_choices_v1';
-const FIT_CHOICES_DEFAULT = { goal: 'cagr', maxDd: '', minCagr: '', shape: 'cliff', numbers: 'optimal', settings: 'optimal' };
+const FIT_CHOICES_DEFAULT = { goal: 'cagr', maxDd: '', minCagr: '', shape: 'cliff', numbers: 'optimal', settings: 'optimal', fromYear: '', toYear: '' };
 // The limit that goes with each goal: which of the choices holds it, its name and what an empty box means.
 const FIT_LIMITS = {
   cagr: { id: 'maxDd', name: 'Max drawdown', empty: 'any',
@@ -3808,6 +3809,77 @@ function fitFloor(plan, cagrOf, hold) {
   return { final: hold.final, ask: `that still beats ${bh}`, short: `don't beat ${bh}`, none: `beat ${bh}` };
 }
 
+// ---- Fit years ----
+// The user (2026-11-25): "I want to add option to set fit years, start of the year and end of the
+// year, if current year is chosen use latest day. By default it should use existing slider, but
+// if it's changed option, then make sure changed one stays."
+// The window's Years row: a first and a last year. Each end is the chart's own Entry or Exit
+// until a year is picked for it ('' in the choices), and a picked year stays, kept with the
+// other choices, whatever the chart's period does afterwards. A first year starts at the year's
+// start (the chart's Entry on its first quarter), a last year ends at the year's end (Exit on its
+// last quarter), which for the year not over yet is the latest day. A fit on picked years runs
+// as it would with the chart's Entry and Exit moved there: quarter ends, the same money.
+const FIT_YEAR_ENDS = [{ id: 'fromYear', name: 'First year' }, { id: 'toYear', name: 'Last year' }];
+const FIT_YEARS_TIP = "The years the fit runs on, from the start of the first to the end of the last; the year not over yet ends on the latest day. \"Chart\" follows the chart's Entry or Exit. A year picked here stays until it is changed here.";
+const fitYearOfQuarter = (idx) => +quarterlyData[idx][0].slice(0, 4);
+// The chart's own period as its sliders hold it (render keeps them inside the data and in order).
+const fitChartPeriod = () => ({ entryIdx: +document.getElementById('slider-entry').value, exitIdx: +document.getElementById('slider-exit').value });
+// The first quarter a period may start in, as for the chart's Entry: later than the data's start
+// while a line with a shorter history is shown.
+const fitFirstQuarter = () => (typeof effectiveEntryMinQIdx === 'function' ? effectiveEntryMinQIdx() : 0);
+// The years to pick from: from the first quarter allowed to the data's last.
+const fitYearList = () => d3.range(fitYearOfQuarter(fitFirstQuarter()), fitYearOfQuarter(quarterlyData.length - 1) + 1);
+// The period the choices stand for. null: both ends follow the chart, so the fit runs on the
+// chart's period as it is, exact days included. Else { entryIdx, exitIdx } as the chart's sliders
+// would hold it (entryIdx: the first quarter that runs), `text` naming it for the notes, and
+// `inverted` when it ends before it starts (a picked year against an end that follows the chart).
+function fitPeriodOf(choices) {
+  if (!choices.fromYear && !choices.toYear) return null;
+  const chart = fitChartPeriod(), first = fitFirstQuarter(), quarters = d3.range(first, quarterlyData.length);
+  // A first year before the data allowed starts where the data does.
+  const entryIdx = choices.fromYear ? (quarters.find(q => fitYearOfQuarter(q) >= +choices.fromYear) ?? quarters[quarters.length - 1]) : chart.entryIdx;
+  const exitIdx = choices.toYear ? (d3.max(quarters.filter(q => fitYearOfQuarter(q) <= +choices.toYear)) ?? first) : chart.exitIdx;
+  const text = `${choices.fromYear || qLabel(quarterlyData[chart.entryIdx][0])} to ${choices.toYear || qLabel(quarterlyData[chart.exitIdx][0])}`;
+  return { entryIdx, exitIdx, text, inverted: entryIdx > exitIdx || (entryIdx === exitIdx && entryIdx === 0) };
+}
+// What the chart measures a CAGR on, for a period (js/chart.js render): the days its main 9sig
+// line's log starts and ends on, the years between them, and that run's paid-in total. At the
+// quarterly grain those days are the period's own; at a finer one they are that grain's days
+// around it. A fit on picked years takes them from the same dates-only run the chart makes, so
+// its numbers are the ones the chart shows when its period is moved there.
+const fitChartDates = (money, monthly, annualRaise, simEntryIdx, exitIdx, grain) =>
+  simulate(money.initial, monthly, 0, simEntryIdx, exitIdx, annualRaise, { rebalancePeriod: grain, skipBH: true, schedule: money.contribSchedule });
+function fitChartSpan(money, monthly, annualRaise, simEntryIdx, exitIdx) {
+  const grain = window._editingConfigId ? 'quarterly' : document.getElementById('select-9sig-period').value;
+  const run = fitChartDates(money, monthly, annualRaise, simEntryIdx, exitIdx, grain), dates = run.log.map(row => row.date);
+  const first = dates[0], last = dates[dates.length - 1];
+  return { grain, dates, first, last, totalContributed: run.totalContributed, years: dates.length > 1 ? (new Date(last) - new Date(first)) / (365.25 * 86400000) : 1 };
+}
+// The chart's context for a strategy's runs (js/chart.js's cfgCtx), moved to a period: what it
+// would hold with Entry and Exit on those quarters. Only what a search reads is worked out again:
+// the dates, the money for that entry (moneyForEntry), the axis' days, the years and the paid-in
+// total behind the CAGR (fitChartSpan), the log's grain, and whether the period reaches the latest day.
+function fitPeriodCtx(ctx, period) {
+  const simEntryIdx = period.entryIdx > 0 ? period.entryIdx - 1 : period.entryIdx, exitIdx = period.exitIdx;
+  const entryDate = quarterlyData[simEntryIdx][0], exitDate = quarterlyData[exitIdx][0];
+  const money = moneyForEntry(entryDate, sliderToInitial(+document.getElementById('slider-initial').value), ctx.rate);
+  const span = fitChartSpan(money, ctx.monthly, ctx.annualRaise, simEntryIdx, exitIdx);
+  const displayGrain = chartDisplayPeriod(document.getElementById('select-9sig-period').value, _yearsSpan(entryDate, exitDate));
+  // The axis the chart would draw: the main line's own days, or a finer grain's when one is shown.
+  const labels = displayGrain === span.grain ? span.dates : fitChartDates(money, ctx.monthly, ctx.annualRaise, simEntryIdx, exitIdx, displayGrain).log.map(row => row.date);
+  const { entryDateOverride, exitDateOverride, ...rest } = ctx;   // a picked year is a quarter's end, never an exact day
+  const lastDay = daily[daily.length - 1].date, dayBefore = daily[daily.length - 2].date;
+  return { ...rest, initial: money.initial, contribSchedule: money.contribSchedule,
+    simEntryIdx, exitIdx, labels, entryDateForSim: entryDate, years: span.years, totalContributed: span.totalContributed,
+    displayGrain, isLatestDaySelected: exitDate === lastDay && entryDate < dayBefore };
+}
+// The CAGR of a final value on a built-in panel's params for a period (window.previewFit.base):
+// the chart's own measure for the panels (js/chart.js's _mwCagrOfFinal), on that period's span.
+function fitCagrOfBase(base) {
+  const span = fitChartSpan({ initial: base.initial, contribSchedule: base.schedule }, base.monthly, base.annualRaise, base.simEntryIdx, base.exitIdx);
+  return f => moneyWeightedCAGR(base.initial, base.monthly, base.annualRaise, span.first, span.last, span.years, f, monthlyData, span.totalContributed, base.schedule);
+}
+
 // ---- Round fit ----
 // The user (2026-11-21): "add option for fit, but in rounded numbers". A round
 // fit runs the same search over round values only, by the rule the library's
@@ -3838,15 +3910,16 @@ function fitRoundSetting(s) {
 }
 
 // The drawdown goal's hurdle: buy & hold of the fund the strategy holds most
-// in its current run, with the chart's money (the bar previews' B&H finals).
-function fitHurdle(cfg) {
+// in its current run, with the chart's money (the bar previews' B&H finals),
+// over the fit's years when they are set (period, fitPeriodOf).
+function fitHurdle(cfg, period) {
   const rows = {};
   ((window._customLogs || {})[cfg.id] || []).forEach(r => {
     const h = typeof r.held === 'string' ? r.held.toLowerCase() : '';
     if (h && h !== 'cash') rows[h] = (rows[h] || 0) + 1;
   });
   const fund = Object.keys(rows).sort((a, b) => rows[b] - rows[a])[0];
-  const finals = fund && typeof window.previewBhFinals === 'function' ? window.previewBhFinals() : null;
+  const finals = fund && typeof window.previewBhFinals === 'function' ? window.previewBhFinals(period) : null;
   return finals && finals[fund] > 0 ? { fund, final: finals[fund] } : { fund: fund || null, final: null };
 }
 
@@ -4222,7 +4295,8 @@ function fitSpaceOf(plan, space) {
 }
 // One fit from start to the result note: runs the search, sets what it found
 // (job.apply), and writes the change list. job.plan: what the Fit window asked
-// for; job.floor: the drawdown goal's floor (fitFloor).
+// for; job.floor: the drawdown goal's floor (fitFloor); job.years: the window's
+// years when the fit runs on them (fitPeriodOf's text), named in the note.
 async function fitRun(job) {
   const { plan } = job;
   const state = _fit = { key: job.key, goal: plan.goal, stage: 1, stages: plan.goal === 'dd' ? 2 : 1, phase: 'rounds', round: 1, done: 0, total: 0, stopped: false, close: job.close,
@@ -4251,7 +4325,7 @@ async function fitRun(job) {
   const changes = fitChangesOf(job.space, before, job.cur);
   if (changed.length) job.apply(job.cur, changed);
   const inUse = plan.fewest ? { before: fitInUseCount(job.space, before), now: fitInUseCount(job.space, job.cur), of: job.space.length, next: state.next, top: state.top } : null;
-  _fitNotes[job.key] = { text: fitNoteText(plan, job.floor, job.cagrOf, start, best, reached, changed.length, inUse), changes };
+  _fitNotes[job.key] = { text: fitYearsNote(job.years) + fitNoteText(plan, job.floor, job.cagrOf, start, best, reached, changed.length, inUse), changes };
   render();
 }
 // ---- Runs kept for the page ----
@@ -4339,10 +4413,10 @@ const FIT_YIELD_MS = 25;
 // Which selects may change, their names and one run's result come from
 // js/preview-dropdown.js (window.previewFit), which owns those engines' option
 // previews; which of them are frozen is the user's choice (fitFreeIds).
-function nativeFitJob(type, free) {
+function nativeFitJob(type, free, period) {
   const pf = window.previewFit, key = 'panel:' + type;
   const selects = Array.from(free, id => document.getElementById(id));
-  const base = pf.base(type), cur = {};
+  const base = pf.base(type, period), cur = {};
   selects.forEach(el => { cur[el.id] = el.value; });
   const optionsOf = (el) => Array.from(el.options).filter(o => !o.disabled).map(o => o.value);
   const optionText = (el, v) => { const o = Array.from(el.options).find(x => x.value === String(v)); return o ? o.textContent.trim() : String(v); };
@@ -4359,7 +4433,7 @@ function nativeFitJob(type, free) {
     space: selects.map(el => ({ id: el.id, label: pf.name(el.id), values: optionsOf(el),
       between: () => [], text: v => optionText(el, v), number: v => fitShownNumber(optionText(el, v)),
       off: pf.off(el.id), shown: values => ruleOn(el.id, values) })),
-    cagrOf: f => window._mwCagrOfFinal(f),
+    cagrOf: period ? fitCagrOfBase(base) : f => window._mwCagrOfFinal(f),
     apply: (values) => {
       applyControlParams(type, Object.assign(captureParams(type), values));
       if (typeof saveSliders === 'function') saveSliders();
@@ -4377,43 +4451,44 @@ function nativeFitJob(type, free) {
 }
 // What can be searched for a key right now: { job } (customFitJob / nativeFitJob), { frozen: true }
 // when every setting is frozen, or null when there is nothing to search (no such strategy, no
-// setting with a choice, the chart not drawn yet).
-function fitJobFor(key) {
+// setting with a choice, the chart not drawn yet). period: the fit's years where they are set
+// (fitPeriodOf), else the chart's period as it is.
+function fitJobFor(key, period) {
   const free = fitFreeIds(key);
   if (fitIsPanel(key)) {
     const type = key.slice(6);
     if (!FIT_PANELS[type] || !window.previewFit || free === null) return null;
-    return free.size ? { job: nativeFitJob(type, free) } : { frozen: true };
+    return free.size ? { job: nativeFitJob(type, free, period) } : { frozen: true };
   }
   const cfg = savedConfigs.find(c => c.id === key), ctx = window._customCtx;
   if (!cfg || !cfg.code || !ctx || free === null) return null;
-  return free.size ? { job: customFitJob(cfg, ctx, free) } : { frozen: true };
+  return free.size ? { job: customFitJob(cfg, period ? fitPeriodCtx(ctx, period) : ctx, free) } : { frozen: true };
 }
 // Is the search of a key still going on? What a panel's runs ask between two of them.
 const fitLive = () => !!_fit && !_fit.stopped;
-// Fit from the window's plan.
-async function runFit(key, plan) {
+// Fit from the window's plan, on the chart's period or on the window's years (period, fitPeriodOf).
+async function runFit(key, plan, period) {
   if (_fit) return;
-  const found = fitJobFor(key);
+  const found = fitJobFor(key, period);
   if (!found) return;
   if (found.frozen) { fitNothingFree(key); return; }
-  const { job } = found, floor = fitFloorFor(key, plan, job.cagrOf);
+  const { job } = found, floor = fitFloorFor(key, plan, job.cagrOf, period);
   if (floor.lacking) { fitNoHurdle(key, floor.fund); return; }
-  await fitRun({ ...job, ...job.start(fitLive), plan, floor: floor.floor });
+  await fitRun({ ...job, ...job.start(fitLive), plan, floor: floor.floor, years: period ? period.text : null });
 }
 // The drawdown goal's floor for a key and a plan: the least CAGR typed, else buy & hold of the
 // fund a code strategy holds most, or of the fund a panel buys. { floor } (null for the CAGR goal), or
 // { lacking: true, fund } when no least CAGR was typed and there is no buy & hold line to beat.
-function fitFloorFor(key, plan, cagrOf) {
+function fitFloorFor(key, plan, cagrOf, period) {
   if (plan.goal !== 'dd') return { floor: null };
-  const hold = plan.limit != null ? null : fitIsPanel(key) ? fitPanelHold(key.slice(6)) : fitHurdle(savedConfigs.find(c => c.id === key));
+  const hold = plan.limit != null ? null : fitIsPanel(key) ? fitPanelHold(key.slice(6), period) : fitHurdle(savedConfigs.find(c => c.id === key), period);
   if (hold && !(hold.final > 0)) return { lacking: true, fund: hold.fund };
   return { floor: fitFloor(plan, cagrOf, hold) };
 }
-// Buy & hold of the fund a panel buys, with the chart's money.
-function fitPanelHold(type) {
+// Buy & hold of the fund a panel buys, with the chart's money, over the fit's years when they are set.
+function fitPanelHold(type, period) {
   const fund = document.getElementById(FIT_PANELS[type].fund).value;
-  return { fund, final: window.previewBhFinals()[fund] };
+  return { fund, final: window.previewBhFinals(period)[fund] };
 }
 
 // A setting's name for the change list: its section's head ("Ceiling" of
@@ -4437,6 +4512,9 @@ const buildFitChangesHtml = (changes) => changes.length
 function buildFitNoteHtml(note) {
   return `<div class="fit-note">${_escHtml(note.text)}${buildFitChangesHtml(note.changes)}</div>`;
 }
+// What a note says first when the numbers after it are for the Fit window's years and not for the
+// chart's period (years: fitPeriodOf's text, or null).
+const fitYearsNote = (years) => (years ? `On ${years}. ` : '');
 // A result's two numbers as the notes write them.
 const fitCagrText = (cagrOf, r) => cagrOf(r.final).toFixed(1) + '%';
 const fitDdText = (r) => (r.dd * 100).toFixed(1) + '%';
@@ -4492,8 +4570,8 @@ function buildFitButtonHtml(key) {
     + `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span></span>`;
 }
 // ---- The Fit window ----
-// What to freeze first, then the choices in the order they are made (FIT_ROWS, the goal's limit
-// after the goal), then Map and Run. It opens on the choices of the last fit (fitChoices). The limit's
+// What to freeze first, then the years ("Fit years"), then the choices in the order they are made
+// (FIT_ROWS, the goal's limit after the goal), then Map and Run. It opens on the choices of the last fit (fitChoices). The limit's
 // row follows the goal: "Max drawdown" for CAGR, "Min CAGR" for Drawdown, each keeping what was
 // typed for it.
 // Beside Run, "Map" opens the settings map (js/settings-map.js) in the window's place: the user
@@ -4509,13 +4587,25 @@ function buildFitWindowHtml(key, choices, freezeOpen) {
   const limit = FIT_LIMITS[choices.goal];
   const limitRow = `<div class="fit-row"><span class="fit-row-name">${limit.name}${tipIcon(limit.tip)}</span>`
     + `<span class="fit-limit"><input type="text" inputmode="decimal" data-fit-limit="${limit.id}" value="${_escHtml(choices[limit.id])}" placeholder="${limit.empty}" aria-label="${limit.name}, percent" autocomplete="off"><span class="fit-limit-unit">%</span></span></div>`;
+  // The years: each end a dropdown, its first choice the chart's own Entry or Exit.
+  const period = fitPeriodOf(choices), chart = fitChartPeriod(), years = fitYearList();
+  const chartEnd = { fromYear: chart.entryIdx, toYear: chart.exitIdx };
+  // A kept first year from before the data allowed reads as the first year there is.
+  const picked = (end) => (choices[end.id] ? String(Math.max(+choices[end.id], years[0])) : '');
+  const yearPick = (end) => `<select class="fit-year" data-fit-year="${end.id}" aria-label="${end.name}" title="${end.name}${choices[end.id] ? '' : ': as the chart, ' + qLabel(quarterlyData[chartEnd[end.id]][0])}">`
+    + `<option value=""${picked(end) ? '' : ' selected'}>Chart ${fitYearOfQuarter(chartEnd[end.id])}</option>`
+    + years.map(y => `<option value="${y}"${picked(end) === String(y) ? ' selected' : ''}>${y}</option>`).join('') + `</select>`;
+  const yearsRow = `<div class="fit-row"><span class="fit-row-name">Years${tipIcon(FIT_YEARS_TIP)}</span>`
+    + `<span class="fit-years">${yearPick(FIT_YEAR_ENDS[0])}<span class="fit-years-to">to</span>${yearPick(FIT_YEAR_ENDS[1])}</span></div>`
+    + (period && period.inverted ? `<div class="fit-years-note">The last year is before the first.</div>` : '');
+  const blocked = period && period.inverted ? ' disabled' : '';
   const [goal, ...rest] = FIT_ROWS;
   return `<div class="modal-backdrop" data-fit-close></div>`
     + `<div class="modal-content fit-window" role="dialog" aria-modal="true" aria-label="Fit">`
     + `<div class="fit-window-head"><h3>Fit</h3><span class="fit-window-name">${_escHtml(fitKeyName(key))}</span><button type="button" class="modal-close" data-fit-close aria-label="Close">×</button></div>`
-    + `<div class="fit-window-body">${buildFitFreezeHtml(key, freezeOpen)}${pair(goal)}${limitRow}${rest.map(pair).join('')}</div>`
-    + `<div class="fit-window-foot"><button type="button" class="fit-map-btn" data-fit-map title="${_escHtml(FIT_MAP_TIP)}">Map</button>`
-    + `<button type="button" class="fit-run-btn" data-fit-run>Run</button></div></div>`;
+    + `<div class="fit-window-body">${buildFitFreezeHtml(key, freezeOpen)}${yearsRow}${pair(goal)}${limitRow}${rest.map(pair).join('')}</div>`
+    + `<div class="fit-window-foot"><button type="button" class="fit-map-btn" data-fit-map title="${_escHtml(FIT_MAP_TIP)}"${blocked}>Map</button>`
+    + `<button type="button" class="fit-run-btn" data-fit-run${blocked}>Run</button></div></div>`;
 }
 function openFitWindow(key) {
   closeFitWindow();
@@ -4525,7 +4615,12 @@ function openFitWindow(key) {
   el.innerHTML = buildFitWindowHtml(key, _fitWindow.choices, false);
   document.body.appendChild(el);
   document.body.classList.add('modal-open');
-  el.addEventListener('change', (e) => { fitFreezeTicked(el, key, e.target); });
+  el.addEventListener('change', (e) => {
+    // A year picked: kept, and the window drawn again (an end before its start blocks Run and Map).
+    const year = e.target.closest('[data-fit-year]');
+    if (year) { setFitChoice(year.getAttribute('data-fit-year'), year.value); showFitWindow(); return; }
+    fitFreezeTicked(el, key, e.target);
+  });
   // The limit as it is typed; Enter in its box runs the fit.
   el.addEventListener('input', (e) => {
     const box = e.target.closest('[data-fit-limit]');
@@ -4561,7 +4656,7 @@ function showFitWindow() {
 function runFitWindow() {
   const { key, choices } = _fitWindow;
   closeFitWindow();
-  runFit(key, fitPlanOf(choices));
+  runFit(key, fitPlanOf(choices), fitPeriodOf(choices));
 }
 // The "Freeze" part of the Fit window: a head that opens it, then the strategy as its Settings read,
 // in small text, with a tick box on each value (ticked = frozen), and a way back to the usual ones.

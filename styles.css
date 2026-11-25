@@ -4293,6 +4293,13 @@
   .fit-limit input { flex: 1; min-width: 0; padding: 5px 0; border: 0; outline: 0; background: none; font-family: 'JetBrains Mono', monospace; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: right; }
   .fit-limit input::placeholder { color: var(--text-muted); font-family: inherit; opacity: 0.8; }
   .fit-limit-unit { font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); }
+  /* The Years row: a dropdown for each end, sharing the room the other rows' two options take. */
+  .fit-years { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 6px; min-width: 0; }
+  .fit-year { min-width: 0; padding: 4px 4px 4px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); font: inherit; font-size: calc(12px * var(--ui-scale)); color: var(--text); cursor: pointer; }
+  .fit-year:focus { border-color: var(--accent); outline: 0; }
+  .fit-years-to { font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); }
+  .fit-years-note { padding: 0 0 7px; font-size: calc(11px * var(--ui-scale)); color: var(--red-text); text-align: right; }
+  .fit-run-btn:disabled, .fit-map-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .fit-window-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--border); }
   .fit-map-btn { flex: none; padding: 7px 16px; border: 1px solid var(--border); border-radius: 8px; background: none; font: inherit; font-size: calc(13px * var(--ui-scale)); font-weight: 600; color: var(--accent-text); cursor: pointer; }
   .fit-map-btn:hover { border-color: var(--accent); background: rgba(134, 118, 255, 0.08); }

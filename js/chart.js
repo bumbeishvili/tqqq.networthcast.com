@@ -2303,6 +2303,28 @@ function read9sigBaseOpts() {
   };
 }
 
+// The money a period that starts on entryDate runs on: the Initial Investment
+// slider's, unless something else funds the chart.
+//  - A shown custom strategy that brings its own money funds every line with
+//    its deposits, ahead of a transaction history (ownMoneyStrategy). The
+//    sliders' values stay as they are, unused, until it is hidden.
+//  - A real uploaded transaction history is re-derived for this entry date
+//    (js/transactions.js's txEffectiveForEntry).
+// { initial, contribSchedule (none: the monthly formula), ownMoney (that
+// strategy, or null), txEffective (the history's view at this entry, or null) }.
+// render() uses it for the chart's period, the Fit window for its years
+// (js/saved-configs.js's fitPeriodCtx).
+function moneyForEntry(entryDate, sliderInitial, rate) {
+  const ownMoney = typeof ownMoneyStrategy === 'function' ? ownMoneyStrategy() : null;
+  if (ownMoney) {
+    const m = ownMoneyCtx({ rate }, ownMoney.log, entryDate);
+    return { initial: m.initial, contribSchedule: m.contribSchedule, ownMoney, txEffective: null };
+  }
+  const eff = window._txSchedule && typeof txEffectiveForEntry === 'function' ? txEffectiveForEntry(window._txSchedule, entryDate, rate) : null;
+  return eff ? { initial: eff.initial, contribSchedule: eff.schedule, ownMoney: null, txEffective: eff }
+    : { initial: sliderInitial, contribSchedule: undefined, ownMoney: null, txEffective: null };
+}
+
 function render() {
   if (!quarterlyData) return; // data not loaded yet
   // Live-edit: mirror sidebar changes into the open saved strategy before the
@@ -2386,24 +2408,11 @@ function render() {
   // lump and only later transactions remain as flows. The underlying data
   // never changes. Stashed on window so appendActualPortfolioDatasets (the
   // "My portfolio" line) reads the SAME view this render simulated with.
-  window._txEffective = null;
-  // A shown custom strategy that brings its own money funds every line with
-  // its deposits, ahead of a transaction history (ownMoneyStrategy). The
-  // sliders' values stay as they are, unused, until it is hidden.
   const sliderInitial = initial;
-  const ownMoney = typeof ownMoneyStrategy === 'function' ? ownMoneyStrategy() : null;
-  if (ownMoney) {
-    const m = ownMoneyCtx({ rate }, ownMoney.log, entryDateForSim);
-    initial = m.initial;
-    contribSchedule = m.contribSchedule;
-  } else if (window._txSchedule && typeof txEffectiveForEntry === 'function') {
-    const eff = txEffectiveForEntry(window._txSchedule, entryDateForSim, rate);
-    if (eff) {
-      initial = eff.initial;
-      contribSchedule = eff.schedule;
-      window._txEffective = eff;
-    }
-  }
+  const money = moneyForEntry(entryDateForSim, sliderInitial, rate), ownMoney = money.ownMoney;
+  initial = money.initial;
+  contribSchedule = money.contribSchedule;
+  window._txEffective = money.txEffective;
   window._ownMoneyCfgId = ownMoney ? ownMoney.cfg.id : null;
   if (typeof renderOwnMoneyState === 'function') renderOwnMoneyState(ownMoney);
   // Day-over-day change badge (endLabelPlugin) only makes sense when the chart

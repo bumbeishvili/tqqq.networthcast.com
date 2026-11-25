@@ -75,7 +75,7 @@ const MAP_TIP = "Every dot is one set of settings on the chart's period and mone
   + 'It checks the best sets as it goes: a checked set has all its neighbours run, the sets with one setting a tenth off either way, and is drawn larger the better it holds among them. '
   + 'The thin line joins the sets no other beats on both counts. Runs are shared with Fit, and the settings frozen there stay as they are. '
   + 'Zoom with ⌘ or Ctrl and the wheel, or a pinch; drag to move.';
-let _map = null;   // the open window: { el, key, view, picked, chart, job, space, plans, floor, ask, doneKey, fits, dots, byResult, twins, failed, version, places, fronts, most, drawn, run }
+let _map = null;   // the open window: { el, key, view, picked, chart, job, space, plans, floor, ask, doneKey, years, fits, dots, byResult, twins, failed, version, places, fronts, most, drawn, run }
 
 // A repeatable random source (mulberry32): the same kept runs breed the same sets.
 function mapRandom(seed) {
@@ -424,41 +424,44 @@ function stopMapWork(map) {
 // ---- The window ----
 // The window's job and dots, from the settings, the frozen ones and the kept runs as they are now,
 // and the searches it will run: the Fit window's plan without "fewest settings", in its own shape
-// and then in the other. found: what fitJobFor gave for the key.
-function setMapJob(map, found) {
+// and then in the other. found: what fitJobFor gave for the key; period: the Fit window's years
+// where they are set (fitPeriodOf), which the job was made for.
+function setMapJob(map, found, period) {
   const job = found.job || null, plan = Object.assign(fitPlanOf(fitChoices()), { fewest: false });
-  const floor = job ? fitFloorFor(map.key, plan, job.cagrOf) : { lacking: true };
+  const floor = job ? fitFloorFor(map.key, plan, job.cagrOf, period) : { lacking: true };
   // What a done map and its searches' results go with: the settings that were free, and the plan whatever its shape.
   const doneKey = job ? job.space.map(s => s.id).join(',') + '|' + JSON.stringify(Object.assign({}, plan, { plateau: null })) : '';
   const kept = job && job.store.mapFits && job.store.mapFits.plan === doneKey ? job.store.mapFits.fits : null;
   Object.assign(map, { job, frozen: !!found.frozen, space: job ? job.space.map(mapSetting) : [], floor: floor.floor || null, ask: !floor.lacking, doneKey,
+    years: period ? period.text : null,
     plans: [plan, Object.assign({}, plan, { plateau: !plan.plateau })], fits: Object.assign({ cliff: null, plateau: null }, kept),
     dots: new Map(), byResult: new Map(), twins: new Set(), failed: new Set(), version: 0, places: null, fronts: null, most: 0, drawn: null });
   mapSync(map);
 }
 const mapTipIcon = (tip) => `<span class="info-icon" tabindex="0" data-tip-below data-tip-wide data-tip="${_escHtml(tip)}">ⓘ</span>`;
-function buildMapWindowHtml(key) {
+// years: the Fit window's years when the map is for them (fitPeriodOf's text), named after the strategy.
+function buildMapWindowHtml(key, years) {
   return `<div class="modal-backdrop" data-map-close></div>`
     + `<div class="modal-content fit-window map-window" role="dialog" aria-modal="true" aria-label="Map">`
-    + `<div class="fit-window-head"><h3>Map</h3>${mapTipIcon(MAP_TIP)}<span class="fit-window-name">${_escHtml(fitKeyName(key))}</span><button type="button" class="modal-close" data-map-close aria-label="Close">×</button></div>`
+    + `<div class="fit-window-head"><h3>Map</h3>${mapTipIcon(MAP_TIP)}<span class="fit-window-name">${_escHtml(fitKeyName(key) + (years ? ', ' + years : ''))}</span><button type="button" class="modal-close" data-map-close aria-label="Close">×</button></div>`
     + `<div class="fit-window-body"><div class="map-view"></div><div class="map-chart"></div><div class="map-detail"></div></div>`
     + `<div class="fit-window-foot map-foot"><span class="map-count"></span><button type="button" class="fit-run-btn map-run-btn" data-map-run></button></div></div>`
     + `<div class="map-tip" hidden></div>`;
 }
 // Opened from the Fit window, on its Shape. It starts filling itself at once, unless it was done before on the same choices.
 function openMapWindow(key) {
-  const found = fitJobFor(key);
+  const period = fitPeriodOf(fitChoices()), found = fitJobFor(key, period);
   if (!found) return;   // nothing to map: no such strategy, no setting with a choice, or the chart not drawn yet
   closeMapWindow(false);
   const el = document.createElement('div');
   el.className = 'modal fit-modal map-modal';
   const map = _map = { el, key, view: fitChoices().shape, picked: null, chart: null, run: null };
-  el.innerHTML = buildMapWindowHtml(key);
+  el.innerHTML = buildMapWindowHtml(key, period ? period.text : null);
   document.body.appendChild(el);
   document.body.classList.add('modal-open');
   el.addEventListener('click', onMapWindowClick);
   document.addEventListener('keydown', _mapWindowKey, true);
-  setMapJob(map, found);
+  setMapJob(map, found, period);
   showMapView();
   showMap();
   if (!mapIsDone(map)) startMapFill(map);
@@ -513,7 +516,7 @@ function useMapDot(map) {
   if (!changed.length) return;
   const one = (text, was) => (was ? was + ' → ' : '') + text;
   const moved = `CAGR ${one(fitCagrText(job.cagrOf, dot.r), now && fitCagrText(job.cagrOf, now.r))}, max drawdown ${one(fitDdText(dot.r), now && fitDdText(now.r))}`;
-  _fitNotes[job.key] = { text: `From the map: ${changed.length} setting${changed.length > 1 ? 's' : ''} changed. ${moved}.${dot.flat ? ' ' + fitNearText(job.cagrOf, dot.flat) : ''}`,
+  _fitNotes[job.key] = { text: `${fitYearsNote(map.years)}From the map: ${changed.length} setting${changed.length > 1 ? 's' : ''} changed. ${moved}.${dot.flat ? ' ' + fitNearText(job.cagrOf, dot.flat) : ''}`,
     changes: fitChangesOf(job.space, job.cur, dot.values) };
   job.apply(dot.values, changed);
   closeMapWindow(false);

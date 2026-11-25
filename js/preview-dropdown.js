@@ -66,17 +66,20 @@
   // mirrors render()'s exact-day override handling (js/date-picker.js) so a
   // preview bar reflects what you'd ACTUALLY get, not the quarter-snapped
   // number, whenever an override is active.
-  function readBaseParams() {
-    let entryIdx = +document.getElementById('slider-entry').value;
-    let exitIdx  = +document.getElementById('slider-exit').value;
+  // period: { entryIdx, exitIdx } in place of the chart's Entry and Exit, on
+  // quarter ends with no exact day (the Fit window's years, js/saved-configs.js
+  // fitPeriodOf): the params as they would be with the sliders moved there.
+  function readBaseParams(period) {
+    let entryIdx = period ? period.entryIdx : +document.getElementById('slider-entry').value;
+    let exitIdx  = period ? period.exitIdx : +document.getElementById('slider-exit').value;
     const maxIdx = quarterlyData.length - 1;
     if (!Number.isFinite(entryIdx) || entryIdx < 0) entryIdx = 0;
     if (!Number.isFinite(exitIdx)  || exitIdx  < 0) exitIdx  = maxIdx;
     if (entryIdx > maxIdx) entryIdx = maxIdx;
     if (exitIdx  > maxIdx) exitIdx  = maxIdx;
     const simEntryIdx = entryIdx > 0 ? entryIdx - 1 : entryIdx;
-    let entryOverride = (document.getElementById('entry-exact-date') || {}).value || '';
-    let exitOverride  = (document.getElementById('exit-exact-date')  || {}).value || '';
+    let entryOverride = period ? '' : (document.getElementById('entry-exact-date') || {}).value || '';
+    let exitOverride  = period ? '' : (document.getElementById('exit-exact-date')  || {}).value || '';
     if (entryOverride && (!dailyDateToIdx || !dailyDateToIdx.has(entryOverride))) entryOverride = '';
     if (exitOverride  && (!dailyDateToIdx || !dailyDateToIdx.has(exitOverride)))  exitOverride  = '';
     if (entryOverride && exitOverride && entryOverride >= exitOverride) { entryOverride = ''; exitOverride = ''; }
@@ -107,8 +110,8 @@
   const _num = (id, d) => { const el = document.getElementById(id); const n = el ? +el.value : NaN; return Number.isFinite(n) ? n : d; };
   const _str = (id, d) => { const el = document.getElementById(id); return el && el.value != null ? el.value : d; };
 
-  function read9sigParams() {
-    return Object.assign(readBaseParams(), {
+  function read9sigParams(period) {
+    return Object.assign(readBaseParams(period), {
       baselineRate:  sliderToRate(+document.getElementById('slider-rate').value) / 100,
       cashRate:      _num('select-9sig-cashrate', 0) / 100,
       underlyingCol: ulColFromVal(_str('select-9sig-underlying', 'tqqq')),
@@ -120,8 +123,8 @@
     }, (typeof read9sigBaseOpts === 'function' ? read9sigBaseOpts() : {}));
   }
 
-  function readSmaParams() {
-    return Object.assign(readBaseParams(), {
+  function readSmaParams(period) {
+    return Object.assign(readBaseParams(period), {
       cashRate:      _num('select-sma-cashrate', 0) / 100,
       underlyingCol: (function () { const v = _str('select-sma-underlying', 'tqqq'); return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : v === 'sqqq' ? 7 : v === 'gld' ? 8 : v === 'soxl' ? 9 : v === 'soxx' ? 10 : v === 'soxs' ? 11 : 1; })(),
       smaAsset:      _str('select-sma-asset', 'qqq'),
@@ -195,7 +198,8 @@
     // For Fit's "fewest settings": the value that switches a setting's rule off, and the rule's setting a setting belongs to.
     off: (id) => PREVIEW_SELECTS[id].off,
     needs: (id) => PREVIEW_SELECTS[id].needs,
-    base: (kind) => kind === 'sma' ? readSmaParams() : read9sigParams(),
+    // period: the Fit window's years in place of the chart's Entry and Exit (readBaseParams).
+    base: (kind, period) => kind === 'sma' ? readSmaParams(period) : read9sigParams(period),
     // What a run's result stands on besides the settings in `values`, as text: the panel's params
     // with those set. Runs with the same stamp and settings give the same result (the kept runs).
     stamp: (kind, base, values) => JSON.stringify(withValues(base, values)),
@@ -210,8 +214,9 @@
     },
   };
   // One 9sig sim (no skipBH) yields all four Buy & Hold finals at once.
-  function bhFinals() {
-    const p = read9sigParams();
+  // period: as for readBaseParams.
+  function bhFinals(period) {
+    const p = read9sigParams(period);
     let _qd;
     if (p.hasExactOverride && typeof buildExactRangeQData === 'function') {
       const q2 = buildExactRangeQData(p.rebalancePeriod, p.entryDateOverride, p.exitDateOverride);
