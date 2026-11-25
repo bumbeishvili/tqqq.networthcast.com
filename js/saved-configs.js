@@ -817,8 +817,10 @@ which timing fired. A rule with no line is a bug. Declare them as lines:
   levels are compared with. On each trade row, firedBy: "<group name>" names the group whose rule
   fired the trade: its mark goes in that panel only (a sale on the median line shows nothing on a
   stress index). A trade row without firedBy is marked in the first panel. A trade row may also
-  carry why: "<a few words>", the reason alone (why: "SOXX lags QQQ by 16%"): on the day of the
-  trade the strategy's card names the trade, and the ⓘ beside it gives this line before the note.
+  carry why: "<one plain sentence>", the reason alone, in everyday words with its number
+  (why: "SOXX is 16% behind QQQ over 20 days"): on the day of the trade the strategy's card
+  names the trade and the ⓘ beside it says this line. Without it the ⓘ says the note's first
+  clause.
   Example, a rule on
   TQQQ's median and on TQQQ's lead over QQQ:
     { key: "assetPrice", label: "TQQQ price", group: "TQQQ price" }, { key: "median", label: "Median (250d)", group: "TQQQ price" },
@@ -3052,16 +3054,15 @@ function buildConfigPillHtml(cfg) {
     metrics = `
       <div class="sc-metrics">
         <span class="sc-metric"><span class="sc-metric-label">CAGR</span> <span class="sc-metric-value ${cagrCls}">${cagrSign}${m.cagr.toFixed(1)}%</span></span>
-        ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRange ? tipIcon([ddRange]) : ''}</span>` : ''}
+        ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRange ? tipIcon([ddRange.replace('–', ' to ')]) : ''}</span>` : ''}
       </div>`;
   }
   // The day's event: the strategy's trade at the latest day's close, on a day it trades
   // (js/signal-chart.js dayEventOf). The card shows where the money goes, in the trade's colour,
-  // and no more. The ⓘ beside it has the rest: the trade and its close, the reason in a few
-  // words where the strategy gives one, its note, and whether the price is a close yet.
-  const event = m.event, close = event ? dayEventClose(event) : null;
+  // and no more. The ⓘ beside it is two lines: why, said once, and whether the price is final.
+  const event = m.event, sentence = (text) => (/[.!?]$/.test(text) ? text : text + '.');
   const eventHtml = event ? `
-      <div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${esc(event.move)}</b>${tipIcon([`${event.what} ${close.when}.`, event.why, event.note, close.notFinal])}</div>` : '';
+      <div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${esc(event.move)}</b>${tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)])}</div>` : '';
   const eyeSvg = hidden
     ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
     : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
@@ -3474,7 +3475,7 @@ const FIT_DD_TOL = 0.001;     // the second stage's room over the drawdown found
 const FIT_LIMIT_RETRIES = 3;  // tries at getting past a rest short of the limit (fitSearch)
 const FIT_LIMIT_EASE = 0.05;  // how much each try eases the limit under where the settings stand
 let _fit = null;          // the running search: { key, goal, phase, round, done, total, stopped, close }
-let _fitWindow = null;    // { el, key, choices, freezeOpen, preview } while the Fit window is open (preview: the map picture's chart, showMapPreview)
+let _fitWindow = null;    // { el, key, choices, freezeOpen, preview, closedHeight } while the Fit window is open (preview: the map picture's chart, showMapPreview; closedHeight: holdFitHeight)
 // key (a code strategy's cfg id, or "panel:9sig" / "panel:sma") -> the last
 // fit's result { text, changes: [{ label, from, to }] }, until a setting is changed by hand
 const _fitNotes = {};
@@ -4685,6 +4686,7 @@ function openFitWindow(key) {
   document.body.appendChild(el);
   document.body.classList.add('modal-open');
   showFitMap();
+  holdFitHeight();
   el.addEventListener('change', (e) => {
     // A year picked: kept, and the window drawn again (an end before its start blocks Run and Map).
     const year = e.target.closest('[data-fit-year]');
@@ -4728,6 +4730,16 @@ function showFitWindow() {
   el.innerHTML = buildFitWindowHtml(key, choices, freezeOpen);
   SCROLLERS.forEach((sel, i) => { el.querySelector(sel).scrollTop = scrolled[i]; });
   showFitMap();
+  holdFitHeight();
+}
+// The Freeze list opens inside the window as it stands: the window keeps the height it has with
+// the list closed, and the choices' side scrolls. The user (2026-11-25): "freeze should have
+// it's own scrollable container, it should not influence modal height, it should just make left
+// container scrollable". Each drawing is a new element, so the height set here goes with it.
+function holdFitHeight() {
+  const win = _fitWindow.el.querySelector('.fit-window');
+  if (_fitWindow.freezeOpen) win.style.height = _fitWindow.closedHeight + 'px';
+  else _fitWindow.closedHeight = win.getBoundingClientRect().height;
 }
 function runFitWindow() {
   const { key, choices } = _fitWindow;

@@ -130,7 +130,7 @@ const _miniCloseGap = min => min < 60 ? `${min} min` : `${Math.floor(min / 60)} 
 // open: it still trades (the minutes left to its close, minutesBeforeClose).
 const _miniCloseName = (t, open) => open ? "today's close" : `the ${_miniDayMonth(t)} close`;
 // What a trade made on a price from before the close still hangs on.
-const _miniNotFinal = min => `Not final: the price is from ${_miniCloseGap(min)} before the close.`;
+const _miniNotFinal = min => `Not final: prices are from ${_miniCloseGap(min)} before the close.`;
 // A day as the tooltips name it, the hovered day's and a trade's alike: weekday, then the log's
 // date ("Tue 21 Dec 21"). The weekday matters to rules that trade by it (the user, 2026-11-23:
 // "when hovering over signal chart, make sure day is included").
@@ -1272,29 +1272,50 @@ function _miniMoveEnds(ends) {
   const name = h => (!h || /^cash$/i.test(h)) ? 'cash' : h, from = name(ends.from), to = name(ends.to);
   return ends.kind === 'rebalance' || from === to ? _miniMoveText(ends) : `${from} → ${to}`;
 }
+// A trade's note cut down to its reason, for a tooltip's one line. The library's notes read
+// "<the trade again>: <the reason>; <what follows from it> (<the readings>)". Dropped here: an
+// opening that only names the trade's funds ("Sold TQQQ: ", "Switched TQQQ to SOXL: "), readings
+// in brackets at the end, and what comes after the first "; ". One that opens with more than the
+// funds ("Bought $12.3K of TQQQ: ...") keeps its opening.
+const TRADE_NOTE_OPENING = /^(?:(?:Bought|Sold) [A-Z]{2,5}|Switched [A-Z]{2,5} to [A-Z]{2,5}):\s*/;
+// A text without the brackets it ends on, brackets inside them included ("... (TQQQ's RSI(10) 31)").
+function withoutEndBrackets(text) {
+  if (!text.endsWith(')')) return text;
+  let depth = 0;
+  for (let i = text.length - 1; i >= 0; i--) {
+    if (text[i] === ')') depth++;
+    else if (text[i] === '(' && --depth === 0) return text.slice(0, i).trimEnd();
+  }
+  return text;
+}
+function tradeWhy(note) {
+  const why = withoutEndBrackets(String(note || '').replace(TRADE_NOTE_OPENING, '')).split('; ')[0];
+  return why.charAt(0).toUpperCase() + why.slice(1);
+}
 // The day's event of a strategy, for its card in the sidebar: the latest day's trade of its log.
 // The user (2026-11-25): "if sell or buy event is triggered today, I want additional subsection
 // to be added to the relevant card that will say, what got triggered and why. Very briefly";
 // then "Just show from what to what (TQQQ -> sqqq is good)"; then, of the reason written beside
 // it: "Let's only keep blue part, everything else include in info icon, that should be close to
-// the symbol it is connected to".
+// the symbol it is connected to"; then, of an icon that said the trade again, the reason twice
+// (in a few words, then as the note with its readings) and a caveat: "this is neither well
+// formatted, nor deslopped, use simple plain words please".
 // move: where the money went ("TQQQ → SQQQ"), all the card shows; kind: buy, sell, switch or
-// rebalance, for its colour. For the ⓘ beside it: what, the trade as the charts say it; why,
-// the reason in a few words where the strategy gives one on the row (the contract's `why`);
-// note, the row's note whole; date, its day. Null when the log's last row is no such trade.
+// rebalance, for its colour. For the ⓘ beside it: why, the reason said once, in the strategy's
+// own few words where a row gives them (the contract's `why`), else its note cut down
+// (tradeWhy); date, its day. Null when the log's last row is no such trade.
 function dayEventOf(log) {
   const ev = log && log.length ? latestDayTrade(log) : null;
   if (!ev) return null;
   const ends = _miniTradeEnds(log, ev);
-  return { move: _miniMoveEnds(ends), kind: ends.kind, what: _miniMoveText(ends), why: ev.row.why ? String(ev.row.why) : '', note: String(ev.row.note || ''), date: String(ev.row.date) };
+  return { move: _miniMoveEnds(ends), kind: ends.kind, why: ev.row.why ? String(ev.row.why) : tradeWhy(ev.row.note), date: String(ev.row.date) };
 }
-// The close a day's event is made at, read when the card is drawn (the time the prices stand at
-// arrives after the first run, and moves with every live price). when: "at today's close" while
-// that day still trades, else "at the 25 Nov close"; notFinal: what to say while the price is
-// from before the close, null once the day has closed.
+// The second line of that ⓘ, read when the card is drawn (the time the prices stand at arrives
+// after the first run, and moves with every live price): while the day still trades, that the
+// price is no close yet; once it has closed, which close the trade was made at.
 function dayEventClose(event) {
   const open = minutesBeforeClose(event.date, window._dataFetchedAt);
-  return { when: `at ${_miniCloseName(Date.parse(event.date), open != null)}`, notFinal: open != null ? _miniNotFinal(open) : null };
+  return open != null ? _miniNotFinal(open) : `Final at ${_miniCloseName(Date.parse(event.date), false)}.`;
 }
 // A trade as a person would say it: "Buy TQQQ", "Sell TQQQ", "Sell TQQQ → SQQQ"
 // when the proceeds were parked, "Buy TQQQ (from SQQQ)" when a buy left another

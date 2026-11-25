@@ -100,7 +100,11 @@ const MAP_PLATEAU_TIP = [
 ].join('\n');
 const MAP_UNTESTED_TIP = 'Not tested yet with a setting a little off. Click it to test it now.';
 const MAP_BEST_TIP = 'The line joins the best dots. For the same max drawdown, no dot has a higher CAGR.';
-const MAP_WORST_TIP = `Click a dot: the dotted line leads to its worst case, the result when one setting is ${MAP_NEAR_PCT}% off.`;
+const MAP_WORST_TIP = [
+  `Worst case: the lowest result when one setting is ${MAP_NEAR_PCT}% off.`,
+  `Each setting is moved ${MAP_NEAR_PCT}% up and down, one at a time.`,
+  'It shows only after you click a dot: a dotted line from the dot to its worst case.',
+].join('\n');
 const MAP_RUN_TIP = [
   `The map tries new combinations until ${MAP_STALL_ROUNDS} rounds in a row find nothing better. Then it stops.`,
   'Stop pauses it. Resume continues.',
@@ -549,6 +553,7 @@ function onMapWindowClick(e) {
   if (on('[data-map-close]')) { closeMapWindow(true); return; }
   if (on('[data-map-run]')) { if (map.run) stopMapWork(map); else startMapFill(map); return; }
   if (on('[data-map-csv]')) { downloadMapCsv(map); return; }
+  if (on('[data-map-clear]')) { pickMapDot(null); return; }
   if (on('[data-map-use]')) useMapDot(map);
 }
 // A dot picked on the chart (null: none). Unchecked, it is checked ahead of the others: a map
@@ -592,7 +597,10 @@ function drawMap() {
   if (!map.chart) {
     map.chart = new SettingsMapChart().container(box).linkLabel(MAP_WORST_LABEL)
       .hitRadius(window.matchMedia('(pointer: coarse)').matches ? MAP_HIT_PX.coarse : MAP_HIT_PX.fine)
-      .onHover(showMapTip).onLeave(hideMapTip).onPick(dot => pickMapDot(dot ? dot.id : null));
+      .onHover(showMapTip).onLeave(hideMapTip)
+      // A click on a dot picks it. A click on empty plot does nothing: a pick is let go with the column's Clear
+      // (the user, 2026-11-25: "make sure click can be discarded explicitly via button and not by empty area click on chart").
+      .onPick((dot) => { if (dot) pickMapDot(dot.id); });
   }
   // Asked for many times a second while the map fills itself: drawn again only when the dots, the pick, the mark or the room changed.
   const width = box.getBoundingClientRect().width, fit = mapFitDot(map);
@@ -663,8 +671,8 @@ function hideMapTip() {
 }
 // Beside the chart, in a column that scrolls by itself (under it on a narrow screen): a set's
 // numbers, its worst case, and the whole strategy as its Settings read. The set is the dot that
-// was clicked, a value it changes struck through with the new one beside it, and Use; until one
-// is clicked, the settings as they are. The user (2026-11-25), of the search's result picked for
+// was clicked, a value it changes struck through with the new one beside it, with Use and Clear
+// (which lets the dot go); until one is clicked, the settings as they are. The user (2026-11-25), of the search's result picked for
 // the reader when it came in: "make sure this does not open without clicking, it appeared
 // sudden", and "display clicked strategy it's own scrollable container on the right". Written
 // only when it changes: it is asked for many times a second while a map fills, and a button
@@ -690,7 +698,8 @@ function mapDetailHtml(map) {
     dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what Run in the Fit window would pick.` : '',
     dot.flat ? mapWorstText(job, dot) : picked && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
   return (dot ? `<div class="map-detail-head"><span>CAGR <b>${fitCagrText(job.cagrOf, dot.r)}</b>, max drawdown <b>${fitDdText(dot.r)}</b></span>`
-    + (dot.differs ? '<button type="button" class="map-use-btn" data-map-use>Use</button>' : '') + '</div>' : '')
+    + (dot.differs ? '<button type="button" class="map-use-btn" data-map-use>Use</button>' : '')
+    + (picked ? '<button type="button" class="map-clear-btn" data-map-clear>Clear</button>' : '') + '</div>' : '')
     + notes.map(note => `<div class="map-near">${_escHtml(note)}</div>`).join('')
     + `<div class="map-strategy">${buildFitStrategyHtml(map.key, value)}</div>`;
 }

@@ -1550,9 +1550,9 @@ function smaSignalChart() {
 // in a few words, with the amount, for a saved 9sig's card (dayEventOf, js/signal-chart.js).
 function nineSigChartTrade(r, UL) {
   const amount = (String(r.action).match(/\$[^\s)]+/) || [''])[0], verb = String(r.action).split(' ')[0];
-  if (verb === 'BUY') return { action: 'buy', value: r.total, why: `${amount}: holding under the signal line`, note: `Bought ${amount} of ${UL}: the holding was under the signal line${/\(part\)/.test(r.action) ? '; cash ran short' : ''}` };
-  if (verb === 'SELL') return { action: 'sell', held: 'cash', value: r.total, why: `${amount}: holding over the signal line`, note: `Sold ${amount} of ${UL}: the holding was over the signal line${/expired/.test(r.action) ? '; the crash rule\'s skipped sells ran out' : ''}` };
-  if (verb === 'RESET') return { action: 'sell', held: 'cash', value: r.total, why: `${amount}: spike reset, ${UL} doubled in a quarter`, note: `Spike reset: ${UL} doubled in a quarter, sold ${amount} back to 60%` };
+  if (verb === 'BUY') return { action: 'buy', value: r.total, why: `Buy ${amount}: the holding is under the signal line`, note: `Bought ${amount} of ${UL}: the holding was under the signal line${/\(part\)/.test(r.action) ? '; cash ran short' : ''}` };
+  if (verb === 'SELL') return { action: 'sell', held: 'cash', value: r.total, why: `Sell ${amount}: the holding is over the signal line`, note: `Sold ${amount} of ${UL}: the holding was over the signal line${/expired/.test(r.action) ? '; the crash rule\'s skipped sells ran out' : ''}` };
+  if (verb === 'RESET') return { action: 'sell', held: 'cash', value: r.total, why: `Sell ${amount}: ${UL} doubled in a quarter`, note: `Spike reset: ${UL} doubled in a quarter, sold ${amount} back to 60%` };
   return null;
 }
 // ---- The day's event of a built-in engine ----

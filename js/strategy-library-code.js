@@ -6258,15 +6258,15 @@ ${bareFn(rsiLevel)}
         : !downAt(i) ? "No down trend: " + trendSays(i)
         : outSession(i + 1) ? "The down trend began after this week's close out of " + FUND_NAME + " (" + trendSays(i) + ")"
         : "Down trend, the week's " + FUND_NAME + " days (" + trendSays(i) + ")";
-      // The same reason in a few words, for the strategy's card (a trade row's why): the note has the readings.
-      const brief = outAt(i) ? (lagOut(i) ? LAG_NAME + " lags " + LAG_VS_NAME + " by " + Math.round(Math.abs(lagAt(startClose(i)))) + "%" : "Down trend, the week's " + OUT_NAME + " days")
-        : NONE_OUT ? "No days out of " + FUND_NAME
-        : backBefore(i) ? "Back before the weekend, " + FUND_NAME + " " + signedPct(weekendMove(startClose(i))) + " since the sale"
-        : lagBack(i) ? LAG_NAME + "'s lag, the stay is over"
-        : RSI_SKIP && outSession(i + 1) && skippedBy(startClose(i)) >= 0 ? "Week skipped, " + rsiSays(skippedBy(startClose(i)))
-        : !downAt(i) ? "No down trend"
-        : outSession(i + 1) ? "Down trend began after the week's close out of " + FUND_NAME
-        : "Down trend, the week's " + FUND_NAME + " days";`,
+      // The same reason as one plain sentence, for the ⓘ on the strategy's card (a trade row's why): the note has the readings.
+      const brief = outAt(i) ? (lagOut(i) ? LAG_NAME + " is " + Math.round(Math.abs(lagAt(startClose(i)))) + "% behind " + LAG_VS_NAME + " over " + LAG_DAYS + " days" : "Down trend: the week's days in " + OUT_NAME + " begin")
+        : NONE_OUT ? "No days out of " + FUND_NAME + " are set"
+        : backBefore(i) ? "Back before the weekend: " + FUND_NAME + " is " + signedPct(weekendMove(startClose(i))) + " since it was sold"
+        : lagBack(i) ? (LAG_WEEKEND ? "The days out for " + LAG_NAME + "'s lag are over" : "The day out for " + LAG_NAME + "'s lag is over")
+        : RSI_SKIP && outSession(i + 1) && skippedBy(startClose(i)) >= 0 ? "This week is skipped: " + rsiSays(skippedBy(startClose(i)))
+        : !downAt(i) ? "The down trend is over"
+        : outSession(i + 1) ? "The down trend began too late for this week"
+        : "The week's days in " + OUT_NAME + " are over";`,
   row: `          trendClose: S[i] > 0 ? S[i] : null, lineRel: gapAt(i), trendLevel: lineBefore[i] > 0 ? -UNDER : null, trendPx: lineBefore[i] > 0 ? levelAt(i) : null,
           ...rsiRow(i), soldAt: soldAt(i), lag: lagAt(i), lagLevel: lagAt(i) === null ? null : -LAG_BY,
           // A trade is marked where its rule reads: a purchase the weekend check made on the fund's price, where its
