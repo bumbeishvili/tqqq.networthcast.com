@@ -139,6 +139,51 @@ window._miniZooms = window._miniZooms || {};   // cfg id → { t0, t1 }; absent 
 function _miniNameRows(name) {
   return name.split(' ').flatMap(word => word.replace(/-/g, '-\n').split('\n')).filter(Boolean);
 }
+// The most of a chart's width its right gutter (the end labels) may take, so
+// a narrow panel keeps a usable plot.
+const MINI_GUTTER_SHARE = 0.45;
+// The chart's text is JetBrains Mono: every character 0.6 of the type size
+// wide, capitals and digits 0.74 of it high, a descender 0.2 deep. The width
+// of `chars` characters, and the box a text's ink takes from its left edge
+// and baseline, for texts that must keep clear of each other.
+const MINI_TYPE = { advance: 0.6, rise: 0.74, drop: 0.2 };
+const _miniTextW = (chars, size) => chars * MINI_TYPE.advance * size;
+const _miniTextBox = (left, baseline, chars, size) => ({ x0: left, x1: left + _miniTextW(chars, size), y0: baseline - MINI_TYPE.rise * size, y1: baseline + MINI_TYPE.drop * size });
+const _miniBoxesTouch = (a, b) => a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+// A line from time `from` on: its lowest and highest value and the highest
+// price its level stood at (0 when it has none).
+function _miniSpread(pts, from) {
+  let lo = Infinity, hi = -Infinity, px = 0;
+  for (const pt of pts) {
+    if (pt.t < from) continue;
+    if (pt.v < lo) lo = pt.v;
+    if (pt.v > hi) hi = pt.v;
+    if (pt.px > px) px = pt.px;
+  }
+  return { lo, hi, px };
+}
+// The values between lo and hi whose text can be the longest: the two ends,
+// and the last value short of 10 on either side of zero ("-9.9%" is longer
+// than "-10%", "9.94" than "12.3").
+const _miniLongValues = (lo, hi) => [lo, hi, -9.94, 9.94].filter(v => v >= lo && v <= hi);
+const _miniLongest = texts => texts.reduce((longest, text) => (text.length > longest.length ? text : longest), '');
+// A label row's length in characters, its tail (a day's change after the
+// name, in its own colour) included. The font is monospace, so a row's length
+// is its width.
+const _miniRowChars = row => row.text.length + (row.tail ? 1 + row.tail.text.length : 0);
+// A label row as the rows a column of maxChars characters gives it: one when
+// it fits, else its words wrapped (wrapWords, js/utils.js), the tail's words
+// last and still in the tail's colour.
+function _miniWrapRow(row, maxChars) {
+  if (_miniRowChars(row) <= maxChars) return [row];
+  const widthOf = text => text.length;
+  const wordsOf = text => text.split(' ').filter(Boolean).flatMap(word => cutToWidth(word, maxChars, widthOf));
+  const own = wordsOf(row.text), words = own.concat(row.tail ? wordsOf(row.tail.text) : []);
+  return wrapWords(words, maxChars, widthOf).map(([first, last]) => {
+    const name = words.slice(first, Math.min(last + 1, own.length)).join(' '), rest = words.slice(Math.max(first, own.length), last + 1).join(' ');
+    return name ? { text: name, color: row.color, tail: rest ? { text: rest, color: row.tail.color } : null } : { text: rest, color: row.tail.color, tail: null };
+  });
+}
 // A value as its panel reads it: dollars, percent on a panel whose lines all
 // declare unit: "%" (a volatility, a share of the account), or a plain number
 // on one whose lines declare unit: "num" (an index reading such as NFCI).
@@ -346,7 +391,6 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // the − and + that zoom it (zoomSteps below). The compact layout, the
   // desktop widget's, has none.
   const stepsH = MINI_TOUCH_UI && !compact ? MINI_PX.steps / k : 0;
-  const H = plotsH + stepsH;
   // The trades, once: the strip above the plot holds their caps. The compact
   // layout drops the strip when the log has none (the whole log, so zooming
   // never moves the plot), unless the first of several panels needs its name there.
@@ -360,12 +404,6 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   const lastEv = markerEvents[markerEvents.length - 1];
   const latestTrade = lastEv && lastEv.i === log.length - 1 && String(lastEv.row.date) === daily[daily.length - 1].date && !lastEv.row.projected ? lastEv : null;
   const beforeClose = latestTrade ? minutesBeforeClose(String(latestTrade.row.date), window._dataFetchedAt) : null;
-  // A chart taller than it is wide gets the date axis at the top as well (the
-  // user, 2026-11-05: "if complete chart height is too much, show axis at the
-  // bottom and at the top too"): a band above the strip, the strip's own
-  // content (caps, the first panel's name, the zoom hint and buttons) below it.
-  const topAxis = !compact && plotsH > W, axisTopH = topAxis ? MINI_PX.axis / k : 0;
-  const padT = axisTopH + (compact && !markerEvents.length && nPanels === 1 ? MINI_PX.edge : MINI_PX.strip) / k, padB = MINI_PX.axis / k + stepsH;
   // The full extent, then the zoom window inside it. A zoom saved from an
   // older, longer run is clamped so it can never show an empty plot.
   let T0 = Infinity, T1 = -Infinity;
@@ -401,42 +439,50 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   if (!series.length) return '';
   // Right gutter: the value column, then the name column beside it (both
   // descaled, JetBrains Mono advance ≈ 0.6em). A name is one row, or in the
-  // compact layout a row per word with any badge on the row above them. It is
-  // capped so a narrow panel keeps a usable plot area — when capped, long
-  // names clip at the right edge instead of covering lines.
+  // compact layout a row per word with any badge on the row above them. The
+  // gutter is capped (MINI_GUTTER_SHARE); a row longer than the name column
+  // the cap leaves wraps onto more rows, so the chart's edge cuts no name
+  // (the user, 2026-11-25, on a phone where it cut six of nine: "make sure in
+  // signal charts texts are visible").
   const _valTxt = (unit, v) => unit === '$' ? (v < 0 ? '-' : '') + (Math.abs(v) >= 1000 ? fmt(Math.abs(v)) : '$' + Math.abs(v).toFixed(2)) : _miniFmtValue(unit, v);
   // A level line declared with a priceKey names its price too, in brackets after
   // its name ("Floor ($48.12)"): the user sets orders at prices, and the level
   // in percent is the strategy's reading of it (2026-11-05).
   const _pxTxt = px => '$' + px.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });   // the plain price, as an order is written
-  for (const s of series) s.tagLabel = s.label + (s.endPt.px > 0 ? ' (' + _pxTxt(s.endPt.px) + ')' : '');
-  // A price panel's first line is the price its levels are compared with
-  // (LINES in the prompt); on the latest day its label carries the day's
-  // change against the prior close, as the main chart's end labels do (the
-  // user, 2026-11-06): "+1.2%" after its name, on the row above it in the
-  // compact layout. Only from one trading day to the next: the display log's
-  // weekly rows (while the detail run is on its way) carry none.
   const latestDate = daily[daily.length - 1].date, priorDate = daily.length > 1 ? daily[daily.length - 2].date : null;
-  for (const s of series) {
-    if (s.unit !== '$' || s.badge || series.find(o => o.panel === s.panel) !== s) continue;
-    const at = s.pts.indexOf(s.endPt), prev = at > 0 ? s.pts[at - 1] : null;
-    if (!prev || s.endPt.d !== latestDate || prev.d !== priorDate) continue;
-    const delta = computeDayChange(s.endPt.v, prev.v);
-    if (delta) s.badge = { text: fmtDayChangePct(delta), color: delta.pct >= 0 ? MINI_DAY_CHANGE.up : MINI_DAY_CHANGE.down };
-  }
-  // Outside the regular session the proxy carries each fund's latest pre-market
-  // or after-hours print (js/data.js's applyLiveQuotes, window._liveExtended):
-  // a price line standing at a fund's close names the print on a second row,
-  // "after hours $50.10 -0.7%", its change against that close (the user,
-  // 2026-11-06). The line itself keeps the close: the rules read closes.
   const prints = (window._liveExtended && window._liveExtended.prints) || null;
-  for (const s of series) {
-    if (!prints || s.unit !== '$' || s.endPt.d !== latestDate) continue;
-    const fund = LIVE_FUNDS.find(f => prints[f] && daily[daily.length - 1][f] === s.endPt.v);
-    if (!fund) continue;
-    const x = prints[fund];
-    s.extended = { text: EXTENDED_SESSION_NAMES[x.session] + ' ' + _pxTxt(x.price), tail: { text: fmtDayChangePct({ pct: x.changePct }), color: x.changePct >= 0 ? MINI_DAY_CHANGE.up : MINI_DAY_CHANGE.down } };
-  }
+  const tagLabelOf = (label, px) => label + (px > 0 ? ' (' + _pxTxt(px) + ')' : '');
+  // What each line's label says, from the point the line ends on (endPt):
+  // tagLabel, badge and extended, set on the lines of the list.
+  const nameLabels = list => {
+    for (const s of list) s.tagLabel = tagLabelOf(s.label, s.endPt.px);
+    // A price panel's first line is the price its levels are compared with
+    // (LINES in the prompt); on the latest day its label carries the day's
+    // change against the prior close, as the main chart's end labels do (the
+    // user, 2026-11-06): "+1.2%" after its name, on the row above it in the
+    // compact layout. Only from one trading day to the next: the display log's
+    // weekly rows (while the detail run is on its way) carry none.
+    for (const s of list) {
+      if (s.unit !== '$' || s.badge || list.find(o => o.panel === s.panel) !== s) continue;
+      const at = s.pts.lastIndexOf(s.endPt), prev = at > 0 ? s.pts[at - 1] : null;
+      if (!prev || s.endPt.d !== latestDate || prev.d !== priorDate) continue;
+      const delta = computeDayChange(s.endPt.v, prev.v);
+      if (delta) s.badge = { text: fmtDayChangePct(delta), color: delta.pct >= 0 ? MINI_DAY_CHANGE.up : MINI_DAY_CHANGE.down };
+    }
+    // Outside the regular session the proxy carries each fund's latest pre-market
+    // or after-hours print (js/data.js's applyLiveQuotes, window._liveExtended):
+    // a price line standing at a fund's close names the print on a second row,
+    // "after hours $50.10 -0.7%", its change against that close (the user,
+    // 2026-11-06). The line itself keeps the close: the rules read closes.
+    for (const s of list) {
+      if (!prints || s.unit !== '$' || s.endPt.d !== latestDate) continue;
+      const fund = LIVE_FUNDS.find(f => prints[f] && daily[daily.length - 1][f] === s.endPt.v);
+      if (!fund) continue;
+      const x = prints[fund];
+      s.extended = { text: EXTENDED_SESSION_NAMES[x.session] + ' ' + _pxTxt(x.price), tail: { text: fmtDayChangePct({ pct: x.changePct }), color: x.changePct >= 0 ? MINI_DAY_CHANGE.up : MINI_DAY_CHANGE.down } };
+    }
+  };
+  nameLabels(series);
   const gutterSeries = series.filter(s => s.hidden || (s.shown && !s.partial));
   // A label's name rows: the compact layout stacks a row per word under any
   // badge; the full layout has one row with the badge after the name (tail).
@@ -445,19 +491,83 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     ? (badge ? [{ text: badge.text, color: badge.color }] : []).concat(_miniNameRows(name).map(text => ({ text, color })))
     : [{ text: name, color, tail: badge || null }])
     .concat(extended ? [{ text: extended.text, color: MINI_MUTED_TEXT, tail: extended.tail }] : []);
-  const rowChars = row => row.text.length + (row.tail ? 1 + row.tail.text.length : 0);
-  const valColW = Math.max(0, ...gutterSeries.map(s => _valTxt(s.unit, s.endPt.v).length)) * (9 / k) * 0.6;
-  const nameColW = Math.max(0, ...gutterSeries.flatMap(s => nameRowsOf(s.tagLabel, s.badge, s.color, s.extended)).map(rowChars)) * (7 / k) * 0.62;
   const eyeW = compact ? 0 : 11 / k;   // the eye before each label's value (the compact layout has none)
-  const padR = Math.min(4 / k + eyeW + valColW + 4 / k + nameColW + 5 / k, 0.45 * W);
-  // The panels split the plot's height by their shares, a gap apart, each
-  // scaled to its own points in the window. A panel with none there keeps its
-  // place, empty.
-  const plotW = W - padL - padR, plotBottom = H - padB, plotH = plotBottom - padT;
+  // The gutter a list of labelled lines takes: its value column (valueOf: a
+  // line's value as text) and its width, with each line's name rows (rows)
+  // wrapped to the name column.
+  const endValue = s => _valTxt(s.unit, s.endPt.v);
+  const gutterOf = (labelled, valueOf) => {
+    const valColW = Math.max(0, ...labelled.map(s => valueOf(s).length)) * (9 / k) * 0.6;
+    // The longest name row that ends inside the chart with the gutter at its
+    // cap: the room right of the value column.
+    const maxChars = Math.floor((MINI_GUTTER_SHARE * W - (4 / k + eyeW + valColW + 4 / k)) / _miniTextW(1, 7 / k));
+    for (const s of labelled) s.rows = nameRowsOf(s.tagLabel, s.badge, s.color, s.extended).flatMap(row => _miniWrapRow(row, maxChars));
+    const nameColW = Math.max(0, ...labelled.flatMap(s => s.rows).map(_miniRowChars)) * (7 / k) * 0.62;
+    return { valColW, padR: Math.min(4 / k + eyeW + valColW + 4 / k + nameColW + 5 / k, MINI_GUTTER_SHARE * W) };
+  };
+  const { valColW, padR } = gutterOf(gutterSeries, endValue);
+  // How labels stand in the gutter. A label of several rows is centred on its
+  // value (stacked): every compact label, and in the full layout a name that
+  // wrapped or has an extended-hours row under it. reach: a label's half
+  // height. Two one-row labels keep 10px between their values; next to a
+  // stacked label there is a pixel between the two.
+  const rowLh = 8.5 / k;
+  const reach = e => (e.rows.length - 1) / 2 * rowLh + 5 / k;
+  const stacked = e => compact || e.rows.length > 1;
+  const room = (a, b) => (stacked(a) || stacked(b) ? reach(a) + reach(b) + 1 / k : 10 / k);
+  // A panel's labels use the panel's height and, with several panels, the gap
+  // around it up to 2px from the dividers; the first panel's stop 2px above
+  // the plot, under the strip's zoom hint and buttons.
   const gapY = nPanels > 1 ? MINI_PANEL.gap / k : 0;
-  const fullH = (plotH - (nPanels - 1) * gapY) / shares.reduce((sum, f) => sum + f, 0);
+  const labelRoomAbove = p => (p === 0 ? 2 / k : gapY - (MINI_PANEL.rule + 2) / k);
+  const labelRoomBelow = p => (p === nPanels - 1 ? 0 : (MINI_PANEL.rule - 2) / k);
+  // The height a panel's labels take in any order, as the layout below spaces
+  // them: one-row labels 10px apart with 3px under the last, else each label's
+  // full height with a pixel between.
+  const labelsHeight = labelled => !labelled.length ? 0
+    : labelled.reduce((sum, s) => sum + 2 * reach(s), 0) + (labelled.some(stacked) ? (labelled.length - 1) / k : -2 / k);
+  // A panel is as tall as its share of the chart's own height, or as its
+  // labels need when that is more (a phone, where a quarter panel is 40px and
+  // five names beside it wrap onto two rows each). So that the chart keeps
+  // its height while it is zoomed and panned, the need is not the window's:
+  // it counts every line the strategy declares in the panel, labelled as on
+  // the data's latest day (the day's change, an extended-hours print) but
+  // with the longest value and level price the line shows from the start of
+  // the view the chart rests in (home) on. The years before it are another
+  // run's (a 9sig target that grew to $1e37 on its way to 2010): there, and
+  // wherever the window's own labels still take more, those count.
+  // A chart given its height (an aspect) and the compact layout keep theirs.
+  const grows = !compact && !(opts && opts.aspect);
+  const resting = grows ? all.map(s => ({ label: s.label, color: s.color, unit: s.unit, panel: s.panel, pts: s.pts, endPt: s.pts[s.pts.length - 1], badge: s.badge })) : [];
+  nameLabels(resting);
+  for (const s of resting) {
+    const { lo, hi, px } = _miniSpread(s.pts, home ? home.t0 : -Infinity);
+    s.tagLabel = tagLabelOf(s.label, px);
+    s.longestValue = _miniLongest(_miniLongValues(lo, hi).map(v => _valTxt(s.unit, v)));
+  }
+  gutterOf(resting, s => s.longestValue);
+  const labelNeeds = panelSpecs.map((sp, p) => !grows ? 0
+    : Math.max(...[gutterSeries, resting].map(labelled => labelsHeight(labelled.filter(s => s.panel === p)))) - labelRoomAbove(p) - labelRoomBelow(p));
+  const stripH = (compact && !markerEvents.length && nPanels === 1 ? MINI_PX.edge : MINI_PX.strip) / k, padB = MINI_PX.axis / k + stepsH;
+  const layoutWith = topAxis => {
+    const axisTopH = topAxis ? MINI_PX.axis / k : 0, padT = axisTopH + stripH;
+    const fullH = (plotsH + stepsH - padB - padT - (nPanels - 1) * gapY) / shares.reduce((sum, f) => sum + f, 0);
+    const heights = shares.map((f, p) => Math.max(f * fullH, labelNeeds[p]));
+    return { topAxis, axisTopH, padT, heights, grown: heights.reduce((sum, h, p) => sum + h - shares[p] * fullH, 0) };
+  };
+  // A chart taller than it is wide gets the date axis at the top as well (the
+  // user, 2026-11-05: "if complete chart height is too much, show axis at the
+  // bottom and at the top too"): a band above the strip, the strip's own
+  // content (caps, the first panel's name, the zoom hint and buttons) below it.
+  // Judged on the chart's own height, and again on the height its panels grew to.
+  const ownLayout = layoutWith(!compact && plotsH > W);
+  const { topAxis, axisTopH, padT, heights, grown } = !compact && !ownLayout.topAxis && plotsH + ownLayout.grown > W ? layoutWith(true) : ownLayout;
+  const H = plotsH + stepsH + grown;
+  // The panels stand a gap apart, each scaled to its own points in the
+  // window. A panel with none there keeps its place, empty.
+  const plotW = W - padL - padR, plotBottom = H - padB, plotH = plotBottom - padT;
   const panels = panelSpecs.map((sp, p) => {
-    const top = padT + shares.slice(0, p).reduce((y, f) => y + f * fullH + gapY, 0), bottom = top + shares[p] * fullH, tf = _miniScaleOf(sp.linear);
+    const top = padT + heights.slice(0, p).reduce((y, h) => y + h + gapY, 0), bottom = top + heights[p], tf = _miniScaleOf(sp.linear);
     let lo = Infinity, hi = -Infinity;
     for (const s of series) if (s.panel === p && !s.hidden) for (const pt of s.scalePts) { if (pt.v < lo) lo = pt.v; if (pt.v > hi) hi = pt.v; }
     if (!(hi >= lo)) return { name: sp.name, unit: sp.unit, linear: sp.linear, top, bottom, yLo: 0, yHi: 1, empty: true };
@@ -539,29 +649,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   window._miniCharts[cfg.id] = chartData;
   window._miniChartHover = chartData;
 
-  // Horizontal gridlines per panel, labeled with fmt(): log-spaced levels, or
-  // on a linear axis the round values a step apart, zero among them once the
-  // axis reaches below it. As many as the panel's height fits with room for
-  // their labels, at most six: a full panel gets six, a quarter-height one
-  // three (the user, 2026-11-05: "show some additional axes").
   const titled = nPanels > 1;
-  let grid = '';
-  panels.forEach(P => {
-    if (P.empty) return;
-    const fit = Math.max(1, Math.min(6, Math.floor((P.bottom - P.top) / (2.4 * 8 / k))));
-    const step = P.linear ? _miniNiceStep(P.yHi - P.yLo, fit) : 0;
-    const levels = P.linear
-      ? Array.from({ length: Math.floor(P.yHi / step) - Math.ceil(P.yLo / step) + 1 }, (_, i) => (Math.ceil(P.yLo / step) + i) * step).filter(v => v > 0 || P.yLo < 0)
-      : Array.from({ length: fit }, (_, i) => Math.pow(10, P.yLo + (P.yHi - P.yLo) * (i + 0.5) / fit));   // log: evenly down the panel, the gaps the same %
-    for (const lv of levels) {
-      const y = _miniPanelY(P, lv).toFixed(1);
-      // The label sits above its line, or under it when the line runs within a
-      // label's height of the panel's top, where the panel's name is.
-      const labelY = +y - P.top < 10 / k ? +y + 8 / k : +y - 2;
-      grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(122,122,166,0.14)" stroke-width="0.5"/>
-      <text x="${padL + 1}" y="${labelY.toFixed(1)}" font-family="JetBrains Mono" font-size="${(8 / k).toFixed(2)}" fill="rgba(122,122,166,0.75)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_miniFmtValue(P.unit, lv)}</text>`;
-    }
-  });
   // With more than one panel each is named just above its top left, outside
   // the plot so no line runs through the name: the first in the strip, the
   // others in the gap above them, under a divider across the chart. It runs
@@ -662,8 +750,14 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // away from the end, when the strip's Latest chip says so instead. On a
   // latest-day trade the line wears the trade's colour and the strip's action
   // chip stands in for the date.
+  // The texts that stand inside the plot (the latest date in its top right
+  // corner, the price's age there on a latest-day trade, the tags of lines
+  // that end early): their boxes, for the gridline labels to keep clear of.
+  const plotTexts = [];
+  const cornerText = text => _miniTextBox(W - padR - 2 / k - _miniTextW(text.length, 7 / k), padT + 7.5 / k, text.length, 7 / k);
   let latestMark = '';
   if (atEnd) {
+    if (!latestItem) plotTexts.push(cornerText(`latest · ${_miniShortDate(T1)}`));
     const xEnd = (W - padR).toFixed(1);
     const dots = series.filter(s => !s.hidden && Math.abs(s.endPt.t - T1) < 86400000).map(s =>
       `<circle cx="${xEnd}" cy="${yAt(s.panel, s.endPt.v).toFixed(1)}" r="${(1.4 / k).toFixed(2)}" fill="${s.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(0.7 / k).toFixed(2)}"/>`).join('');
@@ -684,43 +778,48 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   };
   const panelPaths = panelSeries.map(own => own.length ? own.slice(1).map(pathOf).join('') + pathOf(own[0]) : '');
   // Partial lines: name and last value beside the line's end, to its right when
-  // that fits inside the plot, else to its left.
+  // that fits inside the plot, else to its left. A tag longer than either side
+  // (on a phone's plot, 190px wide) starts at the plot's left edge instead,
+  // just above the line it then crosses; one longer than the whole plot wraps
+  // onto rows, the last where the single row would be.
   let lineTags = '';
+  const tagSize = 7 / k, tagChars = Math.floor((plotW - 4 / k) / _miniTextW(1, tagSize));
   for (const s of series.filter(s => !s.hidden && s.shown && s.partial)) {
     const P = panels[s.panel], x = xAt(s.endPt.t), txt = `${s.tagLabel} ${_valTxt(s.unit, s.endPt.v)}`;
-    const y = Math.max(P.top + 6 / k, Math.min(P.bottom - 1 / k, yAt(s.panel, s.endPt.v) + 2.5 / k));
-    const right = x + 3 / k + txt.length * 0.6 * (7 / k) <= W - padR;
-    lineTags += `<text class="mini-line-tag" x="${(right ? x + 3 / k : x - 3 / k).toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" font-family="JetBrains Mono" font-size="${(7 / k).toFixed(2)}" font-weight="600" fill="${s.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(txt)}</text>`;
+    const rows = _miniWrapRow({ text: txt, color: s.color, tail: null }, tagChars).map(row => row.text);
+    const width = _miniTextW(Math.max(...rows.map(row => row.length)), tagSize);
+    const right = x + 3 / k + width <= W - padR, beside = right || x - 3 / k - width >= padL;
+    const lineY = yAt(s.panel, s.endPt.v);
+    const y = Math.max(P.top + 6 / k, Math.min(P.bottom - 1 / k, beside ? lineY + 2.5 / k : lineY - 3 / k));
+    const tagX = right ? x + 3 / k : beside ? x - 3 / k : padL + 1 / k + width;
+    rows.forEach((row, j) => {
+      const rowY = y - (rows.length - 1 - j) * rowLh;
+      plotTexts.push(_miniTextBox(right ? tagX : tagX - _miniTextW(row.length, tagSize), rowY, row.length, tagSize));
+      lineTags += `<text class="mini-line-tag" x="${tagX.toFixed(1)}" y="${rowY.toFixed(1)}" text-anchor="${right ? 'start' : 'end'}" font-family="JetBrains Mono" font-size="${tagSize.toFixed(2)}" font-weight="600" fill="${s.color}" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${_escHtml(row)}</text>`;
+    });
   }
   // One label per series in the gutter, never over the plot: the value at
   // the line's end, and its name beside it on the same baseline. In the
   // compact layout the name runs down a row per word with any badge on the
   // row above it, the rows centred on the value; labels push apart by their
-  // own heights and stay inside the plot's height. Each panel lays out its
-  // own labels and keeps them beside it.
-  const rowLh = 8.5 / k;
-  const reach = e => (e.rows.length - 1) / 2 * rowLh + 5 / k;   // a stacked label's half height
-  // A label's rows are centred on its value when stacked: every compact label,
-  // and in the full layout one with an extended-hours row under its name.
-  const stacked = e => compact || e.rows.length > 1;
-  const room = (a, b) => (stacked(a) || stacked(b) ? reach(a) + reach(b) + 1 / k : 10 / k);
+  // own heights (reach, room above) and stay inside the room their panel has
+  // for them. Each panel lays out its own labels and keeps them beside it.
   let endLabels = '';
   panels.forEach((P, p) => {
     // A hidden line's label sits where its value would be, kept inside the
     // panel (its value set no scale); in a panel with nothing drawn, at the top.
     const ends = panelLabels[p].map(s => {
       const y = P.empty ? NaN : yAt(p, s.endPt.v);
-      return { y: y === y ? Math.max(P.top, Math.min(P.bottom, y)) : P.top, v: s.endPt.v, unit: s.unit, rows: nameRowsOf(s.tagLabel, s.badge, s.color, s.extended), color: s.color, key: s.key, hidden: s.hidden };
+      return { y: y === y ? Math.max(P.top, Math.min(P.bottom, y)) : P.top, v: s.endPt.v, unit: s.unit, name: s.tagLabel, rows: s.rows, color: s.color, key: s.key, hidden: s.hidden };
     });
     ends.sort((a, b) => a.y - b.y);
-    const minY = p === 0 ? 0 : ruleY(p) + 2 / k, maxY = p === nPanels - 1 ? plotBottom : ruleY(p + 1) - 2 / k;
-    if (ends.length && stacked(ends[0])) ends[0].y = Math.max(ends[0].y, minY + reach(ends[0]));
+    // The compact layout's first panel has the whole height above it: its zoom buttons sit in the bottom corner.
+    const minY = compact && p === 0 ? 0 : P.top - labelRoomAbove(p), maxY = P.bottom + labelRoomBelow(p);
+    if (ends.length) ends[0].y = Math.max(ends[0].y, minY + reach(ends[0]));
     for (let i = 1; i < ends.length; i++) if (ends[i].y - ends[i - 1].y < room(ends[i - 1], ends[i])) ends[i].y = ends[i - 1].y + room(ends[i - 1], ends[i]);
-    if (compact || titled) {
-      for (let i = ends.length - 1; i >= 0; i--) {
-        const max = i === ends.length - 1 ? maxY - (stacked(ends[i]) ? reach(ends[i]) : 3 / k) : ends[i + 1].y - room(ends[i], ends[i + 1]);
-        if (ends[i].y > max) ends[i].y = max;
-      }
+    for (let i = ends.length - 1; i >= 0; i--) {
+      const max = i === ends.length - 1 ? maxY - (stacked(ends[i]) ? reach(ends[i]) : 3 / k) : ends[i + 1].y - room(ends[i], ends[i + 1]);
+      if (ends[i].y > max) ends[i].y = max;
     }
     for (const e of ends) {
       const base = e.y + 3 / k;
@@ -732,8 +831,8 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
       // the chart's labels): the eye before the value hides the line or shows
       // it again. It carries the chips' class and data, so saved-configs.js's
       // .cfg-sub-chip click handler flips cfg.subShown[key] and re-renders.
-      const eyeX = W - padR + 2 / k, eyeS = 8 / k / 24, name = e.rows[0].text;
-      endLabels += `<g class="cfg-sub-chip mini-line-toggle${e.hidden ? ' legend-hidden' : ''}" data-config-id="${_escHtml(String(cfg.id))}" data-config-sub="${_escHtml(String(e.key))}" role="button" tabindex="0"><title>${e.hidden ? 'Show' : 'Hide'} ${_escHtml(name)}</title>`
+      const eyeX = W - padR + 2 / k, eyeS = 8 / k / 24;
+      endLabels += `<g class="cfg-sub-chip mini-line-toggle${e.hidden ? ' legend-hidden' : ''}" data-config-id="${_escHtml(String(cfg.id))}" data-config-sub="${_escHtml(String(e.key))}" role="button" tabindex="0"><title>${e.hidden ? 'Show' : 'Hide'} ${_escHtml(e.name)}</title>`
         + `<rect x="${eyeX.toFixed(1)}" y="${(e.y - reach(e)).toFixed(1)}" width="${(W - eyeX).toFixed(1)}" height="${(2 * reach(e)).toFixed(2)}" fill="transparent"/>`
         + `<g transform="translate(${eyeX.toFixed(2)},${(e.y - 4 / k).toFixed(2)}) scale(${eyeS.toFixed(4)})" fill="none" stroke="${e.hidden ? 'rgba(122,122,166,0.9)' : e.color}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">${e.hidden ? MINI_EYE.off : MINI_EYE.open}</g>`
         + texts + '</g>';
@@ -802,13 +901,48 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const actW = text.length * charW + 2 * padX, actX = right - actW;
     const age = open ? `price ${_miniCloseGap(it.beforeClose)} before the close` : '';
     const ageAttrs = `font-family="JetBrains Mono" font-size="${fs.toFixed(2)}" font-weight="600" fill="rgba(122,122,166,0.95)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke"`;
+    const ageInStrip = actX - 4 / k - age.length * charW >= left;
+    if (age && !ageInStrip) plotTexts.push(cornerText(age));
     latestTradeSvg += `<g class="mini-action-chip" pointer-events="none"><rect x="${actX.toFixed(1)}" y="${actY.toFixed(2)}" width="${actW.toFixed(1)}" height="${actH.toFixed(2)}" rx="${(3 / k).toFixed(2)}" fill="${it.color}"/>`
       + `<text x="${(actX + actW / 2).toFixed(1)}" y="${(actY + 7.3 / k).toFixed(2)}" text-anchor="middle" font-family="JetBrains Mono" font-size="${fs.toFixed(2)}" font-weight="700" fill="#fff">${_escHtml(text)}</text>`
-      + (age ? (actX - 4 / k - age.length * charW >= left
+      + (age ? (ageInStrip
         ? `<text x="${(actX - 4 / k).toFixed(1)}" y="${(actY + 7.3 / k).toFixed(2)}" text-anchor="end" ${ageAttrs}>${age}</text>`
         : `<text x="${(W - padR - 2 / k).toFixed(1)}" y="${(padT + 7.5 / k).toFixed(2)}" text-anchor="end" ${ageAttrs}>${age}</text>`) : '')
       + '</g>';
   }
+
+  // Horizontal gridlines per panel, labeled with fmt(): log-spaced levels, or
+  // on a linear axis the round values a step apart, zero among them once the
+  // axis reaches below it. As many as the panel's height fits with room for
+  // their labels, at most six: a full panel gets six, a quarter-height one
+  // three (the user, 2026-11-05: "show some additional axes").
+  // A label sits above its line, or under it when the line runs within a
+  // label's height of the panel's top, where the panel's name is; under a
+  // line near the panel's bottom it stops 2px past the panel, short of the
+  // divider and the date axis. One that would touch a text already in the
+  // plot (plotTexts, or a label placed before it) takes the other side of its
+  // line if it has one, and is left out, its line kept, when neither is free.
+  const gridSize = 8 / k;
+  let grid = '';
+  panels.forEach(P => {
+    if (P.empty) return;
+    const fit = Math.max(1, Math.min(6, Math.floor((P.bottom - P.top) / (2.4 * 8 / k))));
+    const step = P.linear ? _miniNiceStep(P.yHi - P.yLo, fit) : 0;
+    const levels = P.linear
+      ? Array.from({ length: Math.floor(P.yHi / step) - Math.ceil(P.yLo / step) + 1 }, (_, i) => (Math.ceil(P.yLo / step) + i) * step).filter(v => v > 0 || P.yLo < 0)
+      : Array.from({ length: fit }, (_, i) => Math.pow(10, P.yLo + (P.yHi - P.yLo) * (i + 0.5) / fit));   // log: evenly down the panel, the gaps the same %
+    for (const lv of levels) {
+      const y = _miniPanelY(P, lv).toFixed(1), text = _miniFmtValue(P.unit, lv);
+      const sides = (+y - P.top < 10 / k ? [] : [+y - 2]).concat(Math.min(+y + 8 / k, P.bottom + 2 / k));
+      const boxAt = labelY => _miniTextBox(padL + 1, labelY, text.length, gridSize);
+      const labelY = sides.find(side => !plotTexts.some(taken => _miniBoxesTouch(taken, boxAt(side))));
+      grid += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="rgba(122,122,166,0.14)" stroke-width="0.5"/>`;
+      if (labelY === undefined) continue;
+      plotTexts.push(boxAt(labelY));
+      grid += `
+      <text x="${padL + 1}" y="${labelY.toFixed(1)}" font-family="JetBrains Mono" font-size="${gridSize.toFixed(2)}" fill="rgba(122,122,166,0.75)" stroke="rgba(255,255,255,0.95)" stroke-width="${(2 / k).toFixed(2)}" stroke-linejoin="round" paint-order="stroke">${text}</text>`;
+    }
+  });
 
   return `<svg class="custom-lines-chart" data-mini-id="${_escHtml(String(cfg.id))}" viewBox="0 0 ${W} ${H}"><defs>${clips}</defs>${grid}<g clip-path="url(#${clipId})">${eventBands}</g>${panelLayers}${latestMark}${lineTags}${eventCaps}${panelTitles}${endLabels}${xAxis}${zoomUi}${zoomSteps}${latestTradeSvg}</svg>`;
 }
