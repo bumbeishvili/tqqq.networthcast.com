@@ -1759,7 +1759,7 @@ function customDailyDrawdown(log) {
 // Turn a (worker-computed) log into a label-aligned series + stats. No code eval.
 function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
   const labels = ctx.labels;
-  if (error) return { data: labels.map(() => null), cagr: 0, maxDD: 0, start: 0, end: 0, ddPeak: null, ddTrough: null, dayEvent: null };
+  if (error) return { data: labels.map(() => null), cagr: 0, maxDD: 0, start: 0, end: 0, ddPeak: null, ddTrough: null, dayEvent: null, held: null };
   const points = (log || [])
     .filter(r => r && r.date != null && typeof r.value === 'number' && Number.isFinite(r.value))
     .map(r => ({ date: String(r.date), value: r.value }))
@@ -1783,9 +1783,9 @@ function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
     dd = computeMaxDrawdown(ddVals.length ? ddVals : series, ddVals.length ? ddDates : labels);
   }
   if (!dd) dd = { pct: 0, peakDate: null, troughDate: null };
-  // The trade at the latest day's close, for the card (js/signal-chart.js dayEventOf). None from a
-  // log that is being run again: it may be yesterday's.
-  return { data: series, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate, dayEvent: stale ? null : dayEventOf(log) };
+  // The trade at the latest day's close and the fund held at the end, for the card (js/signal-chart.js
+  // dayEventOf, heldAtEnd). None from a log that is being run again: it may be yesterday's.
+  return { data: series, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate, dayEvent: stale ? null : dayEventOf(log), held: stale ? null : heldAtEnd(log) };
 }
 
 // Custom strategy series — served from the worker-result cache. On a cache miss
@@ -2079,6 +2079,7 @@ function computeConfigSeries(cfg, ctx) {
   }
   window._configDayChange[cfg.id] = endState ? ydayFromHoldings(endState.h, endState.cash) : null;
   window._configEndHoldings[cfg.id] = endState;
+  const held = endState ? mainHolding(endState) : null;
 
   const data = resampleByDate(points, labels);
   const finalV = data.length ? data[data.length - 1] : 0;
@@ -2094,7 +2095,16 @@ function computeConfigSeries(cfg, ctx) {
     : (ddControls && ddControls.length && dailyRows && typeof computeDailyMaxDrawdown === 'function')
     ? computeDailyMaxDrawdown(ddControls, dailyRows, ddKey)
     : ((typeof computeMaxDrawdown === 'function') ? computeMaxDrawdown(data, labels) : { pct: 0, peakDate: null, troughDate: null });
-  return { data, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed, dayEvent };
+  return { data, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed, dayEvent, held };
+}
+// What a built-in engine's run holds at its end, for its card (heldAtEnd, js/signal-chart.js): the
+// largest of its holdings by value at the latest prices, cash by its name. end: { h: { fund: shares }, cash }.
+function mainHolding(end) {
+  const prices = daily[daily.length - 1];
+  const parts = Object.entries(end.h).map(([fund, shares]) => ({ name: fund.toUpperCase(), value: shares * prices[fund] })).concat({ name: 'cash', value: end.cash });
+  // Plain JS: this runs in the page's first render, which d3 (loaded deferred, and not at all by the widget) may not be there for.
+  const most = parts.reduce((best, part) => (part.value > best.value ? part : best));
+  return most.value > 0 ? most.name : null;
 }
 
 function fadeColor(hex, a) {
@@ -2119,7 +2129,7 @@ function appendConfigDatasets(chart, ctx) {
   window._editingConfigSim = null;
   for (const cfg of savedConfigs) {
     const s = computeConfigSeries(cfg, ctx);
-    window._configMetrics[cfg.id] = { cagr: s.cagr, maxDD: s.maxDD, start: s.start, end: s.end, ddPeak: s.ddPeak, ddTrough: s.ddTrough, event: s.dayEvent || null };
+    window._configMetrics[cfg.id] = { cagr: s.cagr, maxDD: s.maxDD, start: s.start, end: s.end, ddPeak: s.ddPeak, ddTrough: s.ddTrough, event: s.dayEvent || null, held: s.held || null };
     chart.data.datasets.push({
       label: cfg.name,
       data: s.data,
@@ -3070,7 +3080,10 @@ function buildConfigPillHtml(cfg) {
   // and no more. The ⓘ beside it is two lines: why, said once, and whether the price is final.
   const event = m.event, sentence = (text) => (/[.!?]$/.test(text) ? text : text + '.');
   const eventHtml = event ? `
-      <div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${esc(event.move)}</b>${tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)])}</div>` : '';
+      <div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${esc(event.move)}</b>${tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)])}</div>`
+    // On a day without a trade the same line names the fund held now, paler and alone.
+    : m.held ? `
+      <div class="sc-holding">${esc(m.held)}</div>` : '';
   const eyeSvg = hidden
     ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
     : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
@@ -3831,13 +3844,35 @@ const FIT_ROWS = [
 const fitLimitOf = (text) => { const n = parseFloat(String(text).replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; };
 const fitPlanOf = (choices) => ({ goal: choices.goal, limit: fitLimitOf(choices[FIT_LIMITS[choices.goal].id]),
   plateau: choices.shape === 'plateau', round: choices.numbers === 'round', fewest: choices.settings === 'fewest' });
+// The choices a share link brought with its map (useSharedFitChoices), for this visit: they stand
+// until the reader changes one in the Fit window, and only then is anything kept.
+let _fitChoicesShared = null;
 // The choices of the last fit, for the window to open on. localStorage can be missing or throw (private mode): the defaults then.
 function fitChoices() {
+  if (_fitChoicesShared) return Object.assign({}, _fitChoicesShared);
   let kept = null;
   try { kept = JSON.parse(localStorage.getItem(FIT_CHOICES_KEY)); } catch (e) {}
   return Object.assign({}, FIT_CHOICES_DEFAULT, kept);
 }
-function keepFitChoices(choices) { try { localStorage.setItem(FIT_CHOICES_KEY, JSON.stringify(choices)); } catch (e) {} }
+function keepFitChoices(choices) {
+  _fitChoicesShared = null;
+  try { localStorage.setItem(FIT_CHOICES_KEY, JSON.stringify(choices)); } catch (e) {}
+}
+// The choices as a share link carries them, in this order, and back. A link is typed by anyone:
+// a choice of two that is neither of them, a limit that is no number and a year that is no year
+// each fall back to the default.
+const FIT_SHARED_CHOICES = ['goal', 'maxDd', 'minCagr', 'shape', 'numbers', 'settings', 'fromYear', 'toYear'];
+const fitChoicesShareParam = () => { const choices = fitChoices(); return JSON.stringify(FIT_SHARED_CHOICES.map(id => choices[id])); };
+function useSharedFitChoices(text) {
+  let values;
+  try { values = JSON.parse(text); } catch (e) { throw new Error('The link\'s map choices (mc) are not readable: ' + text); }
+  if (!Array.isArray(values)) throw new Error('The link\'s map choices (mc) are not a list: ' + text);
+  const allowed = Object.fromEntries(FIT_ROWS.map(row => [row.id, row.options.map(([value]) => value)]));
+  const valid = (id, value) => (id in allowed ? allowed[id].includes(value)
+    : /Year$/.test(id) ? value === '' || /^\d{4}$/.test(value)
+    : value === '' || fitLimitOf(value) !== null);
+  _fitChoicesShared = Object.assign({}, FIT_CHOICES_DEFAULT, Object.fromEntries(FIT_SHARED_CHOICES.map((id, k) => [id, String(values[k] == null ? '' : values[k])]).filter(([id, value]) => valid(id, value))));
+}
 // The final value a CAGR stands for on the chart's period and money: cagrOf goes from a final value
 // to its CAGR and rises with it, so the value is found by halving, over powers of ten.
 const FIT_FINAL_POWERS = [-2, 60];

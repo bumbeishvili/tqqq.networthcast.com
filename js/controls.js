@@ -889,6 +889,11 @@ async function shareConfig() {
     const fz = fitFreezeShareParam();
     if (fz) params.set('fz', fz);
   }
+  // The settings map, while it is open: whose it is (`mp`) and the Fit window's choices it runs on (`mc`).
+  if (typeof mapShareParams === 'function') {
+    const map = mapShareParams(activeCfgs);
+    if (map) { params.set('mp', map.mp); params.set('mc', map.mc); }
+  }
 
   // Saved strategies, including custom ones (code + description). SECURITY:
   // shared custom code is never trusted on arrival — it arrives `_transient`

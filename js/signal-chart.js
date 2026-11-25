@@ -1310,6 +1310,13 @@ function dayEventOf(log) {
   const ends = _miniTradeEnds(log, ev);
   return { move: _miniMoveEnds(ends), kind: ends.kind, why: ev.row.why ? String(ev.row.why) : tradeWhy(ev.row.note), date: String(ev.row.date) };
 }
+// What a strategy holds at its log's end, for its card on a day without a trade (the user,
+// 2026-11-25: "show currently active fund in light blue, like tqqq=>sqqq but lighter and without
+// arrow and upcoming fund"): the last row's holding, cash by its name. Null for a log that names none.
+function heldAtEnd(log) {
+  const held = log && log.length ? String(log[log.length - 1].held || '') : '';
+  return held ? (/^cash$/i.test(held) ? 'cash' : held) : null;
+}
 // The second line of that ⓘ, read when the card is drawn (the time the prices stand at arrives
 // after the first run, and moves with every live price): while the day still trades, that the
 // price is no close yet; once it has closed, which close the trade was made at.

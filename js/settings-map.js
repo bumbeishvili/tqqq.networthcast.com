@@ -114,6 +114,7 @@ const MAP_FREEZE_TIP = [
   'The map then runs again without the combinations that change it.',
   'The Fit window uses the same ticks.',
 ].join('\n');
+const MAP_LINK_TIP = 'Copy a link that opens this map and starts it running.';
 const MAP_CSV_TIP = "Download every dot as a CSV file: CAGR, max drawdown, and each setting's value.";
 const MAP_LEGEND = [
   { mark: 'dot is-pale', name: 'not tested', tip: MAP_UNTESTED_TIP },
@@ -514,9 +515,41 @@ function buildMapWindowHtml(key, years) {
     + `<div class="map-legend">${MAP_LEGEND.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${key.name}${key.tip ? mapTipIcon(key.tip) : ''}</span>`).join('')}</div></div>`
     + `<div class="map-side"><div class="map-detail"></div></div></div>`
     + `<div class="fit-window-foot map-foot"><span class="map-status"><span class="map-count"></span>${mapTipIcon(MAP_RUN_TIP)}</span>`
+    + `<button type="button" class="map-csv-btn" data-map-link title="${_escHtml(MAP_LINK_TIP)}">Link</button>`
     + `<button type="button" class="map-csv-btn" data-map-csv title="${_escHtml(MAP_CSV_TIP)}">CSV</button>`
     + `<button type="button" class="fit-run-btn map-run-btn" data-map-run></button></div></div>`
     + `<div class="map-tip" hidden></div>`;
+}
+// ---- The map in a share link ----
+// The user (2026-11-25): "make sure that map view is linkable, so when I share the link and
+// other people open it it will start processing accordingly". An open map rides in the page's
+// share link (shareConfig, js/controls.js) as `mp`, whose map it is (a panel by its name, a
+// saved strategy by its place among those the link carries, as `spc` names the open panel), and
+// `mc`, the Fit window's choices it runs on. What is frozen travels as it always did: a
+// strategy's ticks with the strategy, a panel's in `fz`. The runs themselves do not travel: the
+// reader's map starts from nothing and fills itself.
+// shared: the strategies the link carries, in its order. Null with no map open, or one of a
+// strategy the link leaves out (a hidden one).
+function mapShareParams(shared) {
+  if (!_map) return null;
+  const at = fitIsPanel(_map.key) ? _map.key.slice(6) : shared.findIndex(c => c.id === _map.key);
+  return at === -1 ? null : { mp: String(at), mc: fitChoicesShareParam() };
+}
+// On arrival (js/init.js): the link's choices are taken for this visit, and the map opens as soon
+// as its strategy can be mapped. A code strategy's settings come back with its first run, so the
+// way in is tried again until then, for a minute at most; a reader who opened Fit or a map by
+// hand meanwhile is left alone.
+const MAP_LINK_WAIT = { everyMs: 250, tries: 240 };
+function openSharedMap(key, choicesText) {
+  if (fitIsPanel(key) && !FIT_PANELS[key.slice(6)]) throw new Error('The link names a map of an unknown panel: ' + key.slice(6));
+  if (choicesText) useSharedFitChoices(choicesText);
+  let tries = 0;
+  const attempt = () => {
+    if (_map || _fitWindow) return;
+    openMapWindow(key);
+    if (!_map && ++tries < MAP_LINK_WAIT.tries) setTimeout(attempt, MAP_LINK_WAIT.everyMs);
+  };
+  attempt();
 }
 // Opened from the Fit window. It starts filling itself at once, unless it was done before on the same choices.
 function openMapWindow(key) {
@@ -559,6 +592,7 @@ function onMapWindowClick(e) {
   if (on('[data-map-close]')) { closeMapWindow(true); return; }
   if (on('[data-map-run]')) { if (map.run) stopMapWork(map); else startMapFill(map); return; }
   if (on('[data-map-csv]')) { downloadMapCsv(map); return; }
+  if (on('[data-map-link]')) { shareConfig(); return; }   // the page's share link, which names the open map (mapShareParams)
   if (on('[data-map-clear]')) { pickMapDot(null); return; }
   if (on('[data-map-freeze-reset]')) { setFitFreezeChoices(map.key, {}); refreezeMap(map); return; }
   if (on('[data-map-use]')) useMapDot(map);

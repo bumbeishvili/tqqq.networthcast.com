@@ -2611,6 +2611,8 @@
   /* The day's event: where the money goes at the latest day's close, a line under the card's numbers, its ⓘ beside it (js/saved-configs.js buildConfigPillHtml). */
   .saved-config-pill .sc-event { display: flex; align-items: center; gap: 4px; margin-top: 3px; padding-left: 24px; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
   .saved-config-pill .sc-event-move { font-weight: 700; color: var(--accent-text); white-space: nowrap; }
+  /* On a day without a trade: the fund held now, in the event's place and type, paler. */
+  .saved-config-pill .sc-holding { margin-top: 3px; padding-left: 24px; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; font-weight: 700; color: var(--accent-text); opacity: 0.5; white-space: nowrap; }
   .saved-config-pill .sc-event-move.action-buy { color: var(--green-text); }
   .saved-config-pill .sc-event-move.action-sell { color: var(--red-text); }
   .saved-config-pill.is-hidden { opacity: var(--state-hidden-opacity); }
@@ -4419,7 +4421,7 @@
   .map-old { color: var(--text-muted); }
   .map-new { color: var(--accent-text); font-weight: 700; }
   .map-foot { gap: 10px; }
-  @media (max-width: 420px) { .map-foot { flex-wrap: wrap; } .map-status { flex-basis: 100%; } }   /* a narrow phone: the count on a line of its own over the buttons */
+  @media (max-width: 420px) { .map-foot { flex-wrap: wrap; } .map-run-btn { flex: 1 1 100%; } }   /* a narrow phone: the count, Link and CSV on one line, the button that runs the map on a line of its own under them */
   .map-status { display: inline-flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; }
   .map-count { min-width: 0; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
   .map-csv-btn { flex: none; padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: none; font: inherit; font-size: calc(13px * var(--ui-scale)); font-weight: 600; color: var(--accent-text); cursor: pointer; }
@@ -5171,7 +5173,7 @@
     position: fixed;
     top: 24px;
     right: 24px;
-    z-index: 300;
+    z-index: 500;   /* over the Fit and Map windows (400), whose Link button raises it */
     padding: 8px 16px;
     background: var(--green);
     color: var(--bg);

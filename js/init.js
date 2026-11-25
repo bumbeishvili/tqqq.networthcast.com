@@ -490,5 +490,17 @@
     const base = params.get('sp');
     if (base && typeof openPanelByKey === 'function') openPanelByKey(base);
   }
+  // The settings map that was open when the link was shared (`mp`, `mc`: mapShareParams in
+  // js/settings-map.js): a saved strategy's by its place in the link, a panel's by its name.
+  const mp = params.get('mp');
+  if (mp != null) {
+    const sharedCfg = /^\d+$/.test(mp) && _sharedCfgArr ? _sharedCfgArr[+mp] : null;
+    const mapKey = /^\d+$/.test(mp) ? (sharedCfg ? resolveSharedConfigId(sharedCfg) : null) : 'panel:' + mp;
+    // A link is typed by anyone: one whose map cannot be opened says so in the console, and the page goes on.
+    try {
+      if (!mapKey) throw new Error('The link names the map of a strategy it does not carry (mp=' + mp + ').');
+      openSharedMap(mapKey, params.get('mc'));
+    } catch (err) { console.error(err); }
+  }
   startLivePrices();
 })();
