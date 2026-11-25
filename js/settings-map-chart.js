@@ -23,7 +23,7 @@ class SettingsMapChart {
       id: 'ID' + Math.floor(Math.random() * 1000000),
       svgWidth: 400,
       svgHeight: 360,
-      marginTop: 8,
+      marginTop: 12,       // half a tick label's height on a phone's larger type, so the top label is whole
       marginBottom: 36,
       marginRight: 10,
       marginLeft: 58,      // the tick labels and, along the edge, the y axis' name
@@ -33,6 +33,7 @@ class SettingsMapChart {
       picked: null,        // the picked dot's id: a ring around it
       link: null,          // { x, y }: a second point the picked dot is tied to with a line
       frontier: null,      // [{ x, y }] by x: a step line through them
+      flags: null,         // [{ id, x, y, label }]: named places, each a ring with its name
       xTitle: 'max drawdown',
       yTitle: 'CAGR',
       nowLabel: 'Now',
@@ -89,6 +90,7 @@ class SettingsMapChart {
     this.drawDots();
     this.drawAxes();
     this.drawNow();
+    this.drawFlags();
     this.drawMarks();
     this.drawZoomReset();
     return this;
@@ -126,8 +128,8 @@ class SettingsMapChart {
   // The dots' spread with a little room around it, drawdown never under zero.
   // The zoom then takes its part of that (applyZoom).
   calculateScales() {
-    const { data, now, link, chartWidth, chartHeight, padShare } = this.getState();
-    const points = (data || []).concat(now || [], link || []);
+    const { data, now, link, flags, chartWidth, chartHeight, padShare } = this.getState();
+    const points = (data || []).concat(now || [], link || [], flags || []);
     const spread = (values, floor) => {
       const lo = d3.min(values), hi = d3.max(values), pad = Math.max((hi - lo) * padShare, 1);
       return [Math.max(floor, lo - pad), hi + pad];
@@ -228,6 +230,17 @@ class SettingsMapChart {
     layer._add('text.quarter-label', [].concat(better ? { id: 'better', text: betterLabel, x: 6, y: 6, anchor: 'start' } : [],
       worse ? { id: 'worse', text: worseLabel, x: chartWidth - 6, y: chartHeight - 8, anchor: 'end' } : []))
       .attr('x', d => d.x).attr('y', d => d.y).attr('dy', d => (d.id === 'better' ? '0.7em' : 0)).attr('text-anchor', d => d.anchor).text(d => d.text);
+  }
+
+  // The named places in view: a ring, and the name beside it on the side with room.
+  drawFlags() {
+    const { chart, flags, x, y, chartWidth, chartHeight } = this.getState();
+    const seen = (flags || []).map(f => Object.assign({}, f, { px: x(f.x), py: y(f.y) })).filter(f => f.px >= 0 && f.px <= chartWidth && f.py >= 0 && f.py <= chartHeight);
+    const layer = chart._add('g.flags').attr('pointer-events', 'none');
+    layer._add('circle.flag-ring', seen).attr('cx', f => f.px).attr('cy', f => f.py).attr('r', 5.5);
+    const left = (f) => f.px > 40;   // the name goes left of the ring, away from the name of the settings as they are
+    layer._add('text.flag-label', seen).attr('x', f => f.px + (left(f) ? -8 : 8)).attr('y', f => f.py + (f.py > 16 ? -8 : 14))
+      .attr('text-anchor', f => (left(f) ? 'end' : 'start')).text(f => f.label);
   }
 
   // The picked dot's ring, its line to `link`, and the ring under the pointer.

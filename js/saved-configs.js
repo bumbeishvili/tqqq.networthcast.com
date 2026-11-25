@@ -3013,7 +3013,7 @@ function buildNativeSettingsHeaderHtml(type) {
   const atDefaults = paramsEqual(captureParams(type), strategyDefaultParams(type, savedConfigInPanel(type)), type);
   const note = _fitNotes[key] ? buildFitNoteHtml(_fitNotes[key]) : '';
   return `<div class="strategy-panel-section-label settings-head"><span>Settings</span><span class="settings-actions">`
-    + `${FIT_PANELS[type] ? buildFitButtonHtml(key) + buildMapButtonHtml(key) : ''}`
+    + `${FIT_PANELS[type] ? buildFitButtonHtml(key) : ''}`
     + `<button type="button" class="settings-reset-btn" data-sc-reset="${type}"${atDefaults || (_fit && _fit.key === key) ? ' disabled' : ''}>Reset to default</button>`
     + `</span></div>${note}`;
 }
@@ -4210,6 +4210,16 @@ async function fitFewest(state, space, cur, quest, found, begun) {
   state.top = better(top.result, result) ? { r: top.result, count: top.count } : null;
   return result;
 }
+// What a plan asks of the search, as fitBetter reads it. floor: the drawdown goal's floor (fitFloor).
+const fitRuleOf = (plan, floor) => ({ goal: plan.goal, plateau: plan.plateau, minFinal: plan.goal === 'dd' ? floor.final : -Infinity,
+  maxDd: plan.goal === 'cagr' && plan.limit != null ? plan.limit / 100 : Infinity });
+// The settings as a plan's search takes them: round values alone for a round fit, with their
+// neighbours on a plateau. Every setting keeps its whole list (all): a plateau reads a value's
+// neighbours off it, also those a round fit leaves out.
+function fitSpaceOf(plan, space) {
+  const whole = space.map(s => Object.assign({ all: s.values }, s)), rounded = plan.round ? whole.map(fitRoundSetting) : whole;
+  return plan.plateau ? rounded.map(fitPlateauSetting) : rounded;
+}
 // One fit from start to the result note: runs the search, sets what it found
 // (job.apply), and writes the change list. job.plan: what the Fit window asked
 // for; job.floor: the drawdown goal's floor (fitFloor).
@@ -4219,14 +4229,10 @@ async function fitRun(job) {
     base: 0, span: plan.fewest ? 1 - FIT_FEWEST_STEP : 1 };
   delete _fitNotes[job.key];
   render();
-  const rule = { goal: plan.goal, plateau: plan.plateau, minFinal: plan.goal === 'dd' ? job.floor.final : -Infinity,
-    maxDd: plan.goal === 'cagr' && plan.limit != null ? plan.limit / 100 : Infinity };
-  const quest = { rule, measure: job.measure, cagrOf: job.cagrOf };
+  const rule = fitRuleOf(plan, job.floor), quest = { rule, measure: job.measure, cagrOf: job.cagrOf };
   const before = Object.assign({}, job.cur);
   const start = await job.measure(Object.assign({}, before));
-  // Every setting keeps its whole list (all): a plateau reads a value's neighbours off it, also those a round fit leaves out.
-  const whole = job.space.map(s => Object.assign({ all: s.values }, s)), rounded = plan.round ? whole.map(fitRoundSetting) : whole;
-  const space = plan.plateau ? rounded.map(fitPlateauSetting) : rounded;
+  const space = fitSpaceOf(plan, job.space);
   if (plan.round) space.forEach(s => { job.cur[s.id] = s.snap(job.cur[s.id]); });
   // Where the search begins, one of the sets the fewest settings are picked from: the settings as
   // they are, or on round numbers their round neighbours; with the result the fit judges them by.
@@ -4385,21 +4391,24 @@ function fitJobFor(key) {
 }
 // Is the search of a key still going on? What a panel's runs ask between two of them.
 const fitLive = () => !!_fit && !_fit.stopped;
-// Fit from the window's plan. The drawdown goal's floor: the least CAGR typed, else buy & hold of
-// the fund a code strategy holds most, or of the fund a panel buys.
+// Fit from the window's plan.
 async function runFit(key, plan) {
   if (_fit) return;
   const found = fitJobFor(key);
   if (!found) return;
   if (found.frozen) { fitNothingFree(key); return; }
-  const { job } = found;
-  let floor = null;
-  if (plan.goal === 'dd') {
-    const hold = plan.limit != null ? null : fitIsPanel(key) ? fitPanelHold(key.slice(6)) : fitHurdle(savedConfigs.find(c => c.id === key));
-    if (hold && !(hold.final > 0)) { fitNoHurdle(key, hold.fund); return; }
-    floor = fitFloor(plan, job.cagrOf, hold);
-  }
-  await fitRun({ ...job, ...job.start(fitLive), plan, floor });
+  const { job } = found, floor = fitFloorFor(key, plan, job.cagrOf);
+  if (floor.lacking) { fitNoHurdle(key, floor.fund); return; }
+  await fitRun({ ...job, ...job.start(fitLive), plan, floor: floor.floor });
+}
+// The drawdown goal's floor for a key and a plan: the least CAGR typed, else buy & hold of the
+// fund a code strategy holds most, or of the fund a panel buys. { floor } (null for the CAGR goal), or
+// { lacking: true, fund } when no least CAGR was typed and there is no buy & hold line to beat.
+function fitFloorFor(key, plan, cagrOf) {
+  if (plan.goal !== 'dd') return { floor: null };
+  const hold = plan.limit != null ? null : fitIsPanel(key) ? fitPanelHold(key.slice(6)) : fitHurdle(savedConfigs.find(c => c.id === key));
+  if (hold && !(hold.final > 0)) return { lacking: true, fund: hold.fund };
+  return { floor: fitFloor(plan, cagrOf, hold) };
 }
 // Buy & hold of the fund a panel buys, with the chart's money.
 function fitPanelHold(type) {
@@ -4484,9 +4493,12 @@ function buildFitButtonHtml(key) {
 }
 // ---- The Fit window ----
 // What to freeze first, then the choices in the order they are made (FIT_ROWS, the goal's limit
-// after the goal), then Run. It opens on the choices of the last fit (fitChoices). The limit's
+// after the goal), then Map and Run. It opens on the choices of the last fit (fitChoices). The limit's
 // row follows the goal: "Max drawdown" for CAGR, "Min CAGR" for Drawdown, each keeping what was
 // typed for it.
+// Beside Run, "Map" opens the settings map (js/settings-map.js) in the window's place: the user
+// (2026-11-25): "i want that map button inside fit modal".
+const FIT_MAP_TIP = 'Opens the map: every set of settings as a dot, by its max drawdown and its CAGR. It searches for new sets by itself, with the settings frozen here left as they are.';
 // What is being fitted, for the window's head: a strategy's name, a built-in panel's label.
 const fitKeyName = (key) => fitIsPanel(key) ? BASE_LABELS[key.slice(6)] : savedConfigs.find(c => c.id === key).name;
 function buildFitWindowHtml(key, choices, freezeOpen) {
@@ -4502,7 +4514,8 @@ function buildFitWindowHtml(key, choices, freezeOpen) {
     + `<div class="modal-content fit-window" role="dialog" aria-modal="true" aria-label="Fit">`
     + `<div class="fit-window-head"><h3>Fit</h3><span class="fit-window-name">${_escHtml(fitKeyName(key))}</span><button type="button" class="modal-close" data-fit-close aria-label="Close">×</button></div>`
     + `<div class="fit-window-body">${buildFitFreezeHtml(key, freezeOpen)}${pair(goal)}${limitRow}${rest.map(pair).join('')}</div>`
-    + `<div class="fit-window-foot"><button type="button" class="fit-run-btn" data-fit-run>Run</button></div></div>`;
+    + `<div class="fit-window-foot"><button type="button" class="fit-map-btn" data-fit-map title="${_escHtml(FIT_MAP_TIP)}">Map</button>`
+    + `<button type="button" class="fit-run-btn" data-fit-run>Run</button></div></div>`;
 }
 function openFitWindow(key) {
   closeFitWindow();
@@ -4915,7 +4928,7 @@ function renderCustomPanelBody(cfgId) {
     const atDefaults = schema.every(sp => sp.id == null || String(customParamValue(cfg, sp)) === String(coerceCustomVal(sp, sp.default)));
     const fitNote = _fitNotes[cfg.id] ? buildFitNoteHtml(_fitNotes[cfg.id]) : '';
     html += `<div class="strategy-panel-section-label settings-head" style="margin-top:14px"><span>Settings</span>`
-      + `<span class="settings-actions">${buildFitButtonHtml(cfg.id)}${buildMapButtonHtml(cfg.id)}`
+      + `<span class="settings-actions">${buildFitButtonHtml(cfg.id)}`
       + `<button type="button" class="settings-reset-btn" data-custom-reset="${_escHtml(cfg.id)}"${atDefaults || (_fit && _fit.key === cfg.id) ? ' disabled' : ''}>Reset to default</button></span></div>${fitNote}${controls}`;
   }
 
@@ -5144,11 +5157,12 @@ document.addEventListener('click', (e) => {
   if (reset) { resetPanelToDefaults(reset.getAttribute('data-sc-reset')); return; }
   const resetCustom = e.target.closest('[data-custom-reset]');
   if (resetCustom) { resetCustomToDefaults(resetCustom.getAttribute('data-custom-reset')); return; }
-  // The Fit window: a choice, Run, its Freeze list (the head opens and closes it, Reset goes back to the usual ones), and the ways out.
+  // The Fit window: a choice, Run, Map, its Freeze list (the head opens and closes it, Reset goes back to the usual ones), and the ways out.
   if (_fitWindow && e.target.closest('.fit-modal')) {
     const choice = e.target.closest('[data-fit-choice]');
     if (choice) { setFitChoice(choice.getAttribute('data-fit-choice'), choice.getAttribute('data-fit-value')); showFitWindow(); return; }
     if (e.target.closest('[data-fit-run]')) { runFitWindow(); return; }
+    if (e.target.closest('[data-fit-map]')) { const { key } = _fitWindow; closeFitWindow(); openMapWindow(key); return; }
     if (e.target.closest('[data-fit-freeze-toggle]')) { _fitWindow.freezeOpen = !_fitWindow.freezeOpen; showFitWindow(); return; }
     if (e.target.closest('[data-fit-freeze-reset]')) { setFitFreezeChoices(_fitWindow.key, {}); showFitWindow(); return; }
     if (e.target.closest('[data-fit-close]')) closeFitWindow();

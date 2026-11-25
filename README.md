@@ -20,7 +20,7 @@ $10K plus $500 a month from 2010: TQQQ vs QQQ + Turnaround Monday from the libra
 
 ![A strategy's panel docked beside the chart](images/readme-strategy-panel.png)
 
-A library strategy's settings read as sentences. Every dropdown shows what each value would have made, and Fit searches them. Its window asks, in order: what to freeze, CAGR or drawdown, the limit the other one has to keep, a cliff or a plateau, round or any numbers, the fewest or any settings. Map, beside it, draws every set of settings that has been run as a dot, max drawdown across and CAGR up, with dashed lines through the settings as they are: Run fills it for a minute, a picked dot lists what differs and can be set with Use. Fit and Map share their runs, so each makes the other quicker.
+A library strategy's settings read as sentences. Every dropdown shows what each value would have made, and Fit searches them. Its window asks, in order: what to freeze, CAGR or drawdown, the limit the other one has to keep, a cliff or a plateau, round or any numbers, the fewest or any settings. Map, in that window, draws every set of settings that has been run as a dot, max drawdown across and CAGR up, with dashed lines through the settings as they are. It fills itself from the moment it opens: every setting at each of its values, the search the window is set to (as a cliff and as a plateau, each result marked Fit), then new sets bred from the best found, until nothing new shows. A picked dot lists what differs and can be set with Use. Fit and Map share their runs, so each makes the other quicker.
 
 ![The signal chart inside the panel](images/readme-signal-chart.png)
 
