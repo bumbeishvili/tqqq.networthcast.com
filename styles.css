@@ -4259,7 +4259,7 @@
     background: rgba(134, 118, 255, 0.08);
   }
   .settings-reset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-  /* Fit (js/saved-configs.js buildFitButtonHtml): beside Reset to default, with its goal menu and result line. */
+  /* Fit (js/saved-configs.js buildFitButtonHtml): beside Reset to default, with its window and result line. */
   .settings-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .settings-actions { display: inline-flex; align-items: center; gap: 8px; }
   .settings-fit-wrap { display: inline-flex; align-items: center; gap: 3px; }
@@ -4268,17 +4268,41 @@
     /* fills left to right as the search runs (js/saved-configs.js fitShowProgress) */
     background: linear-gradient(to right, rgba(134, 118, 255, 0.18) var(--fit-pct, 0%), transparent var(--fit-pct, 0%));
   }
-  .fit-menu { padding: 4px; }
-  .fit-menu-item { display: flex; flex-direction: column; gap: 2px; max-width: 280px; padding: 7px 9px; border-radius: 6px; cursor: pointer; }
-  .fit-menu-item:hover { background: rgba(134, 118, 255, 0.08); }
-  .fit-menu-item b { font-size: calc(12px * var(--ui-scale)); color: var(--text); }
-  /* "Freeze" under the goals (js/saved-configs.js buildFitFreezeHtml): a head that opens the strategy's sentences, a tick box on each value. */
-  .fit-freeze { max-width: 280px; margin-top: 4px; padding-top: 4px; border-top: 1px solid var(--border); }
-  .fit-freeze-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 9px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: left; cursor: pointer; }
+  /* The Fit window (js/saved-configs.js buildFitWindowHtml): a small dialog on the modal's backdrop. What to freeze, then a row
+     for each choice in the order it is made, the name left and its two options right, then Run. On a phone it is as wide as
+     the screen less a margin, and its body scrolls when the Freeze list is open. */
+  /* over the strategy panel it is opened from (150; on a phone the panel fills the screen), under the tooltips (10000) */
+  .fit-modal { z-index: 400; }
+  .fit-window { width: min(400px, calc(100vw - 24px)); height: auto; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); }
+  .fit-window-head { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px 8px; }
+  .fit-window-head h3 { margin: 0; font-size: calc(15px * var(--ui-scale)); color: var(--text); }
+  .fit-window-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11.5px * var(--ui-scale)); color: var(--text-muted); }
+  .fit-window-head .modal-close { flex: none; align-self: center; }
+  .fit-window-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 4px; }
+  .fit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--border); }
+  .fit-row-name { display: inline-flex; flex: none; align-items: center; font-size: calc(12px * var(--ui-scale)); color: var(--text); white-space: nowrap; }
+  /* the two options of a choice, side by side; the chosen one filled */
+  .fit-seg { display: inline-flex; flex: none; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
+  .fit-seg-btn { min-width: calc(66px * var(--ui-scale)); padding: 5px 10px; border: 0; background: none; font: inherit; font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); cursor: pointer; }
+  .fit-seg-btn + .fit-seg-btn { border-left: 1px solid var(--border); }
+  .fit-seg-btn:hover { color: var(--text); background: rgba(134, 118, 255, 0.08); }
+  .fit-seg-btn.on { background: var(--accent); color: var(--bg); font-weight: 600; }
+  /* the limit: a number and its percent sign in one box, as wide as a pair of options */
+  .fit-limit { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 4px; box-sizing: border-box; width: calc(2 * 66px * var(--ui-scale) + 3px); min-width: 0; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; }   /* gives way to its name on a 320px phone */
+  .fit-limit:focus-within { border-color: var(--accent); }
+  .fit-limit input { flex: 1; min-width: 0; padding: 5px 0; border: 0; outline: 0; background: none; font-family: 'JetBrains Mono', monospace; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: right; }
+  .fit-limit input::placeholder { color: var(--text-muted); font-family: inherit; opacity: 0.8; }
+  .fit-limit-unit { font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); }
+  .fit-window-foot { padding: 10px 14px 12px; border-top: 1px solid var(--border); }
+  .fit-run-btn { width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--accent); font: inherit; font-size: calc(13px * var(--ui-scale)); font-weight: 600; color: var(--bg); cursor: pointer; }
+  .fit-run-btn:hover { filter: brightness(1.06); }
+  /* "Freeze" at the window's top (js/saved-configs.js buildFitFreezeHtml): a head that opens the strategy's sentences, a tick box on each value. */
+  .fit-freeze { padding-bottom: 2px; }
+  .fit-freeze-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 0; border: 0; border-radius: 6px; background: none; font: inherit; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: left; cursor: pointer; }
   .fit-freeze-head:hover { background: rgba(134, 118, 255, 0.08); }
   .fit-freeze-arrow { width: 10px; color: var(--text-muted); }
   .fit-freeze-notice { margin-left: auto; font-size: calc(10.5px * var(--ui-scale)); color: var(--accent-text); }   /* "2 changed": ticks that differ from the defaults */
-  .fit-freeze-body { padding: 0 9px 6px; font-size: calc(11px * var(--ui-scale)); line-height: 2; color: var(--text-muted); }
+  .fit-freeze-body { padding: 0 0 6px; font-size: calc(11px * var(--ui-scale)); line-height: 2; color: var(--text-muted); }
   /* a section's name, as .custom-param-group writes it in Settings */
   .fit-freeze-section { margin: 6px 0 0; font-size: calc(9px * var(--ui-scale)); font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; line-height: 1.6; }
   .fit-freeze-glued { white-space: nowrap; }   /* a value and the text touching it stay on one line */

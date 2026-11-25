@@ -20,7 +20,7 @@ $10K plus $500 a month from 2010: TQQQ vs QQQ + Turnaround Monday from the libra
 
 ![A strategy's panel docked beside the chart](images/readme-strategy-panel.png)
 
-A library strategy's settings read as sentences. Every dropdown shows what each value would have made, and Fit searches them for the best CAGR, or the lowest drawdown that still beats buy & hold.
+A library strategy's settings read as sentences. Every dropdown shows what each value would have made, and Fit searches them. Its window asks, in order: what to freeze, CAGR or drawdown, the limit the other one has to keep, a cliff or a plateau, round or any numbers, the fewest or any settings.
 
 ![The signal chart inside the panel](images/readme-signal-chart.png)
 

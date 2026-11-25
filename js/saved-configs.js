@@ -3423,13 +3423,14 @@ function cpFillBars(popup, finals) {
 }
 
 // ---- Fit: search a strategy's settings for the best CAGR or lowest drawdown ----
-// The user (2026-11-04): a Fit dropdown in the sidebar, "Best CAGR" and
-// "Lowest drawdown", that finds the best settings and sets them. "Lowest
-// drawdown" counts only settings whose final value beats buy & hold of the
-// fund the strategy holds most (the user's pick: the plain lowest drawdown
-// ends in cash). Settings marked fit: false (trading cost, cash interest, how
-// a switch is executed) stay as they are unless the user unfreezes them, and
-// any other setting can be frozen ("Fit: frozen settings" below, "Freeze" in the menu).
+// The user (2026-11-04): a Fit button in the sidebar, "Best CAGR" and "Lowest
+// drawdown", that finds the best settings and sets them. Since 2026-11-25 the
+// button opens a window with the choices in the order they are made ("What a
+// fit is asked for" below): what to freeze, the goal, the limit the other
+// measure has to keep, cliff or plateau, round or any numbers, the fewest or
+// any settings, then Run. Settings marked fit: false (trading cost, cash
+// interest, how a switch is executed) stay as they are unless the user
+// unfreezes them, and any other setting can be frozen ("Fit: frozen settings").
 //
 // The search runs on the chart's current period and money, like the bar
 // previews. Each setting in turn tries every option with the others held and
@@ -3437,20 +3438,21 @@ function cpFillBars(popup, finals) {
 // setting tries the values between its pick and the options next to it (whole
 // numbers for whole-number lists, fifths of the gap otherwise), so the result
 // can land between the dropdown's options. The runs go to a pool of sandbox
-// workers, one per spare core. "Lowest drawdown" then runs the whole search
-// again with the drawdown held where it landed (to FIT_DD_TOL) for the
-// highest CAGR within it (the user, 2026-11-05: "highest cagr for lowest
-// drawdown that beats buy hold"); before that, CAGR broke only exact ties.
+// workers, one per spare core. The drawdown goal counts only settings over
+// its floor: the least CAGR typed in the window, else buy & hold of the fund
+// the strategy holds most (the user's pick: the plain lowest drawdown ends in
+// cash). It then runs the whole search again with the drawdown held where it
+// landed (to FIT_DD_TOL) for the highest CAGR within it (the user,
+// 2026-11-05: "highest cagr for lowest drawdown that beats buy hold");
+// before that, CAGR broke only exact ties.
 const FIT_MAX_PASSES = 4;
 const FIT_JOB_TIMEOUT_MS = 15000;
 const FIT_BETWEEN_MAX = 20;   // values tried on each side of a pick, between the options
 const FIT_DD_TOL = 0.001;     // the second stage's room over the drawdown found: 0.1 of a point, what the note shows
-const FIT_GOALS = {
-  cagr: { label: 'Best CAGR', tip: "The settings with the highest CAGR on the chart's period." },
-  dd:   { label: 'Lowest drawdown', tip: 'The smallest max drawdown among settings that still beat buy & hold, then the highest CAGR at that drawdown.' },
-};
+const FIT_LIMIT_RETRIES = 3;  // tries at getting past a rest short of the limit (fitSearch)
+const FIT_LIMIT_EASE = 0.05;  // how much each try eases the limit under where the settings stand
 let _fit = null;          // the running search: { key, goal, phase, round, done, total, stopped, close }
-let _fitMenu = null;      // { menu, btn, key } while the goal menu is open
+let _fitWindow = null;    // { el, key, choices, freezeOpen } while the Fit window is open
 // key (a code strategy's cfg id, or "panel:9sig" / "panel:sma") -> the last
 // fit's result { text, changes: [{ label, from, to }] }, until a setting is changed by hand
 const _fitNotes = {};
@@ -3624,26 +3626,88 @@ function fitScore(msg) {
   return { final, dd: dd.pct };
 }
 
-// Is a better than b for the goal? A failed run is never better. With the
-// drawdown goal a setting over the hurdle beats one under it; under it the
-// higher final value wins, so a search that starts under the hurdle climbs.
-// The drawdown goal's second stage ('cagrAt') keeps the drawdown found, up to
-// ddCap, and takes the higher final value within it.
-function fitBetter(goal, a, b, hurdle, ddCap) {
+// Is a better than b by the rule? rule: { goal, minFinal, maxDd, ddCap }. A failed run is never
+// better.
+// goal 'cagr': the higher final value wins among results whose drawdown is within maxDd
+// (Infinity: any drawdown). One within it beats one past it; past it the smaller drawdown wins,
+// so a search that starts past the limit comes down to it.
+// goal 'dd': the smaller drawdown wins among results over minFinal, the final value the least
+// acceptable CAGR stands for. One over it beats one under it; under it the higher final value
+// wins, so a search that starts under it climbs.
+// goal 'cagrAt', the drawdown goal's second stage: keeps the drawdown found, up to ddCap, and
+// takes the higher final value within it.
+function fitBetter(rule, a, b) {
   if (!a) return false;
   if (!b) return true;
   const more = a.final > b.final * (1 + 1e-9), sameFinal = Math.abs(a.final - b.final) <= b.final * 1e-9;
-  if (goal === 'cagr') return more || (sameFinal && a.dd < b.dd - 1e-9);
-  const aOver = a.final > hurdle, bOver = b.final > hurdle;
+  const shallower = a.dd < b.dd - 1e-9, sameDd = Math.abs(a.dd - b.dd) <= 1e-9;
+  if (rule.goal === 'cagr') {
+    const aIn = a.dd <= rule.maxDd, bIn = b.dd <= rule.maxDd;
+    if (aIn !== bIn) return aIn;
+    return aIn ? more || (sameFinal && shallower) : shallower || (sameDd && more);
+  }
+  const aOver = a.final > rule.minFinal, bOver = b.final > rule.minFinal;
   if (aOver !== bOver) return aOver;
   if (!aOver) return more;
-  if (goal === 'cagrAt') {
-    const aIn = a.dd <= ddCap, bIn = b.dd <= ddCap;
+  if (rule.goal === 'cagrAt') {
+    const aIn = a.dd <= rule.ddCap, bIn = b.dd <= rule.ddCap;
     if (aIn !== bIn) return aIn;
-    return aIn ? more || (sameFinal && a.dd < b.dd - 1e-9) : a.dd < b.dd - 1e-9;
+    return aIn ? more || (sameFinal && shallower) : shallower;
   }
-  return a.dd < b.dd - 1e-9 || (Math.abs(a.dd - b.dd) <= 1e-9 && more);
+  return shallower || (sameDd && more);
 }
+// Does a result meet the rule's limit: a drawdown within maxDd for 'cagr', a final value over minFinal for 'dd'?
+const fitReached = (rule, r) => !!r && (rule.goal === 'cagr' ? r.dd <= rule.maxDd : r.final > rule.minFinal);
+
+// ---- Plateau ----
+// The Fit window's "Plateau" (the user, 2026-11-25: "then I am choosing if I want a cliff or
+// plateau"). A cliff fit takes each result on its own word, so it can settle on one high bar
+// between low ones. A plateau fit judges a value by its neighbours as well: by the lowest final
+// value and the deepest drawdown among the value and the setting's values near it, the others
+// held. A value's neighbours are the setting's other numeric choices within FIT_PLATEAU_REACH of
+// it either way, and the nearest one on each side however far (a list's end has one side). A
+// named choice (a fund, Yes/No, Off) has none and stands for itself.
+// What a plateau fit goes by, reports and holds to its limit (fitFlatAt) is the worst over every
+// setting's neighbours at once, one setting moved at a time. The values between a dropdown's
+// options are not tried: they tune to a peak.
+const FIT_PLATEAU_REACH = 0.1;
+const FIT_PLATEAU_CHECKS = 3;   // values of one setting checked with every setting's neighbours before a round moves on
+// The worst of several results, measure by measure; null when there is none.
+function fitWorst(results) {
+  const ok = results.filter(Boolean);
+  return ok.length ? { final: d3.min(ok, r => r.final), dd: d3.max(ok, r => r.dd) } : null;
+}
+// One setting of a plateau fit: near(v) lists a value's neighbours, scan every value a round measures
+// along it (the candidates and their neighbours, which a round fit's candidates leave out).
+function fitPlateauSetting(s) {
+  const numbered = s.all.map(v => ({ v, x: s.number(v) })).filter(o => o.x != null).sort((a, b) => a.x - b.x);
+  const near = (v) => {
+    const x = s.number(v);
+    if (x == null) return [];
+    const reach = FIT_PLATEAU_REACH * Math.abs(x), below = numbered.filter(o => o.x < x), above = numbered.filter(o => o.x > x);
+    const side = (others, nearest) => { const within = others.filter(o => Math.abs(o.x - x) <= reach); return within.length ? within : nearest ? [nearest] : []; };
+    return side(below, below[below.length - 1]).concat(side(above, above[0])).map(o => o.v);
+  };
+  const scan = [...new Map(s.values.flatMap(v => [v].concat(near(v))).map(v => [String(v), v])).values()];
+  return Object.assign({}, s, { near, scan, between: () => [] });
+}
+// A set of values as a plateau fit judges it: the worst of its own result and of every neighbour
+// of every setting, one setting moved at a time. own: its own result. low and deep: the neighbour
+// with the lowest final value and the one with the deepest drawdown, the setting moved and the
+// value it stands at ({ id, value }; label and to as the note names them), or null where the
+// settings' own result is the worst. null when its own run failed.
+async function fitFlatAt(space, values, measure) {
+  const own = await measure(Object.assign({}, values));
+  if (!own) return null;
+  const moves = space.flatMap(s => s.near(values[s.id]).map(v => ({ s, v })));
+  const results = await Promise.all(moves.map(m => measure(Object.assign({}, values, { [m.s.id]: m.v }))));
+  const met = moves.map((m, i) => Object.assign(m, { r: results[i] })).filter(m => m.r);
+  const spot = (m, worse) => (m && worse(m.r) ? { id: m.s.id, value: m.v, label: m.s.label, to: m.s.text(m.v) } : null);
+  return Object.assign(fitWorst(results.concat(own)), { own,
+    low: spot(d3.least(met, m => m.r.final), r => r.final < own.final), deep: spot(d3.greatest(met, m => m.r.dd), r => r.dd > own.dd) });
+}
+// A set of values as the fit judges it: on a plateau with its neighbours, else by its own run.
+const fitJudge = (quest, space, values) => quest.rule.plateau ? fitFlatAt(space, values, quest.measure) : quest.measure(Object.assign({}, values));
 
 // A value as the dropdown stores it (strings, booleans as they are).
 const fitStored = (v) => typeof v === 'boolean' ? v : String(v);
@@ -3672,25 +3736,80 @@ function fitBetween(sp, picked) {
   return [...out].map(fitStored);
 }
 
-// ---- Round fit ----
-// The user (2026-11-21): "add option for fit, but in rounded numbers". Each
-// goal has a second menu entry that runs the same search over round values
-// only, by the rule the library's defaults were rounded with (2026-11-04):
-// from 10 up a multiple of 5; under 10 a whole number, or a half where the
-// setting's list has decimals; under 1 only 0 or 0.5. A value is judged by the
-// number it stands for (space[].number); a named choice ("Off", a fund,
-// Yes/No) has none and stays in the search. (FIT_VARIANTS.round)
-// A goal's other ways of searching, each its own menu entry: on round values (round), for the
-// fewest settings (fewest, "Fewest settings" below), or both (the user, 2026-11-23: "one option
-// with fit - fewest parameter with rounded numbers").
-const FIT_VARIANTS = {
-  round: { label: 'round numbers', round: true, tip: 'The same search on round values only: multiples of 5 from 10 up, whole or half numbers below.' },
-  fewest: { label: 'fewest settings', fewest: true, tip: 'The same search, then the fewest settings that keep 95% of the best result found: settings are taken out one by one, the rest tuned again, and the search repeated from what is left. Takes about ten times as long.' },
-  fewestRound: { label: 'fewest settings, round numbers', fewest: true, round: true, tip: 'The search for the fewest settings, on round values only: multiples of 5 from 10 up, whole or half numbers below.' },
+// ---- What a fit is asked for ----
+// The user (2026-11-25): "Fit is clearly hierarchical, so can we treat it that way, let's make a
+// fit a modal, where, I'll have option what to freeze, then ... first I am choosing what I am
+// optimizing for, CAGR or drawdown, then ... min acceptable cagr or max acceptable drawdown, then
+// ... a cliff or plateau, then ... round numbers or whatever is most optimal, then ... fewest
+// settings or optimal settings. And then finally I will click run for fitting." Before that the
+// Fit menu listed eight ready combinations (two goals, each plain, on round numbers, for the
+// fewest settings, or both).
+// A plan is what the window hands the search:
+//   goal     'cagr': the highest CAGR. 'dd': the smallest max drawdown, then the highest CAGR at it.
+//   limit    what the other measure has to keep, in percent, or null. For 'cagr' the deepest
+//            drawdown accepted (null: any). For 'dd' the least CAGR accepted (null: more than
+//            buy & hold of the fund the strategy holds most, the user's pick of 2026-11-04).
+//   plateau  false ("Cliff"): the best result, however narrow the peak it stands on. true: a
+//            value is judged with its neighbours ("Plateau" above).
+//   round    only round values ("Round fit" below).
+//   fewest   the fewest settings that keep 95% of the best found ("Fewest settings" below).
+// The window's choices as they are kept (FIT_CHOICES_KEY): the two limits as typed, one for each goal.
+const FIT_CHOICES_KEY = 'tqqq_fit_choices_v1';
+const FIT_CHOICES_DEFAULT = { goal: 'cagr', maxDd: '', minCagr: '', shape: 'cliff', numbers: 'optimal', settings: 'optimal' };
+// The limit that goes with each goal: which of the choices holds it, its name and what an empty box means.
+const FIT_LIMITS = {
+  cagr: { id: 'maxDd', name: 'Max drawdown', empty: 'any',
+    tip: 'Only settings whose max drawdown is no deeper than this count. Empty: any drawdown.' },
+  dd: { id: 'minCagr', name: 'Min CAGR', empty: 'buy & hold',
+    tip: 'Only settings that make at least this much a year count. Empty: they have to beat buy & hold of the fund the strategy holds most.' },
 };
-const fitGoalLabel = (goal, variant) => FIT_GOALS[goal].label + (variant ? ', ' + FIT_VARIANTS[variant].label : '');
-// What a variant asks of the search: { round, fewest }; neither for the plain goal ('').
-const fitVariant = (variant) => variant ? FIT_VARIANTS[variant] : {};
+// The rows of two choices, in the order they are made; the limit's row comes after the first.
+const FIT_ROWS = [
+  { id: 'goal', name: 'Optimize', options: [['cagr', 'CAGR'], ['dd', 'Drawdown']],
+    tip: "CAGR: the settings with the highest CAGR on the chart's period and money. Drawdown: the smallest max drawdown, then the highest CAGR at that drawdown." },
+  { id: 'shape', name: 'Shape', options: [['cliff', 'Cliff'], ['plateau', 'Plateau']],
+    tip: 'Cliff: the best result, however narrow the peak it stands on. Plateau: each value is judged by the worst result among it and the values within a tenth of it either way, so the result holds when a setting is a little off. The limit then has to hold for those neighbours too.' },
+  { id: 'numbers', name: 'Numbers', options: [['round', 'Round'], ['optimal', 'Optimal']],
+    tip: 'Round: multiples of 5 from 10 up, whole or half numbers below. Optimal: any value, on a cliff also the ones between a dropdown\'s options.' },
+  { id: 'settings', name: 'Settings', options: [['fewest', 'Fewest'], ['optimal', 'Optimal']],
+    tip: 'Fewest: the fewest settings that keep 95% of the best result found; settings are taken out one by one, the rest tuned again, and the search repeated. Takes about ten times as long. Optimal: every setting may be in use.' },
+];
+// What was typed as a limit: a number over zero, else none.
+const fitLimitOf = (text) => { const n = parseFloat(String(text).replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; };
+const fitPlanOf = (choices) => ({ goal: choices.goal, limit: fitLimitOf(choices[FIT_LIMITS[choices.goal].id]),
+  plateau: choices.shape === 'plateau', round: choices.numbers === 'round', fewest: choices.settings === 'fewest' });
+// The choices of the last fit, for the window to open on. localStorage can be missing or throw (private mode): the defaults then.
+function fitChoices() {
+  let kept = null;
+  try { kept = JSON.parse(localStorage.getItem(FIT_CHOICES_KEY)); } catch (e) {}
+  return Object.assign({}, FIT_CHOICES_DEFAULT, kept);
+}
+function keepFitChoices(choices) { try { localStorage.setItem(FIT_CHOICES_KEY, JSON.stringify(choices)); } catch (e) {} }
+// The final value a CAGR stands for on the chart's period and money: cagrOf goes from a final value
+// to its CAGR and rises with it, so the value is found by halving, over powers of ten.
+const FIT_FINAL_POWERS = [-2, 60];
+function fitFinalAtCagr(cagrOf, pct) {
+  let [lo, hi] = FIT_FINAL_POWERS;
+  for (let k = 0; k < 80; k++) { const mid = (lo + hi) / 2; if (cagrOf(Math.pow(10, mid)) < pct) lo = mid; else hi = mid; }
+  return Math.pow(10, hi);
+}
+// The drawdown goal's floor: the final value a result has to end over, and the words the note
+// puts it in. The least CAGR typed in the window, else buy & hold of the fund held most
+// (hold: { fund, final }).
+function fitFloor(plan, cagrOf, hold) {
+  if (plan.limit != null) return { final: fitFinalAtCagr(cagrOf, plan.limit), ask: `at ${plan.limit}% a year or more`, short: `make less than ${plan.limit}% a year`, none: `made ${plan.limit}% a year` };
+  const bh = `buy & hold ${hold.fund.toUpperCase()} (${cagrOf(hold.final).toFixed(1)}% a year)`;
+  return { final: hold.final, ask: `that still beats ${bh}`, short: `don't beat ${bh}`, none: `beat ${bh}` };
+}
+
+// ---- Round fit ----
+// The user (2026-11-21): "add option for fit, but in rounded numbers". A round
+// fit runs the same search over round values only, by the rule the library's
+// defaults were rounded with (2026-11-04): from 10 up a multiple of 5; under
+// 10 a whole number, or a half where the setting's list has decimals; under 1
+// only 0 or 0.5. A value is judged by the number it stands for
+// (space[].number); a named choice ("Off", a fund, Yes/No) has none and stays
+// in the search.
 function fitIsRound(x, halves) {
   const a = Math.abs(x);
   if (a >= 10) return a % 5 === 0;
@@ -3738,7 +3857,9 @@ function fitPercent(f) {
   // The drawdown goal's two stages split the percentage in half. A search for the fewest settings is
   // many searches in a row: each has its stretch of the whole (f.base, f.span).
   const stages = f.stages || 1, stage = f.stage || 1;
-  return Math.min(99, Math.floor(100 * (f.base + f.span * (stage - 1 + share) / stages)));
+  // It never goes back: a search that starts its rounds again (a retry short of the limit) holds the percentage it had (f.most).
+  f.most = Math.max(f.most || 0, Math.min(99, Math.floor(100 * (f.base + f.span * (stage - 1 + share) / stages))));
+  return f.most;
 }
 function fitProgressText(f) { return `Fitting ${fitPercent(f)}% · Stop`; }
 // What the search is doing now, on hover.
@@ -3763,23 +3884,62 @@ function fitShowProgress() {
 // The search, shared by code strategies and the built-in panels. space lists
 // the settings it may change: { id, values, between(v) } with each setting's
 // candidate values and the values between the options next to a pick (none
-// for a built-in <select>, which can only hold its options). measure(values)
-// resolves to { final, dd } or null. cur holds every setting, is where the
-// search starts, and ends on the search's picks. Resolves to the best result.
-async function fitSearch(state, space, cur, measure, goal, hurdleFinal) {
-  let best = await measure(Object.assign({}, cur)), stage = goal, ddCap = Infinity;
+// for a built-in <select>, which can only hold its options; none on a
+// plateau), and on a plateau near(v) and scan (fitPlateauSetting).
+// quest: { rule, measure, cagrOf }: what the fit is after (fitBetter's rule,
+// with plateau: true for a plateau fit) and measure(values), which resolves
+// to { final, dd } or null. cur holds every setting, is where the search
+// starts, and ends on the search's picks. Resolves to the result of those as
+// the fit judges it (fitJudge).
+async function fitSearch(state, space, cur, quest) {
+  const { rule, measure } = quest;
+  let stage = rule.goal, ddCap = Infinity, limit = { minFinal: rule.minFinal, maxDd: rule.maxDd };
+  const better = (a, b) => fitBetter(Object.assign({}, rule, limit, { goal: stage, ddCap }), a, b);
+  let best = await fitJudge(quest, space, cur);
+  // One setting's values measured with the others held: each value (as text) with its result.
+  const along = async (s, values) => {
+    const results = await Promise.all(values.map(v => measure(Object.assign({}, cur, { [s.id]: v }))
+      .then(r => { state.done++; fitShowProgress(); return r; })));
+    return new Map(values.map((v, i) => [String(v), results[i]]));
+  };
   // One setting tries its values with the others held; the best stays.
   const sweep = async (s, values) => {
     const tries = values.filter(v => String(v) !== String(cur[s.id]));
-    const results = await Promise.all(tries.map(v => measure(Object.assign({}, cur, { [s.id]: v }))
-      .then(r => { state.done++; fitShowProgress(); return r; })));
+    const got = await along(s, tries);
     if (state.stopped) return false;
-    let pick = -1;
-    results.forEach((r, i) => { if (fitBetter(stage, r, pick < 0 ? best : results[pick], hurdleFinal, ddCap)) pick = i; });
-    if (pick < 0) return false;
-    cur[s.id] = tries[pick];
-    best = results[pick];
+    let pick = null;
+    tries.forEach((v) => { if (better(got.get(String(v)), pick === null ? best : got.get(String(pick)))) pick = v; });
+    if (pick === null) return false;
+    cur[s.id] = pick;
+    best = got.get(String(pick));
     return true;
+  };
+  // The same on a plateau. Each value is first judged with its neighbours along this setting
+  // alone, which the runs above give for free, and then with the two weakest neighbours of the
+  // settings as they stand (best.low, best.deep), run with this value: two runs more. Both are
+  // part of what the value comes to with every setting's neighbours counted (fitFlatAt), so that
+  // can be no better than they say. The values that beat the settings as they stand on that
+  // count are checked in full, best first, up to FIT_PLATEAU_CHECKS of them, and the first that
+  // still beats them stays.
+  const sweepFlat = async (s) => {
+    const got = await along(s, s.scan);
+    if (state.stopped) return false;
+    const stretch = (v) => got.get(String(v)) ? fitWorst([v].concat(s.near(v)).map(u => got.get(String(u)))) : null;
+    const weak = [best && best.low, best && best.deep].filter(spot => spot && spot.id !== s.id);
+    const withWeak = async (c) => ({ v: c.v, r: fitWorst((await Promise.all(weak.map(spot => measure(Object.assign({}, cur, { [s.id]: c.v, [spot.id]: spot.value }))))).concat(c.r)) });
+    const along1 = s.values.filter(v => String(v) !== String(cur[s.id])).map(v => ({ v, r: stretch(v) })).filter(c => better(c.r, best));
+    const hopes = (await Promise.all(along1.map(withWeak))).filter(c => better(c.r, best))
+      .sort((a, b) => (better(a.r, b.r) ? -1 : better(b.r, a.r) ? 1 : 0)).slice(0, FIT_PLATEAU_CHECKS);
+    if (state.stopped) return false;
+    for (const hope of hopes) {
+      const whole = await fitFlatAt(space, Object.assign({}, cur, { [s.id]: hope.v }), measure);
+      if (state.stopped) return false;
+      if (!better(whole, best)) continue;
+      cur[s.id] = hope.v;
+      best = whole;
+      return true;
+    }
+    return false;
   };
   // The rounds over the options, then the values between the options next to each pick.
   // state.settled: the rounds ended on one that changed nothing and the step between the options
@@ -3787,24 +3947,39 @@ async function fitSearch(state, space, cur, measure, goal, hurdleFinal) {
   const search = async () => {
     let rested = false, moved = false;
     for (let round = 1; round <= FIT_MAX_PASSES && !state.stopped; round++) {
-      Object.assign(state, { round, done: 0, total: space.reduce((n, s) => n + s.values.length, 0) });
+      Object.assign(state, { round, done: 0, total: d3.sum(space, s => (rule.plateau ? s.scan : s.values).length) });
       let changed = false;
-      for (const s of space) { if (state.stopped) break; if (await sweep(s, s.values)) changed = true; }
+      for (const s of space) { if (state.stopped) break; if (await (rule.plateau ? sweepFlat(s) : sweep(s, s.values))) changed = true; }
       if (!changed) { rested = true; break; }
     }
     if (!state.stopped) {
       const between = space.map(s => ({ s, values: s.between(cur[s.id]) }));
-      Object.assign(state, { phase: 'between', done: 0, total: between.reduce((n, b) => n + b.values.length, 0) });
+      Object.assign(state, { phase: 'between', done: 0, total: d3.sum(between, b => b.values.length) });
       fitShowProgress();
       for (const b of between) { if (state.stopped) break; if (await sweep(b.s, b.values)) moved = true; }
     }
     state.settled = rested && !moved;
   };
   await search();
+  // Short of its limit the search can come to rest where no single move brings the settings nearer
+  // to it, though moves that help the goal itself would open a way (seen 2026-11-25: asked for a
+  // plateau at 180% a year it rested at 179.8%; asked for 175% it found one at 205.8%). So the
+  // limit is eased to a little under where the settings stand, which they then meet (the CAGR, or
+  // the drawdown, they have, less FIT_LIMIT_EASE of it for each try so far), the search runs for
+  // the goal within that, and then by the real limit again. Up to FIT_LIMIT_RETRIES tries.
+  for (let k = 1; k <= FIT_LIMIT_RETRIES && best && !fitReached(rule, best) && !state.stopped; k++) {
+    const ease = 1 - FIT_LIMIT_EASE * k;
+    limit = rule.goal === 'dd' ? { minFinal: fitFinalAtCagr(quest.cagrOf, quest.cagrOf(best.final) * ease), maxDd: rule.maxDd } : { minFinal: rule.minFinal, maxDd: best.dd / ease };
+    Object.assign(state, { phase: 'rounds', round: 1, done: 0, total: 0 });
+    await search();
+    limit = { minFinal: rule.minFinal, maxDd: rule.maxDd };
+    Object.assign(state, { phase: 'rounds', round: 1, done: 0, total: 0 });
+    await search();
+  }
   // The drawdown goal's second stage (the user, 2026-11-05: "highest cagr for
   // lowest drawdown that beats buy hold"): the drawdown found is held, to
   // FIT_DD_TOL, and the search runs again for the highest CAGR within it.
-  if (goal === 'dd' && !state.stopped && best && best.final > hurdleFinal) {
+  if (rule.goal === 'dd' && !state.stopped && fitReached(rule, best)) {
     stage = 'cagrAt'; ddCap = best.dd + FIT_DD_TOL;
     Object.assign(state, { stage: 2, phase: 'rounds', round: 1, done: 0, total: 0 });
     await search();
@@ -3887,18 +4062,21 @@ function customComplexity(schema, cfg) {
   const rules = all.filter(sp => sp.fit !== false && customParamOptions(sp).length > 1);
   return strategyComplexity(rules.map(sp => customSettingSpace(schema, sp)), values);
 }
-// Does a simpler strategy's result keep its share of the best found? `room`: how much it may fall short by.
-function fitKeeps(goal, r, ref, hurdleFinal, cagrOf, room = 1 - FIT_FEWEST_KEEPS) {
-  if (!r) return false;
-  if (goal === 'cagr') { const top = cagrOf(ref.final); return cagrOf(r.final) >= top - room * Math.abs(top); }
-  return r.final > hurdleFinal && r.dd <= ref.dd * (1 + room);
+// Does a simpler strategy's result keep its share of the best found? It has to meet the rule's
+// limit as well. `room`: how much it may fall short by.
+function fitKeeps(quest, r, ref, room = 1 - FIT_FEWEST_KEEPS) {
+  if (!fitReached(quest.rule, r)) return false;
+  if (quest.rule.goal === 'cagr') { const top = quest.cagrOf(ref.final); return quest.cagrOf(r.final) >= top - room * Math.abs(top); }
+  return r.dd <= ref.dd * (1 + room);
 }
 // From the search's result (found, with cur on its settings) to the fewest settings that keep it.
 // begun: the settings the fit started from and their result, a set like any other it meets.
+// Every result here is one the fit judges by (fitJudge): on a plateau, with the neighbours.
 // Ends with cur on the fewest settings and resolves to their result.
-async function fitFewest(state, space, cur, measure, goal, hurdleFinal, cagrOf, found, begun) {
-  const better = (a, b) => fitBetter(goal, a, b, hurdleFinal, Infinity);
+async function fitFewest(state, space, cur, quest, found, begun) {
+  const better = (a, b) => fitBetter(quest.rule, a, b);
   let ref = found;      // the best result seen, which every simpler one is held against
+  const keeps = (r, room) => fitKeeps(quest, r, ref, room);
   let searches = 1;     // the searches run so far, the first included: each takes its stretch of the progress
   const usedFirst = fitInUseCount(space, cur);
   const stretch = (what) => {
@@ -3913,7 +4091,7 @@ async function fitFewest(state, space, cur, measure, goal, hurdleFinal, cagrOf, 
     let result = null;
     for (let k = 0; k < FIT_FEWEST_SETTLES && !state.stopped; k++) {
       stretch(what);
-      result = await fitSearch(state, within, values, measure, goal, hurdleFinal);
+      result = await fitSearch(state, within, values, quest);
       if (state.settled) break;
     }
     return result;
@@ -3931,11 +4109,10 @@ async function fitFewest(state, space, cur, measure, goal, hurdleFinal, cagrOf, 
       const live = space.filter(s => s !== pinned && fitInUse(s, values)).map(s => Object.assign({}, s, {
         values: s.values.filter(v => fitInUseCount(space, Object.assign({}, values, { [s.id]: v })) <= count) }));
       stretch({ without: pinned ? pinned.label : '', again: false, last: !pinned });
-      result = await fitSearch(state, live, values, measure, goal, hurdleFinal);
+      result = await fitSearch(state, live, values, quest);
       if (state.stopped || state.settled) break;                                             // at rest
       if (!pinned || liveIds(values, pinned) !== ids) continue;                              // the answer's tuning; or new settings in view
-      const near = fitKeeps(goal, result, ref, hurdleFinal, cagrOf, 2 * (1 - FIT_FEWEST_KEEPS));
-      if (fitKeeps(goal, result, ref, hurdleFinal, cagrOf) || !near) break;                  // the verdict stands either way
+      if (keeps(result) || !keeps(result, 2 * (1 - FIT_FEWEST_KEEPS))) break;                // the verdict stands either way
     }
     return result;
   };
@@ -3962,7 +4139,7 @@ async function fitFewest(state, space, cur, measure, goal, hurdleFinal, cagrOf, 
       const changes = canGo(cur).flatMap(s => s.values.filter(v => String(v) !== String(cur[s.id]))
         .map(v => ({ s, values: Object.assign({}, cur, { [s.id]: v }) })).filter(c => fitInUseCount(space, c.values) < count));
       if (!changes.length) break;
-      const results = await Promise.all(changes.map(c => measure(Object.assign({}, c.values))));
+      const results = await Promise.all(changes.map(c => fitJudge(quest, space, c.values)));
       if (state.stopped) break;
       const order = changes.map((c, i) => Object.assign(c, { r: results[i] })).filter(c => c.r)
         .sort((a, b) => (better(a.r, b.r) ? -1 : better(b.r, a.r) ? 1 : 0)).slice(0, FIT_FEWEST_TRIES);
@@ -3970,9 +4147,9 @@ async function fitFewest(state, space, cur, measure, goal, hurdleFinal, cagrOf, 
       for (const c of order) {
         // A change the result keeps its share with as it stands stays without a search; any other
         // gets the settings in use tuned around it first.
-        const tuned = fitKeeps(goal, c.r, ref, hurdleFinal, cagrOf) ? c.r : await tune(c.values, c.s);
+        const tuned = keeps(c.r) ? c.r : await tune(c.values, c.s);
         if (state.stopped) break;
-        if (fitKeeps(goal, tuned, ref, hurdleFinal, cagrOf) && fitInUseCount(space, c.values) < count) {
+        if (keeps(tuned) && fitInUseCount(space, c.values) < count) {
           Object.assign(cur, c.values);
           best = tuned;
           if (better(tuned, ref)) ref = tuned;
@@ -3988,7 +4165,7 @@ async function fitFewest(state, space, cur, measure, goal, hurdleFinal, cagrOf, 
   };
   // The answer so far: of the sets met that keep their share of the best met, the one with the
   // fewest settings in use; among those with as few, the best result.
-  const pick = () => met.filter(m => fitKeeps(goal, m.result, ref, hurdleFinal, cagrOf))
+  const pick = () => met.filter(m => keeps(m.result))
     .sort((x, y) => x.count - y.count || (better(x.result, y.result) ? -1 : better(y.result, x.result) ? 1 : 0))[0];
   // Cycles of "take settings out, then search again". Taking out goes one setting at a time and
   // never brings one back, so it can end on a set that is not the best of its size; the whole search
@@ -4028,37 +4205,42 @@ async function fitFewest(state, space, cur, measure, goal, hurdleFinal, cagrOf, 
   return result;
 }
 // One fit from start to the result note: runs the search, sets what it found
-// (job.apply), and writes the change list. job.variant (FIT_VARIANTS): round
-// keeps the search to round values, fewest follows it with fitFewest.
+// (job.apply), and writes the change list. job.plan: what the Fit window asked
+// for; job.floor: the drawdown goal's floor (fitFloor).
 async function fitRun(job) {
-  const state = _fit = { key: job.key, goal: job.goal, stage: 1, stages: job.goal === 'dd' ? 2 : 1, phase: 'rounds', round: 1, done: 0, total: 0, stopped: false, close: job.close,
-    base: 0, span: fitVariant(job.variant).fewest ? 1 - FIT_FEWEST_STEP : 1 };
+  const { plan } = job;
+  const state = _fit = { key: job.key, goal: plan.goal, stage: 1, stages: plan.goal === 'dd' ? 2 : 1, phase: 'rounds', round: 1, done: 0, total: 0, stopped: false, close: job.close,
+    base: 0, span: plan.fewest ? 1 - FIT_FEWEST_STEP : 1 };
   delete _fitNotes[job.key];
   render();
+  const rule = { goal: plan.goal, plateau: plan.plateau, minFinal: plan.goal === 'dd' ? job.floor.final : -Infinity,
+    maxDd: plan.goal === 'cagr' && plan.limit != null ? plan.limit / 100 : Infinity };
+  const quest = { rule, measure: job.measure, cagrOf: job.cagrOf };
   const before = Object.assign({}, job.cur);
   const start = await job.measure(Object.assign({}, before));
-  const { round, fewest } = fitVariant(job.variant), space = round ? job.space.map(fitRoundSetting) : job.space;
-  if (round) space.forEach(s => { job.cur[s.id] = s.snap(job.cur[s.id]); });
+  // Every setting keeps its whole list (all): a plateau reads a value's neighbours off it, also those a round fit leaves out.
+  const whole = job.space.map(s => Object.assign({ all: s.values }, s)), rounded = plan.round ? whole.map(fitRoundSetting) : whole;
+  const space = plan.plateau ? rounded.map(fitPlateauSetting) : rounded;
+  if (plan.round) space.forEach(s => { job.cur[s.id] = s.snap(job.cur[s.id]); });
   // Where the search begins, one of the sets the fewest settings are picked from: the settings as
-  // they are, or on round numbers their round neighbours.
-  const begun = !fewest ? null : round ? { values: Object.assign({}, job.cur), result: await job.measure(Object.assign({}, job.cur)) } : { values: before, result: start };
-  const hurdleFinal = job.hurdle && job.hurdle.final;
-  let best = await fitSearch(state, space, job.cur, job.measure, job.goal, hurdleFinal);
-  // The fewest settings: only from a search that reached its goal.
-  const reached = best && (job.goal === 'cagr' || best.final > hurdleFinal);
-  if (fewest && reached && !state.stopped) best = await fitFewest(state, space, job.cur, job.measure, job.goal, hurdleFinal, job.cagrOf, best, begun);
+  // they are, or on round numbers their round neighbours; with the result the fit judges them by.
+  const begun = !plan.fewest ? null : { values: Object.assign({}, plan.round ? job.cur : before), result: await fitJudge(quest, space, plan.round ? job.cur : before) };
+  let best = await fitSearch(state, space, job.cur, quest);
+  // The fewest settings: only from a search that met its limit.
+  if (plan.fewest && fitReached(rule, best) && !state.stopped) best = await fitFewest(state, space, job.cur, quest, best, begun);
   job.close();
   _fit = null;
   if (state.stopped) { render(); return; }
-  // The drawdown goal with nothing over the hurdle: the climb toward it is not
-  // a result, so the settings stay as they were (the note says nothing changed).
-  if (job.goal === 'dd' && !(best && job.hurdle && best.final > job.hurdle.final)) Object.assign(job.cur, before);
+  // Nothing met the limit: the way toward it is not a result, so the settings
+  // stay as they were (the note says nothing changed).
+  const reached = fitReached(rule, best);
+  if (!reached) Object.assign(job.cur, before);
   const changed = job.space.filter(s => String(job.cur[s.id]) !== String(before[s.id]));
   // Each changed setting, old → new, as its dropdown reads (the user: "a quick summary of what changed").
   const changes = changed.map(s => ({ label: s.label, from: s.text(before[s.id]), to: s.text(job.cur[s.id]) }));
   if (changed.length) job.apply(job.cur, changed);
-  const inUse = fewest ? { before: fitInUseCount(job.space, before), now: fitInUseCount(job.space, job.cur), of: job.space.length, next: state.next, top: state.top } : null;
-  _fitNotes[job.key] = { text: fitNoteText(job.goal, job.variant, job.cagrOf, start, best, job.hurdle, changed.length, inUse), changes };
+  const inUse = plan.fewest ? { before: fitInUseCount(job.space, before), now: fitInUseCount(job.space, job.cur), of: job.space.length, next: state.next, top: state.top } : null;
+  _fitNotes[job.key] = { text: fitNoteText(plan, job.floor, job.cagrOf, start, best, reached, changed.length, inUse), changes };
   render();
 }
 // Runs each distinct setting combination once per fit.
@@ -4073,18 +4255,19 @@ function fitNoHurdle(key, fund) {
   render();
 }
 // Fit for a code strategy (runs in the sandbox worker pool).
-async function runCustomFit(cfgId, goal, variant) {
+async function runCustomFit(cfgId, plan) {
   const cfg = savedConfigs.find(c => c.id === cfgId), ctx = window._customCtx;
   if (_fit || !cfg || !cfg.code || !ctx) return;
   const schema = getCustomSchema(cfg), free = fitFreeIds(cfgId);
   if (free === null) return;
   if (!free.size) { fitNothingFree(cfgId); return; }
   const params = schema.filter(sp => sp && sp.id != null && free.has(sp.id));
-  let hurdle = null;
-  if (goal === 'dd') {
-    const h = fitHurdle(cfg);
-    if (!h.final) { fitNoHurdle(cfgId, h.fund); return; }
-    hurdle = h;
+  const cagrOf = f => cfgMoneyWeightedCAGR(ctx, f);
+  let floor = null;
+  if (plan.goal === 'dd') {
+    const hold = plan.limit == null ? fitHurdle(cfg) : null;
+    if (hold && !hold.final) { fitNoHurdle(cfgId, hold.fund); return; }
+    floor = fitFloor(plan, cagrOf, hold);
   }
   const globals = computeCustomGlobals(cfg, ctx), pool = fitPool();
   const cur = {};
@@ -4096,11 +4279,11 @@ async function runCustomFit(cfgId, goal, variant) {
     return v => options.has(String(v)) ? options.get(String(v)) : between(v);
   };
   await fitRun({
-    key: cfgId, goal, variant, hurdle, cur, close: pool.close,
+    key: cfgId, plan, floor, cur, close: pool.close,
     space: params.map(sp => ({ ...customSettingSpace(schema, sp), label: fitLabel(schema, sp),
       between: v => fitBetween(sp, v), text: v => customOptionLabel(sp, v), number: numberOf(sp) })),
     measure: fitMemo(new Map(), p => pool.run(cfg.code, globals, p).then(fitScore)),
-    cagrOf: f => cfgMoneyWeightedCAGR(ctx, f),
+    cagrOf,
     apply: (values, changed) => {
       cfg.params = cfg.params || {};
       changed.forEach(s => { cfg.params[s.id] = values[s.id]; });
@@ -4117,18 +4300,19 @@ const FIT_YIELD_MS = 25;
 // Stop. Which selects it may change, their names and one run's result come
 // from js/preview-dropdown.js (window.previewFit), which owns those engines'
 // option previews; which of them are frozen is the user's choice (fitFreeIds).
-async function runNativeFit(type, goal, variant) {
+async function runNativeFit(type, plan) {
   const pf = window.previewFit, key = 'panel:' + type;
   if (_fit || !FIT_PANELS[type] || !pf) return;
   const free = fitFreeIds(key);
   if (free === null) return;
   if (!free.size) { fitNothingFree(key); return; }
   const selects = Array.from(free, id => document.getElementById(id));
-  let hurdle = null;
-  if (goal === 'dd') {
-    const fund = document.getElementById(FIT_PANELS[type].fund).value, finals = window.previewBhFinals();
-    if (!(finals[fund] > 0)) { fitNoHurdle(key, fund); return; }
-    hurdle = { fund, final: finals[fund] };
+  const cagrOf = f => window._mwCagrOfFinal(f);
+  let floor = null;
+  if (plan.goal === 'dd') {
+    const fund = document.getElementById(FIT_PANELS[type].fund).value, hold = plan.limit == null ? { fund, final: window.previewBhFinals()[fund] } : null;
+    if (hold && !(hold.final > 0)) { fitNoHurdle(key, fund); return; }
+    floor = fitFloor(plan, cagrOf, hold);
   }
   const base = pf.base(type), cur = {};
   selects.forEach(el => { cur[el.id] = el.value; });
@@ -4142,20 +4326,20 @@ async function runNativeFit(type, goal, variant) {
   // A panel setting that belongs to a rule (pf.needs) shows while that rule's setting is not off; a frozen one is read off the page.
   const ruleOn = (id, values) => { const rule = pf.needs(id); return !rule || String(rule in values ? values[rule] : document.getElementById(rule).value) !== String(pf.off(rule)); };
   await fitRun({
-    key, goal, variant, hurdle, cur, close: () => {},
+    key, plan, floor, cur, close: () => {},
     // A select's value can be in another unit than its text ("1 quarter" is 3 months), so a round fit goes by the text.
     space: selects.map(el => ({ id: el.id, label: pf.name(el.id), values: Array.from(el.options).filter(o => !o.disabled).map(o => o.value),
       between: () => [], text: v => optionText(el, v), number: v => fitShownNumber(optionText(el, v)),
       off: pf.off(el.id), shown: values => ruleOn(el.id, values) })),
     measure: fitMemo(new Map(), runOne),
-    cagrOf: f => window._mwCagrOfFinal(f),
+    cagrOf,
     apply: (values) => {
       applyControlParams(type, Object.assign(captureParams(type), values));
       if (typeof saveSliders === 'function') saveSliders();
     },
   });
 }
-function runFit(key, goal, variant) { return key.startsWith('panel:') ? runNativeFit(key.slice(6), goal, variant) : runCustomFit(key, goal, variant); }
+function runFit(key, plan) { return fitIsPanel(key) ? runNativeFit(key.slice(6), plan) : runCustomFit(key, plan); }
 
 // A setting's name for the change list: its section's head ("Ceiling" of
 // "Ceiling — step aside") and its label without the unit in brackets, so two
@@ -4175,62 +4359,119 @@ function buildFitNoteHtml(note) {
     ? `<ul class="fit-changes">${note.changes.map(c => `<li>${_escHtml(c.label)}: ${_escHtml(c.from)} → <b>${_escHtml(c.to)}</b></li>`).join('')}</ul>` : '';
   return `<div class="fit-note">${_escHtml(note.text)}${list}</div>`;
 }
-// The result line under Settings: what moved, on the chart's period.
-function fitNoteText(goal, variant, cagrOf, start, best, hurdle, nChanged, inUse) {
+// What a plan asks for, as the note names it: "Lowest drawdown at 180% a year or more, and the highest CAGR at it, on a plateau".
+function fitAskText(plan, floor) {
+  const goal = plan.goal === 'cagr'
+    ? 'Best CAGR' + (plan.limit != null ? ` within a max drawdown of ${plan.limit}%` : '')
+    : `Lowest drawdown ${floor.ask}, and the highest CAGR at it`;
+  return goal + (plan.plateau ? ', on a plateau' : '') + (plan.round ? ', round numbers' : '') + (plan.fewest ? ', fewest settings' : '');
+}
+// The result line under Settings: what moved, on the chart's period. start: the settings' own
+// result before; best: the result the fit judged by, on a plateau with the settings' own in best.own.
+function fitNoteText(plan, floor, cagrOf, start, best, reached, nChanged, inUse) {
   if (!best) return 'The runs failed, so nothing changed.';
+  const own = (r) => r.own || r;
   const cagr = (r) => cagrOf(r.final).toFixed(1) + '%';
   const dd = (r) => (r.dd * 100).toFixed(1) + '%';
-  const { round, fewest } = fitVariant(variant), inRound = round ? ` in ${FIT_VARIANTS.round.label}` : '';
+  const both = (r) => `CAGR ${cagr(r)}, max drawdown ${dd(r)}`;
+  const how = (plan.round ? ' in round numbers' : '') + (plan.plateau ? ' on a plateau' : '');
+  // A plateau's result holds for the neighbours too: what the worst of them makes and falls.
+  // Each with the neighbour that gives it, the setting and the value it would stand at.
+  const at = (spot) => spot ? ` (${spot.label} at ${spot.to})` : '';
+  const near = (r) => plan.plateau ? ` With any one setting a tenth off either way: CAGR ${cagr(r)} or more${at(r.low)}, max drawdown ${dd(r)} or less${at(r.deep)}.` : '';
+  if (!reached) {
+    const closest = ` The closest found: ${both(own(best))}.${near(best)}`;
+    return plan.goal === 'dd'
+      ? `No setting${how} ${floor.none}, so nothing changed.${plan.limit != null ? closest : ''}`
+      : `No setting${how} kept the max drawdown within ${plan.limit}%, so nothing changed.${closest}`;
+  }
   // The fewest settings: how many of the settings Fit may change are in use, against how many were.
+  const one = (r) => plan.goal === 'cagr' ? 'CAGR ' + cagr(own(r)) : 'max drawdown ' + dd(own(r)) + ', CAGR ' + cagr(own(r));
   const used = !inUse ? '' : ` ${inUse.now} of ${inUse.of} settings in use${inUse.before !== inUse.now ? ', ' + inUse.before + ' before' : ''}.`
-    + (inUse.next ? ` The next to go would be "${inUse.next.label}": ${goal === 'cagr' ? 'CAGR ' + cagr(inUse.next.r) : 'max drawdown ' + dd(inUse.next.r) + ', CAGR ' + cagr(inUse.next.r)} without it.` : '')
-    + (inUse.top ? ` The best met on the way: ${goal === 'cagr' ? 'CAGR ' + cagr(inUse.top.r) : 'max drawdown ' + dd(inUse.top.r) + ', CAGR ' + cagr(inUse.top.r)} with ${inUse.top.count} in use.` : '');
-  if (goal === 'dd' && !(best.final > hurdle.final)) return `No setting${inRound} beat buy & hold ${hurdle.fund.toUpperCase()} (${cagr(hurdle)} a year) here, so nothing changed.`;
-  if (!nChanged) return `${fitGoalLabel(goal, variant)}: the current settings are already the best found.${used}`;
-  const moved = `CAGR ${start ? cagr(start) + ' → ' : ''}${cagr(best)}, max drawdown ${start ? dd(start) + ' → ' : ''}${dd(best)}`;
-  const changed = `${nChanged} setting${nChanged > 1 ? 's' : ''} changed`;
-  if (goal === 'cagr') return `${fitGoalLabel(goal, variant)}: ${changed}. ${moved}.${used}`;
-  const bh = `buy & hold ${hurdle.fund.toUpperCase()} (${cagr(hurdle)} a year)`;
-  // Settings under the hurdle climb to it first, so the drawdown can grow.
-  return start && !(start.final > hurdle.final)
-    ? `The current settings don't beat ${bh}. The lowest drawdown${inRound} that does, and the highest CAGR at it, ${changed}: ${moved}.${used}`
-    : `${fewest ? fitGoalLabel(goal, variant) : fitGoalLabel(goal) + inRound} that still beats ${bh}, and the highest CAGR at it, ${changed}: ${moved}.${used}`;
+    + (inUse.next ? ` The next to go would be "${inUse.next.label}": ${one(inUse.next.r)} without it.` : '')
+    + (inUse.top ? ` The best met on the way: ${one(inUse.top.r)} with ${inUse.top.count} in use.` : '');
+  const ask = fitAskText(plan, floor);
+  if (!nChanged) return `${ask}: the current settings are already the best found.${near(best)}${used}`;
+  const moved = `CAGR ${start ? cagr(start) + ' → ' : ''}${cagr(own(best))}, max drawdown ${start ? dd(start) + ' → ' : ''}${dd(own(best))}`;
+  // Settings short of the limit come up to it first, so the measure searched for can get worse.
+  const short = !start ? '' : plan.goal === 'dd' ? (start.final > floor.final ? '' : `The current settings ${floor.short}. `)
+    : (plan.limit == null || start.dd <= plan.limit / 100 ? '' : `The current settings fall further than ${plan.limit}%. `);
+  return `${short}${ask}: ${nChanged} setting${nChanged > 1 ? 's' : ''} changed. ${moved}.${near(best)}${used}`;
 }
 
-// The Fit button beside "Reset to default"; a running search shows its progress and stops on click.
+// The Fit button beside "Reset to default": it opens the Fit window; a running search shows its progress and stops on click.
 function buildFitButtonHtml(key) {
   const running = _fit && _fit.key === key;
-  const tip = "Searches the settings for the best result on the chart's current period and money, and sets them. Frozen settings stay as they are: costs, cash interest and how trades execute, unless chosen otherwise under Freeze in the menu.";
-  return `<span class="settings-fit-wrap"><button type="button" class="settings-reset-btn settings-fit-btn${running ? ' running' : ''}" data-fit-key="${_escHtml(key)}"${_fit && !running ? ' disabled' : ''}${running ? ` title="${_escHtml(fitStepText(_fit))}" style="--fit-pct:${fitPercent(_fit)}%"` : ''}>${running ? _escHtml(fitProgressText(_fit)) : 'Fit ▾'}</button>`
+  const tip = "Opens the Fit window: it searches the settings for the best result on the chart's current period and money, and sets them. Frozen settings stay as they are: costs, cash interest and how trades execute, unless chosen otherwise under Freeze there.";
+  return `<span class="settings-fit-wrap"><button type="button" class="settings-reset-btn settings-fit-btn${running ? ' running' : ''}" data-fit-key="${_escHtml(key)}"${_fit && !running ? ' disabled' : ''}${running ? ` title="${_escHtml(fitStepText(_fit))}" style="--fit-pct:${fitPercent(_fit)}%"` : ''}>${running ? _escHtml(fitProgressText(_fit)) : 'Fit'}</button>`
     + `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span></span>`;
 }
-function openFitMenu(btn, key) {
-  closeFitMenu();
-  const menu = document.createElement('div');
-  menu.className = 'pdrop-popup fit-menu';
-  // Each goal, then the same goal on round values and for the fewest settings, by name alone (the
-  // user, 2026-11-23: "remove description texts"; what a goal does shows on hover); under them, the
-  // settings Fit leaves alone.
-  menu.innerHTML = Object.keys(FIT_GOALS).flatMap(k => [''].concat(Object.keys(FIT_VARIANTS)).map(variant =>
-    `<div class="fit-menu-item" data-fit-goal="${k}" data-fit-variant="${variant}" title="${_escHtml(variant ? FIT_VARIANTS[variant].tip : FIT_GOALS[k].tip)}"><b>${_escHtml(fitGoalLabel(k, variant))}</b></div>`)).join('')
-    + buildFitFreezeHtml(key, false);
-  document.body.appendChild(menu);
-  positionCpPopup(menu, btn);
-  fitMenuToWindow(menu);
-  _fitMenu = { menu, btn, key };
+// ---- The Fit window ----
+// What to freeze first, then the choices in the order they are made (FIT_ROWS, the goal's limit
+// after the goal), then Run. It opens on the choices of the last fit (fitChoices). The limit's
+// row follows the goal: "Max drawdown" for CAGR, "Min CAGR" for Drawdown, each keeping what was
+// typed for it.
+// What is being fitted, for the window's head: a strategy's name, a built-in panel's label.
+const fitKeyName = (key) => fitIsPanel(key) ? BASE_LABELS[key.slice(6)] : savedConfigs.find(c => c.id === key).name;
+function buildFitWindowHtml(key, choices, freezeOpen) {
+  const tipIcon = (tip) => `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span>`;
+  const pair = (row) => `<div class="fit-row"><span class="fit-row-name">${row.name}${tipIcon(row.tip)}</span>`
+    + `<span class="fit-seg" role="group" aria-label="${row.name}">${row.options.map(([value, label]) =>
+      `<button type="button" class="fit-seg-btn${choices[row.id] === value ? ' on' : ''}" data-fit-choice="${row.id}" data-fit-value="${value}" aria-pressed="${choices[row.id] === value}">${label}</button>`).join('')}</span></div>`;
+  const limit = FIT_LIMITS[choices.goal];
+  const limitRow = `<div class="fit-row"><span class="fit-row-name">${limit.name}${tipIcon(limit.tip)}</span>`
+    + `<span class="fit-limit"><input type="text" inputmode="decimal" data-fit-limit="${limit.id}" value="${_escHtml(choices[limit.id])}" placeholder="${limit.empty}" aria-label="${limit.name}, percent" autocomplete="off"><span class="fit-limit-unit">%</span></span></div>`;
+  const [goal, ...rest] = FIT_ROWS;
+  return `<div class="modal-backdrop" data-fit-close></div>`
+    + `<div class="modal-content fit-window" role="dialog" aria-modal="true" aria-label="Fit">`
+    + `<div class="fit-window-head"><h3>Fit</h3><span class="fit-window-name">${_escHtml(fitKeyName(key))}</span><button type="button" class="modal-close" data-fit-close aria-label="Close">×</button></div>`
+    + `<div class="fit-window-body">${buildFitFreezeHtml(key, freezeOpen)}${pair(goal)}${limitRow}${rest.map(pair).join('')}</div>`
+    + `<div class="fit-window-foot"><button type="button" class="fit-run-btn" data-fit-run>Run</button></div></div>`;
+}
+function openFitWindow(key) {
+  closeFitWindow();
+  const el = document.createElement('div');
+  el.className = 'modal fit-modal';
+  _fitWindow = { el, key, choices: fitChoices(), freezeOpen: false };
+  el.innerHTML = buildFitWindowHtml(key, _fitWindow.choices, false);
+  document.body.appendChild(el);
+  document.body.classList.add('modal-open');
   // A tick freezes its setting, an empty box lets Fit change it.
-  menu.addEventListener('change', (e) => {
+  el.addEventListener('change', (e) => {
     const box = e.target.closest('[data-fit-freeze-id]');
     if (!box) return;
     const settings = fitSettings(key), setting = settings.find(s => s.id === box.getAttribute('data-fit-freeze-id'));
     setFitFrozen(key, setting, box.checked);
     const changed = fitFreezeChanged(settings, fitFreezeChoices(key));
-    menu.querySelector('.fit-freeze-notice').textContent = fitFreezeNotice(changed);
-    menu.querySelector('[data-fit-freeze-reset]').disabled = !changed;
+    el.querySelector('.fit-freeze-notice').textContent = fitFreezeNotice(changed);
+    el.querySelector('[data-fit-freeze-reset]').disabled = !changed;
   });
-  document.addEventListener('keydown', _fitMenuKey, true);
+  // The limit as it is typed; Enter in its box runs the fit.
+  el.addEventListener('input', (e) => {
+    const box = e.target.closest('[data-fit-limit]');
+    if (box) setFitChoice(box.getAttribute('data-fit-limit'), box.value);
+  });
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest('[data-fit-limit]')) runFitWindow(); });
+  document.addEventListener('keydown', _fitWindowKey, true);
 }
-// The "Freeze" part of the Fit menu: a head that opens it, then the strategy as its Settings read,
+// One of the window's choices set and kept for the next time it opens.
+function setFitChoice(id, value) {
+  _fitWindow.choices[id] = value;
+  keepFitChoices(_fitWindow.choices);
+}
+// The window drawn again where it stands: after a choice (the limit's row follows the goal), and
+// when the Freeze list opens, closes or is reset.
+function showFitWindow() {
+  const { el, key, choices, freezeOpen } = _fitWindow, scrolled = el.querySelector('.fit-window-body').scrollTop;
+  el.innerHTML = buildFitWindowHtml(key, choices, freezeOpen);
+  el.querySelector('.fit-window-body').scrollTop = scrolled;
+}
+function runFitWindow() {
+  const { key, choices } = _fitWindow;
+  closeFitWindow();
+  runFit(key, fitPlanOf(choices));
+}
+// The "Freeze" part of the Fit window: a head that opens it, then the strategy as its Settings read,
 // in small text, with a tick box on each value (ticked = frozen), and a way back to the usual ones.
 // The user (2026-11-23): "remove these additional texts, just say freeze" (no count, no tip line);
 // and, on a list of setting names: "not clearly mappable to strategy. So display the full strategy in
@@ -4273,29 +4514,19 @@ function buildFitFreezeHtml(key, open) {
     + `<div class="fit-freeze-body"${open ? '' : ' hidden'}>${rows}`
     + `<button type="button" class="fit-freeze-reset" data-fit-freeze-reset${changed ? '' : ' disabled'}>Reset</button></div></div>`;
 }
-// Keeps the menu inside the window: it takes at most the room the window has on its side of the
-// button and scrolls inside that (the goals alone fit most windows; the open Freeze list can be long).
-const FIT_MENU_EDGE_GAP = 8;      // px kept between the menu and the window's edge
-const FIT_MENU_MIN_HEIGHT = 180;  // px the menu keeps however little room there is
-function fitMenuToWindow(menu) {
-  // The menu hangs under the button from its top edge, or stands on it from its bottom edge (positionCpPopup).
-  const box = menu.getBoundingClientRect(), room = menu.style.bottom === '' ? window.innerHeight - box.top : box.bottom;
-  menu.style.maxHeight = Math.max(FIT_MENU_MIN_HEIGHT, room - FIT_MENU_EDGE_GAP) + 'px';
+function closeFitWindow() {
+  if (!_fitWindow) return;
+  _fitWindow.el.remove();
+  _fitWindow = null;
+  document.body.classList.remove('modal-open');
+  document.removeEventListener('keydown', _fitWindowKey, true);
 }
-// Opens or closes the Freeze list, or draws it again after a reset (open: true).
-function showFitFreeze(open) {
-  const { menu, key } = _fitMenu, scrolled = menu.scrollTop;
-  menu.querySelector('.fit-freeze').outerHTML = buildFitFreezeHtml(key, open);
-  fitMenuToWindow(menu);
-  menu.scrollTop = scrolled;
+// Escape closes the window alone: the key stops here, so the panel under it stays open.
+function _fitWindowKey(e) {
+  if (e.key !== 'Escape') return;
+  e.stopPropagation();
+  closeFitWindow();
 }
-function closeFitMenu() {
-  if (!_fitMenu) return;
-  _fitMenu.menu.remove();
-  _fitMenu = null;
-  document.removeEventListener('keydown', _fitMenuKey, true);
-}
-function _fitMenuKey(e) { if (e.key === 'Escape') closeFitMenu(); }
 
 // Built-in header labels + tooltips for the log keys the build prompt asks a
 // strategy to write. Following the contract therefore buys an SMA-quality
@@ -4834,20 +5065,23 @@ document.addEventListener('click', (e) => {
   if (reset) { resetPanelToDefaults(reset.getAttribute('data-sc-reset')); return; }
   const resetCustom = e.target.closest('[data-custom-reset]');
   if (resetCustom) { resetCustomToDefaults(resetCustom.getAttribute('data-custom-reset')); return; }
-  // Fit: the button opens the goal menu, or stops a running search; a menu item starts one.
-  const fitGoal = e.target.closest('[data-fit-goal]');
-  if (fitGoal && _fitMenu) { const key = _fitMenu.key; closeFitMenu(); runFit(key, fitGoal.getAttribute('data-fit-goal'), fitGoal.getAttribute('data-fit-variant')); return; }
-  // The menu's "Freeze": its head opens and closes the list, Reset goes back to the usual ones.
-  const freezeHead = e.target.closest('[data-fit-freeze-toggle]');
-  if (freezeHead && _fitMenu) { showFitFreeze(freezeHead.getAttribute('aria-expanded') !== 'true'); return; }
-  if (e.target.closest('[data-fit-freeze-reset]') && _fitMenu) { setFitFreezeChoices(_fitMenu.key, {}); showFitFreeze(true); return; }
+  // The Fit window: a choice, Run, its Freeze list (the head opens and closes it, Reset goes back to the usual ones), and the ways out.
+  if (_fitWindow && e.target.closest('.fit-modal')) {
+    const choice = e.target.closest('[data-fit-choice]');
+    if (choice) { setFitChoice(choice.getAttribute('data-fit-choice'), choice.getAttribute('data-fit-value')); showFitWindow(); return; }
+    if (e.target.closest('[data-fit-run]')) { runFitWindow(); return; }
+    if (e.target.closest('[data-fit-freeze-toggle]')) { _fitWindow.freezeOpen = !_fitWindow.freezeOpen; showFitWindow(); return; }
+    if (e.target.closest('[data-fit-freeze-reset]')) { setFitFreezeChoices(_fitWindow.key, {}); showFitWindow(); return; }
+    if (e.target.closest('[data-fit-close]')) closeFitWindow();
+    return;
+  }
+  // Fit: the button opens the window, or stops a running search.
   const fitBtn = e.target.closest('[data-fit-key]');
   if (fitBtn) {
     if (_fit && _fit.key === fitBtn.getAttribute('data-fit-key')) { _fit.stopped = true; _fit.close(); return; }
-    if (_fitMenu) closeFitMenu(); else openFitMenu(fitBtn, fitBtn.getAttribute('data-fit-key'));
+    openFitWindow(fitBtn.getAttribute('data-fit-key'));
     return;
   }
-  if (_fitMenu && !e.target.closest('.fit-menu')) closeFitMenu();
 
   // Parameters-panel config pills.
   const pill = e.target.closest('.saved-config-pill');
