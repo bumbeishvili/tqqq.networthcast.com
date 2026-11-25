@@ -4411,7 +4411,8 @@
   .map-key-line { width: 18px; border-top: 1px solid var(--map-frontier); }
   .map-key-link { width: 18px; border-top: 1px dashed var(--text); }
   /* A picked dot's strategy, as its Settings read: a value it changes struck through, the new one beside it. */
-  .map-strategy { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); font-size: calc(11px * var(--ui-scale)); line-height: 1.75; }
+  .map-strategy { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); font-size: calc(11px * var(--ui-scale)); line-height: 2; }   /* the lines apart as in the Fit window's Freeze list: each value sits in a box with its tick */
+  .map-freeze-head { display: flex; align-items: center; gap: 2px; font-size: calc(12px * var(--ui-scale)); line-height: 1.6; color: var(--text); }
   .map-value { color: var(--text); }
   .map-old { color: var(--text-muted); }
   .map-new { color: var(--accent-text); font-weight: 700; }

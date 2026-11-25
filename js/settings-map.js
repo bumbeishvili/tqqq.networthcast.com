@@ -109,6 +109,11 @@ const MAP_RUN_TIP = [
   `The map tries new combinations until ${MAP_STALL_ROUNDS} rounds in a row find nothing better. Then it stops.`,
   'Stop pauses it. Resume continues.',
 ].join('\n');
+const MAP_FREEZE_TIP = [
+  'Tick a value to freeze it: the map keeps it as it is.',
+  'The map then runs again without the combinations that change it.',
+  'The Fit window uses the same ticks.',
+].join('\n');
 const MAP_CSV_TIP = "Download every dot as a CSV file: CAGR, max drawdown, and each setting's value.";
 const MAP_LEGEND = [
   { mark: 'dot is-pale', name: 'not tested', tip: MAP_UNTESTED_TIP },
@@ -525,6 +530,7 @@ function openMapWindow(key) {
   document.body.appendChild(el);
   document.body.classList.add('modal-open');
   el.addEventListener('click', onMapWindowClick);
+  el.addEventListener('change', onMapWindowChange);
   document.addEventListener('keydown', _mapWindowKey, true);
   setMapJob(map, found, period);
   showMap();
@@ -554,6 +560,7 @@ function onMapWindowClick(e) {
   if (on('[data-map-run]')) { if (map.run) stopMapWork(map); else startMapFill(map); return; }
   if (on('[data-map-csv]')) { downloadMapCsv(map); return; }
   if (on('[data-map-clear]')) { pickMapDot(null); return; }
+  if (on('[data-map-freeze-reset]')) { setFitFreezeChoices(map.key, {}); refreezeMap(map); return; }
   if (on('[data-map-use]')) useMapDot(map);
 }
 // A dot picked on the chart (null: none). Unchecked, it is checked ahead of the others: a map
@@ -670,8 +677,9 @@ function hideMapTip() {
   if (_map) _map.el.querySelector('.map-tip').hidden = true;
 }
 // Beside the chart, in a column that scrolls by itself (under it on a narrow screen): a set's
-// numbers, its worst case, and the whole strategy as its Settings read. The set is the dot that
-// was clicked, a value it changes struck through with the new one beside it, with Use and Clear
+// numbers, its worst case, and the whole strategy as its Settings read, which is the Freeze list
+// too: a tick box on each value a search can change (refreezeMap). The set is the dot that was
+// clicked, a value it changes struck through with the new one beside it, with Use and Clear
 // (which lets the dot go); until one is clicked, the settings as they are. The user (2026-11-25), of the search's result picked for
 // the reader when it came in: "make sure this does not open without clicking, it appeared
 // sudden", and "display clicked strategy it's own scrollable container on the right". Written
@@ -684,24 +692,52 @@ function showMapDetail() {
   box.innerHTML = html;
 }
 function mapDetailHtml(map) {
-  const { job } = map;
-  if (!job) return '';   // every setting is frozen: there is no set to show
-  const picked = map.picked ? map.dots.get(map.picked) : null, dot = picked || mapNowDot(map);   // no dot at all before the first run comes in
-  const free = new Map(job.space.map(s => [s.id, s]));
-  // A value the dot changes: the one it has now struck through, the dot's beside it. Any other: as it is.
+  const { job } = map;   // none while every setting is frozen: the column is then the Freeze list alone
+  const picked = job && map.picked ? map.dots.get(map.picked) : null, dot = job ? picked || mapNowDot(map) : null;   // no dot at all before the first run comes in
+  const free = new Map(job ? job.space.map(s => [s.id, s]) : []);
+  const settings = fitSettings(map.key), byId = new Map(settings.map(s => [s.id, s])), choices = fitFreezeChoices(map.key);
+  // A value as it is, or where the dot changes it the one it has now struck through with the dot's
+  // beside it. One a search can change carries a tick box: ticked, it is frozen (Freeze, as in the Fit window).
   const value = (slot) => {
-    const s = free.get(slot.id);
-    if (!dot || !s || String(dot.values[s.id]) === String(job.cur[s.id])) return `<span class="map-value">${_escHtml(slot.value)}</span>`;
-    return `<s class="map-old">${_escHtml(slot.value)}</s> <b class="map-new">${_escHtml(s.text(dot.values[s.id]))}</b>`;
+    const s = free.get(slot.id), setting = byId.get(slot.id);
+    const text = !dot || !s || String(dot.values[s.id]) === String(job.cur[s.id]) ? `<span class="map-value">${_escHtml(slot.value)}</span>`
+      : `<s class="map-old">${_escHtml(slot.value)}</s> <b class="map-new">${_escHtml(s.text(dot.values[s.id]))}</b>`;
+    return setting ? `<label class="fit-freeze-value"><input type="checkbox" data-map-freeze-id="${_escHtml(slot.id)}"${fitFrozen(choices, setting) ? ' checked' : ''}>${text}</label>` : text;
   };
   const notes = !dot ? [] : [dot.differs ? '' : 'Your settings now.',
     dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what Run in the Fit window would pick.` : '',
     dot.flat ? mapWorstText(job, dot) : picked && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
+  const changed = fitFreezeChanged(settings, choices);
   return (dot ? `<div class="map-detail-head"><span>CAGR <b>${fitCagrText(job.cagrOf, dot.r)}</b>, max drawdown <b>${fitDdText(dot.r)}</b></span>`
     + (dot.differs ? '<button type="button" class="map-use-btn" data-map-use>Use</button>' : '')
     + (picked ? '<button type="button" class="map-clear-btn" data-map-clear>Clear</button>' : '') + '</div>' : '')
     + notes.map(note => `<div class="map-near">${_escHtml(note)}</div>`).join('')
-    + `<div class="map-strategy">${buildFitStrategyHtml(map.key, value)}</div>`;
+    + `<div class="map-strategy"><div class="map-freeze-head"><b>Freeze</b>${mapTipIcon(MAP_FREEZE_TIP)}<span class="fit-freeze-notice">${fitFreezeNotice(changed)}</span></div>`
+    + buildFitStrategyHtml(map.key, value)
+    + `<button type="button" class="fit-freeze-reset" data-map-freeze-reset${changed ? '' : ' disabled'}>Reset</button></div>`;
+}
+// The frozen settings changed (a tick in the column, or its Reset): the map is worked out again
+// for the settings that are free now. The user (2026-11-25): "I want freeze component to also
+// appear, in the map component, in place of strategy, just add a checkbox that will freeze a
+// specific setting and then map will rerun/reevaluate". What is running stops; the dots that
+// keep every frozen setting as it is stay (a code strategy's runs are kept whatever is frozen; a
+// panel's start over), and the map fills itself again unless it was done for these settings.
+// Ticks made in a row: the last one's turn is the one that goes on.
+async function refreezeMap(map) {
+  const turn = map.turn = (map.turn || 0) + 1;
+  await stopMapWork(map);
+  if (_map !== map || map.turn !== turn) return;
+  const period = fitPeriodOf(fitChoices());
+  setMapJob(map, fitJobFor(map.key, period), period);
+  showMap();
+  if (map.job && !mapIsDone(map)) startMapFill(map);
+}
+// A tick on a value in the column freezes its setting, an empty box lets the map change it.
+function onMapWindowChange(e) {
+  const map = _map, box = e.target.closest('[data-map-freeze-id]');
+  if (!map || !box) return;
+  setFitFrozen(map.key, fitSettings(map.key).find(s => s.id === box.getAttribute('data-map-freeze-id')), box.checked);
+  refreezeMap(map);
 }
 // The map as a file: a row a dot, the highest CAGR first. The settings' columns carry the
 // strategy's own names for them and the values as its dropdowns read (the user, 2026-11-25:
