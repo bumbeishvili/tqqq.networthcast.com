@@ -3013,7 +3013,7 @@ function buildNativeSettingsHeaderHtml(type) {
   const atDefaults = paramsEqual(captureParams(type), strategyDefaultParams(type, savedConfigInPanel(type)), type);
   const note = _fitNotes[key] ? buildFitNoteHtml(_fitNotes[key]) : '';
   return `<div class="strategy-panel-section-label settings-head"><span>Settings</span><span class="settings-actions">`
-    + `${FIT_PANELS[type] ? buildFitButtonHtml(key) : ''}`
+    + `${FIT_PANELS[type] ? buildFitButtonHtml(key) + buildMapButtonHtml(key) : ''}`
     + `<button type="button" class="settings-reset-btn" data-sc-reset="${type}"${atDefaults || (_fit && _fit.key === key) ? ' disabled' : ''}>Reset to default</button>`
     + `</span></div>${note}`;
 }
@@ -3582,10 +3582,10 @@ function restoreFitFreezeFromShare(text) {
 // Sandbox workers sharing a job queue; run() resolves with the worker's
 // message, or null when the run failed, timed out or the pool was closed.
 // run(code, globals, rawParams, answer): answer 'values' asks the worker for
-// each row's date and value alone (see customWorkerMain).
-function fitPool() {
+// each row's date and value alone (see customWorkerMain). data: the prices the
+// workers run on (buildCustomData), as they stood when the search was set up.
+function fitPool(data) {
   const size = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
-  const data = buildCustomData();
   const spawn = () => { const w = newCustomWorker(); w.postMessage({ type: 'data', data }); return w; };
   const slots = Array.from({ length: size }, () => ({ w: spawn(), finish: null }));
   const queue = [];
@@ -3691,20 +3691,26 @@ function fitPlateauSetting(s) {
   const scan = [...new Map(s.values.flatMap(v => [v].concat(near(v))).map(v => [String(v), v])).values()];
   return Object.assign({}, s, { near, scan, between: () => [] });
 }
-// A set of values as a plateau fit judges it: the worst of its own result and of every neighbour
-// of every setting, one setting moved at a time. own: its own result. low and deep: the neighbour
-// with the lowest final value and the one with the deepest drawdown, the setting moved and the
-// value it stands at ({ id, value }; label and to as the note names them), or null where the
-// settings' own result is the worst. null when its own run failed.
+// A set of values with one setting moved to a neighbour of its value ({ s, v }).
+const fitMoved = (values, move) => Object.assign({}, values, { [move.s.id]: move.v });
+// A set of values as a plateau fit judges it, from its own result and its neighbours' (moves with
+// their result r, null for a failed run): the worst of them all. own: its own result. low and
+// deep: the neighbour with the lowest final value and the one with the deepest drawdown, the
+// setting moved and the value it stands at ({ id, value }; label and to as the note names them),
+// or null where the settings' own result is the worst.
+function fitFlatOf(own, moves) {
+  const met = moves.filter(m => m.r);
+  const spot = (m, worse) => (m && worse(m.r) ? { id: m.s.id, value: m.v, label: m.s.label, to: m.s.text(m.v) } : null);
+  return Object.assign(fitWorst(moves.map(m => m.r).concat(own)), { own,
+    low: spot(d3.least(met, m => m.r.final), r => r.final < own.final), deep: spot(d3.greatest(met, m => m.r.dd), r => r.dd > own.dd) });
+}
+// The same with the runs made: null when the set's own run failed.
 async function fitFlatAt(space, values, measure) {
   const own = await measure(Object.assign({}, values));
   if (!own) return null;
   const moves = space.flatMap(s => s.near(values[s.id]).map(v => ({ s, v })));
-  const results = await Promise.all(moves.map(m => measure(Object.assign({}, values, { [m.s.id]: m.v }))));
-  const met = moves.map((m, i) => Object.assign(m, { r: results[i] })).filter(m => m.r);
-  const spot = (m, worse) => (m && worse(m.r) ? { id: m.s.id, value: m.v, label: m.s.label, to: m.s.text(m.v) } : null);
-  return Object.assign(fitWorst(results.concat(own)), { own,
-    low: spot(d3.least(met, m => m.r.final), r => r.final < own.final), deep: spot(d3.greatest(met, m => m.r.dd), r => r.dd > own.dd) });
+  const results = await Promise.all(moves.map(m => measure(fitMoved(values, m))));
+  return fitFlatOf(own, moves.map((m, i) => Object.assign(m, { r: results[i] })));
 }
 // A set of values as the fit judges it: on a plateau with its neighbours, else by its own run.
 const fitJudge = (quest, space, values) => quest.rule.plateau ? fitFlatAt(space, values, quest.measure) : quest.measure(Object.assign({}, values));
@@ -4236,41 +4242,64 @@ async function fitRun(job) {
   const reached = fitReached(rule, best);
   if (!reached) Object.assign(job.cur, before);
   const changed = job.space.filter(s => String(job.cur[s.id]) !== String(before[s.id]));
-  // Each changed setting, old → new, as its dropdown reads (the user: "a quick summary of what changed").
-  const changes = changed.map(s => ({ label: s.label, from: s.text(before[s.id]), to: s.text(job.cur[s.id]) }));
+  const changes = fitChangesOf(job.space, before, job.cur);
   if (changed.length) job.apply(job.cur, changed);
   const inUse = plan.fewest ? { before: fitInUseCount(job.space, before), now: fitInUseCount(job.space, job.cur), of: job.space.length, next: state.next, top: state.top } : null;
   _fitNotes[job.key] = { text: fitNoteText(plan, job.floor, job.cagrOf, start, best, reached, changed.length, inUse), changes };
   render();
 }
-// Runs each distinct setting combination once per fit.
-const fitMemo = (memo, run) => (values) => {
-  const k = JSON.stringify(values);
-  if (!memo.has(k)) memo.set(k, run(values));
-  return memo.get(k);
+// ---- Runs kept for the page ----
+// The user (2026-11-25, asking for the settings map): "many processes could be shared across so
+// it is actually quicker". Every finished run of a key's settings is kept while the page lives,
+// under the settings it ran with: a second fit, and the map (js/settings-map.js), take what an
+// earlier search ran instead of running it again, and the map draws them all. A key's store is
+// dropped when what its results stand on changes (the stamp): the strategy's code, the chart's
+// period and money, the data, and for a panel its frozen settings. A failed run is not kept: it
+// may have been cut short by Stop. A long map is tens of thousands of runs, so a run is kept under
+// its values alone (fitRunKey) and only the last FIT_RUN_STORES keys worked on keep their runs.
+const FIT_RUN_STORES = 4;
+const _fitRuns = new Map();   // key -> { stamp, ids, done: Map(fitRunKey -> { values, r: { final, dd } }) }, the last used last
+// ids: the settings a run's values hold, in the order its key lists them.
+function fitRunStore(key, stamp, ids) {
+  const kept = _fitRuns.get(key), store = kept && kept.stamp === stamp ? kept : { stamp, ids, done: new Map() };
+  _fitRuns.delete(key);
+  _fitRuns.set(key, store);
+  while (_fitRuns.size > FIT_RUN_STORES) _fitRuns.delete(_fitRuns.keys().next().value);
+  return store;
+}
+// What a store keeps a set of values under: each setting's value in the store's order, as text.
+const fitRunKey = (store, values) => JSON.stringify(store.ids.map(id => values[id]));
+// measure(values) for one search: a run the store holds comes from there; any other is run once
+// in this search, a failed one too, and kept when it gives a result.
+const fitMeasure = (store, run) => {
+  const asked = new Map();
+  return (values) => {
+    const k = fitRunKey(store, values), kept = store.done.get(k);
+    if (kept) return Promise.resolve(kept.r);
+    if (!asked.has(k)) asked.set(k, Promise.resolve(run(values)).then((r) => { if (r) store.done.set(k, { values: Object.assign({}, values), r }); return r; }));
+    return asked.get(k);
+  };
 };
 // The drawdown goal with no buy & hold line to beat: say so, change nothing.
 function fitNoHurdle(key, fund) {
   _fitNotes[key] = { text: fund ? `No buy & hold line for ${fund.toUpperCase()} to compare with, so nothing changed.` : 'The strategy holds no fund on this period, so nothing changed.', changes: [] };
   render();
 }
-// Fit for a code strategy (runs in the sandbox worker pool).
-async function runCustomFit(cfgId, plan) {
-  const cfg = savedConfigs.find(c => c.id === cfgId), ctx = window._customCtx;
-  if (_fit || !cfg || !cfg.code || !ctx) return;
-  const schema = getCustomSchema(cfg), free = fitFreeIds(cfgId);
-  if (free === null) return;
-  if (!free.size) { fitNothingFree(cfgId); return; }
-  const params = schema.filter(sp => sp && sp.id != null && free.has(sp.id));
-  const cagrOf = f => cfgMoneyWeightedCAGR(ctx, f);
-  let floor = null;
-  if (plan.goal === 'dd') {
-    const hold = plan.limit == null ? fitHurdle(cfg) : null;
-    if (hold && !hold.final) { fitNoHurdle(cfgId, hold.fund); return; }
-    floor = fitFloor(plan, cagrOf, hold);
-  }
-  const globals = computeCustomGlobals(cfg, ctx), pool = fitPool();
-  const cur = {};
+// ---- What a search works on ----
+// A key's settings as Fit and the map (js/settings-map.js) search them:
+//   cur      every setting's value as it stands (a panel: the free ones)
+//   space    the settings that may change: { id, label, values, between(v), text(v), number(v), off, shown(values) }
+//   cagrOf   from a final value to its CAGR on the chart's period and money
+//   store    the key's kept runs (fitRunStore)
+//   apply    (values, changed settings): sets them on the strategy
+//   start    (live) opens the runs: { measure(values) -> { final, dd } or null, close() }. live()
+//            tells whether the search still goes on; a panel's runs end when it does not.
+// A code strategy's runs go to the sandbox worker pool, on the prices as they stood when the job
+// was set up.
+function customFitJob(cfg, ctx, free) {
+  const schema = getCustomSchema(cfg), params = schema.filter(sp => sp && sp.id != null && free.has(sp.id));
+  // The prices as they stand now: every run of this job is on them, also one started after a live price came in.
+  const globals = computeCustomGlobals(cfg, ctx), data = buildCustomData(), cur = {};
   schema.forEach(sp => { if (sp && sp.id != null) cur[sp.id] = fitStored(customParamValue(cfg, sp)); });
   // The number a value stands for: a plain numeric option's own value, a number between the options, or null for a named choice.
   const numberOf = (sp) => {
@@ -4278,68 +4307,105 @@ async function runCustomFit(cfgId, plan) {
     const between = (v) => typeof v === 'string' && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
     return v => options.has(String(v)) ? options.get(String(v)) : between(v);
   };
-  await fitRun({
-    key: cfgId, plan, floor, cur, close: pool.close,
+  const store = fitRunStore(cfg.id, [cfg.code, JSON.stringify(globals), customDataStamp(ctx)].join('|'), Object.keys(cur));
+  return {
+    key: cfg.id, cur, store,
     space: params.map(sp => ({ ...customSettingSpace(schema, sp), label: fitLabel(schema, sp),
       between: v => fitBetween(sp, v), text: v => customOptionLabel(sp, v), number: numberOf(sp) })),
-    measure: fitMemo(new Map(), p => pool.run(cfg.code, globals, p).then(fitScore)),
-    cagrOf,
+    cagrOf: f => cfgMoneyWeightedCAGR(ctx, f),
     apply: (values, changed) => {
       cfg.params = cfg.params || {};
       changed.forEach(s => { cfg.params[s.id] = values[s.id]; });
       persistSavedConfigs();
     },
-  });
+    start: () => {
+      const pool = fitPool(data);
+      return { measure: fitMeasure(store, p => pool.run(cfg.code, globals, p).then(fitScore)), close: pool.close };
+    },
+  };
 }
 // The built-in panels Fit can search, and the select naming the fund each buys
 // (the drawdown goal's buy & hold hurdle).
 const FIT_PANELS = { '9sig': { fund: 'select-9sig-underlying' }, sma: { fund: 'select-sma-underlying' } };
 const FIT_YIELD_MS = 25;
-// Fit for a built-in 9sig or SMA panel. Their engines run on the page, so the
-// runs go one at a time with a pause every FIT_YIELD_MS for the progress and
-// Stop. Which selects it may change, their names and one run's result come
-// from js/preview-dropdown.js (window.previewFit), which owns those engines'
-// option previews; which of them are frozen is the user's choice (fitFreeIds).
-async function runNativeFit(type, plan) {
+// A built-in 9sig or SMA panel. Their engines run on the page, so the runs go
+// one at a time with a pause every FIT_YIELD_MS for the progress and Stop.
+// Which selects may change, their names and one run's result come from
+// js/preview-dropdown.js (window.previewFit), which owns those engines' option
+// previews; which of them are frozen is the user's choice (fitFreeIds).
+function nativeFitJob(type, free) {
   const pf = window.previewFit, key = 'panel:' + type;
-  if (_fit || !FIT_PANELS[type] || !pf) return;
-  const free = fitFreeIds(key);
-  if (free === null) return;
-  if (!free.size) { fitNothingFree(key); return; }
   const selects = Array.from(free, id => document.getElementById(id));
-  const cagrOf = f => window._mwCagrOfFinal(f);
-  let floor = null;
-  if (plan.goal === 'dd') {
-    const fund = document.getElementById(FIT_PANELS[type].fund).value, hold = plan.limit == null ? { fund, final: window.previewBhFinals()[fund] } : null;
-    if (hold && !(hold.final > 0)) { fitNoHurdle(key, fund); return; }
-    floor = fitFloor(plan, cagrOf, hold);
-  }
   const base = pf.base(type), cur = {};
   selects.forEach(el => { cur[el.id] = el.value; });
-  let chain = Promise.resolve(), lastYield = performance.now();
-  const runOne = (values) => (chain = chain.then(async () => {
-    if (performance.now() - lastYield > FIT_YIELD_MS) { await new Promise(r => setTimeout(r, 0)); lastYield = performance.now(); }
-    if (!_fit || _fit.stopped) return null;
-    try { return pf.measure(type, base, values); } catch (e) { console.error('Fit: a run failed', e); return null; }
-  }));
+  const optionsOf = (el) => Array.from(el.options).filter(o => !o.disabled).map(o => o.value);
   const optionText = (el, v) => { const o = Array.from(el.options).find(x => x.value === String(v)); return o ? o.textContent.trim() : String(v); };
   // A panel setting that belongs to a rule (pf.needs) shows while that rule's setting is not off; a frozen one is read off the page.
   const ruleOn = (id, values) => { const rule = pf.needs(id); return !rule || String(rule in values ? values[rule] : document.getElementById(rule).value) !== String(pf.off(rule)); };
-  await fitRun({
-    key, plan, floor, cur, close: () => {},
+  // The stamp leaves the free settings' own values out of account (each read at its first option), so a fit's change keeps the store.
+  // The engines read the prices as they are at each run: a live price that comes in while a search or an open map goes on
+  // moves its later runs by that much, as it always did within one fit; the next search starts a new store.
+  const ids = selects.map(el => el.id);
+  const store = fitRunStore(key, [pf.stamp(type, base, Object.fromEntries(selects.map(el => [el.id, optionsOf(el)[0]]))), ids.join(','), _customDataVersion].join('|'), ids);
+  return {
+    key, cur, store,
     // A select's value can be in another unit than its text ("1 quarter" is 3 months), so a round fit goes by the text.
-    space: selects.map(el => ({ id: el.id, label: pf.name(el.id), values: Array.from(el.options).filter(o => !o.disabled).map(o => o.value),
+    space: selects.map(el => ({ id: el.id, label: pf.name(el.id), values: optionsOf(el),
       between: () => [], text: v => optionText(el, v), number: v => fitShownNumber(optionText(el, v)),
       off: pf.off(el.id), shown: values => ruleOn(el.id, values) })),
-    measure: fitMemo(new Map(), runOne),
-    cagrOf,
+    cagrOf: f => window._mwCagrOfFinal(f),
     apply: (values) => {
       applyControlParams(type, Object.assign(captureParams(type), values));
       if (typeof saveSliders === 'function') saveSliders();
     },
-  });
+    start: (live) => {
+      let chain = Promise.resolve(), lastYield = performance.now();
+      const runOne = (values) => (chain = chain.then(async () => {
+        if (performance.now() - lastYield > FIT_YIELD_MS) { await new Promise(r => setTimeout(r, 0)); lastYield = performance.now(); }
+        if (!live()) return null;
+        try { return pf.measure(type, base, values); } catch (e) { console.error('Fit: a run failed', e); return null; }
+      }));
+      return { measure: fitMeasure(store, runOne), close: () => {} };
+    },
+  };
 }
-function runFit(key, plan) { return fitIsPanel(key) ? runNativeFit(key.slice(6), plan) : runCustomFit(key, plan); }
+// What can be searched for a key right now: { job } (customFitJob / nativeFitJob), { frozen: true }
+// when every setting is frozen, or null when there is nothing to search (no such strategy, no
+// setting with a choice, the chart not drawn yet).
+function fitJobFor(key) {
+  const free = fitFreeIds(key);
+  if (fitIsPanel(key)) {
+    const type = key.slice(6);
+    if (!FIT_PANELS[type] || !window.previewFit || free === null) return null;
+    return free.size ? { job: nativeFitJob(type, free) } : { frozen: true };
+  }
+  const cfg = savedConfigs.find(c => c.id === key), ctx = window._customCtx;
+  if (!cfg || !cfg.code || !ctx || free === null) return null;
+  return free.size ? { job: customFitJob(cfg, ctx, free) } : { frozen: true };
+}
+// Is the search of a key still going on? What a panel's runs ask between two of them.
+const fitLive = () => !!_fit && !_fit.stopped;
+// Fit from the window's plan. The drawdown goal's floor: the least CAGR typed, else buy & hold of
+// the fund a code strategy holds most, or of the fund a panel buys.
+async function runFit(key, plan) {
+  if (_fit) return;
+  const found = fitJobFor(key);
+  if (!found) return;
+  if (found.frozen) { fitNothingFree(key); return; }
+  const { job } = found;
+  let floor = null;
+  if (plan.goal === 'dd') {
+    const hold = plan.limit != null ? null : fitIsPanel(key) ? fitPanelHold(key.slice(6)) : fitHurdle(savedConfigs.find(c => c.id === key));
+    if (hold && !(hold.final > 0)) { fitNoHurdle(key, hold.fund); return; }
+    floor = fitFloor(plan, job.cagrOf, hold);
+  }
+  await fitRun({ ...job, ...job.start(fitLive), plan, floor });
+}
+// Buy & hold of the fund a panel buys, with the chart's money.
+function fitPanelHold(type) {
+  const fund = document.getElementById(FIT_PANELS[type].fund).value;
+  return { fund, final: window.previewBhFinals()[fund] };
+}
 
 // A setting's name for the change list: its section's head ("Ceiling" of
 // "Ceiling — step aside") and its label without the unit in brackets, so two
@@ -4353,11 +4419,23 @@ function fitLabel(schema, sp) {
   const name = String(sp.label || sp.id).replace(/\s*\([^()]*\)\s*$/, '');
   return section ? `${section} · ${name}` : name;
 }
+// Each changed setting, old → new, as its dropdown reads (the user: "a quick summary of what changed").
+const fitChangesOf = (space, from, to) => space.filter(s => String(to[s.id]) !== String(from[s.id]))
+  .map(s => ({ label: s.label, from: s.text(from[s.id]), to: s.text(to[s.id]) }));
+const buildFitChangesHtml = (changes) => changes.length
+  ? `<ul class="fit-changes">${changes.map(c => `<li>${_escHtml(c.label)}: ${_escHtml(c.from)} → <b>${_escHtml(c.to)}</b></li>`).join('')}</ul>` : '';
 // The result under Settings: what moved, then each changed setting.
 function buildFitNoteHtml(note) {
-  const list = note.changes.length
-    ? `<ul class="fit-changes">${note.changes.map(c => `<li>${_escHtml(c.label)}: ${_escHtml(c.from)} → <b>${_escHtml(c.to)}</b></li>`).join('')}</ul>` : '';
-  return `<div class="fit-note">${_escHtml(note.text)}${list}</div>`;
+  return `<div class="fit-note">${_escHtml(note.text)}${buildFitChangesHtml(note.changes)}</div>`;
+}
+// A result's two numbers as the notes write them.
+const fitCagrText = (cagrOf, r) => cagrOf(r.final).toFixed(1) + '%';
+const fitDdText = (r) => (r.dd * 100).toFixed(1) + '%';
+// What a plateau's judgement (fitFlatOf) says of the neighbours: what the worst of them makes and
+// falls, each with the neighbour that gives it, the setting and the value it would stand at.
+function fitNearText(cagrOf, flat) {
+  const at = (spot) => spot ? ` (${spot.label} at ${spot.to})` : '';
+  return `With any one setting a tenth off either way: CAGR ${fitCagrText(cagrOf, flat)} or more${at(flat.low)}, max drawdown ${fitDdText(flat)} or less${at(flat.deep)}.`;
 }
 // What a plan asks for, as the note names it: "Lowest drawdown at 180% a year or more, and the highest CAGR at it, on a plateau".
 function fitAskText(plan, floor) {
@@ -4371,14 +4449,12 @@ function fitAskText(plan, floor) {
 function fitNoteText(plan, floor, cagrOf, start, best, reached, nChanged, inUse) {
   if (!best) return 'The runs failed, so nothing changed.';
   const own = (r) => r.own || r;
-  const cagr = (r) => cagrOf(r.final).toFixed(1) + '%';
-  const dd = (r) => (r.dd * 100).toFixed(1) + '%';
+  const cagr = (r) => fitCagrText(cagrOf, r);
+  const dd = fitDdText;
   const both = (r) => `CAGR ${cagr(r)}, max drawdown ${dd(r)}`;
   const how = (plan.round ? ' in round numbers' : '') + (plan.plateau ? ' on a plateau' : '');
-  // A plateau's result holds for the neighbours too: what the worst of them makes and falls.
-  // Each with the neighbour that gives it, the setting and the value it would stand at.
-  const at = (spot) => spot ? ` (${spot.label} at ${spot.to})` : '';
-  const near = (r) => plan.plateau ? ` With any one setting a tenth off either way: CAGR ${cagr(r)} or more${at(r.low)}, max drawdown ${dd(r)} or less${at(r.deep)}.` : '';
+  // A plateau's result holds for the neighbours too.
+  const near = (r) => plan.plateau ? ' ' + fitNearText(cagrOf, r) : '';
   if (!reached) {
     const closest = ` The closest found: ${both(own(best))}.${near(best)}`;
     return plan.goal === 'dd'
@@ -4436,16 +4512,7 @@ function openFitWindow(key) {
   el.innerHTML = buildFitWindowHtml(key, _fitWindow.choices, false);
   document.body.appendChild(el);
   document.body.classList.add('modal-open');
-  // A tick freezes its setting, an empty box lets Fit change it.
-  el.addEventListener('change', (e) => {
-    const box = e.target.closest('[data-fit-freeze-id]');
-    if (!box) return;
-    const settings = fitSettings(key), setting = settings.find(s => s.id === box.getAttribute('data-fit-freeze-id'));
-    setFitFrozen(key, setting, box.checked);
-    const changed = fitFreezeChanged(settings, fitFreezeChoices(key));
-    el.querySelector('.fit-freeze-notice').textContent = fitFreezeNotice(changed);
-    el.querySelector('[data-fit-freeze-reset]').disabled = !changed;
-  });
+  el.addEventListener('change', (e) => { fitFreezeTicked(el, key, e.target); });
   // The limit as it is typed; Enter in its box runs the fit.
   el.addEventListener('input', (e) => {
     const box = e.target.closest('[data-fit-limit]');
@@ -4453,6 +4520,18 @@ function openFitWindow(key) {
   });
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest('[data-fit-limit]')) runFitWindow(); });
   document.addEventListener('keydown', _fitWindowKey, true);
+}
+// A tick in a window's Freeze list freezes its setting, an empty box lets a search change it; the
+// notice beside "Freeze" and Reset follow. True when `target` was such a box.
+function fitFreezeTicked(el, key, target) {
+  const box = target.closest('[data-fit-freeze-id]');
+  if (!box) return false;
+  const settings = fitSettings(key), setting = settings.find(s => s.id === box.getAttribute('data-fit-freeze-id'));
+  setFitFrozen(key, setting, box.checked);
+  const changed = fitFreezeChanged(settings, fitFreezeChoices(key));
+  el.querySelector('.fit-freeze-notice').textContent = fitFreezeNotice(changed);
+  el.querySelector('[data-fit-freeze-reset]').disabled = !changed;
+  return true;
 }
 // One of the window's choices set and kept for the next time it opens.
 function setFitChoice(id, value) {
@@ -4836,7 +4915,7 @@ function renderCustomPanelBody(cfgId) {
     const atDefaults = schema.every(sp => sp.id == null || String(customParamValue(cfg, sp)) === String(coerceCustomVal(sp, sp.default)));
     const fitNote = _fitNotes[cfg.id] ? buildFitNoteHtml(_fitNotes[cfg.id]) : '';
     html += `<div class="strategy-panel-section-label settings-head" style="margin-top:14px"><span>Settings</span>`
-      + `<span class="settings-actions">${buildFitButtonHtml(cfg.id)}`
+      + `<span class="settings-actions">${buildFitButtonHtml(cfg.id)}${buildMapButtonHtml(cfg.id)}`
       + `<button type="button" class="settings-reset-btn" data-custom-reset="${_escHtml(cfg.id)}"${atDefaults || (_fit && _fit.key === cfg.id) ? ' disabled' : ''}>Reset to default</button></span></div>${fitNote}${controls}`;
   }
 

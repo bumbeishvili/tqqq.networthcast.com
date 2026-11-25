@@ -1822,7 +1822,7 @@ async function warmAnalyticsCodeRuns(keys, rowRanges, money, isCurrent, onProgre
     .map(([entryIdx, exitIdx]) => ({ cfg, entryIdx, exitIdx, ck: analyticsCodeCacheKey(cfg, initial, monthly, annualRaise, entryIdx, exitIdx) }))
     .filter(run => !_analyticsCodeCache.has(run.ck)));
   if (missing.length < ANALYTICS_POOL_MIN_RUNS) return;
-  const pool = fitPool();
+  const pool = fitPool(buildCustomData());
   let dropped = false, back = 0;
   await Promise.all(missing.map(({ cfg, entryIdx, exitIdx, ck }) => {
     const globals = computeCustomGlobals(cfg, { initial, monthly, annualRaise, simEntryIdx: entryIdx, exitIdx });

@@ -4321,6 +4321,57 @@
   .strategy-rules .explain-text { margin-top: 6px; }
   .strategy-rules .explain-list { margin: 4px 0 0 18px; padding: 0; }
   .fit-changes b { color: var(--text); font-weight: 600; }
+  /* The settings map (js/settings-map.js): the Map button's window, Fit's window made wider for a chart. */
+  .map-window { width: min(760px, calc(100vw - 24px)); }
+  .map-window .fit-window-head .info-icon { align-self: center; }
+  .map-view .fit-row { border-top: 0; }
+  .map-freeze:not(:empty) + .map-view .fit-row { border-top: 1px solid var(--border); }
+  .map-chart { margin: 4px 0; }
+  /* The chart's colours: js/settings-map-chart.js reads them off the plot at every render. */
+  .settings-map-plot {
+    --map-dot: rgba(134, 118, 255, 0.42);         /* a set of settings */
+    --map-dot-sized: rgba(134, 118, 255, 0.78);   /* a checked one, sized by how it holds */
+    --map-ring: var(--surface);                   /* the edge that keeps touching dots apart */
+    --map-better: rgba(134, 118, 255, 0.1);       /* the quarter better on both counts */
+    --map-worse: rgba(56, 56, 116, 0.07);         /* the quarter worse on both */
+    --map-grid: rgba(56, 56, 116, 0.1);
+    --map-frontier: rgba(56, 56, 116, 0.5);
+  }
+  /* A finger on the plot scrolls the window; once zoomed in it pans the plot. */
+  .settings-map-svg { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
+  .settings-map-svg.is-zoomed { touch-action: none; }
+  .settings-map-svg.is-zoomed .pointer-catch { cursor: grab; }
+  .settings-map-svg text { font-family: 'JetBrains Mono', monospace; font-size: calc(10px * var(--ui-scale)); fill: var(--text-muted); }
+  .settings-map-svg .x-title, .settings-map-svg .now-label, .settings-map-svg .quarter-label {
+    paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round;   /* readable over the dots */
+  }
+  .settings-map-svg .now-line-x, .settings-map-svg .now-line-y { stroke: var(--text); stroke-width: 1; stroke-dasharray: 4 3; }
+  .settings-map-svg .now-ring { fill: var(--surface); stroke: var(--text); stroke-width: 2; }
+  .settings-map-svg .now-label { fill: var(--text); font-weight: 700; }
+  .settings-map-svg .quarter-label { font-weight: 600; }
+  .settings-map-svg .pick-ring { fill: none; stroke: var(--text); stroke-width: 2; }
+  .settings-map-svg .hover-ring { fill: none; stroke: var(--accent-text); stroke-width: 1.5; }
+  .settings-map-svg .pick-link { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 2; }
+  .settings-map-svg .pick-link-end { fill: var(--text); }
+  .settings-map-svg .empty-text { font-family: inherit; font-size: calc(12px * var(--ui-scale)); }
+  .settings-map-svg .zoom-reset { cursor: pointer; }
+  .settings-map-svg .zoom-reset-box { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
+  .settings-map-svg .zoom-reset-text { fill: var(--accent-text); font-family: inherit; font-weight: 600; }
+  .settings-map-svg .zoom-reset:hover .zoom-reset-box { stroke: var(--accent); }
+  .map-tip { position: fixed; z-index: 10000; display: flex; flex-direction: column; gap: 2px; padding: 6px 9px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); box-shadow: var(--shadow-lg); font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); white-space: nowrap; pointer-events: none; }
+  .map-tip[hidden] { display: none; }
+  .map-tip b { color: var(--text); font-weight: 600; }
+  .map-detail { padding: 2px 0 8px; font-size: calc(11.5px * var(--ui-scale)); line-height: 1.45; color: var(--text-muted); }
+  .map-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: var(--text); }
+  .map-detail-head b { font-weight: 600; }
+  .map-use-btn { flex: none; padding: 4px 16px; border: 0; border-radius: 7px; background: var(--accent); font: inherit; font-weight: 600; color: var(--bg); cursor: pointer; }
+  .map-use-btn:hover { filter: brightness(1.06); }
+  .map-near, .map-differs { margin-top: 4px; }
+  .map-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .map-count { min-width: 0; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
+  .map-run-btn { flex: none; width: auto; min-width: calc(150px * var(--ui-scale)); }
+  .map-run-btn.running { border: 1px solid rgba(134, 118, 255, 0.45); background: linear-gradient(to right, rgba(134, 118, 255, 0.18) var(--fit-pct, 0%), transparent var(--fit-pct, 0%)); color: var(--accent-text); }
+  .map-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   /* "Strategy trades only", on every log table: only the rows the strategy
      itself traded on stay (js/utils.js toggleLogTradesOnly). */
   .log-section.trades-only tbody tr:not(.log-row-trade) { display: none; }

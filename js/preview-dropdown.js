@@ -19,7 +19,7 @@
   //   'bh'   → Buy & Hold; all four underlyings' finals come from ONE 9sig sim
   //            (no per-option resim), so no `apply` is needed.
   // `name` is the setting's name in the Fit summary (js/saved-configs.js
-  // runNativeFit); `fit: false` keeps a cost or execution setting (trading
+  // nativeFitJob); `fit: false` keeps a cost or execution setting (trading
   // cost, cash interest, settlement days, the rebalance point) out of the search.
   const PREVIEW_SELECTS = {
     'select-9sig-cash':       { kind: '9sig', name: 'Entry cash share', apply: (p, v) => { p.cashPct = (+v || 0) / 100; } },
@@ -177,8 +177,14 @@
   }
   const smaFinalOf = (r) => (r.smaPoints && r.smaPoints.length) ? r.smaPoints[r.smaPoints.length - 1].value : 0;
   function smaFinal(p) { return smaFinalOf(smaRun(p)); }
+  // A panel's params with some of its selects at other values (each select's own `apply`).
+  function withValues(base, values) {
+    const p = Object.assign({}, base);
+    for (const id in values) PREVIEW_SELECTS[id].apply(p, values[id]);
+    return p;
+  }
   // The Fit search's hooks for the built-in panels (js/saved-configs.js
-  // runNativeFit): the selects it may change, their names, the panel's params
+  // nativeFitJob): the selects it may change, their names, the panel's params
   // as they stand (the chart's window, money and transactions, as the bar
   // previews read them), and one run's final value and max drawdown, measured
   // at every daily close as the chart's own drawdown is (js/chart.js).
@@ -190,9 +196,11 @@
     off: (id) => PREVIEW_SELECTS[id].off,
     needs: (id) => PREVIEW_SELECTS[id].needs,
     base: (kind) => kind === 'sma' ? readSmaParams() : read9sigParams(),
+    // What a run's result stands on besides the settings in `values`, as text: the panel's params
+    // with those set. Runs with the same stamp and settings give the same result (the kept runs).
+    stamp: (kind, base, values) => JSON.stringify(withValues(base, values)),
     measure(kind, base, values) {
-      const p = Object.assign({}, base);
-      for (const id in values) PREVIEW_SELECTS[id].apply(p, values[id]);
+      const p = withValues(base, values);
       if (kind === 'sma') {
         const r = smaRun(p, true);
         return { final: smaFinalOf(r), dd: computeDailyMaxDrawdownMulti(r.ddControls, daily).pct };
