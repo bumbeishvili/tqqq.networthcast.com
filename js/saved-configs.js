@@ -816,7 +816,10 @@ which timing fired. A rule with no line is a bug. Declare them as lines:
   a fund your rule only trades, with no level on it, gets no line. Each group's FIRST line is what its
   levels are compared with. On each trade row, firedBy: "<group name>" names the group whose rule
   fired the trade: its mark goes in that panel only (a sale on the median line shows nothing on a
-  stress index). A trade row without firedBy is marked in the first panel. Example, a rule on
+  stress index). A trade row without firedBy is marked in the first panel. A trade row may also
+  carry why: "<a few words>", the reason alone (why: "SOXX lags QQQ by 16%"): on the day of the
+  trade the strategy's card names the trade, and the ⓘ beside it gives this line before the note.
+  Example, a rule on
   TQQQ's median and on TQQQ's lead over QQQ:
     { key: "assetPrice", label: "TQQQ price", group: "TQQQ price" }, { key: "median", label: "Median (250d)", group: "TQQQ price" },
     { key: "leadPct", label: "TQQQ ahead of QQQ", unit: "%", group: "TQQQ vs QQQ" }, { key: "ceiling", label: "Ceiling", unit: "%", group: "TQQQ vs QQQ" }
@@ -1754,7 +1757,7 @@ function customDailyDrawdown(log) {
 // Turn a (worker-computed) log into a label-aligned series + stats. No code eval.
 function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
   const labels = ctx.labels;
-  if (error) return { data: labels.map(() => null), cagr: 0, maxDD: 0, start: 0, end: 0, ddPeak: null, ddTrough: null };
+  if (error) return { data: labels.map(() => null), cagr: 0, maxDD: 0, start: 0, end: 0, ddPeak: null, ddTrough: null, dayEvent: null };
   const points = (log || [])
     .filter(r => r && r.date != null && typeof r.value === 'number' && Number.isFinite(r.value))
     .map(r => ({ date: String(r.date), value: r.value }))
@@ -1778,7 +1781,9 @@ function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
     dd = computeMaxDrawdown(ddVals.length ? ddVals : series, ddVals.length ? ddDates : labels);
   }
   if (!dd) dd = { pct: 0, peakDate: null, troughDate: null };
-  return { data: series, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate };
+  // The trade at the latest day's close, for the card (js/signal-chart.js dayEventOf). None from a
+  // log that is being run again: it may be yesterday's.
+  return { data: series, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate, dayEvent: stale ? null : dayEventOf(log) };
 }
 
 // Custom strategy series — served from the worker-result cache. On a cache miss
@@ -1873,6 +1878,7 @@ function computeConfigSeries(cfg, ctx) {
   const p = cfg.params || {};
   let points = null;
   let subPoints = null; // 9sig Holding/Target/Cash breakdown (for its sub-series)
+  let dayEvent = null;  // the trade at the latest day's close, for the card (js/chart.js nineSigDayEvent, smaDayEvent)
   let contributed = null; // what the run put in: its initial plus contributions
   // #3 Daily-drawdown control points (date/shares/cash) + the daily price field
   // to revalue against. Filled per strategy below; null → fall back to the
@@ -1948,6 +1954,7 @@ function computeConfigSeries(cfg, ctx) {
     };
     ddControls = (r.log || []).map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: l.cash }));
     ddKey = UL_KEY[opts.underlyingCol] || 'tqqq';
+    dayEvent = nineSigDayEvent(r.log, opts);
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: '9sig', log: r.log, bhPoints: r.bhPoints, qqqPoints: r.qqqPoints, spyPoints: r.spyPoints, qldPoints: r.qldPoints, ssoPoints: r.ssoPoints, spxlPoints: r.spxlPoints, sqqqPoints: r.sqqqPoints, gldPoints: r.gldPoints, soxlPoints: r.soxlPoints, soxxPoints: r.soxxPoints, soxsPoints: r.soxsPoints };
     const _sigLast = (r.log && r.log.length) ? r.log[r.log.length - 1] : null;
     if (_sigLast && typeof daily !== 'undefined' && daily && daily.length) {
@@ -1998,6 +2005,7 @@ function computeConfigSeries(cfg, ctx) {
     points = (r.smaPoints || []).map(pt => ({ date: pt.date, value: pt.value }));
     // Full multi-asset holdings per step → honest daily-revalued max drawdown.
     ddMulti = r.ddControls || null;
+    dayEvent = smaDayEvent(r.smaLog, opts);
     if (window._editingConfigId === cfg.id) window._editingConfigSim = { type: 'sma', smaLog: r.smaLog, smaPoints: r.smaPoints, ddControls: r.ddControls };
     const _smaCtlLast = (ddMulti && ddMulti.length) ? ddMulti[ddMulti.length - 1] : null;
     if (_smaCtlLast) endState = { h: _smaCtlLast.h, cash: _smaCtlLast.cash };
@@ -2084,7 +2092,7 @@ function computeConfigSeries(cfg, ctx) {
     : (ddControls && ddControls.length && dailyRows && typeof computeDailyMaxDrawdown === 'function')
     ? computeDailyMaxDrawdown(ddControls, dailyRows, ddKey)
     : ((typeof computeMaxDrawdown === 'function') ? computeMaxDrawdown(data, labels) : { pct: 0, peakDate: null, troughDate: null });
-  return { data, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed };
+  return { data, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed, dayEvent };
 }
 
 function fadeColor(hex, a) {
@@ -2109,7 +2117,7 @@ function appendConfigDatasets(chart, ctx) {
   window._editingConfigSim = null;
   for (const cfg of savedConfigs) {
     const s = computeConfigSeries(cfg, ctx);
-    window._configMetrics[cfg.id] = { cagr: s.cagr, maxDD: s.maxDD, start: s.start, end: s.end, ddPeak: s.ddPeak, ddTrough: s.ddTrough };
+    window._configMetrics[cfg.id] = { cagr: s.cagr, maxDD: s.maxDD, start: s.start, end: s.end, ddPeak: s.ddPeak, ddTrough: s.ddTrough, event: s.dayEvent || null };
     chart.data.datasets.push({
       label: cfg.name,
       data: s.data,
@@ -3023,23 +3031,37 @@ document.addEventListener('change', (e) => {
 }, true);
 
 // --- Parameters-panel pill list ----------------------------------------
+// The colour of a card's day event, by the trade's kind: the log tables' own classes for a buy
+// and a sale; a switch and a rebalance keep the card's accent.
+const SC_EVENT_CLASS = { buy: 'action-buy', sell: 'action-sell' };
 function buildConfigPillHtml(cfg) {
   const m = (window._configMetrics || {})[cfg.id] || {};
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const hidden = !!cfg.hidden;
+  // An ⓘ stands right after what it explains (the user, 2026-11-25: "close to the symbol it is connected to").
+  const tipIcon = (lines) => `<span class="info-icon sc-info" tabindex="0" data-tip="${esc(lines.filter(Boolean).join('\n'))}">ⓘ</span>`;
+  // The numbers on one line. The drawdown's dates are in an ⓘ beside it, and nothing else is
+  // (the user: "only that should have info icon that should only display when that drawdown
+  // happened between").
   let metrics = '';
   if (Number.isFinite(m.cagr)) {
     const cagrSign = m.cagr >= 0 ? '+' : '';
     const cagrCls = m.cagr >= 0 ? 'positive' : 'negative';
     const ddStr = Number.isFinite(m.maxDD) ? fmtDD(m.maxDD) : '';
     const ddRange = (typeof fmtDDRange === 'function') ? fmtDDRange(m.ddPeak, m.ddTrough) : '';
-    const ddRangeHtml = ddRange ? ` <span class="sc-metric-range">${ddRange}</span>` : '';
     metrics = `
       <div class="sc-metrics">
         <span class="sc-metric"><span class="sc-metric-label">CAGR</span> <span class="sc-metric-value ${cagrCls}">${cagrSign}${m.cagr.toFixed(1)}%</span></span>
-        ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRangeHtml}</span>` : ''}
+        ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRange ? tipIcon([ddRange]) : ''}</span>` : ''}
       </div>`;
   }
+  // The day's event: the strategy's trade at the latest day's close, on a day it trades
+  // (js/signal-chart.js dayEventOf). The card shows where the money goes, in the trade's colour,
+  // and no more. The ⓘ beside it has the rest: the trade and its close, the reason in a few
+  // words where the strategy gives one, its note, and whether the price is a close yet.
+  const event = m.event, close = event ? dayEventClose(event) : null;
+  const eventHtml = event ? `
+      <div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${esc(event.move)}</b>${tipIcon([`${event.what} ${close.when}.`, event.why, event.note, close.notFinal])}</div>` : '';
   const eyeSvg = hidden
     ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
     : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
@@ -3066,7 +3088,7 @@ function buildConfigPillHtml(cfg) {
           </button>
         </div>
       </div>
-      ${metrics}
+      ${metrics}${eventHtml}
     </div>`;
 }
 function renderSavedConfigPills() {
@@ -3452,7 +3474,7 @@ const FIT_DD_TOL = 0.001;     // the second stage's room over the drawdown found
 const FIT_LIMIT_RETRIES = 3;  // tries at getting past a rest short of the limit (fitSearch)
 const FIT_LIMIT_EASE = 0.05;  // how much each try eases the limit under where the settings stand
 let _fit = null;          // the running search: { key, goal, phase, round, done, total, stopped, close }
-let _fitWindow = null;    // { el, key, choices, freezeOpen } while the Fit window is open
+let _fitWindow = null;    // { el, key, choices, freezeOpen, preview } while the Fit window is open (preview: the map picture's chart, showMapPreview)
 // key (a code strategy's cfg id, or "panel:9sig" / "panel:sma") -> the last
 // fit's result { text, changes: [{ label, from, to }] }, until a setting is changed by hand
 const _fitNotes = {};
@@ -3761,25 +3783,35 @@ function fitBetween(sp, picked) {
 //   fewest   the fewest settings that keep 95% of the best found ("Fewest settings" below).
 // The window's choices as they are kept (FIT_CHOICES_KEY): the two limits as typed, one for each
 // goal, and the two years ("Fit years" below), '' while one follows the chart.
-const FIT_CHOICES_KEY = 'tqqq_fit_choices_v1';
-const FIT_CHOICES_DEFAULT = { goal: 'cagr', maxDd: '', minCagr: '', shape: 'cliff', numbers: 'optimal', settings: 'optimal', fromYear: '', toYear: '' };
-// The limit that goes with each goal: which of the choices holds it, its name and what an empty box means.
+// v2: the years open on 2010 to 2025 (the user, 2026-11-25: "when fitting let's set default to
+// 2010-2025"). Choices kept under v1 held '' for both, which was the default then and reads as
+// "the chart's" now, so they are left behind.
+const FIT_CHOICES_KEY = 'tqqq_fit_choices_v2';
+const FIT_CHOICES_DEFAULT = { goal: 'cagr', maxDd: '', minCagr: '', shape: 'cliff', numbers: 'optimal', settings: 'optimal', fromYear: '2010', toYear: '2025' };
+// The window's choices as sentences, a dropdown where each choice sits ({}), the way a strategy's
+// settings read. The user (2026-11-25): "let's use similar wording as we do in strategies and
+// similar dropdowns. This will say, fit the current strategy between 2010-2025 period (both
+// dropdowns), optimize for highest cagr, max drawdown of , lowest drawdown and minimum cagr of.
+// Shape (does not matter, or it's plateu), numbers should be optimal/rounded, parameters used
+// should be optimal/fewest possible".
+// The limit that goes with each goal follows the goal in its sentence: which of the choices holds
+// it, its words, its name (for a screen reader) and what an empty box means.
 const FIT_LIMITS = {
-  cagr: { id: 'maxDd', name: 'Max drawdown', empty: 'any',
-    tip: 'Only settings whose max drawdown is no deeper than this count. Empty: any drawdown.' },
-  dd: { id: 'minCagr', name: 'Min CAGR', empty: 'buy & hold',
-    tip: 'Only settings that make at least this much a year count. Empty: they have to beat buy & hold of the fund the strategy holds most.' },
+  cagr: { id: 'maxDd', name: 'Max drawdown', text: ' with a max drawdown of {}', empty: 'any',
+    tip: ['Skips settings with a deeper max drawdown than this.', 'Empty: any drawdown.'].join('\n') },
+  dd: { id: 'minCagr', name: 'Min CAGR', text: ' with a minimum CAGR of {}', empty: 'buy & hold',
+    tip: ['Skips settings that make less than this a year.', 'Empty: they must beat buy & hold of the fund the strategy holds most.'].join('\n') },
 };
-// The rows of two choices, in the order they are made; the limit's row comes after the first.
+// The sentences with one choice of two, in the order they are made; the goal's ends with its limit.
 const FIT_ROWS = [
-  { id: 'goal', name: 'Optimize', options: [['cagr', 'CAGR'], ['dd', 'Drawdown']],
-    tip: "CAGR: the settings with the highest CAGR on the chart's period and money. Drawdown: the smallest max drawdown, then the highest CAGR at that drawdown." },
-  { id: 'shape', name: 'Shape', options: [['cliff', 'Cliff'], ['plateau', 'Plateau']],
-    tip: 'Cliff: the best result, however narrow the peak it stands on. Plateau: each value is judged by the worst result among it and the values within a tenth of it either way, so the result holds when a setting is a little off. The limit then has to hold for those neighbours too.' },
-  { id: 'numbers', name: 'Numbers', options: [['round', 'Round'], ['optimal', 'Optimal']],
-    tip: 'Round: multiples of 5 from 10 up, whole or half numbers below. Optimal: any value, on a cliff also the ones between a dropdown\'s options.' },
-  { id: 'settings', name: 'Settings', options: [['fewest', 'Fewest'], ['optimal', 'Optimal']],
-    tip: 'Fewest: the fewest settings that keep 95% of the best result found; settings are taken out one by one, the rest tuned again, and the search repeated. Takes about ten times as long. Optimal: every setting may be in use.' },
+  { id: 'goal', name: 'Optimize', text: 'Optimize for {}', options: [['cagr', 'the highest CAGR'], ['dd', 'the lowest drawdown']],
+    tip: ['The highest CAGR: the settings that make the most a year.', 'The lowest drawdown: the smallest max drawdown, then the highest CAGR at that drawdown.', "Both use the years above and the chart's money."].join('\n') },
+  { id: 'shape', name: 'Shape', text: 'The shape {}.', options: [['cliff', 'does not matter'], ['plateau', 'must be a plateau']],
+    tip: ['Does not matter: the best result, even if a small change ruins it (a cliff).', `A plateau: the best result that still holds with any one setting ${FIT_PLATEAU_REACH * 100}% off.`, 'The limit must hold then too.'].join('\n') },
+  { id: 'numbers', name: 'Numbers', text: 'Numbers should be {}.', options: [['optimal', 'optimal'], ['round', 'rounded']],
+    tip: ['Optimal: any value. Where the shape does not matter, also values between a dropdown\'s options.', 'Rounded: only round values. Multiples of 5 from 10 up, whole or half numbers below.'].join('\n') },
+  { id: 'settings', name: 'Settings', text: 'Settings used should be {}.', options: [['optimal', 'optimal'], ['fewest', 'the fewest possible']],
+    tip: ['Optimal: every setting may be used.', 'The fewest possible: as few settings in use as keep 95% of the best result.', 'That takes about ten times as long.'].join('\n') },
 ];
 // What was typed as a limit: a number over zero, else none.
 const fitLimitOf = (text) => { const n = parseFloat(String(text).replace(',', '.')); return Number.isFinite(n) && n > 0 ? n : null; };
@@ -3813,14 +3845,15 @@ function fitFloor(plan, cagrOf, hold) {
 // The user (2026-11-25): "I want to add option to set fit years, start of the year and end of the
 // year, if current year is chosen use latest day. By default it should use existing slider, but
 // if it's changed option, then make sure changed one stays."
-// The window's Years row: a first and a last year. Each end is the chart's own Entry or Exit
-// until a year is picked for it ('' in the choices), and a picked year stays, kept with the
-// other choices, whatever the chart's period does afterwards. A first year starts at the year's
+// The window's Years row: a first and a last year. It opens on 2010 to 2025
+// (FIT_CHOICES_DEFAULT). An end set to its first choice ('' in the choices) is the chart's own
+// Entry or Exit; a picked year stays, kept with the other choices, whatever the chart's period
+// does afterwards. A first year starts at the year's
 // start (the chart's Entry on its first quarter), a last year ends at the year's end (Exit on its
 // last quarter), which for the year not over yet is the latest day. A fit on picked years runs
 // as it would with the chart's Entry and Exit moved there: quarter ends, the same money.
 const FIT_YEAR_ENDS = [{ id: 'fromYear', name: 'First year' }, { id: 'toYear', name: 'Last year' }];
-const FIT_YEARS_TIP = "The years the fit runs on, from the start of the first to the end of the last; the year not over yet ends on the latest day. \"Chart\" follows the chart's Entry or Exit. A year picked here stays until it is changed here.";
+const FIT_YEARS_TIP = ['The years the fit runs on, from the start of the first to the end of the last.', 'It opens on 2010 to 2025.', 'This year ends on the latest day.', "The top choice follows the chart's Entry or Exit.", 'A year picked below it stays until you change it.'].join('\n');
 const fitYearOfQuarter = (idx) => +quarterlyData[idx][0].slice(0, 4);
 // The chart's own period as its sliders hold it (render keeps them inside the data and in order).
 const fitChartPeriod = () => ({ entryIdx: +document.getElementById('slider-entry').value, exitIdx: +document.getElementById('slider-exit').value });
@@ -4340,8 +4373,12 @@ async function fitRun(job) {
 const FIT_RUN_STORES = 4;
 const _fitRuns = new Map();   // key -> { stamp, ids, done: Map(fitRunKey -> { values, r: { final, dd } }) }, the last used last
 // ids: the settings a run's values hold, in the order its key lists them.
-function fitRunStore(key, stamp, ids) {
+// peek: only look (the Fit window's picture of the map). The key's kept runs then stay as they
+// are, also when they stand on something else (other years, other frozen settings), and the
+// empty store handed back in that case is not kept.
+function fitRunStore(key, stamp, ids, peek) {
   const kept = _fitRuns.get(key), store = kept && kept.stamp === stamp ? kept : { stamp, ids, done: new Map() };
+  if (peek) return store;
   _fitRuns.delete(key);
   _fitRuns.set(key, store);
   while (_fitRuns.size > FIT_RUN_STORES) _fitRuns.delete(_fitRuns.keys().next().value);
@@ -4369,6 +4406,8 @@ function fitNoHurdle(key, fund) {
 // A key's settings as Fit and the map (js/settings-map.js) search them:
 //   cur      every setting's value as it stands (a panel: the free ones)
 //   space    the settings that may change: { id, label, values, between(v), text(v), number(v), off, shown(values) }
+//   settings every setting of the strategy, in its order, the frozen ones too: { id, name (the
+//            strategy's own name for it), now (its value as it stands), text(v) }
 //   cagrOf   from a final value to its CAGR on the chart's period and money
 //   store    the key's kept runs (fitRunStore)
 //   apply    (values, changed settings): sets them on the strategy
@@ -4376,7 +4415,7 @@ function fitNoHurdle(key, fund) {
 //            tells whether the search still goes on; a panel's runs end when it does not.
 // A code strategy's runs go to the sandbox worker pool, on the prices as they stood when the job
 // was set up.
-function customFitJob(cfg, ctx, free) {
+function customFitJob(cfg, ctx, free, peek) {
   const schema = getCustomSchema(cfg), params = schema.filter(sp => sp && sp.id != null && free.has(sp.id));
   // The prices as they stand now: every run of this job is on them, also one started after a live price came in.
   const globals = computeCustomGlobals(cfg, ctx), data = buildCustomData(), cur = {};
@@ -4387,9 +4426,10 @@ function customFitJob(cfg, ctx, free) {
     const between = (v) => typeof v === 'string' && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
     return v => options.has(String(v)) ? options.get(String(v)) : between(v);
   };
-  const store = fitRunStore(cfg.id, [cfg.code, JSON.stringify(globals), customDataStamp(ctx)].join('|'), Object.keys(cur));
+  const store = fitRunStore(cfg.id, [cfg.code, JSON.stringify(globals), customDataStamp(ctx)].join('|'), Object.keys(cur), peek);
   return {
     key: cfg.id, cur, store,
+    settings: schema.filter(sp => sp && sp.id != null).map(sp => ({ id: sp.id, name: String(sp.label || sp.id), now: cur[sp.id], text: v => customOptionLabel(sp, v) })),
     space: params.map(sp => ({ ...customSettingSpace(schema, sp), label: fitLabel(schema, sp),
       between: v => fitBetween(sp, v), text: v => customOptionLabel(sp, v), number: numberOf(sp) })),
     cagrOf: f => cfgMoneyWeightedCAGR(ctx, f),
@@ -4413,7 +4453,7 @@ const FIT_YIELD_MS = 25;
 // Which selects may change, their names and one run's result come from
 // js/preview-dropdown.js (window.previewFit), which owns those engines' option
 // previews; which of them are frozen is the user's choice (fitFreeIds).
-function nativeFitJob(type, free, period) {
+function nativeFitJob(type, free, period, peek) {
   const pf = window.previewFit, key = 'panel:' + type;
   const selects = Array.from(free, id => document.getElementById(id));
   const base = pf.base(type, period), cur = {};
@@ -4426,9 +4466,10 @@ function nativeFitJob(type, free, period) {
   // The engines read the prices as they are at each run: a live price that comes in while a search or an open map goes on
   // moves its later runs by that much, as it always did within one fit; the next search starts a new store.
   const ids = selects.map(el => el.id);
-  const store = fitRunStore(key, [pf.stamp(type, base, Object.fromEntries(selects.map(el => [el.id, optionsOf(el)[0]]))), ids.join(','), _customDataVersion].join('|'), ids);
+  const store = fitRunStore(key, [pf.stamp(type, base, Object.fromEntries(selects.map(el => [el.id, optionsOf(el)[0]]))), ids.join(','), _customDataVersion].join('|'), ids, peek);
   return {
     key, cur, store,
+    settings: pf.settings(type).map(s => document.getElementById(s.id)).filter(Boolean).map(el => ({ id: el.id, name: pf.name(el.id), now: el.value, text: v => optionText(el, v) })),
     // A select's value can be in another unit than its text ("1 quarter" is 3 months), so a round fit goes by the text.
     space: selects.map(el => ({ id: el.id, label: pf.name(el.id), values: optionsOf(el),
       between: () => [], text: v => optionText(el, v), number: v => fitShownNumber(optionText(el, v)),
@@ -4452,17 +4493,17 @@ function nativeFitJob(type, free, period) {
 // What can be searched for a key right now: { job } (customFitJob / nativeFitJob), { frozen: true }
 // when every setting is frozen, or null when there is nothing to search (no such strategy, no
 // setting with a choice, the chart not drawn yet). period: the fit's years where they are set
-// (fitPeriodOf), else the chart's period as it is.
-function fitJobFor(key, period) {
+// (fitPeriodOf), else the chart's period as it is. peek: only to look at the runs kept (fitRunStore).
+function fitJobFor(key, period, peek) {
   const free = fitFreeIds(key);
   if (fitIsPanel(key)) {
     const type = key.slice(6);
     if (!FIT_PANELS[type] || !window.previewFit || free === null) return null;
-    return free.size ? { job: nativeFitJob(type, free, period) } : { frozen: true };
+    return free.size ? { job: nativeFitJob(type, free, period, peek) } : { frozen: true };
   }
   const cfg = savedConfigs.find(c => c.id === key), ctx = window._customCtx;
   if (!cfg || !cfg.code || !ctx || free === null) return null;
-  return free.size ? { job: customFitJob(cfg, period ? fitPeriodCtx(ctx, period) : ctx, free) } : { frozen: true };
+  return free.size ? { job: customFitJob(cfg, period ? fitPeriodCtx(ctx, period) : ctx, free, peek) } : { frozen: true };
 }
 // Is the search of a key still going on? What a panel's runs ask between two of them.
 const fitLive = () => !!_fit && !_fit.stopped;
@@ -4565,66 +4606,98 @@ function fitNoteText(plan, floor, cagrOf, start, best, reached, nChanged, inUse)
 // The Fit button beside "Reset to default": it opens the Fit window; a running search shows its progress and stops on click.
 function buildFitButtonHtml(key) {
   const running = _fit && _fit.key === key;
-  const tip = "Opens the Fit window: it searches the settings for the best result on the chart's current period and money, and sets them. Frozen settings stay as they are: costs, cash interest and how trades execute, unless chosen otherwise under Freeze there.";
+  const tip = ['Opens the Fit window. It searches the settings for the best result and sets them.', "It uses the chart's years and money, unless you pick years there.", 'Frozen settings stay as they are: costs, cash interest and how trades execute, unless you untick them under Freeze.'].join('\n');
   return `<span class="settings-fit-wrap"><button type="button" class="settings-reset-btn settings-fit-btn${running ? ' running' : ''}" data-fit-key="${_escHtml(key)}"${_fit && !running ? ' disabled' : ''}${running ? ` title="${_escHtml(fitStepText(_fit))}" style="--fit-pct:${fitPercent(_fit)}%"` : ''}>${running ? _escHtml(fitProgressText(_fit)) : 'Fit'}</button>`
     + `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span></span>`;
 }
 // ---- The Fit window ----
-// What to freeze first, then the years ("Fit years"), then the choices in the order they are made
-// (FIT_ROWS, the goal's limit after the goal), then Map and Run. It opens on the choices of the last fit (fitChoices). The limit's
-// row follows the goal: "Max drawdown" for CAGR, "Min CAGR" for Drawdown, each keeping what was
-// typed for it.
-// Beside Run, "Map" opens the settings map (js/settings-map.js) in the window's place: the user
-// (2026-11-25): "i want that map button inside fit modal".
-const FIT_MAP_TIP = 'Opens the map: every set of settings as a dot, by its max drawdown and its CAGR. It searches for new sets by itself, with the settings frozen here left as they are.';
+// Two parts side by side from 900px of screen, the window 60% of the page wide (the user,
+// 2026-11-25: "make it wider, so it takes 60% of page, and put much better, functional and
+// logical UI around"); one under the other on a narrower screen.
+//   The fit: what to freeze, then the choices as sentences with a dropdown in each (FIT_ROWS,
+//   FIT_LIMITS), the years first ("Fit years"), and Run under them. It opens on the choices of
+//   the last fit (fitChoices). The goal's sentence ends with the limit that goes with it, "with
+//   a max drawdown of" for the highest CAGR and "with a minimum CAGR of" for the lowest drawdown, each
+//   keeping what was typed for it (the user: "when switching between drawdown and cagr, drawdown
+//   and cagr input should not stay the same value").
+//   The map: a card of its own with a picture of the map as it stands (js/settings-map.js
+//   showMapPreview: the runs kept so far, nothing run) and "Open map", which opens the map in the
+//   window's place. The user: "i want that map button inside fit modal", then "make sure map is
+//   placed at better place so it does not interfere main fit, but also says I am the main
+//   character here".
+const FIT_MAP_TIP = ['Every combination of settings as a dot: max drawdown against CAGR.', 'It looks for better ones by itself.', 'The picture here is what it found so far.', 'Frozen settings stay as they are.'].join('\n');
 // What is being fitted, for the window's head: a strategy's name, a built-in panel's label.
 const fitKeyName = (key) => fitIsPanel(key) ? BASE_LABELS[key.slice(6)] : savedConfigs.find(c => c.id === key).name;
 function buildFitWindowHtml(key, choices, freezeOpen) {
   const tipIcon = (tip) => `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span>`;
-  const pair = (row) => `<div class="fit-row"><span class="fit-row-name">${row.name}${tipIcon(row.tip)}</span>`
-    + `<span class="fit-seg" role="group" aria-label="${row.name}">${row.options.map(([value, label]) =>
-      `<button type="button" class="fit-seg-btn${choices[row.id] === value ? ' on' : ''}" data-fit-choice="${row.id}" data-fit-value="${value}" aria-pressed="${choices[row.id] === value}">${label}</button>`).join('')}</span></div>`;
+  // A sentence: its text with `control` where the {} stands. The word before the control, the
+  // control, what follows it and the ⓘ keep to one line, so no box or icon starts a line alone.
+  const said = (text, control, tip) => {
+    const at = text.indexOf('{}'), lead = text.slice(0, at).trimEnd(), word = lead.lastIndexOf(' ') + 1;
+    return `${_escHtml(lead.slice(0, word))}<span class="cp-tail">${_escHtml(lead.slice(word))} ${control}${_escHtml(text.slice(at + 2))} ${tipIcon(tip)}</span>`;
+  };
+  const line = (id, html) => `<div class="custom-param-line fit-line" data-fit-line="${id}">${html}</div>`;
+  const pick = (row) => `<select class="inline-select" data-fit-pick="${row.id}" aria-label="${row.name}">${row.options.map(([value, label]) =>
+    `<option value="${value}"${choices[row.id] === value ? ' selected' : ''}>${label}</option>`).join('')}</select>`;
+  const pair = (row) => line(row.id, said(row.text, pick(row), row.tip));
+  // The goal, then its limit: a number typed, in percent; an empty box reads what it means.
   const limit = FIT_LIMITS[choices.goal];
-  const limitRow = `<div class="fit-row"><span class="fit-row-name">${limit.name}${tipIcon(limit.tip)}</span>`
-    + `<span class="fit-limit"><input type="text" inputmode="decimal" data-fit-limit="${limit.id}" value="${_escHtml(choices[limit.id])}" placeholder="${limit.empty}" aria-label="${limit.name}, percent" autocomplete="off"><span class="fit-limit-unit">%</span></span></div>`;
-  // The years: each end a dropdown, its first choice the chart's own Entry or Exit.
+  const limitBox = `<span class="fit-limit"><input type="text" inputmode="decimal" data-fit-limit="${limit.id}" value="${_escHtml(choices[limit.id])}" placeholder="${limit.empty}" aria-label="${limit.name}, percent" autocomplete="off"><span class="fit-limit-unit">%</span></span>`;
+  const goalLine = (row) => line(row.id, said(row.text, pick(row), row.tip) + said(limit.text + '.', limitBox, limit.tip));
+  // The years: each end a dropdown, its first choice the chart's own Entry or Exit, set off from the
+  // years by a line. It reads as its year alone (the user, 2026-11-25: "just say years, no chart").
   const period = fitPeriodOf(choices), chart = fitChartPeriod(), years = fitYearList();
   const chartEnd = { fromYear: chart.entryIdx, toYear: chart.exitIdx };
   // A kept first year from before the data allowed reads as the first year there is.
   const picked = (end) => (choices[end.id] ? String(Math.max(+choices[end.id], years[0])) : '');
-  const yearPick = (end) => `<select class="fit-year" data-fit-year="${end.id}" aria-label="${end.name}" title="${end.name}${choices[end.id] ? '' : ': as the chart, ' + qLabel(quarterlyData[chartEnd[end.id]][0])}">`
-    + `<option value=""${picked(end) ? '' : ' selected'}>Chart ${fitYearOfQuarter(chartEnd[end.id])}</option>`
+  const yearPick = (end) => `<select class="inline-select fit-year" data-fit-year="${end.id}" aria-label="${end.name}" title="${end.name}${choices[end.id] ? '' : ': as the chart, ' + qLabel(quarterlyData[chartEnd[end.id]][0])}">`
+    + `<option value=""${picked(end) ? '' : ' selected'}>${fitYearOfQuarter(chartEnd[end.id])}</option><hr>`
     + years.map(y => `<option value="${y}"${picked(end) === String(y) ? ' selected' : ''}>${y}</option>`).join('') + `</select>`;
-  const yearsRow = `<div class="fit-row"><span class="fit-row-name">Years${tipIcon(FIT_YEARS_TIP)}</span>`
-    + `<span class="fit-years">${yearPick(FIT_YEAR_ENDS[0])}<span class="fit-years-to">to</span>${yearPick(FIT_YEAR_ENDS[1])}</span></div>`
+  const yearsRow = line('years', `Fit this strategy between ${yearPick(FIT_YEAR_ENDS[0])} and <span class="cp-tail">${yearPick(FIT_YEAR_ENDS[1])}. ${tipIcon(FIT_YEARS_TIP)}</span>`)
     + (period && period.inverted ? `<div class="fit-years-note">The last year is before the first.</div>` : '');
   const blocked = period && period.inverted ? ' disabled' : '';
   const [goal, ...rest] = FIT_ROWS;
+  // The map's card: its picture and count are drawn in by showFitMap once the window stands.
+  const mapCard = `<div class="fit-map-card"><div class="fit-map-head"><b class="fit-map-title">Map</b>${tipIcon(FIT_MAP_TIP)}<span class="fit-map-count"></span></div>`
+    + `<div class="fit-map-preview" data-fit-map></div>`
+    + `<button type="button" class="fit-map-btn" data-fit-map${blocked}>Open map</button></div>`;
   return `<div class="modal-backdrop" data-fit-close></div>`
-    + `<div class="modal-content fit-window" role="dialog" aria-modal="true" aria-label="Fit">`
+    + `<div class="modal-content fit-window fit-form-window" role="dialog" aria-modal="true" aria-label="Fit">`
     + `<div class="fit-window-head"><h3>Fit</h3><span class="fit-window-name">${_escHtml(fitKeyName(key))}</span><button type="button" class="modal-close" data-fit-close aria-label="Close">×</button></div>`
-    + `<div class="fit-window-body">${buildFitFreezeHtml(key, freezeOpen)}${yearsRow}${pair(goal)}${limitRow}${rest.map(pair).join('')}</div>`
-    + `<div class="fit-window-foot"><button type="button" class="fit-map-btn" data-fit-map title="${_escHtml(FIT_MAP_TIP)}"${blocked}>Map</button>`
-    + `<button type="button" class="fit-run-btn" data-fit-run${blocked}>Run</button></div></div>`;
+    + `<div class="fit-window-main"><div class="fit-window-body">${buildFitFreezeHtml(key, freezeOpen)}<div class="fit-lines">${yearsRow}${goalLine(goal)}${rest.map(pair).join('')}</div></div>${mapCard}</div>`
+    + `<div class="fit-window-foot"><button type="button" class="fit-run-btn" data-fit-run${blocked}>Run</button></div></div>`;
+}
+// The map's card filled in: the picture of the map as it stands for the window's years and frozen
+// settings, and how much of it there is. Drawn again whenever one of those, or the search the
+// "Fit" mark stands for, changes.
+function showFitMap() {
+  const { el, key, choices } = _fitWindow, period = fitPeriodOf(choices);
+  if (period && period.inverted) return;   // no such years: the picture is left empty, with Run and "Open map" off
+  const box = el.querySelector('.fit-map-preview'), seen = showMapPreview(_fitWindow.preview, box, key, period);
+  el.querySelector('.fit-map-count').textContent = seen && seen.tried ? `${seen.tried.toLocaleString('en-US')} tried${seen.done ? '. Done.' : ''}` : '';
 }
 function openFitWindow(key) {
   closeFitWindow();
   const el = document.createElement('div');
   el.className = 'modal fit-modal';
-  _fitWindow = { el, key, choices: fitChoices(), freezeOpen: false };
+  _fitWindow = { el, key, choices: fitChoices(), freezeOpen: false, preview: {} };
   el.innerHTML = buildFitWindowHtml(key, _fitWindow.choices, false);
   document.body.appendChild(el);
   document.body.classList.add('modal-open');
+  showFitMap();
   el.addEventListener('change', (e) => {
     // A year picked: kept, and the window drawn again (an end before its start blocks Run and Map).
     const year = e.target.closest('[data-fit-year]');
     if (year) { setFitChoice(year.getAttribute('data-fit-year'), year.value); showFitWindow(); return; }
-    fitFreezeTicked(el, key, e.target);
+    // One of the other choices: kept, and the window drawn again (the limit follows the goal).
+    const picked = e.target.closest('[data-fit-pick]');
+    if (picked) { setFitChoice(picked.getAttribute('data-fit-pick'), picked.value); showFitWindow(); return; }
+    if (fitFreezeTicked(el, key, e.target)) showFitMap();   // the map leaves out what differs in a frozen setting
   });
   // The limit as it is typed; Enter in its box runs the fit.
   el.addEventListener('input', (e) => {
     const box = e.target.closest('[data-fit-limit]');
-    if (box) setFitChoice(box.getAttribute('data-fit-limit'), box.value);
+    if (box) { setFitChoice(box.getAttribute('data-fit-limit'), box.value); showFitMap(); }
   });
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest('[data-fit-limit]')) runFitWindow(); });
   document.addEventListener('keydown', _fitWindowKey, true);
@@ -4649,31 +4722,23 @@ function setFitChoice(id, value) {
 // The window drawn again where it stands: after a choice (the limit's row follows the goal), and
 // when the Freeze list opens, closes or is reset.
 function showFitWindow() {
-  const { el, key, choices, freezeOpen } = _fitWindow, scrolled = el.querySelector('.fit-window-body').scrollTop;
+  // What scrolls: the choices beside the map on a wide screen, the choices and the map together on a narrow one.
+  const { el, key, choices, freezeOpen } = _fitWindow, SCROLLERS = ['.fit-window-body', '.fit-window-main'];
+  const scrolled = SCROLLERS.map(sel => el.querySelector(sel).scrollTop);
   el.innerHTML = buildFitWindowHtml(key, choices, freezeOpen);
-  el.querySelector('.fit-window-body').scrollTop = scrolled;
+  SCROLLERS.forEach((sel, i) => { el.querySelector(sel).scrollTop = scrolled[i]; });
+  showFitMap();
 }
 function runFitWindow() {
   const { key, choices } = _fitWindow;
   closeFitWindow();
   runFit(key, fitPlanOf(choices), fitPeriodOf(choices));
 }
-// The "Freeze" part of the Fit window: a head that opens it, then the strategy as its Settings read,
-// in small text, with a tick box on each value (ticked = frozen), and a way back to the usual ones.
-// The user (2026-11-23): "remove these additional texts, just say freeze" (no count, no tip line);
-// and, on a list of setting names: "not clearly mappable to strategy. So display the full strategy in
-// small text, the value in it, but checkbox over the value"; and "if non default values are chosen,
-// have a notice on the right side of Freeze button" ("2 changed").
-function buildFitFreezeHtml(key, open) {
-  const settings = fitSettings(key), choices = fitFreezeChoices(key);
-  if (!settings.length) return '';
-  const byId = new Map(settings.map(s => [s.id, s]));
-  // A value Fit can change carries the box; one with a single choice, or of a greyed-out dropdown, is plain.
-  const value = (slot) => {
-    const setting = byId.get(slot.id);
-    if (!setting) return `<b>${_escHtml(slot.value)}</b>`;
-    return `<label class="fit-freeze-value"><input type="checkbox" data-fit-freeze-id="${_escHtml(slot.id)}"${fitFrozen(choices, setting) ? ' checked' : ''}><span>${_escHtml(slot.value)}</span></label>`;
-  };
+// The strategy as its Settings read (fitFreezeLines), as markup: section names and sentences, with
+// valueHtml(slot) written where a setting's value sits (slot: { id, value }, the value as its
+// dropdown reads). The Freeze list puts a tick box there, the map's picked dot the old value
+// struck through and the new one beside it (js/settings-map.js).
+function buildFitStrategyHtml(key, valueHtml) {
   // A sentence's pieces in a row. Text that touches a value ("RSI(" before it; "-day", "'s", a comma
   // or a full stop after it) is written with the value, so a line never breaks between the two.
   const sentence = (parts) => {
@@ -4688,14 +4753,31 @@ function buildFitFreezeHtml(key, open) {
     return pieces.map((piece, i) => {
       if (!isSlot(parts[i])) return _escHtml(piece.body);
       const before = isSlot(parts[i - 1]) || i === 0 ? '' : pieces[i - 1].tail, after = isSlot(parts[i + 1]) || i === parts.length - 1 ? '' : pieces[i + 1].head;
-      return `<span class="fit-freeze-glued">${_escHtml(before)}${value(piece)}${_escHtml(after)}</span>`;
+      return `<span class="fit-freeze-glued">${_escHtml(before)}${valueHtml(piece)}${_escHtml(after)}</span>`;
     }).join('');
   };
-  const rows = fitFreezeLines(key).map((line) => {
+  return fitFreezeLines(key).map((line) => {
     if (line.heading != null) return `<div class="fit-freeze-section">${_escHtml(line.heading)}</div>`;
     const tag = line.block ? 'div' : 'span';
     return `<${tag} class="fit-freeze-line">${sentence(line.parts)}</${tag}>`;
   }).join(' ');
+}
+// The "Freeze" part of the Fit window: a head that opens it, then the strategy as its Settings read,
+// in small text, with a tick box on each value (ticked = frozen), and a way back to the usual ones.
+// The user (2026-11-23): "remove these additional texts, just say freeze" (no count, no tip line);
+// and, on a list of setting names: "not clearly mappable to strategy. So display the full strategy in
+// small text, the value in it, but checkbox over the value"; and "if non default values are chosen,
+// have a notice on the right side of Freeze button" ("2 changed").
+function buildFitFreezeHtml(key, open) {
+  const settings = fitSettings(key), choices = fitFreezeChoices(key);
+  if (!settings.length) return '';
+  const byId = new Map(settings.map(s => [s.id, s]));
+  // A value Fit can change carries the box; one with a single choice, or of a greyed-out dropdown, is plain.
+  const rows = buildFitStrategyHtml(key, (slot) => {
+    const setting = byId.get(slot.id);
+    if (!setting) return `<b>${_escHtml(slot.value)}</b>`;
+    return `<label class="fit-freeze-value"><input type="checkbox" data-fit-freeze-id="${_escHtml(slot.id)}"${fitFrozen(choices, setting) ? ' checked' : ''}><span>${_escHtml(slot.value)}</span></label>`;
+  });
   const changed = fitFreezeChanged(settings, choices);
   return `<div class="fit-freeze"><button type="button" class="fit-freeze-head" data-fit-freeze-toggle aria-expanded="${open}"><span class="fit-freeze-arrow">${open ? '▾' : '▸'}</span><b>Freeze</b><span class="fit-freeze-notice">${fitFreezeNotice(changed)}</span></button>`
     + `<div class="fit-freeze-body"${open ? '' : ' hidden'}>${rows}`
@@ -4788,6 +4870,9 @@ function fmtCustomLogCell(k, v, unit) {
 // and trade rows wired to their chart marker (data-mkey, handled in chart.js).
 // `lines` are the chart lines the strategy declared: a key drawn in percent or
 // as a plain reading prints that way in the table too.
+// Row keys the table leaves out: a trade row's why is the note in a few words, written for the
+// strategy's card (js/signal-chart.js dayEventOf), and the Note column has the note itself.
+const CUSTOM_LOG_CARD_KEYS = ['why'];
 function buildCustomLogTableHtml(log, columns, lines) {
   if (!log || !log.length) return '';
   const lineUnit = Object.fromEntries((lines || []).filter(ln => ln && (ln.unit === '%' || ln.unit === 'num')).map(ln => [ln.key, ln.unit]));
@@ -4805,7 +4890,7 @@ function buildCustomLogTableHtml(log, columns, lines) {
   // ones the strategy declared, then anything else in first-seen order.
   const present = [];
   const seen = new Set();
-  for (const row of log) { if (!row) continue; for (const k of Object.keys(row)) if (!seen.has(k)) { seen.add(k); present.push(k); } }
+  for (const row of log) { if (!row) continue; for (const k of Object.keys(row)) if (!seen.has(k) && !CUSTOM_LOG_CARD_KEYS.includes(k)) { seen.add(k); present.push(k); } }
   const rank = (k) => {
     const i = CUSTOM_LOG_ORDER.indexOf(k);
     if (i >= 0) return i;
@@ -5254,10 +5339,14 @@ document.addEventListener('click', (e) => {
   if (resetCustom) { resetCustomToDefaults(resetCustom.getAttribute('data-custom-reset')); return; }
   // The Fit window: a choice, Run, Map, its Freeze list (the head opens and closes it, Reset goes back to the usual ones), and the ways out.
   if (_fitWindow && e.target.closest('.fit-modal')) {
-    const choice = e.target.closest('[data-fit-choice]');
-    if (choice) { setFitChoice(choice.getAttribute('data-fit-choice'), choice.getAttribute('data-fit-value')); showFitWindow(); return; }
     if (e.target.closest('[data-fit-run]')) { runFitWindow(); return; }
-    if (e.target.closest('[data-fit-map]')) { const { key } = _fitWindow; closeFitWindow(); openMapWindow(key); return; }
+    if (e.target.closest('[data-fit-map]')) {
+      const { key, choices } = _fitWindow, period = fitPeriodOf(choices);
+      if (period && period.inverted) return;   // the picture is a way in too, and has no way to be greyed out
+      closeFitWindow();
+      openMapWindow(key);
+      return;
+    }
     if (e.target.closest('[data-fit-freeze-toggle]')) { _fitWindow.freezeOpen = !_fitWindow.freezeOpen; showFitWindow(); return; }
     if (e.target.closest('[data-fit-freeze-reset]')) { setFitFreezeChoices(_fitWindow.key, {}); showFitWindow(); return; }
     if (e.target.closest('[data-fit-close]')) closeFitWindow();
@@ -5276,6 +5365,7 @@ document.addEventListener('click', (e) => {
   if (!pill) return;
   const id = pill.dataset.configId;
   if (e.target.closest('.sc-drag'))   return; // drag handle: reorder only, never toggle
+  if (e.target.closest('.info-icon')) return; // a tip is read, on a phone by a tap
   if (e.target.closest('.sc-edit'))   { openConfigForEdit(id); return; }
   if (e.target.closest('.sc-delete')) {
     const cfg = savedConfigs.find(c => c.id === id);

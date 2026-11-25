@@ -32,6 +32,7 @@ class SettingsMapChart {
       now: null,           // { x, y }: the dashed lines cross here; none without it
       picked: null,        // the picked dot's id: a ring around it
       link: null,          // { x, y }: a second point the picked dot is tied to with a line
+      linkLabel: '',       // the name written at that point
       frontier: null,      // [{ x, y }] by x: a step line through them
       flags: null,         // [{ id, x, y, label }]: named places, each a ring with its name
       xTitle: 'max drawdown',
@@ -44,6 +45,7 @@ class SettingsMapChart {
       dotRadius: 2,        // px, a dot with no size
       sizeRadius: [3.5, 9],   // px, a sized dot at 0 and at 1 (by area)
       hitRadius: 14,       // px around the pointer in which the nearest dot counts
+      interactive: true,   // false: a picture alone, with no hover, pick or zoom
       padShare: 0.06,      // empty room around the dots, as a share of their spread
       maxZoom: 80,
       wheelK: 0.002,       // a wheel step scales the view by 2^(-deltaY × wheelK), as the site's other charts do
@@ -243,16 +245,21 @@ class SettingsMapChart {
       .attr('text-anchor', f => (left(f) ? 'end' : 'start')).text(f => f.label);
   }
 
-  // The picked dot's ring, its line to `link`, and the ring under the pointer.
+  // The picked dot's ring, its line to `link` with that end's name, and the ring under the pointer.
   drawMarks() {
-    const { chart, data, picked, link, hovered, x, y, chartWidth, chartHeight } = this.getState();
+    const { chart, data, picked, link, linkLabel, hovered, x, y, chartWidth, chartHeight } = this.getState();
     const layer = chart._add('g.marks').attr('pointer-events', 'none');
     const inPlot = (p) => p && x(p.x) >= 0 && x(p.x) <= chartWidth && y(p.y) >= 0 && y(p.y) <= chartHeight;
     const pick = picked == null ? null : (data || []).find(d => d.id === picked);
     const tied = pick && link && (inPlot(pick) || inPlot(link));
     layer._add('line.pick-link', tied ? ['link'] : [])
       .attr('x1', pick ? x(pick.x) : 0).attr('y1', pick ? y(pick.y) : 0).attr('x2', link ? x(link.x) : 0).attr('y2', link ? y(link.y) : 0);
-    layer._add('circle.pick-link-end', tied && inPlot(link) ? ['end'] : []).attr('cx', link ? x(link.x) : 0).attr('cy', link ? y(link.y) : 0).attr('r', 3);
+    const ended = tied && inPlot(link), ex = link ? x(link.x) : 0, ey = link ? y(link.y) : 0;
+    layer._add('circle.pick-link-end', ended ? ['end'] : []).attr('cx', ex).attr('cy', ey).attr('r', 3);
+    // The name goes past the end, away from the picked dot, and turns back where the plot's edge is near.
+    const NAME_ROOM = 80, right = ex + NAME_ROOM <= chartWidth, below = ey + 16 <= chartHeight;
+    layer._add('text.pick-link-label', ended && linkLabel ? [linkLabel] : [])
+      .attr('x', ex + (right ? 7 : -7)).attr('y', ey + (below ? 12 : -7)).attr('text-anchor', right ? 'start' : 'end').text(d => d);
     layer._add('circle.pick-ring', inPlot(pick) ? ['pick'] : []).attr('cx', pick ? x(pick.x) : 0).attr('cy', pick ? y(pick.y) : 0).attr('r', 7);
     const over = hovered == null ? null : (data || []).find(d => d.id === hovered);
     layer._add('circle.hover-ring', inPlot(over) && hovered !== picked ? ['hover'] : []).attr('cx', over ? x(over.x) : 0).attr('cy', over ? y(over.y) : 0).attr('r', 7);
@@ -292,7 +299,8 @@ class SettingsMapChart {
   // to the whole map. A double click does nothing of its own: it would pick a
   // dot on its way.
   drawPointerLayer() {
-    const { chart, chartWidth, chartHeight, maxZoom, wheelK, firstRender } = this.getState();
+    const { chart, chartWidth, chartHeight, maxZoom, wheelK, firstRender, interactive } = this.getState();
+    if (!interactive) return;
     const catcher = chart._add('rect.pointer-catch').attr('x', 0).attr('y', 0).attr('width', chartWidth).attr('height', chartHeight).attr('fill', 'transparent');
     const here = (event) => { const [px, py] = d3.pointer(event, catcher.node()); return this.dotAt(px, py); };
     const hover = (dot, event) => {

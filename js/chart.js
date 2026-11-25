@@ -1544,6 +1544,42 @@ function smaSignalChart() {
   // holdings the chart's tooltip names.
   return { lines, rows, home: { t0: Date.parse(start), t1: Date.parse(end) }, holdings: _logData.smaControls || null };
 }
+// A 9sig rebalance as the signal chart's trade row, or null for a row that trades nothing. The
+// rebalance's own words: "BUY $12.3K", "SELL $8.1K (30d expired)", "RESET $40K (spike)". A
+// sell's row holds cash, so the trade reads "Sell TQQQ". UL: the fund it trades. why: the reason
+// in a few words, with the amount, for a saved 9sig's card (dayEventOf, js/signal-chart.js).
+function nineSigChartTrade(r, UL) {
+  const amount = (String(r.action).match(/\$[^\s)]+/) || [''])[0], verb = String(r.action).split(' ')[0];
+  if (verb === 'BUY') return { action: 'buy', value: r.total, why: `${amount}: holding under the signal line`, note: `Bought ${amount} of ${UL}: the holding was under the signal line${/\(part\)/.test(r.action) ? '; cash ran short' : ''}` };
+  if (verb === 'SELL') return { action: 'sell', held: 'cash', value: r.total, why: `${amount}: holding over the signal line`, note: `Sold ${amount} of ${UL}: the holding was over the signal line${/expired/.test(r.action) ? '; the crash rule\'s skipped sells ran out' : ''}` };
+  if (verb === 'RESET') return { action: 'sell', held: 'cash', value: r.total, why: `${amount}: spike reset, ${UL} doubled in a quarter`, note: `Spike reset: ${UL} doubled in a quarter, sold ${amount} back to 60%` };
+  return null;
+}
+// ---- The day's event of a built-in engine ----
+// A saved 9sig or SMA strategy's trade at the latest day's close, for its card (dayEventOf,
+// js/signal-chart.js), from the engine's own log and the settings it ran on (o). Each hands
+// dayEventOf the trade's row as the signal chart writes it, after a row that says what was held
+// before it.
+// 9sig: its last rebalance, when that falls on the data's latest day and the day closes the
+// period. On any other day it is the rebalance the engine would make if the period ended today.
+function nineSigDayEvent(log, o) {
+  const r = log && log[log.length - 1];
+  if (!r || r.date !== daily[daily.length - 1].date || !closesPeriod(r.date, PERIOD_KEY_BY_NAME[o.rebalancePeriod])) return null;
+  const UL = (COL_TO_DAILY_KEY[o.underlyingCol] || 'tqqq').toUpperCase(), trade = nineSigChartTrade(r, UL);
+  return trade ? dayEventOf([{ date: r.date, held: UL }, { date: r.date, held: UL, ...trade }]) : null;
+}
+// SMA: what it traded on the data's latest day. A move from one fund to another is two rows in
+// its log, a sale and a buy: the card says it as one switch, with the first reason either gives.
+function smaDayEvent(smaLog, o) {
+  const i = dailyRows.length - 1, day = dailyRows[i][0], first = (smaLog || []).findIndex(t => t.date === day);
+  if (first < 0) return null;
+  const col = SMA_ASSET_COL[o.smaAsset] || SMA_ASSET_COL.qqq, center = smaAtDailyByKey[o.smaAsset + '_' + o.smaWindow];
+  const overheat = o.rsiOverheatThreshold > 0 ? rsiLevelSeries(col, o.rsiOhWindow, o.rsiOverheatThreshold) : null;
+  const legs = smaLog.slice(first).map(t => smaChartTrade(t, o, dailyRows[i][col], center ? center[i] : null, overheat && overheat[i])).filter(Boolean);
+  if (!legs.length) return null;
+  const from = _heldName(first ? smaLog[first - 1].held : 'cash'), last = legs[legs.length - 1], switched = from !== 'cash' && last.held !== 'cash' && from !== last.held;
+  return dayEventOf([{ date: day, held: from }, { date: day, held: last.held, value: last.value, action: switched ? 'switch' : legs[0].action, note: legs.map(leg => leg.note).find(Boolean) || '' }]);
+}
 function nineSigSignalChart() {
   const log = _logData && _logData.log;
   if (!log || log.length < 2 || !daily || !dailyDateToIdx) return null;
@@ -1568,15 +1604,7 @@ function nineSigSignalChart() {
     // cash on every day, a sell's included (its row is held 'cash' below).
     holdings.push({ date, cash: r.cash, h: { [key]: shares } });
     const day = { date, sigHolding: holding, sigLine: signal, held: UL };
-    // The rebalance's own words: "BUY $12.3K", "SELL $8.1K (30d expired)",
-    // "RESET $40K (spike)". A sell's row holds cash, so the trade reads
-    // "Sell TQQQ".
-    const amount = date === r.date ? (String(r.action).match(/\$[^\s)]+/) || [''])[0] : '';
-    const verb = date === r.date ? String(r.action).split(' ')[0] : '';
-    if (verb === 'BUY') rows.push({ ...day, action: 'buy', value: r.total, note: `Bought ${amount} of ${UL}: the holding was under the signal line${/\(part\)/.test(r.action) ? '; cash ran short' : ''}` });
-    else if (verb === 'SELL') rows.push({ ...day, action: 'sell', held: 'cash', value: r.total, note: `Sold ${amount} of ${UL}: the holding was over the signal line${/expired/.test(r.action) ? '; the crash rule\'s skipped sells ran out' : ''}` });
-    else if (verb === 'RESET') rows.push({ ...day, action: 'sell', held: 'cash', value: r.total, note: `Spike reset: ${UL} doubled in a quarter, sold ${amount} back to 60%` });
-    else rows.push(day);
+    rows.push({ ...day, ...(date === r.date ? nineSigChartTrade(r, UL) : null) });
   }
   // The engine's last period ends on the data's latest day. Unless the
   // calendar says that day closes the period, a rebalance there is the one it

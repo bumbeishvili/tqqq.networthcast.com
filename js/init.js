@@ -76,6 +76,7 @@
     if (live) return;   // the live trade time stands
     showDataTime(d, false);
     redrawPanelSignalChart();   // a chart drawn before the stamp arrived is redrawn
+    renderSavedConfigPills();   // and so are the cards: a day's event says whether its price is a close
   }).catch(err => console.error(err));
   // Everything the engines read off the daily rows, rebuilt whenever they change.
   const deriveFromDaily = () => {

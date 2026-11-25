@@ -2579,8 +2579,10 @@
     background: rgba(255, 45, 46, 0.18);
     color: var(--red-text);
   }
+  /* The card's numbers, on one line; the ⓘ beside DD has the drawdown's dates. */
   .saved-config-pill .sc-metrics {
     display: flex;
+    align-items: baseline;
     gap: 12px;
     margin-top: 4px;
     padding-left: 24px;
@@ -2589,9 +2591,9 @@
     display: inline-flex;
     gap: 4px;
     align-items: baseline;
-    flex-wrap: wrap;
-    max-width: 100%;
+    white-space: nowrap;
   }
+  .saved-config-pill .sc-info { flex: none; align-self: center; margin: 0 0 0 1px; }
   .saved-config-pill .sc-metric-label {
     font-size: calc(8px * var(--ui-scale));
     font-weight: 600;
@@ -2606,14 +2608,11 @@
   }
   .saved-config-pill .sc-metric-value.positive { color: var(--green-text); }
   .saved-config-pill .sc-metric-value.negative { color: var(--red-text); }
-  .saved-config-pill .sc-metric-range {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: calc(9px * var(--ui-scale));
-    color: var(--text-muted);
-    white-space: nowrap;
-    flex-basis: 100%;
-    margin-top: 1px;
-  }
+  /* The day's event: where the money goes at the latest day's close, a line under the card's numbers, its ⓘ beside it (js/saved-configs.js buildConfigPillHtml). */
+  .saved-config-pill .sc-event { display: flex; align-items: center; gap: 4px; margin-top: 3px; padding-left: 24px; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
+  .saved-config-pill .sc-event-move { font-weight: 700; color: var(--accent-text); white-space: nowrap; }
+  .saved-config-pill .sc-event-move.action-buy { color: var(--green-text); }
+  .saved-config-pill .sc-event-move.action-sell { color: var(--red-text); }
   .saved-config-pill.is-hidden { opacity: var(--state-hidden-opacity); }
   .saved-config-pill.is-hidden .sc-name {
     text-decoration: line-through;
@@ -4279,26 +4278,46 @@
   .fit-window-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11.5px * var(--ui-scale)); color: var(--text-muted); }
   .fit-window-head .modal-close { flex: none; align-self: center; }
   .fit-window-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 4px; }
-  .fit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 7px 0; border-top: 1px solid var(--border); }
-  .fit-row-name { display: inline-flex; flex: none; align-items: center; font-size: calc(12px * var(--ui-scale)); color: var(--text); white-space: nowrap; }
-  /* the two options of a choice, side by side; the chosen one filled */
-  .fit-seg { display: inline-flex; flex: none; border: 1px solid var(--border); border-radius: 7px; overflow: hidden; }
-  .fit-seg-btn { min-width: calc(66px * var(--ui-scale)); padding: 5px 10px; border: 0; background: none; font: inherit; font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); cursor: pointer; }
-  .fit-seg-btn + .fit-seg-btn { border-left: 1px solid var(--border); }
-  .fit-seg-btn:hover { color: var(--text); background: rgba(134, 118, 255, 0.08); }
-  .fit-seg-btn.on { background: var(--accent); color: var(--bg); font-weight: 600; }
-  /* the limit: a number and its percent sign in one box, as wide as a pair of options */
-  .fit-limit { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 4px; box-sizing: border-box; width: calc(2 * 66px * var(--ui-scale) + 3px); min-width: 0; padding: 0 10px; border: 1px solid var(--border); border-radius: 7px; }   /* gives way to its name on a 320px phone */
+  /* The Fit window itself (js/saved-configs.js buildFitWindowHtml). A narrow screen: the choices, then the map's card, scrolling together over Run. */
+  .fit-form-window { width: min(440px, calc(100vw - 24px)); }
+  .fit-window-main { flex: 1; min-height: 0; overflow-y: auto; }
+  .fit-form-window .fit-window-body { flex: none; overflow: visible; }
+  /* From 900px: 60% of the page, the choices with Run under them on the left, the map's card beside them taking the larger share. */
+  @media (min-width: 900px) {
+    .fit-form-window { display: grid; width: max(60vw, 780px); grid-template: "head head" auto "form map" minmax(0, 1fr) "run map" auto / minmax(360px, 9fr) minmax(0, 11fr); }
+    .fit-form-window .fit-window-head { grid-area: head; }
+    .fit-form-window .fit-window-main { display: contents; }
+    .fit-form-window .fit-window-body { grid-area: form; min-height: 0; overflow-y: auto; }
+    .fit-form-window .fit-window-foot { grid-area: run; border-top: 0; }
+    .fit-form-window .fit-map-card { grid-area: map; align-self: start; margin: 0 14px 12px 4px; }
+    /* The map: 70% of the screen, the chart with its legend on the left, the clicked strategy beside it in a column that scrolls by itself (its height is the chart's, whatever it holds). */
+    .fit-window.map-window { width: max(70vw, 780px); }
+    .map-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(250px, 2fr); gap: 0 14px; overflow: hidden; }
+    .map-side { position: relative; min-width: 0; border-left: 1px solid var(--border); }
+    .map-side .map-detail { position: absolute; inset: 0 0 0 14px; overflow-y: auto; padding: 4px 4px 8px 0; }
+  }
+  .map-main { min-width: 0; }
+  /* The choices as sentences, a line each, in a strategy's own type (.custom-param-line): dropdowns and the limit's box inside the text. */
+  .fit-lines { padding: 6px 0 4px; border-top: 1px solid var(--border); }
+  .fit-line .inline-select { max-width: 100%; field-sizing: content; }   /* as wide as the choice it shows, where the browser can (else as its longest) */
+  .fit-line .fit-limit { vertical-align: baseline; width: calc(92px * var(--ui-scale)); margin: 0 2px; padding: 0 6px; border-radius: 4px; background: var(--surface2); line-height: 1.5; }
+  .fit-line .fit-limit input { padding: 2px 0; }
+  .fit-limit input:placeholder-shown + .fit-limit-unit { visibility: hidden; }   /* "any" and "buy & hold" are no percentages */
+  /* The map's card: its picture is the largest thing in the window, and a way in like the button under it. */
+  .fit-map-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 4px 14px 12px; padding: 10px 12px 12px; border: 1px solid rgba(134, 118, 255, 0.45); border-radius: 12px; background: linear-gradient(180deg, rgba(134, 118, 255, 0.12), rgba(134, 118, 255, 0.03)); }
+  .fit-map-head { display: flex; align-items: center; gap: 2px; }
+  .fit-map-title { font-size: calc(15px * var(--ui-scale)); color: var(--text); }
+  .fit-map-count { margin-left: auto; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
+  .fit-map-preview { min-height: 150px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); overflow: hidden; cursor: pointer; }
+  .fit-map-preview:hover { border-color: var(--accent); }
+  .fit-map-card .fit-map-btn { padding: 8px 12px; border-color: var(--accent); background: var(--surface); }
+  /* the limit: a number and its percent sign in one box, inside the goal's sentence */
+  .fit-limit { display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; min-width: 0; border: 1px solid var(--border); }
   .fit-limit:focus-within { border-color: var(--accent); }
-  .fit-limit input { flex: 1; min-width: 0; padding: 5px 0; border: 0; outline: 0; background: none; font-family: 'JetBrains Mono', monospace; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: right; }
+  .fit-limit input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-family: 'JetBrains Mono', monospace; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: right; }
   .fit-limit input::placeholder { color: var(--text-muted); font-family: inherit; opacity: 0.8; }
   .fit-limit-unit { font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); }
-  /* The Years row: a dropdown for each end, sharing the room the other rows' two options take. */
-  .fit-years { display: inline-flex; flex: 0 1 auto; align-items: center; gap: 6px; min-width: 0; }
-  .fit-year { min-width: 0; padding: 4px 4px 4px 8px; border: 1px solid var(--border); border-radius: 7px; background: var(--surface); font: inherit; font-size: calc(12px * var(--ui-scale)); color: var(--text); cursor: pointer; }
-  .fit-year:focus { border-color: var(--accent); outline: 0; }
-  .fit-years-to { font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); }
-  .fit-years-note { padding: 0 0 7px; font-size: calc(11px * var(--ui-scale)); color: var(--red-text); text-align: right; }
+  .fit-years-note { padding: 0 0 4px; font-size: calc(11px * var(--ui-scale)); color: var(--red-text); }
   .fit-run-btn:disabled, .fit-map-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .fit-window-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--border); }
   .fit-map-btn { flex: none; padding: 7px 16px; border: 1px solid var(--border); border-radius: 8px; background: none; font: inherit; font-size: calc(13px * var(--ui-scale)); font-weight: 600; color: var(--accent-text); cursor: pointer; }
@@ -4333,10 +4352,9 @@
   /* The settings map (js/settings-map.js), opened by Map in the Fit window: that window made wider for a chart. */
   .map-window { width: min(760px, calc(100vw - 24px)); }
   .map-window .fit-window-head .info-icon { align-self: center; }
-  .map-view .fit-row { border-top: 0; }
   .map-chart { margin: 4px 0; }
-  /* The chart's colours: js/settings-map-chart.js reads them off the plot at every render. */
-  .settings-map-plot {
+  /* The chart's colours: js/settings-map-chart.js reads them off the plot at every render, and the legend under it draws its marks in them. */
+  .settings-map-plot, .map-legend {
     --map-dot: rgba(134, 118, 255, 0.42);         /* a set of settings */
     --map-dot-sized: rgba(134, 118, 255, 0.78);   /* a checked one, sized by how it holds */
     --map-ring: var(--surface);                   /* the edge that keeps touching dots apart */
@@ -4363,6 +4381,7 @@
   .settings-map-svg .hover-ring { fill: none; stroke: var(--accent-text); stroke-width: 1.5; }
   .settings-map-svg .pick-link { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 2; }
   .settings-map-svg .pick-link-end { fill: var(--text); }
+  .settings-map-svg .pick-link-label { fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
   .settings-map-svg .empty-text { font-family: inherit; font-size: calc(12px * var(--ui-scale)); }
   .settings-map-svg .zoom-reset { cursor: pointer; }
   .settings-map-svg .zoom-reset-box { fill: var(--surface); stroke: var(--border); stroke-width: 1; }
@@ -4376,9 +4395,30 @@
   .map-detail-head b { font-weight: 600; }
   .map-use-btn { flex: none; padding: 4px 16px; border: 0; border-radius: 7px; background: var(--accent); font: inherit; font-weight: 600; color: var(--bg); cursor: pointer; }
   .map-use-btn:hover { filter: brightness(1.06); }
-  .map-near, .map-differs { margin-top: 4px; }
-  .map-foot { justify-content: space-between; gap: 12px; }
+  .map-near { margin-top: 4px; }
+  /* Under the chart: what its marks are, each drawn as the chart draws it (the dots at the chart's own sizes). */
+  .map-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 0 0 8px; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
+  .map-key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .map-key .info-icon { margin: 0; }
+  .map-key i { flex: none; }
+  .map-key-dot { border-radius: 50%; background: var(--map-dot-sized); }
+  .map-key-dot.is-pale { width: 4px; height: 4px; background: var(--map-dot); }
+  .map-key-dot.is-small { width: 7px; height: 7px; }
+  .map-key-dot.is-big { width: 18px; height: 18px; }
+  .map-key-line { width: 18px; border-top: 1px solid var(--map-frontier); }
+  .map-key-link { width: 18px; border-top: 1px dashed var(--text); }
+  /* A picked dot's strategy, as its Settings read: a value it changes struck through, the new one beside it. */
+  .map-strategy { margin-top: 8px; padding-top: 6px; border-top: 1px solid var(--border); font-size: calc(11px * var(--ui-scale)); line-height: 1.75; }
+  .map-value { color: var(--text); }
+  .map-old { color: var(--text-muted); }
+  .map-new { color: var(--accent-text); font-weight: 700; }
+  .map-foot { gap: 10px; }
+  @media (max-width: 420px) { .map-foot { flex-wrap: wrap; } .map-status { flex-basis: 100%; } }   /* a narrow phone: the count on a line of its own over the buttons */
+  .map-status { display: inline-flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; }
   .map-count { min-width: 0; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
+  .map-csv-btn { flex: none; padding: 7px 14px; border: 1px solid var(--border); border-radius: 8px; background: none; font: inherit; font-size: calc(13px * var(--ui-scale)); font-weight: 600; color: var(--accent-text); cursor: pointer; }
+  .map-csv-btn:hover:not(:disabled) { border-color: var(--accent); background: rgba(134, 118, 255, 0.08); }
+  .map-csv-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .map-run-btn { flex: none; width: auto; min-width: calc(150px * var(--ui-scale)); }
   .map-run-btn.running { border: 1px solid rgba(134, 118, 255, 0.45); background: linear-gradient(to right, rgba(134, 118, 255, 0.18) var(--fit-pct, 0%), transparent var(--fit-pct, 0%)); color: var(--accent-text); }
   .map-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }

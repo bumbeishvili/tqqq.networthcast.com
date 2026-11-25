@@ -6257,12 +6257,22 @@ ${bareFn(rsiLevel)}
         : RSI_SKIP && outSession(i + 1) && skippedBy(startClose(i)) >= 0 ? "Week skipped: " + rsiSays(skippedBy(startClose(i))) + " at " + dates[skippedBy(startClose(i))] + "'s close, at " + RSI_LEVEL + " or under (" + trendSays(i) + ")"
         : !downAt(i) ? "No down trend: " + trendSays(i)
         : outSession(i + 1) ? "The down trend began after this week's close out of " + FUND_NAME + " (" + trendSays(i) + ")"
-        : "Down trend, the week's " + FUND_NAME + " days (" + trendSays(i) + ")";`,
+        : "Down trend, the week's " + FUND_NAME + " days (" + trendSays(i) + ")";
+      // The same reason in a few words, for the strategy's card (a trade row's why): the note has the readings.
+      const brief = outAt(i) ? (lagOut(i) ? LAG_NAME + " lags " + LAG_VS_NAME + " by " + Math.round(Math.abs(lagAt(startClose(i)))) + "%" : "Down trend, the week's " + OUT_NAME + " days")
+        : NONE_OUT ? "No days out of " + FUND_NAME
+        : backBefore(i) ? "Back before the weekend, " + FUND_NAME + " " + signedPct(weekendMove(startClose(i))) + " since the sale"
+        : lagBack(i) ? LAG_NAME + "'s lag, the stay is over"
+        : RSI_SKIP && outSession(i + 1) && skippedBy(startClose(i)) >= 0 ? "Week skipped, " + rsiSays(skippedBy(startClose(i)))
+        : !downAt(i) ? "No down trend"
+        : outSession(i + 1) ? "Down trend began after the week's close out of " + FUND_NAME
+        : "Down trend, the week's " + FUND_NAME + " days";`,
   row: `          trendClose: S[i] > 0 ? S[i] : null, lineRel: gapAt(i), trendLevel: lineBefore[i] > 0 ? -UNDER : null, trendPx: lineBefore[i] > 0 ? levelAt(i) : null,
           ...rsiRow(i), soldAt: soldAt(i), lag: lagAt(i), lagLevel: lagAt(i) === null ? null : -LAG_BY,
           // A trade is marked where its rule reads: a purchase the weekend check made on the fund's price, where its
           // level is; a skipped week's sale and purchase in the lag's panel.
-          ...(!TRADES.includes(action) ? {} : backBefore(i) ? { firedBy: PRICE_PANEL } : lagOut(i) || lagBack(i) ? { firedBy: LAG_PANEL } : {}),`,
+          ...(!TRADES.includes(action) ? {} : backBefore(i) ? { firedBy: PRICE_PANEL } : lagOut(i) || lagBack(i) ? { firedBy: LAG_PANEL } : {}),
+          ...(TRADES.includes(action) ? { why: brief } : {}),`,
   dashboard: `    const downNow = downAt(p.endIdx), outNow = outAt(p.endIdx), lowNow = lowAt(p.endIdx), backNow = backBefore(p.endIdx), soldNow = soldAt(p.endIdx);
     const lagNow = lagAt(p.endIdx), lagOutNow = lagOut(p.endIdx), lagsNow = lagsAt(p.endIdx);
     const lines = [{ key: "lineRel", label: SIG_NAME + " vs " + LINE, unit: "%", priceKey: "trendClose" }, { key: "trendLevel", label: "Down trend under", unit: "%", priceKey: "trendPx" }]

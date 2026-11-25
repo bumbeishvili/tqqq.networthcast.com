@@ -467,14 +467,17 @@ async function unpackSharePayload(packed) {
 // (respects the "hide monthly contributions" / "hide ease-in slices" toggles,
 // which just CSS-hide rows rather than removing them), so export reads from
 // the rendered <table> rather than re-deriving columns from the raw log array.
+// One cell of a CSV file: quoted when it holds a comma, a quote or a line break.
+const csvCell = (s) => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+// Rows of cells as a CSV file's text.
+const rowsToCsv = (rows) => rows.map(row => row.map(cell => csvCell(String(cell))).join(',')).join('\n');
 function tableToCsv(table) {
   const clean = (s) => s.replace(/ⓘ/g, '').replace(/\s+/g, ' ').trim();
-  const esc = (s) => /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  const header = Array.from(table.querySelectorAll('thead th')).map(th => esc(clean(th.textContent)));
+  const header = Array.from(table.querySelectorAll('thead th')).map(th => clean(th.textContent));
   const rows = Array.from(table.querySelectorAll('tbody tr'))
     .filter(tr => getComputedStyle(tr).display !== 'none')
-    .map(tr => Array.from(tr.children).map(td => esc(clean(td.textContent))).join(','));
-  return [header.join(','), ...rows].join('\n');
+    .map(tr => Array.from(tr.children).map(td => clean(td.textContent)));
+  return rowsToCsv([header, ...rows]);
 }
 function downloadTextFile(content, filename, mime) {
   const blob = new Blob([content], { type: mime + ';charset=utf-8;' });

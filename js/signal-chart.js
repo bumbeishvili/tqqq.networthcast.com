@@ -126,6 +126,11 @@ const _miniShortDate = t => { const d = new Date(t); return `${d.getUTCDate()} $
 const _miniDayMonth = t => { const d = new Date(t); return `${d.getUTCDate()} ${MINI_MON[d.getUTCMonth()]}`; };
 // Minutes to the close as a person says them: "26 min", "2 h", "2 h 26 min".
 const _miniCloseGap = min => min < 60 ? `${min} min` : `${Math.floor(min / 60)} h` + (min % 60 ? ` ${min % 60} min` : '');
+// The close a latest day's trade is made at, as its chip and its card name it. t: that day;
+// open: it still trades (the minutes left to its close, minutesBeforeClose).
+const _miniCloseName = (t, open) => open ? "today's close" : `the ${_miniDayMonth(t)} close`;
+// What a trade made on a price from before the close still hangs on.
+const _miniNotFinal = min => `Not final: the price is from ${_miniCloseGap(min)} before the close.`;
 // A day as the tooltips name it, the hovered day's and a trade's alike: weekday, then the log's
 // date ("Tue 21 Dec 21"). The weekday matters to rules that trade by it (the user, 2026-11-23:
 // "when hovering over signal chart, make sure day is included").
@@ -395,14 +400,10 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
   // layout drops the strip when the log has none (the whole log, so zooming
   // never moves the plot), unless the first of several panels needs its name there.
   const markerEvents = customMarkerEvents(log);
-  // The latest day's trade: one the strategy makes on its log's last row when
-  // that row is the data's latest day, the action to take at that day's close.
-  // While that day still trades (the data was refreshed before its close,
-  // minutesBeforeClose), its price is the price so far: the trade stands only
-  // if the close stays on the same side. A row marked projected (a built-in
-  // engine's rebalance on a day that does not close its period) is not one.
-  const lastEv = markerEvents[markerEvents.length - 1];
-  const latestTrade = lastEv && lastEv.i === log.length - 1 && String(lastEv.row.date) === daily[daily.length - 1].date && !lastEv.row.projected ? lastEv : null;
+  // The latest day's trade (latestDayTrade). While that day still trades (the
+  // data was refreshed before its close, minutesBeforeClose), its price is the
+  // price so far: the trade stands only if the close stays on the same side.
+  const latestTrade = latestDayTrade(log, markerEvents);
   const beforeClose = latestTrade ? minutesBeforeClose(String(latestTrade.row.date), window._dataFetchedAt) : null;
   // The full extent, then the zoom window inside it. A zoom saved from an
   // older, longer run is clamped so it can never show an empty plot.
@@ -599,13 +600,8 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const t = Date.parse(ev.row.date);
     if (!(t >= t0 && t <= t1)) continue;
     const x = xAt(t);
-    // Rows log the state after the trade, so what it moved FROM is the nearest
-    // earlier row holding something else (markerAssetFor's rule); a sell is
-    // about that, a buy or switch about what it holds now.
-    const to = String(ev.row.held || '');
-    let from = '';
-    for (let j = ev.i - 1; j >= 0 && !from; j--) { const h = log[j] && log[j].held; if (h && String(h) !== to) from = String(h); }
-    const kind = customActionKind(ev.row.action);
+    // A sell is about what it moved from, a buy or switch about what it holds now.
+    const { kind, from, to } = _miniTradeEnds(log, ev);
     const assetKey = _miniAssetKey(kind === 'sell' ? from : to);
     const part = kind === 'buy' ? customTradeShare(log, ev.i) : null, firedAt = panelSpecs.findIndex(sp => sp.name === ev.row.firedBy);
     const latest = ev === latestTrade;
@@ -896,7 +892,7 @@ function buildCustomLinesChartHtml(cfg, lines, log, cw, opts) {
     const fs = 7 / k, charW = 0.6 * fs, padX = 3 / k, actH = 10 / k, actY = axisTopH + Math.max(0, (padT - axisTopH - actH) / 2);
     const right = Math.min(W - padR, offRest && !compact ? btnX - 4 / k : Infinity);
     const left = titled && panels[0].name ? padL + 1 + panels[0].name.length * 0.62 * fs + 4 / k : padL;
-    const move = _miniMoveText(it), full = `${move} at ${open ? "today's close" : `the ${_miniDayMonth(it.t)} close`}`;
+    const move = _miniMoveText(it), full = `${move} at ${_miniCloseName(it.t, open)}`;
     const text = right - (full.length * charW + 2 * padX) >= left ? full : move;
     const actW = text.length * charW + 2 * padX, actX = right - actW;
     const age = open ? `price ${_miniCloseGap(it.beforeClose)} before the close` : '';
@@ -1251,6 +1247,55 @@ function _miniRangeBadges(data, readings, xA, xB) {
     return { ...m, fs, xM, box: { x: xM - tw / 2 - padX, y: m.y - lh * 0.72, w: tw + 2 * padX, h: lh } };
   });
 }
+// ---- The latest day's trade ----
+// The trade a strategy makes on its log's last row when that row is the data's latest day: the
+// action to take at that day's close. A row marked projected (a built-in engine's rebalance on a
+// day that does not close its period) is not one. Null when there is none. events: the log's
+// marker events (customMarkerEvents), when the caller has them.
+function latestDayTrade(log, events = customMarkerEvents(log)) {
+  const last = events[events.length - 1];
+  return last && last.i === log.length - 1 && String(last.row.date) === daily[daily.length - 1].date && !last.row.projected ? last : null;
+}
+// What a trade moved, for its words (_miniMoveText): its kind, the fund it left and the one it
+// holds now. Rows log the state after the trade, so what it moved from is the nearest earlier
+// row holding something else (markerAssetFor's rule).
+function _miniTradeEnds(log, ev) {
+  const to = String(ev.row.held || '');
+  let from = '';
+  for (let j = ev.i - 1; j >= 0 && !from; j--) { const h = log[j] && log[j].held; if (h && String(h) !== to) from = String(h); }
+  return { kind: customActionKind(ev.row.action), from, to, label: ev.st.label };
+}
+// A trade as a card says it: the fund it left and the one it holds now, cash by its name
+// ("TQQQ → SQQQ", "TQQQ → cash", "cash → TQQQ"). A rebalance stays in one fund and is said as
+// the charts say it ("Rebalance TQQQ").
+function _miniMoveEnds(ends) {
+  const name = h => (!h || /^cash$/i.test(h)) ? 'cash' : h, from = name(ends.from), to = name(ends.to);
+  return ends.kind === 'rebalance' || from === to ? _miniMoveText(ends) : `${from} → ${to}`;
+}
+// The day's event of a strategy, for its card in the sidebar: the latest day's trade of its log.
+// The user (2026-11-25): "if sell or buy event is triggered today, I want additional subsection
+// to be added to the relevant card that will say, what got triggered and why. Very briefly";
+// then "Just show from what to what (TQQQ -> sqqq is good)"; then, of the reason written beside
+// it: "Let's only keep blue part, everything else include in info icon, that should be close to
+// the symbol it is connected to".
+// move: where the money went ("TQQQ → SQQQ"), all the card shows; kind: buy, sell, switch or
+// rebalance, for its colour. For the ⓘ beside it: what, the trade as the charts say it; why,
+// the reason in a few words where the strategy gives one on the row (the contract's `why`);
+// note, the row's note whole; date, its day. Null when the log's last row is no such trade.
+function dayEventOf(log) {
+  const ev = log && log.length ? latestDayTrade(log) : null;
+  if (!ev) return null;
+  const ends = _miniTradeEnds(log, ev);
+  return { move: _miniMoveEnds(ends), kind: ends.kind, what: _miniMoveText(ends), why: ev.row.why ? String(ev.row.why) : '', note: String(ev.row.note || ''), date: String(ev.row.date) };
+}
+// The close a day's event is made at, read when the card is drawn (the time the prices stand at
+// arrives after the first run, and moves with every live price). when: "at today's close" while
+// that day still trades, else "at the 25 Nov close"; notFinal: what to say while the price is
+// from before the close, null once the day has closed.
+function dayEventClose(event) {
+  const open = minutesBeforeClose(event.date, window._dataFetchedAt);
+  return { when: `at ${_miniCloseName(Date.parse(event.date), open != null)}`, notFinal: open != null ? _miniNotFinal(open) : null };
+}
 // A trade as a person would say it: "Buy TQQQ", "Sell TQQQ", "Sell TQQQ → SQQQ"
 // when the proceeds were parked, "Buy TQQQ (from SQQQ)" when a buy left another
 // holding, "Switch SQQQ → TQQQ". Cash is where money rests between holdings,
@@ -1275,7 +1320,7 @@ function _miniEventRows(group) {
     + listed.map(it => `<div class="mct-ev"><span class="mct-dot" style="background:${it.color};box-shadow:0 0 0 2px ${it.ring}${it.part ? `;clip-path:${_miniWedgeClip(it.part[0], it.part[1])}` : ''}"></span>`
         + `<span>${_escHtml(_miniMoveText(it))}</span><span class="mct-ev-when">${_escHtml(_miniWeekdayDate(it.date))}</span>`
         + (it.note ? `<div class="mct-ev-note">${_escHtml(it.note)}</div>` : '')
-        + (it.beforeClose != null ? `<div class="mct-ev-note mct-ev-open">Not final: the price is from ${_miniCloseGap(it.beforeClose)} before the close.</div>` : '') + `</div>`).join('')
+        + (it.beforeClose != null ? `<div class="mct-ev-note mct-ev-open">${_miniNotFinal(it.beforeClose)}</div>` : '') + `</div>`).join('')
     + (unlisted > 0 ? `<div class="mct-ev-head">and ${unlisted} more — zoom in to split this band</div>` : '');
 }
 // Wheel over the chart with the modifier held zooms the time axis around the
