@@ -468,12 +468,13 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #12 SSO own-price 200SMA → SSO else cash.
+// #12 SSO own-price 200SMA → SSO else cash. Since 27 November 2026 the defaults are the user's pick on the map of
+// 2010-2025 ("set this"): SSO against its own 30-day median (was a 400-day moving average).
 CODE[12] = `{
   name: "SSO own 200SMA → SSO/cash (2×)",
   params: [{ id: "window", label: "Window", text: "Hold SSO while it closes above its own line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 44 }, (_, k) => 181 + k), [230, 240], Array.from({ length: 31 }, (_, k) => 250 + k), Array.from({ length: 7 }, (_, k) => 290 + 10 * k), Array.from({ length: 81 }, (_, k) => 357 + k), Array.from({ length: 7 }, (_, k) => 440 + 10 * k)), default: 400 },
-           ${STAT_PARAM_SNIPPET}],
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 44 }, (_, k) => 181 + k), [230, 240], Array.from({ length: 31 }, (_, k) => 250 + k), Array.from({ length: 7 }, (_, k) => 290 + 10 * k), Array.from({ length: 81 }, (_, k) => 357 + k), Array.from({ length: 7 }, (_, k) => 440 + 10 * k)), default: 30 },
+           ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "center", label: "Center", tip: "SSO's average or median close over the window (the Center line setting). The rule holds SSO while SSO closes above it." }],
   run(data, p) {
     const log = [], W = p.window, lev = data.sso;
