@@ -316,7 +316,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[2] = `{
   name: "Gayed LRS 3× — SPY 200SMA → SPXL/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold SPXL while SPY closes above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 295 },
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 297 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -352,7 +352,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[3] = `{
   name: "Gayed LRS 2× — SPY 200SMA → SSO/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold SSO while SPY closes above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 295 },
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 297 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -5451,21 +5451,23 @@ ${TM_CHART_ROW}`,
 });
 
 // #58 Bare credit veto: the NFCI rule of #44, #47 and their children as the whole strategy: TQQQ,
-// and cash while the index reads above the level. No price rule lifts it early (#44's "crash cycle"
-// release needs #44's crash exit). 0.4 is #44's level, the lowest of the three those strategies ship
-// (0.4, 0.5, 0.75); the dropdown reaches under zero, where the index has spent most days since 2010.
+// and another fund while the index reads above the level. No price rule lifts it early (#44's "crash
+// cycle" release needs #44's crash exit). The dropdown reaches under zero, where the index has spent
+// most days since 2010. Since 26 November 2026 the defaults are the user's pick on the map of 2010 to
+// 2025 ("set this default for bare credit veto"): over -0.76 SPXL is held, so it holds SPXL on most
+// closes; they were 0.4, #44's level, and cash, which since 2010 never traded.
 CODE[58] = bareStrategy({
   name: "Bare credit veto",
-  params: `    { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "The Chicago Fed's weekly index of credit stress: 0 is average, higher is tighter. Each reading is used a week after its week ends.", text: "Hold TQQQ, and leave it while credit stress (NFCI) is above {}.", default: 0.4, options:
+  params: `    { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "The Chicago Fed's weekly index of credit stress: 0 is average, higher is tighter. Each reading is used a week after its week ends.", text: "Hold TQQQ, and leave it while credit stress (NFCI) is above {}.", default: -0.76, options:
       Array.from({ length: 151 }, (_, k) => +(-1 + 0.02 * k).toFixed(2)) },`,
   columns: `    { key: "nfci", label: "NFCI", tip: "Chicago Fed National Financial Conditions Index, weekly, used a week after its week ends. Above 0 is tighter than average." },`,
   rest: '"tqqq"',
-  park: { label: "Held while out", tip: "What the money is in while the veto is on.", text: "While out hold {}." },
+  park: { label: "Held while out", tip: "What the money is in while the veto is on.", text: "While out hold {}.", default: "spxl" },
   panel: '"Credit stress (NFCI)"',
   setup: `    // The credit veto on its own: TQQQ, and out of it while the NFCI reads above the level. data.nfci
     // carries each weekly reading from a week after its week ends; before 1971 there is none.
     if (!data.nfci) throw new Error("The credit veto needs the NFCI readings (data.nfci)");
-    const nfTh = p.nfciVeto == null ? 0.4 : +p.nfciVeto;
+    const nfTh = p.nfciVeto == null ? -0.76 : +p.nfciVeto;
     const vetoAt = (i) => isFinite(data.nfci[i]) && data.nfci[i] > nfTh;`,
   rule: `      const nf = data.nfci[i], veto = vetoAt(i);
       const want = veto ? "cash" : "tqqq";
