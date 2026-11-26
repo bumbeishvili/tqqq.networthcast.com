@@ -95,16 +95,16 @@ const MAP_NEAR_PCT = FIT_PLATEAU_REACH * 100;   // how far a setting is moved fo
 const MAP_TIP = [
   'Each dot is one combination of settings.',
   'Right: deeper max drawdown. Up: higher CAGR.',
-  'Up and left of the dashed lines beats your settings now on both.',
+  'A dot up and left of the dashed lines beats your settings on both CAGR and max drawdown.',
   'The map tries new combinations by itself until it finds nothing better.',
-  'Click a dot to see its settings. Use sets them.',
+  'Click a dot to see its settings. Use puts them on your strategy.',
   'Fit marks what Run in the Fit window would pick.',
   'Zoom: ⌘ or Ctrl + scroll, or pinch. Drag to move.',
 ].join('\n');
 const MAP_PLATEAU_TIP = [
-  'Plateau: the result holds when a setting is a little off.',
-  `Each setting is moved ${MAP_NEAR_PCT}% up and down, one at a time. The worst result counts.`,
-  'The bigger the dot, the closer that worst result is to its own.',
+  'Plateau: the result stays good when a setting is a little off.',
+  `To test it, each setting is moved ${MAP_NEAR_PCT}% up and down, one at a time.`,
+  'The bigger the dot, the less its result drops in that test.',
   'Cliff: a small change makes it much worse.',
 ].join('\n');
 const MAP_UNTESTED_TIP = 'Not tested yet with a setting a little off. Click it to test it now.';
@@ -121,24 +121,26 @@ const MAP_BEST_TIP = [
   `Under ${MAP_BEST_MIN_CAGR}% CAGR it is never the best.`,
 ].join('\n');
 const MAP_TIE_TIP = [
-  `Every CAGR and max drawdown that makes as much as the best after ${MAP_BEST_YEARS} years.`,
-  'The nearer a dot is to the line, the nearer it is to the best.',
+  'Every point on this line ends with as much money as the best.',
+  'The closer a dot is to the line, the closer it is to the best.',
 ].join('\n');
 const MAP_WORST_TIP = [
   `Worst case: the lowest result when one setting is ${MAP_NEAR_PCT}% off.`,
   `Each setting is moved ${MAP_NEAR_PCT}% up and down, one at a time.`,
   'It shows only after you click a dot: a dotted line from the dot to its worst case.',
 ].join('\n');
+// What the map does, in the order it does it, in plain words (the user, 2026-11-26, of a version with "bred",
+// "climbs" and "steps along its list": "what the fuckery slope is this").
 const MAP_RUN_TIP = [
-  `The map tries new combinations until ${MAP_STALL_ROUNDS} rounds in a row find nothing better. Then it stops.`,
-  'Half of them are bred from the dots nearest the green line.',
-  'From the best it climbs, one setting at a time, a few steps along its list, for a dot above the line.',
-  'Each round it also moves 2 to 5 of the best\'s settings at random and climbs from there.',
-  'Stop pauses it. Resume continues.',
+  'The map keeps trying new settings. Every result is a dot.',
+  'First it changes your settings one at a time.',
+  'Then it starts from the best dot and moves one setting at a time. It keeps each move that helps.',
+  'Each round it also tries mixes of the dots near the best, and random changes to the best.',
+  `It stops when ${MAP_STALL_ROUNDS} rounds in a row find nothing better. Stop pauses it, Resume goes on.`,
 ].join('\n');
 const MAP_FREEZE_TIP = [
   'Tick a value to freeze it: the map keeps it as it is.',
-  'The map then runs again without the combinations that change it.',
+  'The map then only tries settings with that value.',
   'The Fit window uses the same ticks.',
 ].join('\n');
 const MAP_LINK_TIP = 'Share a link that opens this map and starts it running.';
