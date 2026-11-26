@@ -3733,11 +3733,18 @@ function fitScore(msg) {
 // wins, so a search that starts under it climbs.
 // goal 'cagrAt', the drawdown goal's second stage: keeps the drawdown found, up to ddCap, and
 // takes the higher final value within it.
+// goal 'score', the settings map's search from its best dot (js/settings-map.js): the higher score
+// wins (rule.scoreOf, what $1 becomes after the map's years), the higher final value on a tie. It
+// has no limit (minFinal -Infinity).
 function fitBetter(rule, a, b) {
   if (!a) return false;
   if (!b) return true;
   const more = a.final > b.final * (1 + 1e-9), sameFinal = Math.abs(a.final - b.final) <= b.final * 1e-9;
   const shallower = a.dd < b.dd - 1e-9, sameDd = Math.abs(a.dd - b.dd) <= 1e-9;
+  if (rule.goal === 'score') {
+    const sa = rule.scoreOf(a), sb = rule.scoreOf(b), higher = sa > sb * (1 + 1e-12), same = !higher && !(sb > sa * (1 + 1e-12));
+    return higher || (same && more);
+  }
   if (rule.goal === 'cagr') {
     const aIn = a.dd <= rule.maxDd, bIn = b.dd <= rule.maxDd;
     if (aIn !== bIn) return aIn;

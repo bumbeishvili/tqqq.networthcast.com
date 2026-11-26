@@ -71,6 +71,8 @@ const MAP_NEAR_SHARE = 0.6;        // a number's moves that go to a value close 
 // "Done", 12 rounds each, still put new sets on both frontiers; the three after those did not).
 const MAP_STALL_ROUNDS = 60;
 const MAP_SHOWN = 10;              // two results differ from a tenth of a point on, as the numbers read
+const MAP_NEAR_BEST = 12;          // the dots that make the most after MAP_BEST_YEARS, the nearest to the green line: a share of each round's sets is bred from them
+const MAP_BEST_SHARE = 0.5;        // that share
 const MAP_PROGRESS = { star: 0.1, fit: 0.4, stall: 0.1 };   // the shares of the percentage for the first step, the search, and the quiet rounds at the end; the checks take the rest
 const MAP_FIT_LABEL = 'Fit';       // the name on the plot of the set the search ended on
 const MAP_WORST_LABEL = 'worst case';   // and of the end of a picked dot's dotted line
@@ -101,14 +103,15 @@ const MAP_PLATEAU_TIP = [
 ].join('\n');
 const MAP_UNTESTED_TIP = 'Not tested yet with a setting a little off. Click it to test it now.';
 const MAP_TOP_TIP = 'The line joins the dots with the highest CAGR. For the same max drawdown, no dot has a higher one.';
-const MAP_BEST_LABEL = 'Best';   // the combination that earns back its max drawdown fastest, the green point
+const MAP_BEST_YEARS = 2.5;   // the time over which the best is judged: the max drawdown at its start, the CAGR after it
+const MAP_BEST_LABEL = 'Best';   // the combination that makes the most in that time, the green point
 const MAP_BEST_TIP = [
-  'Best: the combination that earns back its max drawdown fastest, growing at its own CAGR.',
-  'Years = ln(1 / (1 − max drawdown)) / ln(1 + CAGR). Example: a 50% fall at 100% a year takes 1 year.',
-  'The fewer years, the better. The most years is the worst.',
+  `Best: the most money after ${MAP_BEST_YEARS} years, with the max drawdown at the start and the CAGR after it.`,
+  `$1 becomes (1 − max drawdown) × (1 + CAGR)^${MAP_BEST_YEARS}. Example: a 50% fall, then 100% a year: $2.83.`,
+  `Under $1: the drawdown is not earned back in ${MAP_BEST_YEARS} years. The least money is the worst.`,
 ].join('\n');
 const MAP_TIE_TIP = [
-  'Every CAGR and max drawdown that earns its drawdown back as fast as the best.',
+  `Every CAGR and max drawdown that makes as much as the best after ${MAP_BEST_YEARS} years.`,
   'The nearer a dot is to the line, the nearer it is to the best.',
 ].join('\n');
 const MAP_WORST_TIP = [
@@ -118,6 +121,8 @@ const MAP_WORST_TIP = [
 ].join('\n');
 const MAP_RUN_TIP = [
   `The map tries new combinations until ${MAP_STALL_ROUNDS} rounds in a row find nothing better. Then it stops.`,
+  'Half of them are bred from the dots nearest the green line.',
+  'From each new best it searches, one setting at a time, for a dot above the line.',
   'Stop pauses it. Resume continues.',
 ].join('\n');
 const MAP_FREEZE_TIP = [
@@ -290,30 +295,33 @@ function mapCheckDot(map, dot) {
 }
 const mapDotList = (map) => Array.from(map.dots.values());
 const mapNowDot = (map) => (map.job ? map.dots.get(fitRunKey(map.job.store, map.job.cur)) : null) || null;
-// ---- The best dot: the one that earns back its max drawdown fastest ----
+// ---- The best dot: the one that makes the most after MAP_BEST_YEARS ----
 // The user (2026-11-26), with a write-up that scores a result by its recovery time: "I want a clear
 // definition of the best strategy and worst one ... it should just highlight best strategy (with green
 // color, that has the best ratio for this time penalty), from there also display the line, that will
-// show which points are closest to best strategies".
-// The years a result needs, growing at its CAGR (in percent), to earn back its max drawdown (a share,
-// 0.3): ln(1 / (1 − dd)) / ln(1 + CAGR). The fewest is the best, the most the worst. A result with no
-// drawdown needs none; one that loses money a year never earns it back.
-const mapRecoveryYears = (cagr, dd) => (dd <= 0 ? 0 : cagr <= 0 || dd >= 1 ? Infinity : Math.log(1 / (1 - dd)) / Math.log(1 + cagr / 100));
-const mapDotYears = (dot) => mapRecoveryYears(dot.cagr, dot.r.dd);
-// The dot with the fewest years, or null while no dot earns its drawdown back. Read off once for each
-// state of the dots (map.version; setMapJob starts it over).
+// show which points are closest to best strategies". The years to earn back the max drawdown were the
+// first measure. A ratio, it favoured dots near 0% drawdown ("Cagr 9% with 2.4% drawdown is much worse
+// than cagr 42 with 32% drawdown"); asked which pairs tie, the user gave the rule that replaced it: "I
+// think it's about 2.5 year period, suppose you got your drawdown at the start of year right away, so
+// the best cagr is the one that fixes it in 2.5 years period or sooner and has the best cagr overall
+// aftr that time passes".
+// What $1 becomes after MAP_BEST_YEARS with the max drawdown (a share, 0.3) at the start and the CAGR
+// (in percent) after it: (1 − dd) × (1 + CAGR)^years. The most is the best, the least the worst; under
+// $1 the drawdown is not earned back in that time. 42% at a 32% drawdown makes $1.63, 9% at 2.4% $1.21.
+const mapBestValue = (cagr, dd) => (1 - dd) * Math.pow(Math.max(0, 1 + cagr / 100), MAP_BEST_YEARS);
+const mapDotValue = (dot) => mapBestValue(dot.cagr, dot.r.dd);
+// The dot that makes the most, or null with no dot. Read off once for each state of the dots
+// (map.version; setMapJob starts it over).
 function mapBestDot(map) {
-  if (!map.best || map.best.version !== map.version) {
-    const dot = d3.least(mapDotList(map), mapDotYears);
-    map.best = { version: map.version, dot: dot && Number.isFinite(mapDotYears(dot)) ? dot : null };
-  }
+  if (!map.best || map.best.version !== map.version) map.best = { version: map.version, dot: d3.greatest(mapDotList(map), mapDotValue) || null };
   return map.best.dot;
 }
-// The curve of results that earn their drawdown back in `years`: the CAGR it takes at a max drawdown
-// of x percent, both in percent. Every dot lies on it or under it, the best one on it.
-const mapTieCagr = (years) => (x) => (Math.pow(1 / (1 - x / 100), 1 / years) - 1) * 100;
-const mapYearsText = (years) => years.toFixed(2) + ' years';   // two decimals: a strategy with a CAGR over 100% earns back its drawdown in under a year, and one decimal makes most good dots read alike
-const mapBackText = (years) => (Number.isFinite(years) ? `earns back its max drawdown in ${mapYearsText(years)}` : 'never earns back its max drawdown');
+// The curve of results that make `value` after MAP_BEST_YEARS: the CAGR it takes at a max drawdown of
+// x percent, both in percent. It starts above zero, bends up gently and then steeply toward a 100%
+// drawdown. Every dot lies on it or under it, the best one on it.
+const mapTieCagr = (value) => (x) => (Math.pow(value / (1 - x / 100), 1 / MAP_BEST_YEARS) - 1) * 100;
+const mapMoneyText = (value) => '$' + (value < 100 ? value.toFixed(2) : Math.round(value).toLocaleString('en-US'));
+const mapValueText = (value) => `$1 becomes ${mapMoneyText(value)} after ${MAP_BEST_YEARS} years`;
 const mapOwn = (dot) => dot.r, mapFlat = (dot) => dot.flat;
 // A dot's result, and its worst among its neighbours, as the numbers show them: in tenths of a
 // point. Two sets that read the same are one place on the frontier.
@@ -347,15 +355,46 @@ const mapFrontMark = (map) => { const fronts = mapFronts(map), mark = (front, of
 // The sets new ones are bred from: the frontier, and the frontier of the checked sets by their
 // worst result, so the sets that hold have offspring too.
 const mapParents = (map) => { const fronts = mapFronts(map); return [...new Set(fronts.own.concat(fronts.flat))]; };
-// Up to `count` sets not run yet, bred from the parents.
+// The dots nearest the green line: the MAP_NEAR_BEST that make the most after MAP_BEST_YEARS.
+const mapNearBest = (map) => mapDotList(map).sort((a, b) => mapDotValue(b) - mapDotValue(a)).slice(0, MAP_NEAR_BEST);
+// Up to `count` sets not run yet: a share (MAP_BEST_SHARE) bred from the dots nearest the green
+// line, so the map looks above it most where it is likeliest to find a new best, the rest from the parents.
 function mapBreed(map, rand, count) {
-  const { job } = map, parents = mapParents(map), sets = new Map();
+  const { job } = map, parents = mapParents(map), near = mapNearBest(map), sets = new Map();
   if (!parents.length) return [];
-  for (let tries = 0; sets.size < count && tries < count * MAP_BREED_TRIES; tries++) {
-    const child = mapChild(map.space, job.cur, parents, rand), id = fitRunKey(job.store, child);
-    if (!job.store.done.has(id) && !map.failed.has(id)) sets.set(id, child);
-  }
+  const breed = (from, upTo) => {
+    for (let tries = 0; sets.size < upTo && tries < count * MAP_BREED_TRIES; tries++) {
+      const child = mapChild(map.space, job.cur, from, rand), id = fitRunKey(job.store, child);
+      if (!job.store.done.has(id) && !map.failed.has(id)) sets.set(id, child);
+    }
+  };
+  if (near.length) breed(near, Math.round(count * MAP_BEST_SHARE));
+  breed(parents, count);
   return Array.from(sets.values());
+}
+// ---- Pushing the best dot up ----
+// The user (2026-11-26): "are we somehow able to drive mapping process to improve the best strategy
+// in map", then of the green line: "by best I mean above this line". From each new best dot the map
+// runs the Fit window's own search (fitSearch) for the most money after MAP_BEST_YEARS, one setting at a
+// time from the dot's values: what it ends on is above the line through the best, or the best itself. A dot it
+// set out from is kept with the runs (store.mapClimbed, with the free settings and the frozen
+// values), so a map opened again does not search from it again.
+const mapBestRule = (job) => ({ goal: 'score', plateau: false, minFinal: -Infinity, maxDd: Infinity, scoreOf: (r) => mapBestValue(mapCagr(job, r), r.dd) });
+const mapClimbKey = (map, dot) => JSON.stringify([dot.id, map.job.space.map(s => s.id), mapHeld(map.job)]);
+const mapClimbedOf = (job) => job.store.mapClimbed || (job.store.mapClimbed = new Set());
+// The best dot while the map has not searched from it, else null.
+function mapUnclimbedBest(map) {
+  const best = mapBestDot(map);
+  return best && !mapClimbedOf(map.job).has(mapClimbKey(map, best)) ? best : null;
+}
+async function mapClimb(map, measure, from) {
+  const { job, run } = map, cur = Object.assign({}, from.values);
+  run.fit = { get stopped() { return run.stopped; }, stage: 1, stages: 1, phase: 'rounds', round: 1, done: 0, total: 0, base: 0, span: 1 };
+  await fitSearch(run.fit, fitSpaceOf({}, job.space), cur, { rule: mapBestRule(job), measure, cagrOf: job.cagrOf });
+  run.fit = null;
+  if (run.stopped) return;
+  mapClimbedOf(job).add(mapClimbKey(map, from));
+  mapSync(map);
 }
 // The next frontier set to check: an unchecked one of the frontier as the numbers show it; first
 // those that beat the settings as they are on both counts; of them the one furthest on the plot
@@ -451,6 +490,12 @@ async function mapFill(map, measure, over) {
       run.searched++;   // the first is the one the Fit window asked for: its result is marked "Fit", and picked only by a click
     }
   }
+  // From the best dot, a search for one above the green line, and again from what it finds.
+  run.step = 'best';
+  for (let best = mapUnclimbedBest(map); best; best = mapUnclimbedBest(map)) {
+    await mapClimb(map, measure, best);
+    if (over()) return false;
+  }
   // The rounds below came to their end before on these settings and this plan (in its other shape, or from another start): only the searches were missing.
   if (job.store.mapDone === map.doneKey) return true;
   run.step = 'rounds';
@@ -473,7 +518,12 @@ async function mapFill(map, measure, over) {
     if (steadier) await mapCheck(map, steadier, measure);
     if (over()) return false;
     mapSync(map);
-    const quiet = !onFrontier && !steadier && mapFrontMark(map) === before;
+    // A new best, from the bred sets or the checks: the search for one above the line goes on from it.
+    const climbed = mapUnclimbedBest(map);
+    if (climbed) await mapClimb(map, measure, climbed);
+    if (over()) return false;
+    mapSync(map);
+    const quiet = !onFrontier && !steadier && !climbed && mapFrontMark(map) === before;
     run.stalled = quiet ? run.stalled + 1 : 0;
     if (run.stalled >= MAP_STALL_ROUNDS || (quiet && !sets.length)) return true;   // no set left to breed: every set there is has been run
   }
@@ -487,6 +537,7 @@ function mapPercent(map) {
   const share = () => {
     if (run.step === 'star') return P.star * star;
     if (run.step === 'fit') return P.star + P.fit * (run.searched + (run.fit ? fitPercent(run.fit) / 100 : 0)) / map.plans.length;
+    if (run.step === 'best') return P.star + P.fit;
     const front = mapFronts(map).shownOwn, checks = front.length ? front.filter(mapFlat).length / front.length : 1;
     return P.star + P.fit + (1 - P.star - P.fit - P.stall) * checks + P.stall * run.stalled / MAP_STALL_ROUNDS;
   };
@@ -517,8 +568,8 @@ async function mapWork(map, kind, work) {
 }
 // The map fills itself; a map that comes to its end is marked as done for the settings that were free and the search it ran (map.doneKey).
 const startMapFill = (map) => mapWork(map, 'fill', async (measure, over) => { if (await mapFill(map, measure, over)) map.job.store.mapDone = map.doneKey; });
-// Done: the rounds came to their end (store.mapDone), and every search of this window has its result.
-const mapIsDone = (map) => !!map.job && map.job.store.mapDone === map.doneKey && (!map.ask || map.plans.every(plan => mapSearched(map, plan)));
+// Done: the rounds came to their end (store.mapDone), every search of this window has its result, and the best dot has been searched from.
+const mapIsDone = (map) => !!map.job && map.job.store.mapDone === map.doneKey && (!map.ask || map.plans.every(plan => mapSearched(map, plan))) && !mapUnclimbedBest(map);
 // Stop the window's work and wait for it to wind down.
 function stopMapWork(map) {
   const { run } = map;
@@ -692,7 +743,7 @@ function showMapKeyTips() {
   const map = _map, { hold, job } = map, best = job ? mapBestDot(map) : null;
   map.el.querySelector('[data-map-hold-tip]').dataset.tip = hold ? `${MAP_HOLD_TIP}\nCAGR ${fitCagrText(job.cagrOf, hold)}, max drawdown ${fitDdText(hold)}.` : MAP_HOLD_TIP;
   map.el.querySelector('[data-map-best-tip]').dataset.tip = best
-    ? `${MAP_BEST_TIP}\nThe best here: ${mapYearsText(mapDotYears(best))}, CAGR ${fitCagrText(job.cagrOf, best.r)}, max drawdown ${fitDdText(best.r)}.` : MAP_BEST_TIP;
+    ? `${MAP_BEST_TIP}\nThe best here: ${mapMoneyText(mapDotValue(best))}, CAGR ${fitCagrText(job.cagrOf, best.r)}, max drawdown ${fitDdText(best.r)}.` : MAP_BEST_TIP;
 }
 // Where a dot stands, and where its worst result among its neighbours does, in percent.
 const mapOwnAt = (dot) => ({ x: dot.r.dd * 100, y: dot.cagr });
@@ -730,7 +781,7 @@ function mapPlot(map, chart) {
     .data(mapDotList(map).map(dot => Object.assign({ id: dot.id, size: dot.flat ? mapHolds(dot) : null }, mapOwnAt(dot))))
     .frontier(mapFronts(map).own.map(mapOwnAt))
     .now(now ? mapOwnAt(now) : null)
-    .tie(best ? mapTieCagr(mapDotYears(best)) : null)
+    .tie(best ? mapTieCagr(mapDotValue(best)) : null)
     // Named places: the best dot in green, the Fit window's pick (one name with the best's when it is
     // the same dot), and buy & hold TQQQ in yellow.
     .flags([].concat(best ? Object.assign({ id: 'best', kind: 'best', label: best === fit ? `${MAP_BEST_LABEL} · ${MAP_FIT_LABEL}` : MAP_BEST_LABEL }, mapOwnAt(best)) : [],
@@ -769,7 +820,7 @@ function showMapTip(point, event) {
   const map = _map, dot = map.dots.get(point.id), tip = map.el.querySelector('.map-tip'), { cagrOf } = map.job;
   tip.innerHTML = `<b>CAGR ${fitCagrText(cagrOf, dot.r)} · max drawdown ${fitDdText(dot.r)}</b>`
     + (dot.flat ? `<span>worst case: ${fitCagrText(cagrOf, dot.flat)} · ${fitDdText(dot.flat)}</span>` : '')
-    + `<span>${dot === mapBestDot(map) ? 'best: ' : ''}${mapBackText(mapDotYears(dot))}</span>`
+    + `<span>${dot === mapBestDot(map) ? 'best: ' : ''}${mapValueText(mapDotValue(dot))}</span>`
     + `<span>${dot.differs ? dot.differs + ' setting' + (dot.differs > 1 ? 's' : '') + ' changed' : 'your settings now'}</span>`;
   tip.hidden = false;
   const GAP = 14, box = tip.getBoundingClientRect();
@@ -810,8 +861,8 @@ function mapDetailHtml(map) {
   };
   const best = dot ? mapBestDot(map) : null;
   const notes = !dot ? [] : [dot.differs ? '' : 'Your settings now.',
-    dot === best ? `${MAP_BEST_LABEL}: ${mapBackText(mapDotYears(dot))}, the fastest here.`
-      : best ? `It ${mapBackText(mapDotYears(dot))}. The best takes ${mapYearsText(mapDotYears(best))}.` : '',
+    dot === best ? `${MAP_BEST_LABEL}: ${mapValueText(mapDotValue(dot))}, the most here.`
+      : best ? `${mapValueText(mapDotValue(dot))}. The best makes ${mapMoneyText(mapDotValue(best))}.` : '',
     dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what Run in the Fit window would pick.` : '',
     dot.flat ? mapWorstText(job, dot) : picked && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
   const changed = fitFreezeChanged(settings, choices);
