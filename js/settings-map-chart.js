@@ -237,10 +237,11 @@ class SettingsMapChart {
       .attr('x', d => d.x).attr('y', d => d.y).attr('dy', d => (d.id === 'better' ? '0.7em' : 0)).attr('text-anchor', d => d.anchor).text(d => d.text);
   }
 
-  // The named places in view: a ring, and the name beside it on the side with room.
+  // The named places in view: a ring, and the name beside it on the side with room. None while
+  // the plot has no dot: it has no axes then, and the empty text holds its middle.
   drawFlags() {
-    const { chart, flags, x, y, chartWidth, chartHeight } = this.getState();
-    const seen = (flags || []).map(f => Object.assign({}, f, { px: x(f.x), py: y(f.y) })).filter(f => f.px >= 0 && f.px <= chartWidth && f.py >= 0 && f.py <= chartHeight);
+    const { chart, flags, data, x, y, chartWidth, chartHeight } = this.getState();
+    const seen = (data && data.length ? flags || [] : []).map(f => Object.assign({}, f, { px: x(f.x), py: y(f.y) })).filter(f => f.px >= 0 && f.px <= chartWidth && f.py >= 0 && f.py <= chartHeight);
     const layer = chart._add('g.flags').attr('pointer-events', 'none');
     // _add sets the class anew at each render: a flag's own kind goes on after it.
     const kindOf = (name) => (f) => name + (f.kind ? ' ' + f.kind : '');

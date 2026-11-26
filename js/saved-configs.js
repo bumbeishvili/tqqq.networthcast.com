@@ -3911,6 +3911,17 @@ const fitChartPeriod = () => ({ entryIdx: +document.getElementById('slider-entry
 const fitFirstQuarter = () => (typeof effectiveEntryMinQIdx === 'function' ? effectiveEntryMinQIdx() : 0);
 // The years to pick from: from the first quarter allowed to the data's last.
 const fitYearList = () => d3.range(fitYearOfQuarter(fitFirstQuarter()), fitYearOfQuarter(quarterlyData.length - 1) + 1);
+// One end of the years as a dropdown, in the Fit window's Years row and in the map's head: its
+// first choice the chart's own Entry or Exit, set off from the years by a line. It reads as its
+// year alone (the user, 2026-11-25: "just say years, no chart"). A kept first year from before
+// the data allowed reads as the first year there is. end: one of FIT_YEAR_ENDS.
+function fitYearPickHtml(end, choices) {
+  const chart = fitChartPeriod(), years = fitYearList(), chartEnd = end.id === 'fromYear' ? chart.entryIdx : chart.exitIdx;
+  const picked = choices[end.id] ? String(Math.max(+choices[end.id], years[0])) : '';
+  return `<select class="inline-select fit-year" data-fit-year="${end.id}" aria-label="${end.name}" title="${end.name}${choices[end.id] ? '' : ': as the chart, ' + qLabel(quarterlyData[chartEnd][0])}">`
+    + `<option value=""${picked ? '' : ' selected'}>${fitYearOfQuarter(chartEnd)}</option><hr>`
+    + years.map(y => `<option value="${y}"${picked === String(y) ? ' selected' : ''}>${y}</option>`).join('') + `</select>`;
+}
 // The period the choices stand for. null: both ends follow the chart, so the fit runs on the
 // chart's period as it is, exact days included. Else { entryIdx, exitIdx } as the chart's sliders
 // would hold it (entryIdx: the first quarter that runs), `text` naming it for the notes, and
@@ -4693,15 +4704,8 @@ function buildFitWindowHtml(key, choices, freezeOpen) {
   const limit = FIT_LIMITS[choices.goal];
   const limitBox = `<span class="fit-limit"><input type="text" inputmode="decimal" data-fit-limit="${limit.id}" value="${_escHtml(choices[limit.id])}" placeholder="${limit.empty}" aria-label="${limit.name}, percent" autocomplete="off"><span class="fit-limit-unit">%</span></span>`;
   const goalLine = (row) => line(row.id, said(row.text, pick(row), row.tip) + said(limit.text + '.', limitBox, limit.tip));
-  // The years: each end a dropdown, its first choice the chart's own Entry or Exit, set off from the
-  // years by a line. It reads as its year alone (the user, 2026-11-25: "just say years, no chart").
-  const period = fitPeriodOf(choices), chart = fitChartPeriod(), years = fitYearList();
-  const chartEnd = { fromYear: chart.entryIdx, toYear: chart.exitIdx };
-  // A kept first year from before the data allowed reads as the first year there is.
-  const picked = (end) => (choices[end.id] ? String(Math.max(+choices[end.id], years[0])) : '');
-  const yearPick = (end) => `<select class="inline-select fit-year" data-fit-year="${end.id}" aria-label="${end.name}" title="${end.name}${choices[end.id] ? '' : ': as the chart, ' + qLabel(quarterlyData[chartEnd[end.id]][0])}">`
-    + `<option value=""${picked(end) ? '' : ' selected'}>${fitYearOfQuarter(chartEnd[end.id])}</option><hr>`
-    + years.map(y => `<option value="${y}"${picked(end) === String(y) ? ' selected' : ''}>${y}</option>`).join('') + `</select>`;
+  // The years: each end a dropdown (fitYearPickHtml).
+  const period = fitPeriodOf(choices), yearPick = (end) => fitYearPickHtml(end, choices);
   const yearsRow = line('years', `Fit this strategy between ${yearPick(FIT_YEAR_ENDS[0])} and <span class="cp-tail">${yearPick(FIT_YEAR_ENDS[1])}. ${tipIcon(FIT_YEARS_TIP)}</span>`)
     + (period && period.inverted ? `<div class="fit-years-note">The last year is before the first.</div>` : '');
   const blocked = period && period.inverted ? ' disabled' : '';

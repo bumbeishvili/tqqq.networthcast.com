@@ -4279,6 +4279,13 @@
   .fit-window-head h3 { margin: 0; font-size: calc(15px * var(--ui-scale)); color: var(--text); }
   .fit-window-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11.5px * var(--ui-scale)); color: var(--text-muted); }
   .fit-window-head .modal-close { flex: none; align-self: center; }
+  /* The map's head: the strategy's name, then the years it is mapped on (two dropdowns), the name giving way first;
+     on a narrow screen the years take a line of their own under the name. */
+  .map-window .fit-window-head { flex-wrap: wrap; row-gap: 6px; }
+  .map-window .fit-window-name { flex: 0 1 auto; }
+  .map-window .fit-window-head .modal-close { margin-left: auto; }
+  .map-years { flex: none; display: inline-flex; align-items: baseline; gap: 6px; font-size: calc(11.5px * var(--ui-scale)); color: var(--text-muted); }
+  @media (max-width: 899px) { .map-years { order: 1; flex-basis: 100%; } }
   .fit-window-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 4px; }
   /* The Fit window itself (js/saved-configs.js buildFitWindowHtml). A narrow screen: the choices, then the map's card, scrolling together over Run. */
   .fit-form-window { width: min(440px, calc(100vw - 24px)); }

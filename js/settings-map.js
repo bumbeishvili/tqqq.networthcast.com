@@ -81,6 +81,7 @@ const MAP_CHART_SCREEN = 0.52;     // and at most this share of the screen's hei
 const MAP_HIT_PX = { fine: 14, coarse: 22 };   // how near a dot the pointer, or a finger, has to be
 const MAP_PREVIEW_HEIGHT = { share: 0.72, min: 150, max: 400 };   // the picture in the Fit window: its height against its width, within these px
 const MAP_FROZEN_TEXT = 'Every setting is frozen.';
+const MAP_INVERTED_TEXT = 'The last year is before the first.';
 // What the reader sees, in everyday words, a thought a line (a tip keeps its line breaks).
 const MAP_NEAR_PCT = FIT_PLATEAU_REACH * 100;   // how far a setting is moved for a check, in percent
 const MAP_TIP = [
@@ -489,11 +490,12 @@ function stopMapWork(map) {
 
 // ---- The window ----
 // The window's job and dots, from the settings, the frozen ones and the kept runs as they are now,
-// and the searches it will run (setMapPlan). found: what fitJobFor gave for the key; period: the
-// Fit window's years where they are set (fitPeriodOf), which the job was made for.
+// and the searches it will run (setMapPlan). found: what fitJobFor gave for the key ({} for years
+// that end before they start, which have no job); period: the Fit window's years where they are
+// set (fitPeriodOf), which the job was made for.
 function setMapJob(map, found, period) {
   const job = found.job || null;
-  Object.assign(map, { job, frozen: !!found.frozen, space: job ? job.space.map(mapSetting) : [], years: period ? period.text : null,
+  Object.assign(map, { job, frozen: !!found.frozen, inverted: !!(period && period.inverted), space: job ? job.space.map(mapSetting) : [], years: period ? period.text : null,
     dots: new Map(), byResult: new Map(), twins: new Set(), failed: new Set(), version: 0, places: null, fronts: null, most: 0, drawn: null });
   // Buy and hold TQQQ over the same years with the same money (the user, 2026-11-25: "also include
   // buy hold tqqq point as yellow in the map, for given period whatever was drawdown and cagr").
@@ -513,11 +515,15 @@ function setMapPlan(map, period) {
     plans: plan.plateau ? [plan] : [plan, Object.assign({}, plan, { plateau: true })] });
 }
 const mapTipIcon = (tip, mark = '') => `<span class="info-icon" tabindex="0" data-tip-wide${mark} data-tip="${_escHtml(tip)}">ⓘ</span>`;
-// years: the Fit window's years when the map is for them (fitPeriodOf's text), named after the strategy.
-function buildMapWindowHtml(key, years) {
+// The head names the strategy and the years it is mapped on, the Fit window's two year dropdowns
+// (the user, 2026-11-26: "also can you make sure we also have year filters for the map?").
+// choices: the Fit window's, which the years are one of.
+function buildMapWindowHtml(key, choices) {
   return `<div class="modal-backdrop" data-map-close></div>`
     + `<div class="modal-content fit-window map-window" role="dialog" aria-modal="true" aria-label="Map">`
-    + `<div class="fit-window-head"><h3>Map</h3>${mapTipIcon(MAP_TIP)}<span class="fit-window-name">${_escHtml(fitKeyName(key) + (years ? ', ' + years : ''))}</span><button type="button" class="modal-close" data-map-close aria-label="Close">×</button></div>`
+    + `<div class="fit-window-head"><h3>Map</h3>${mapTipIcon(MAP_TIP)}<span class="fit-window-name">${_escHtml(fitKeyName(key))}</span>`
+    + `<span class="map-years">${fitYearPickHtml(FIT_YEAR_ENDS[0], choices)} to ${fitYearPickHtml(FIT_YEAR_ENDS[1], choices)}</span>`
+    + `<button type="button" class="modal-close" data-map-close aria-label="Close">×</button></div>`
     + `<div class="fit-window-body map-body"><div class="map-main"><div class="map-chart"></div>`
     + `<div class="map-legend">${MAP_LEGEND.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${_escHtml(key.name)}${key.tip ? mapTipIcon(key.tip, key.hold ? ' data-map-hold-tip' : '') : ''}</span>`).join('')}</div></div>`
     + `<div class="map-side"><div class="map-detail"></div></div></div>`
@@ -558,15 +564,18 @@ function openSharedMap(key, choicesText) {
   };
   attempt();
 }
+// What fitJobFor gives for the key on these years, or {} (no job, the window still opens) for
+// years that end before they start: the head's dropdowns are the way to set them right.
+const mapJobFor = (key, period) => (period && period.inverted ? {} : fitJobFor(key, period));
 // Opened from the Fit window. It starts filling itself at once, unless it was done before on the same choices.
 function openMapWindow(key) {
-  const period = fitPeriodOf(fitChoices()), found = fitJobFor(key, period);
+  const choices = fitChoices(), period = fitPeriodOf(choices), found = mapJobFor(key, period);
   if (!found) return;   // nothing to map: no such strategy, no setting with a choice, or the chart not drawn yet
   closeMapWindow(false);
   const el = document.createElement('div');
   el.className = 'modal fit-modal map-modal';
   const map = _map = { el, key, picked: null, chart: null, run: null };
-  el.innerHTML = buildMapWindowHtml(key, period ? period.text : null);
+  el.innerHTML = buildMapWindowHtml(key, choices);
   document.body.appendChild(el);
   document.body.classList.add('modal-open');
   el.addEventListener('click', onMapWindowClick);
@@ -601,7 +610,7 @@ function onMapWindowClick(e) {
   if (on('[data-map-csv]')) { downloadMapCsv(map); return; }
   if (on('[data-map-link]')) { shareConfig(); return; }   // the page's share link, which names the open map (mapShareParams)
   if (on('[data-map-clear]')) { pickMapDot(null); return; }
-  if (on('[data-map-freeze-reset]')) { setFitFreezeChoices(map.key, {}); refreezeMap(map); return; }
+  if (on('[data-map-freeze-reset]')) { setFitFreezeChoices(map.key, {}); redoMap(map); return; }
   if (on('[data-map-use]')) useMapDot(map);
 }
 // A dot picked on the chart (null: none). Unchecked, it is checked ahead of the others: a map
@@ -667,7 +676,7 @@ function drawMap() {
     .picked(picked ? picked.id : null)
     // The picked set tied to its worst result among its neighbours.
     .link(picked && picked.flat ? mapFlatAt(picked) : null)
-    .emptyText(map.frozen ? MAP_FROZEN_TEXT : 'Mapping…')
+    .emptyText(map.inverted ? MAP_INVERTED_TEXT : map.frozen ? MAP_FROZEN_TEXT : 'Mapping…')
     .render();
 }
 // A map on a chart: its dots (a tested one sized by how it holds), the line through the best
@@ -727,7 +736,7 @@ function hideMapTip() {
 }
 // Beside the chart, in a column that scrolls by itself (under it on a narrow screen): a set's
 // numbers, its worst case, and the whole strategy as its Settings read, which is the Freeze list
-// too: a tick box on each value a search can change (refreezeMap). The set is the dot that was
+// too: a tick box on each value a search can change (redoMap). The set is the dot that was
 // clicked, a value it changes struck through with the new one beside it, with Use and Clear
 // (which lets the dot go); until one is clicked, the settings as they are. The user (2026-11-25), of the search's result picked for
 // the reader when it came in: "make sure this does not open without clicking, it appeared
@@ -765,28 +774,38 @@ function mapDetailHtml(map) {
     + buildFitStrategyHtml(map.key, value)
     + `<button type="button" class="fit-freeze-reset" data-map-freeze-reset${changed ? '' : ' disabled'}>Reset</button></div>`;
 }
-// The frozen settings changed (a tick in the column, or its Reset): the map is worked out again
-// for the settings that are free now. The user (2026-11-25): "I want freeze component to also
+// The frozen settings or the years changed: the map is worked out again for the settings that are
+// free now, on the years picked now. The user (2026-11-25): "I want freeze component to also
 // appear, in the map component, in place of strategy, just add a checkbox that will freeze a
 // specific setting and then map will rerun/reevaluate". What is running stops; the dots that
 // keep every frozen setting as it is stay (a code strategy's runs are kept whatever is frozen; a
-// panel's start over), and the map fills itself again unless it was done for these settings.
-// Ticks made in a row: the last one's turn is the one that goes on.
-async function refreezeMap(map) {
+// panel's start over), and the map fills itself again unless it was done for these settings and
+// years. A strategy's runs are kept for one set of years (fitRunStore): other years start the map
+// over, as they do in the Fit window, and so does going back to years mapped before.
+// Years that end before they start have nothing to map: the chart says so until they are set right.
+// Changes made in a row: the last one's turn is the one that goes on.
+async function redoMap(map) {
   const turn = map.turn = (map.turn || 0) + 1;
   await stopMapWork(map);
   if (_map !== map || map.turn !== turn) return;
   const period = fitPeriodOf(fitChoices());
-  setMapJob(map, fitJobFor(map.key, period), period);
+  setMapJob(map, mapJobFor(map.key, period), period);
   showMap();
   if (map.job && !mapIsDone(map)) startMapFill(map);
 }
-// A tick on a value in the column freezes its setting, an empty box lets the map change it.
+// A tick on a value in the column freezes its setting, an empty box lets the map change it. A
+// year picked in the head is kept with the Fit window's choices, so Fit runs on it too.
 function onMapWindowChange(e) {
-  const map = _map, box = e.target.closest('[data-map-freeze-id]');
-  if (!map || !box) return;
+  const map = _map, box = e.target.closest('[data-map-freeze-id]'), year = e.target.closest('[data-fit-year]');
+  if (!map) return;
+  if (year) {
+    keepFitChoices(Object.assign(fitChoices(), { [year.getAttribute('data-fit-year')]: year.value }));
+    redoMap(map);
+    return;
+  }
+  if (!box) return;
   setFitFrozen(map.key, fitSettings(map.key).find(s => s.id === box.getAttribute('data-map-freeze-id')), box.checked);
-  refreezeMap(map);
+  redoMap(map);
 }
 // The map as a file: a row a dot, the highest CAGR first. The settings' columns carry the
 // strategy's own names for them and the values as its dropdowns read (the user, 2026-11-25:
