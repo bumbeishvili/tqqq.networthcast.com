@@ -18,6 +18,9 @@ const ROOT = path.join(__dirname, '..');
 vm.runInThisContext(fs.readFileSync(path.join(ROOT, 'js/data.js'), 'utf8'));   // parseDataFile, buildDaily, buildNfciDaily
 const CODE = require(path.join(ROOT, 'js/strategy-library-code.js'));
 const upgradeWithdrawalHandling = CODE.upgradeWithdrawalHandling;
+// The entries given a trading cost and cash interest on 2026-11-26 (withCostAndCash): a copy saved before the
+// withdrawal rule predates that too, so it is their text from before it.
+const { COST_CASH_BASE, withCostAndCash } = CODE;
 
 let failures = 0;
 const ck = (name, ok, detail) => {
@@ -146,16 +149,18 @@ const strategyIds = Object.keys(CODE).map(Number).filter(n => !engineRun(n)).sor
   // sections 1-3 check like everyone else's.
   const ADDED_AFTER_RULE = [7, 14, 52, 53, 54, 71, 74, 76];
   strategyIds.filter(n => !ADDED_AFTER_RULE.includes(n)).forEach(n => {
-    const preRule = CODE[n].replace(WITHDRAWAL_BLOCK, '');
-    ck(`#${n} the library text contains the withdrawal block once`, preRule !== CODE[n] && !WITHDRAWAL_BLOCK.test(preRule));
-    ck(`#${n} a pre-rule copy upgrades to exactly the library text`, upgradeWithdrawalHandling(preRule) === CODE[n]);
-    ck(`#${n} current text is left alone`, upgradeWithdrawalHandling(CODE[n]) === CODE[n]);
+    const lib = COST_CASH_BASE[n] || CODE[n];
+    const preRule = lib.replace(WITHDRAWAL_BLOCK, '');
+    ck(`#${n} the library text contains the withdrawal block once`, preRule !== lib && !WITHDRAWAL_BLOCK.test(preRule));
+    ck(`#${n} a pre-rule copy upgrades to exactly the library text (before the cost, and with it the entry as it is)`,
+      upgradeWithdrawalHandling(preRule) === lib && (!COST_CASH_BASE[n] || withCostAndCash(lib, '#' + n) === CODE[n]));
+    ck(`#${n} current text is left alone`, upgradeWithdrawalHandling(CODE[n]) === CODE[n] && upgradeWithdrawalHandling(lib) === lib);
     ck(`#${n} re-wrapping moves the money line across several lines`, !rewrapped(preRule).includes('cash += amt; contributed = amt;'));
     const reflowed = upgradeWithdrawalHandling(rewrapped(preRule));
     ck(`#${n} a re-wrapped pre-rule copy is upgraded too`, reflowed !== rewrapped(preRule) && reflowed.includes('A withdrawal: cash pays first'));
     const schedule = withWithdrawals([firstDayOnOrAfter('2021-06-15')], 25000);
     ck(`#${n} the re-wrapped upgrade runs like the library text`,
-      JSON.stringify(run(reflowed, schedule).log.map(row => row.value)) === JSON.stringify(run(CODE[n], schedule).log.map(row => row.value)));
+      JSON.stringify(run(reflowed, schedule).log.map(row => row.value)) === JSON.stringify(run(lib, schedule).log.map(row => row.value)));
   });
   const unrelated = '{ name: "mine", run(data, p) { let cash = p.initial; const amt = 5; cash += amt; return { log: [] }; } }';
   ck('code that does not keep library-style books is returned unchanged', upgradeWithdrawalHandling(unrelated) === unrelated);

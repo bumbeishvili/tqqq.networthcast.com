@@ -6912,12 +6912,73 @@ const NINESIG_LIBRARY = {
 const NINESIG_LIBRARY_NUMBERS = Object.keys(NINESIG_LIBRARY).map(Number);
 for (const n of NINESIG_LIBRARY_NUMBERS) CODE[n] = nineSigStrategyCode(...NINESIG_LIBRARY[n]);
 
+// ---- A trading cost and cash interest for every entry ----
+// The user (2026-11-26): "also make sure all strategies have switching cost and cash percentage", then "and make
+// sure they are frozen by default". An entry written without them (the published rules of #1-#25, Bare seasonal,
+// Bare Donchian breakout) keeps its books as cash plus share counts, moved by whole-account trades; this puts both
+// into those books the way bareStrategy keeps them: cash earns the cash interest each day after the first, and every
+// buy and sell pays the trading cost on the amount traded, a switch between two funds on both legs. The row's fee
+// is in a Fee column. Both settings are fit: false, so Fit and the map leave them as they are unless unticked under
+// Freeze. Each step names what it must find, and a book it cannot account for is an error at load, not a run that
+// trades free.
+const COST_CASH_PARAMS = `{ id: "cashRate", fit: false, label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
+      0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
+    { id: "tradeCost", fit: false, label: "Trading cost (%)", tip: "Charged on every buy and sell, as a share of the amount traded.", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
+      0,0.01,0.02,0.03,0.04,0.05,0.06,0.08,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,1] }`;
+const FEE_COLUMN = `{ key: "fee", label: "Fee", tip: "Trading cost paid on this row's trade." }`;
+function withCostAndCash(code, name) {
+  let t = code;
+  const step = (what, from, to, least) => {
+    const found = (t.match(from) || []).length;
+    if (found < (least == null ? 1 : least)) throw new Error(name + ": withCostAndCash found no " + what);
+    t = t.replace(from, to);
+    return found;
+  };
+  const closeBefore = (marker, what, insert) => {
+    const at = t.indexOf(marker), close = at < 0 ? -1 : t.lastIndexOf("]", at);
+    if (close < 0) throw new Error(name + ": withCostAndCash found no " + what);
+    t = t.slice(0, close).replace(/\s*$/, "") + ",\n    " + insert + "\n  " + t.slice(close);
+  };
+  // The two settings at the end of the settings, the Fee column at the end of the columns.
+  closeBefore("\n  columns: [", "end of the settings", COST_CASH_PARAMS);
+  closeBefore("\n  run(data, p) {", "end of the columns", FEE_COLUMN);
+  step("run head", /\n  run\(data, p\) \{\n/, "\n  run(data, p) {\n    const cost = (p.tradeCost || 0) / 100, dayRate = Math.pow(1 + (p.cashRate || 0) / 100, 1 / 252) - 1;\n");
+  // Each day: no fee yet, and the cash held overnight earns a day's interest.
+  if (step("day loop", /(\n(\s*)for \(let i = p\.startIdx; i <= p\.endIdx; i\+\+\) \{\n)/g, "$1$2  let fee = 0;\n$2  if (cash > 0 && i > p.startIdx) cash *= 1 + dayRate;\n") !== 1) throw new Error(name + ": withCostAndCash found more than one day loop");
+  // A withdrawal sells enough to cover the cash short after the cost.
+  step("withdrawal sale", /\{ const sold = Math\.min\((\w+) \* \(([^|]+?) \|\| 0\), -cash\); if \(sold > 0\) \{ \1 = Math\.max\(0, \1 - sold \/ \2\); cash \+= sold; \} \}/g,
+    "{ const sold = Math.min($1 * ($2 || 0), -cash / (1 - cost)); if (sold > 0) { $1 = Math.max(0, $1 - sold / $2); cash += sold * (1 - cost); fee += sold * cost; } }");
+  // Buys: all the cash into a fund, and the cash of a contribution into the fund held.
+  const buys = step("buy", /\b(sh\w*) (\+?=) cash \/ (\w+(?:\[i\])?|priceOf\(\w+, i\));/g, "{ $1 $2 cash * (1 - cost) / $3; fee += cash * cost; }", 0);   // a block, so it stands where one statement did ("if (a) shT = ...; else ...")
+  // Sales: a fund, or every fund held, into cash.
+  const sales = step("sale", /\bcash (\+?=) (sh\w* \* \w+(?: \+ sh\w* \* \w+)*);/g, "{ const gross = $2; cash $1 gross * (1 - cost); fee += gross * cost; }", 0);
+  // A rebalance to a weight (Bare volatility targeting): the fee on what moves, out of the account before the weight.
+  const rebalances = step("rebalance", /\bsh = \(total \* targetW\) \/ px; cash = total - sh \* px;/g,
+    "{ const f = Math.abs(total * targetW - sh * px) * cost; fee += f; sh = ((total - f) * targetW) / px; cash = total - f - sh * px; }", 0);
+  if (!(buys && sales) && !rebalances) throw new Error(name + ": withCostAndCash found no buy and sale, nor a rebalance");
+  step("log row", /\blog\.push\(\{ ?/g, "log.push({ fee: fee, ");
+  // Nothing left that moves money without the cost.
+  const free = t.match(/\b(sh\w*) \+?= cash \/ |\bcash \+?= sh\w* \* \w+;|cash \+= sold; \}|sh = \(total \* targetW\)/);
+  if (free) throw new Error(name + ": withCostAndCash left a trade without the cost: " + free[0]);
+  return t;
+}
+// Each entry's text before it, for the tests: a saved copy older than the cost has this text, and at a cost of 0
+// and no interest the entry must trade as it does.
+const COST_CASH_BASE = {};
+for (const n of Object.keys(CODE)) {
+  if (/"?id"?: "tradeCost"/.test(CODE[n]) && /"?id"?: "cashRate"/.test(CODE[n])) continue;   // written as code or as JSON (the SMA and 9sig entries)
+  COST_CASH_BASE[n] = CODE[n];
+  CODE[n] = withCostAndCash(CODE[n], "#" + n);
+}
+
 // Browser global + Node export.
 if (typeof window !== 'undefined') window.STRATEGY_CODE = CODE;
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = CODE;
   // Reachable from tests without becoming a strategy key.
   Object.defineProperty(module.exports, 'upgradeWithdrawalHandling', { value: upgradeWithdrawalHandling });
+  Object.defineProperty(module.exports, 'withCostAndCash', { value: withCostAndCash });
+  Object.defineProperty(module.exports, 'COST_CASH_BASE', { value: COST_CASH_BASE });
   Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });

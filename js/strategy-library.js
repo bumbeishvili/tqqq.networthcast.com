@@ -403,6 +403,17 @@ STRATEGY_LIBRARY.push(
     here: '—',
     reported: 'Your request (26 November 2026): your copy of Late-week + overextended SQQQ after a pick on the map of 1984 to 2025, as a strategy of its own. Ten settings differ from that strategy’s: the down trend under the 33-day median or less than 1.5% over it (41 days, 0.5%); the RSI read on QQQ (TQQQ), at 30.5 (40); the lagging-fund rule over 12 days (20), by more than 5.5% (2%), staying out to the weekend (one day); and the line read on SOXX (TQQQ), at 43% (54%) over its 233-day median (242). Your panel’s max drawdown, 64.8% from 25 October 2022 to 9 May 2023, and the fit note’s 75.1% on 1984 to 2025 are this strategy’s own. 1984 to 2025 (prices before 2010 reconstructed, SOXX before 1994 from a stand-in for its index): 99.4% a year (max drawdown 75.1%, May to September 2001; worst 12 months −70%) against 65.2% (99.9%, −99%) for Late-week + overextended SQQQ and 11.5% for buy & hold TQQQ. Q1 2010 to Q4 2025: 110.7% a year (max drawdown 64.8%, worst 12 months −54%) against 223.9% (42.6%, −7%) for Late-week + overextended SQQQ and 40.0% (82%) for buy & hold TQQQ; 2010–17 111.9%, 2018–25 109.4%. Since 2010 it was behind Late-week + overextended SQQQ in 13 of the 16 years and ahead in 2012, 2019 and 2025; 2018 was its only year down (−32%). January to 25 November 2026: up 101.9% against 471.8% for Late-week + overextended SQQQ and −13.6% for TQQQ. It is steady around its settings: one step either way on any of its eight number settings makes 92.2% to 98.9% a year on 1984 to 2025 and 106.9% to 116.2% on 2010 to 2025. The line read on TQQQ in place of SOXX: 66.6% on 1984 to 2025, 108.9% since 2010; the RSI read on TQQQ: 92.4% and 107.7%. Without the line: 74.3% (max drawdown 97.9%) on 1984 to 2025, 107.8% since 2010. Over 1984 to 2025 SOXX closed over the line in 61 stretches, and SQQQ rose over 47 of them; since 2010 in 6, and SQQQ rose over 5. In SQQQ on 24% of days since 1984, 18% since 2010.' });
 
+// The entries given a trading cost and cash interest on 26 November 2026 (withCostAndCash in
+// js/strategy-library-code.js; the user: "make sure all strategies have switching cost and cash percentage"). Their
+// notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
+// [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
+const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [24.5, 53], 3: [18.3, 39], 8: [38.8, 57], 10: [37.5, 55], 12: [15.9, 40], 13: [44.8, 77], 15: [41.6, 54],
+  17: [21.0, 38], 18: [36.0, 72], 19: [43.6, 70], 20: [42.9, 75], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [44.6, 75], 56: [38.3, 80] };
+for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
+  const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025). The numbers before are without them.`;
+  entry.reported = /[.!?]$/.test(entry.reported) ? entry.reported + ' ' + said : entry.reported + ' · ' + said;
+}
+
 const STRATEGY_SRC_LINKS = {
   HAL: 'https://papers.ssrn.com/sol3/papers.cfm?abstract_id=76248',
   TRT: 'https://bigpicture.typepad.com/comments/files/turtlerules.pdf',
