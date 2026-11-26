@@ -1216,7 +1216,7 @@ function renderStatsGrid(idx) {
   const ddRangeHtml = ddRange ? `<div class="strategy-stat-range">${ddRange}</div>` : '';
   return `
     <div class="strategy-stats">
-      ${statCard('CAGR', m.cagr >= 0 ? 'trendUp' : 'trendDown', cagrStr, cagrCls, Number.isFinite(m.cagrYear) ? `${dataYear()} so far: ${fmtYearCagr(m.cagrYear)}` : '',
+      ${statCard('CAGR', m.cagr >= 0 ? 'trendUp' : 'trendDown', cagrStr, cagrCls, Number.isFinite(m.cagrYear) ? `${dataYear()} so far: ${fmtWholePct(m.cagrYear)}` : '',
         'Money-weighted annual growth rate (IRR).&#10;&#10;Each contributed dollar is weighted by how long it was actually invested, so early money counts for more than a simple end÷start rate would give.')}
       ${statCard('Starting Balance', 'dollar', fmtFull(Math.round(m.start)), '', '',
         'Your position value at the start of the selected date range — the initial amount put to work here.')}

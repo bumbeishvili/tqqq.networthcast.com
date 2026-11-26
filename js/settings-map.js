@@ -69,7 +69,8 @@ const MAP_NEAR_SHARE = 0.6;        // a number's moves that go to a value close 
 // Rounds in a row with nothing to check and no frontier moved, after which the map is done. With 12
 // it was done too soon (2026-11-25, Late-week + overextended: the second and third More after
 // "Done", 12 rounds each, still put new sets on both frontiers; the three after those did not).
-const MAP_STALL_ROUNDS = 60;
+// 60 until the user's "Maybe also increase stopping threshold, like to 120" (2026-11-26).
+const MAP_STALL_ROUNDS = 120;
 const MAP_SHOWN = 10;              // two results differ from a tenth of a point on, as the numbers read
 const MAP_NEAR_BEST = 12;          // the dots that make the most after MAP_BEST_YEARS, the nearest to the green line: a share of each round's sets is bred from them
 const MAP_BEST_SHARE = 0.5;        // that share
@@ -103,12 +104,14 @@ const MAP_PLATEAU_TIP = [
 ].join('\n');
 const MAP_UNTESTED_TIP = 'Not tested yet with a setting a little off. Click it to test it now.';
 const MAP_TOP_TIP = 'The line joins the dots with the highest CAGR. For the same max drawdown, no dot has a higher one.';
-const MAP_BEST_YEARS = 5;   // the time over which the best is judged: the max drawdown at its start, the CAGR after it (2.5 until the user's "let's use 5 years instead", 2026-11-26)
+const MAP_BEST_YEARS = 7;   // the time over which the best is judged: the max drawdown at its start, the CAGR after it (2.5, then 5, then 7 at the user's word, 2026-11-26)
+const MAP_BEST_MIN_CAGR = 12;   // % a year: a dot under this is never the best (the user, 2026-11-26: "make sure the cagr under 12 never wins")
 const MAP_BEST_LABEL = 'Best';   // the combination that makes the most in that time, the green point
 const MAP_BEST_TIP = [
   `Best: the most money after ${MAP_BEST_YEARS} years, with the max drawdown at the start and the CAGR after it.`,
   `$1 becomes (1 − max drawdown) × (1 + CAGR)^${MAP_BEST_YEARS}. Example: a 50% fall, then 100% a year: ${mapMoneyText(mapBestValue(100, 0.5))}.`,
   `Under $1: the drawdown is not earned back in ${MAP_BEST_YEARS} years. The least money is the worst.`,
+  `A CAGR under ${MAP_BEST_MIN_CAGR}% is never the best.`,
 ].join('\n');
 const MAP_TIE_TIP = [
   `Every CAGR and max drawdown that makes as much as the best after ${MAP_BEST_YEARS} years.`,
@@ -309,19 +312,23 @@ const mapNowDot = (map) => (map.job ? map.dots.get(fitRunKey(map.job.store, map.
 // than cagr 42 with 32% drawdown"); asked which pairs tie, the user gave the rule that replaced it: "I
 // think it's about 2.5 year period, suppose you got your drawdown at the start of year right away, so
 // the best cagr is the one that fixes it in 2.5 years period or sooner and has the best cagr overall
-// aftr that time passes". The same day: "let's use 5 years instead of 2.5 years for the best ratio".
+// aftr that time passes". The same day: "let's use 5 years instead of 2.5 years for the best ratio", then "Let's put
+// the limit to 7 years, instead of 5, so drawdown initially then 7 years and whichever has best cagr wins. Also make
+// sure the cagr under 12 never wins".
 // What $1 becomes after MAP_BEST_YEARS with the max drawdown (a share, 0.3) at the start and the CAGR
 // (in percent) after it: (1 − dd) × (1 + CAGR)^years. The most is the best, the least the worst; under
-// $1 the drawdown is not earned back in that time. Over 5 years 42% at a 32% drawdown makes $3.93, 9%
-// at 2.4% $1.50. A declaration, so MAP_BEST_TIP's example can use it.
+// $1 the drawdown is not earned back in that time. Over 7 years 42% at a 32% drawdown makes $7.92, 9%
+// at 2.4% $1.78. A declaration, so MAP_BEST_TIP's example can use it.
 function mapBestValue(cagr, dd) {
   return (1 - dd) * Math.pow(Math.max(0, 1 + cagr / 100), MAP_BEST_YEARS);
 }
 const mapDotValue = (dot) => mapBestValue(dot.cagr, dot.r.dd);
-// The dot that makes the most, or null with no dot. Read off once for each state of the dots
-// (map.version; setMapJob starts it over).
+// A dot that can be the best: one with a CAGR of MAP_BEST_MIN_CAGR or more.
+const mapCanBeBest = (dot) => dot.cagr >= MAP_BEST_MIN_CAGR;
+// The dot that makes the most of those that can be the best, or null with none. Read off once for each
+// state of the dots (map.version; setMapJob starts it over).
 function mapBestDot(map) {
-  if (!map.best || map.best.version !== map.version) map.best = { version: map.version, dot: d3.greatest(mapDotList(map), mapDotValue) || null };
+  if (!map.best || map.best.version !== map.version) map.best = { version: map.version, dot: d3.greatest(mapDotList(map).filter(mapCanBeBest), mapDotValue) || null };
   return map.best.dot;
 }
 // The curve of results that make `value` after MAP_BEST_YEARS: the CAGR it takes at a max drawdown of
@@ -365,8 +372,8 @@ const mapFrontMark = (map) => { const fronts = mapFronts(map), mark = (front, of
 // The sets new ones are bred from: the frontier, and the frontier of the checked sets by their
 // worst result, so the sets that hold have offspring too.
 const mapParents = (map) => { const fronts = mapFronts(map); return [...new Set(fronts.own.concat(fronts.flat))]; };
-// The dots nearest the green line: the MAP_NEAR_BEST that make the most after MAP_BEST_YEARS.
-const mapNearBest = (map) => mapDotList(map).sort((a, b) => mapDotValue(b) - mapDotValue(a)).slice(0, MAP_NEAR_BEST);
+// The dots nearest the green line: of those that can be the best, the MAP_NEAR_BEST that make the most after MAP_BEST_YEARS.
+const mapNearBest = (map) => mapDotList(map).filter(mapCanBeBest).sort((a, b) => mapDotValue(b) - mapDotValue(a)).slice(0, MAP_NEAR_BEST);
 // Up to `count` sets not run yet: a share (MAP_BEST_SHARE) bred from the dots nearest the green
 // line, so the map looks above it most where it is likeliest to find a new best, the rest from the parents.
 function mapBreed(map, rand, count) {
@@ -389,7 +396,8 @@ function mapBreed(map, rand, count) {
 // time from the dot's values: what it ends on is above the line through the best, or the best itself. A dot it
 // set out from is kept with the runs (store.mapClimbed, with the free settings and the frozen
 // values), so a map opened again does not search from it again.
-const mapBestRule = (job) => ({ goal: 'score', plateau: false, minFinal: -Infinity, maxDd: Infinity, scoreOf: (r) => mapBestValue(mapCagr(job, r), r.dd) });
+// A result under MAP_BEST_MIN_CAGR scores nothing: the search then climbs by the final value alone until it is over.
+const mapBestRule = (job) => ({ goal: 'score', plateau: false, minFinal: -Infinity, maxDd: Infinity, scoreOf: (r) => { const cagr = mapCagr(job, r); return cagr >= MAP_BEST_MIN_CAGR ? mapBestValue(cagr, r.dd) : -Infinity; } });
 const mapClimbKey = (map, dot) => JSON.stringify([dot.id, map.job.space.map(s => s.id), mapHeld(map.job)]);
 const mapClimbedOf = (job) => job.store.mapClimbed || (job.store.mapClimbed = new Set());
 // The best dot while the map has not searched from it, else null.
