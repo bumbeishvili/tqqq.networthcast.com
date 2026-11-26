@@ -77,11 +77,11 @@ const MAP_PROGRESS = { star: 0.1, fit: 0.4, stall: 0.1 };   // the shares of the
 const MAP_FIT_LABEL = 'Fit';       // the name on the plot of the set the search ended on
 const MAP_WORST_LABEL = 'worst case';   // and of the end of a picked dot's dotted line
 const MAP_REDRAW_MS = 400;         // the window follows a running map this often
-const MAP_CHART_SHARE = 0.72;      // the chart's height against its width,
+const MAP_CHART_SHARE = 0.85;      // the chart's height against its width (a wide screen's chart is as tall as the screen allows),
 const MAP_CHART_MIN = 300;         // at least this many px (a phone's chart is narrow),
-const MAP_CHART_SCREEN = 0.52;     // and at most this share of the screen's height
+const MAP_CHART_CHROME = 220;      // and at most the screen's height less what the window needs besides: its head, the legend, the buttons
 const MAP_HIT_PX = { fine: 14, coarse: 22 };   // how near a dot the pointer, or a finger, has to be
-const MAP_PREVIEW_HEIGHT = { share: 0.72, min: 150, max: 400 };   // the picture in the Fit window: its height against its width, within these px
+const MAP_PREVIEW_HEIGHT = { share: 0.85, min: 150, chrome: 260 };   // the picture in the Fit window: its height against its width, at least min px, at most the screen's height less what the window needs besides
 const MAP_FROZEN_TEXT = 'Every setting is frozen.';
 const MAP_INVERTED_TEXT = 'The last year is before the first.';
 // What the reader sees, in everyday words, a thought a line (a tip keeps its line breaks).
@@ -134,16 +134,21 @@ const MAP_LINK_TIP = 'Share a link that opens this map and starts it running.';
 const MAP_CSV_TIP = "Download every dot as a CSV file: CAGR, max drawdown, and each setting's value.";
 const MAP_HOLD_LABEL = 'B&H TQQQ';   // buy and hold TQQQ, the yellow point
 const MAP_HOLD_TIP = 'Buy and hold TQQQ over the same years, with the same money.';
+// The legend in three groups, each under its name (the user, 2026-11-26: "Make sure this legend is bettr
+// organized , not just some set"): the named points, what a dot's look says, and the lines over the dots.
 // tipAttr: a key whose tip gets this map's numbers (showMapKeyTips).
 const MAP_LEGEND = [
-  { mark: 'dot is-hold', name: MAP_HOLD_LABEL, tip: MAP_HOLD_TIP, tipAttr: 'data-map-hold-tip' },
-  { mark: 'dot is-best', name: 'best', tip: MAP_BEST_TIP, tipAttr: 'data-map-best-tip' },
-  { mark: 'tie', name: 'ties best', tip: MAP_TIE_TIP },
-  { mark: 'dot is-pale', name: 'not tested', tip: MAP_UNTESTED_TIP },
-  { mark: 'dot is-small', name: 'cliff' },
-  { mark: 'dot is-big', name: 'plateau', tip: MAP_PLATEAU_TIP },
-  { mark: 'line', name: 'highest CAGR', tip: MAP_TOP_TIP },
-  { mark: 'link', name: 'worst case', tip: MAP_WORST_TIP },
+  { group: 'Marks', keys: [
+    { mark: 'dot is-best', name: 'best', tip: MAP_BEST_TIP, tipAttr: 'data-map-best-tip' },
+    { mark: 'dot is-hold', name: MAP_HOLD_LABEL, tip: MAP_HOLD_TIP, tipAttr: 'data-map-hold-tip' } ] },
+  { group: 'Dots', keys: [
+    { mark: 'dot is-pale', name: 'not tested', tip: MAP_UNTESTED_TIP },
+    { mark: 'dot is-small', name: 'cliff' },
+    { mark: 'dot is-big', name: 'plateau', tip: MAP_PLATEAU_TIP } ] },
+  { group: 'Lines', keys: [
+    { mark: 'tie', name: 'ties best', tip: MAP_TIE_TIP },
+    { mark: 'line', name: 'highest CAGR', tip: MAP_TOP_TIP },
+    { mark: 'link', name: 'worst case', tip: MAP_WORST_TIP } ] },
 ];
 let _map = null;   // the open window: { el, key, picked, chart, job, space, plans, floor, ask, doneKey, years, dots, byResult, twins, failed, version, places, fronts, most, drawn, run }
 
@@ -621,7 +626,9 @@ function buildMapWindowHtml(key, choices) {
     + `<span class="map-years">${fitYearPickHtml(FIT_YEAR_ENDS[0], choices)} to ${fitYearPickHtml(FIT_YEAR_ENDS[1], choices)}</span>`
     + `<button type="button" class="modal-close" data-map-close aria-label="Close">×</button></div>`
     + `<div class="fit-window-body map-body"><div class="map-main"><div class="map-chart"></div>`
-    + `<div class="map-legend">${MAP_LEGEND.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${_escHtml(key.name)}${key.tip ? mapTipIcon(key.tip, key.tipAttr ? ' ' + key.tipAttr : '') : ''}</span>`).join('')}</div></div>`
+    + `<div class="map-legend">${MAP_LEGEND.map(group => `<span class="map-key-group"><b class="map-key-head">${group.group}</b>`
+      + group.keys.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${_escHtml(key.name)}${key.tip ? mapTipIcon(key.tip, key.tipAttr ? ' ' + key.tipAttr : '') : ''}</span>`).join('')
+      + '</span>').join('')}</div></div>`
     + `<div class="map-side"><div class="map-detail"></div></div></div>`
     + `<div class="fit-window-foot map-foot"><span class="map-status"><span class="map-count"></span>${mapTipIcon(MAP_RUN_TIP)}</span>`
     + `<button type="button" class="map-csv-btn" data-map-link title="${_escHtml(MAP_LINK_TIP)}">Share</button>`
@@ -769,7 +776,7 @@ function drawMap() {
   map.drawn = state;
   const picked = map.picked ? map.dots.get(map.picked) : null;
   mapPlot(map, map.chart)
-    .svgHeight(Math.round(Math.min(Math.max(MAP_CHART_MIN, width * MAP_CHART_SHARE), window.innerHeight * MAP_CHART_SCREEN)))
+    .svgHeight(Math.round(Math.max(MAP_CHART_MIN, Math.min(width * MAP_CHART_SHARE, window.innerHeight - MAP_CHART_CHROME))))
     .picked(picked ? picked.id : null)
     // The picked set tied to its worst result among its neighbours.
     .link(picked && picked.flat ? mapFlatAt(picked) : null)
@@ -812,7 +819,7 @@ function showMapPreview(view, box, key, period) {
   view.chart = view.chart || new SettingsMapChart().interactive(false);
   const width = box.getBoundingClientRect().width, H = MAP_PREVIEW_HEIGHT;
   mapPlot(map, view.chart.container(box))
-    .svgHeight(map.dots.size ? Math.round(Math.min(Math.max(H.min, width * H.share), H.max)) : H.min)   // a map with nothing on it yet takes the least room
+    .svgHeight(map.dots.size ? Math.round(Math.max(H.min, Math.min(width * H.share, window.innerHeight - H.chrome))) : H.min)   // a map with nothing on it yet takes the least room
     .emptyText(map.frozen ? MAP_FROZEN_TEXT : 'Not mapped yet')
     .render();
   return { tried: map.dots.size, done: mapIsDone(map) };

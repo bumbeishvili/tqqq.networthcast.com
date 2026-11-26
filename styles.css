@@ -4290,17 +4290,18 @@
   .fit-form-window { width: min(440px, calc(100vw - 24px)); }
   .fit-window-main { flex: 1; min-height: 0; overflow-y: auto; }
   .fit-form-window .fit-window-body { flex: none; overflow: visible; }
-  /* From 900px: 60% of the page, the choices with Run under them on the left, the map's card beside them taking the larger share. */
+  /* From 900px: 94% of the page, the choices with Run under them on the left, the map's card beside them taking two thirds
+     (the user, 2026-11-26: "for map make sure to utilize bigger screen space, looking into the map it's very important"). */
   @media (min-width: 900px) {
-    .fit-form-window { display: grid; width: max(60vw, 780px); grid-template: "head head" auto "form map" minmax(0, 1fr) "run map" auto / minmax(360px, 9fr) minmax(0, 11fr); }
+    .fit-form-window { display: grid; width: 94vw; grid-template: "head head" auto "form map" minmax(0, 1fr) "run map" auto / minmax(360px, 1fr) minmax(0, 2fr); }
     .fit-form-window .fit-window-head { grid-area: head; }
     .fit-form-window .fit-window-main { display: contents; }
     .fit-form-window .fit-window-body { grid-area: form; min-height: 0; overflow-y: auto; }
     .fit-form-window .fit-window-foot { grid-area: run; border-top: 0; }
     .fit-form-window .fit-map-card { grid-area: map; align-self: start; margin: 0 14px 12px 4px; }
-    /* The map: 70% of the screen, the chart with its legend on the left, the clicked strategy beside it in a column that scrolls by itself (its height is the chart's, whatever it holds). */
-    .fit-window.map-window { width: max(70vw, 780px); }
-    .map-body { display: grid; grid-template-columns: minmax(0, 3fr) minmax(250px, 2fr); gap: 0 14px; overflow: hidden; }
+    /* The map: 96% of the screen, the chart with its legend on the left taking 70%, the strategy beside it in a column that scrolls by itself (its height is the chart's, whatever it holds). */
+    .fit-window.map-window { width: 96vw; }
+    .map-body { display: grid; grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr); gap: 0 14px; overflow: hidden; }
     .map-side { position: relative; min-width: 0; border-left: 1px solid var(--border); }
     .map-side .map-detail { position: absolute; inset: 0 0 0 14px; overflow-y: auto; padding: 4px 4px 8px 0; }
   }
@@ -4422,7 +4423,11 @@
   .map-clear-btn:hover { border-color: var(--accent); color: var(--text); }
   .map-near { margin-top: 4px; }
   /* Under the chart: what its marks are, each drawn as the chart draws it (the dots at the chart's own sizes). */
-  .map-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; padding: 0 0 8px; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
+  /* Three groups, each under its name (Marks, Dots, Lines), set apart by a wider gap than the keys inside one: a group
+     that wraps to the next row starts it with its name, no divider left hanging at the row's start. */
+  .map-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 30px; padding: 0 0 8px; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
+  .map-key-group { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; }
+  .map-key-head { font-size: calc(10px * var(--ui-scale)); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); opacity: 0.8; }
   .map-key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .map-key .info-icon { margin: 0; }
   .map-key i { flex: none; }
