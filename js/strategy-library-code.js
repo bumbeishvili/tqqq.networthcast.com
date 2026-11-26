@@ -3937,15 +3937,35 @@ CODE[52] = withSoxlPile(CODE[50], { name: "SOXL, TQQQ VS QQQ, Mon Turns" });
 // the 12th, three days later: 2020 up 938% against 1,153%); floors 2 to 5
 // make 186.8%. The bare floor and the bare deep buy (#65, #66) read their
 // floor from here and follow.
+// A setting's entry in a strategy's text, from its `{ id: "…",` to the next setting's, put back as
+// edit(entry) makes it. who: the caller, for the error when the setting is not there exactly once.
+function editSetting(t, id, who, edit) {
+  const head = `{ id: "${id}",`, at = t.indexOf(head);
+  if (at < 0 || t.indexOf(head, at + 1) >= 0) throw new Error(`${who}: the setting ${id} must appear exactly once in the base`);
+  const next = t.indexOf('{ id: "', at + 1), end = next < 0 ? t.length : next;   // this setting's text runs to the next one's
+  return t.slice(0, at) + edit(t.slice(at, end)) + t.slice(end);
+}
 function withDefaults(base, spec) {
   let t = base.replace(/^(\s*name:\s*)"[^"]+"/m, (m, pre) => `${pre}"${spec.name}"`);
   for (const [id, value] of Object.entries(spec.defaults)) {
-    const head = `{ id: "${id}",`, at = t.indexOf(head);
-    if (at < 0 || t.indexOf(head, at + 1) >= 0) throw new Error(`withDefaults(${spec.name}): the setting ${id} must appear exactly once in the base`);
-    const next = t.indexOf('{ id: "', at + 1), end = next < 0 ? t.length : next;   // this setting's text runs to the next one's
-    const entry = t.slice(at, end), m = /, default: ([^,}]+)/.exec(entry);
-    if (!m) throw new Error(`withDefaults(${spec.name}): the setting ${id} declares no default`);
-    t = t.slice(0, at) + entry.replace(m[0], ', default: ' + JSON.stringify(value)) + t.slice(end);
+    t = editSetting(t, id, `withDefaults(${spec.name})`, (entry) => {
+      const m = /, default: ([^,}]+)/.exec(entry);
+      if (!m) throw new Error(`withDefaults(${spec.name}): the setting ${id} declares no default`);
+      return entry.replace(m[0], ', default: ' + JSON.stringify(value));
+    });
+  }
+  return t;
+}
+// Tips swapped where they state facts of the base's own defaults ({ id: tip }): an entry made from
+// another at other settings says what holds at its own.
+function withTips(base, spec) {
+  let t = base;
+  for (const [id, tip] of Object.entries(spec.tips)) {
+    t = editSetting(t, id, `withTips(${spec.name})`, (entry) => {
+      const m = /tip: ("(?:[^"\\]|\\.)*")/.exec(entry);
+      if (!m) throw new Error(`withTips(${spec.name}): the setting ${id} has no tip in double quotes`);
+      return entry.replace(m[1], JSON.stringify(tip));
+    });
   }
   return t;
 }
@@ -6381,6 +6401,31 @@ ${hostParam(spec.host, "overWindow", { ...shown, label: "Median over (days)", te
 const LATE_WEEK_OVER = "Late-week + overextended SQQQ";
 CODE[73] = withDefaults(withOverextendedLine(CODE[72], { name: LATE_WEEK_OVER, host: CODE[71], pct: 54, days: 242, hold: "sqqq" }),
   { name: LATE_WEEK_OVER, defaults: { trendUnder: -0.5, trendDays: 41, rsiDays: 9 } });
+
+// ===== #75: #73 at the settings of the user's copy after a pick on the map of 1984-2025 (the user,
+// 2026-11-26, on a screenshot of that copy: "Create this new strategy, call it Late week 84-25 steady
+// fit") =====
+// Ten settings differ from #73's: the down trend under the 33-day median or less than 1.5% over it;
+// the RSI read on QQQ, at 30.5; the lagging-fund rule over 12 days, by more than 5.5%, staying out to
+// the weekend; and the line read on SOXX, at 43% over its 233-day median. The copy's panel and its
+// fit note are matched to the day: a max drawdown of 64.8% from 25 October 2022 to 9 May 2023 on any
+// period since 2010, and 75.1% on 1984-2025. $100K lump sum: 1984-2025 99.4% a year (max drawdown
+// 75.1%) against 65.2% (99.9%) for #73; Q1 2010 to Q4 2025 110.7% (64.8%) against 223.9% (42.6%).
+// It is the steady one of the two: one step either way on any of its eight number settings makes
+// 92.2% to 98.9% on 1984-2025 and 106.9% to 116.2% on 2010-2025. The tips that quote #73's own
+// facts are swapped for this entry's, or for plain ones where they quoted a study of other settings.
+const LATE_WEEK_84_25 = "Late week 84-25 steady fit";
+CODE[75] = withTips(withDefaults(CODE[73], { name: LATE_WEEK_84_25, defaults: {
+  trendUnder: -1.5, trendDays: 33, rsiFund: "qqq", rsiLevel: 30.5, lagDays: 12, lagBy: 5.5, lagHold: "weekend", overFund: "soxx", overPct: 43, overWindow: 233 } }),
+{ name: LATE_WEEK_84_25, tips: {
+  rsiLevel: "The week is skipped with the RSI at this level or under.",
+  lagTake: "Yes: a week skipped for a low RSI is taken all the same when one fund's return trails another's at that close. Left out with one trade per day and another fund held in between.",
+  lagBy: "How far under the other fund's return, in points.",
+  lagHold: "One day: the fund is bought back at the next close. The days before the weekend: at the last close before a weekend, or where the days out end.",
+  overTake: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 1984-2025 SOXX closed more than 43% above its 233-day median in 61 stretches, and SQQQ rose over 47 of them; since 2010 in 6, and SQQQ rose over 5.",
+  overPct: "How far above its median the close must be. With SOXX's 233-day median in 1984-2025: 40% made 88.7% a year, 43% 99.4%, 45% 91.2%, 50% 80.6%. Since 2010 every level from 35% to 55% made 107% to 111%.",
+  overHold: "What the money is in while overextended. Cash in SQQQ's place made 90.2% a year in 1984-2025 against 99.4%. On the week's own days out the fund held in between comes first.",
+} });
 
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----
 // #10, #19, #7 and #20 chart the fund or the measure their rule reads. As bare entries they get
