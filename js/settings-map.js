@@ -806,9 +806,17 @@ async function pickMapDot(id) {
   if (!dot || dot.flat || _map !== map || map.picked !== id) return;
   await mapWork(map, 'check', measure => mapCheck(map, dot.values, measure));
 }
-// The picked set put on the strategy, with a note under Settings as a fit leaves one.
+// The dot the column on the right shows, and Use puts on the strategy: the clicked one; until one is clicked the best
+// (the user, 2026-11-26: "when strategy search is happening, make sure by default best is chosen on the right"); before
+// any dot, the settings as they are. null while every setting is frozen (no job) or before the first run.
+function mapShownDot(map) {
+  if (!map.job) return null;
+  return (map.picked ? map.dots.get(map.picked) : null) || mapBestDot(map) || mapNowDot(map);
+}
+// The shown set put on the strategy, with a note under Settings as a fit leaves one (the user, 2026-11-26, of Use with
+// the best shown and no dot clicked: "this happens when I click use, but If I select green and then click it works").
 function useMapDot(map) {
-  const { job } = map, dot = map.dots.get(map.picked), now = mapNowDot(map);
+  const { job } = map, dot = mapShownDot(map), now = mapNowDot(map);
   const changed = job.space.filter(s => String(dot.values[s.id]) !== String(job.cur[s.id]));
   if (!changed.length) return;
   const one = (text, was) => (was ? was + ' → ' : '') + text;
@@ -938,9 +946,7 @@ function showMapDetail() {
 }
 function mapDetailHtml(map) {
   const { job } = map;   // none while every setting is frozen: the column is then the Freeze list alone
-  // The clicked dot; until one is clicked the best (the user, 2026-11-26: "when strategy search is happening, make sure
-  // by default best is chosen on the right"); before any dot, the settings as they are; none before the first run.
-  const picked = job && map.picked ? map.dots.get(map.picked) : null, dot = job ? picked || mapBestDot(map) || mapNowDot(map) : null;
+  const picked = job && map.picked ? map.dots.get(map.picked) : null, dot = mapShownDot(map);
   const free = new Map(job ? job.space.map(s => [s.id, s]) : []);
   const settings = fitSettings(map.key), byId = new Map(settings.map(s => [s.id, s])), choices = fitFreezeChoices(map.key);
   // A value as it is, or where the dot changes it the one it has now struck through with the dot's
