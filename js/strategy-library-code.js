@@ -429,14 +429,15 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #10 Canonical QQQ 200SMA → TQQQ else cash.
+// #10 Canonical QQQ 200SMA → TQQQ else cash. Since 27 November 2026 the defaults are the user's pick on the map of
+// 2010-2025 ("use this as default"): SOXX against its 280-day moving average (were QQQ and a 160-day median).
 CODE[10] = `{
   name: "QQQ 200-day SMA → TQQQ else cash",
-  params: [{ id: "signal", label: "Signal asset", text: "Watch {} against its line.", options: ${fundOptionsSrc(["qqq", "spy"], LONG_FUNDS)}, default: "qqq" },
+  params: [{ id: "signal", label: "Signal asset", text: "Watch {} against its line.", options: ${fundOptionsSrc(["qqq", "spy"], LONG_FUNDS)}, default: "soxx" },
            { id: "lev", label: "Fund held", text: "Hold {} while it is above the line, and cash while it is below.", options: ${fundOptionsSrc(["tqqq", "qld", "sso", "spxl"], LONG_FUNDS)}, default: "tqqq" },
            { id: "window", label: "Window (days)", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 160 },
-           ${STAT_PARAM_MEDIAN_SNIPPET}],
+      [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 280 },
+           ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
   run(data, p) {

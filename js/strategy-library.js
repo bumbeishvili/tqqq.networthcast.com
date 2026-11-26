@@ -42,8 +42,8 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: SPY vs its 166-day average with a ±3.2% band. Enter: SPY closes 3.2% above → TQQQ. Exit: SPY closes 3.2% below → cash. Freq: daily.',
     here: '—', reported: 'Origin of the whipsaw-buffer idea (DJIA 1886–2006) · defaults from your pick on the map of 2010–2025 (27 November 2026): a 3.2% band around the 166-day average (the rounded fit before, 3.5% and 145 days: 38.8% a year, max drawdown 57%, at the cost and interest below; published settings: 27.8%, 66%) · one step either way: a 3.1% band 36.2% (62%), 3.3% 38.1% (47%), 167 days 38.3% (47%)', src: 'F' },
   { n: 10, name: 'Bare trend line', formerNames: ['QQQ 200-day → TQQQ', 'QQQ 200-day → TQQQ (matched index, cash park)'], tag: 'app', runnable: true,
-    rules: 'Signal: QQQ vs its 160-day median → trade TQQQ. Enter: above → TQQQ. Exit: below → cash. Freq: daily.',
-    here: '32.8% / −55.9%', reported: "The app's canonical SMA config · defaults fitted to 2010–2025 and rounded: 36.7% a year, max drawdown 55% (published settings: 30.2%, 56%)", src: 'F·BH' },
+    rules: 'Signal: SOXX vs its 280-day average → trade TQQQ. Enter: above → TQQQ. Exit: below → cash. Freq: daily.',
+    here: '32.8% / −55.9%', reported: "The app's canonical SMA config · defaults from your pick on the map of 2010–2025 (27 November 2026): SOXX against its 280-day average (the rounded fit before, QQQ against its 160-day median: 37.5% a year, max drawdown 55%, at the cost and interest below; published settings: 30.2%, 56%) · 270 days 43.2% (57%), 290 days 41.5% (66%), the median in place of the average 35.9% (78%), QQQ in SOXX's place 24.6% (66%)", src: 'F·BH' },
   { n: 12, name: 'SSO/SHY 200-day rotation', formerNames: ['SSO/SHY 200-day own-price rotation (2×)'], tag: 'app', runnable: true,
     rules: 'Signal: SSO\'s own price vs its 400-day average. Enter: above → SSO. Exit: below → cash. Freq: daily.',
     here: '14.9% / −42.2%', reported: 'Sharpe 0.555 vs 0.524 B&H SPY (5-yr) · defaults fitted to 2010–2025 and rounded: 15.4% a year, max drawdown 41% (published settings: 14.1%, 42%)', src: 'SSO' },
@@ -407,7 +407,7 @@ STRATEGY_LIBRARY.push(
 // js/strategy-library-code.js; the user: "make sure all strategies have switching cost and cash percentage"). Their
 // notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
 // [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
-const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [24.5, 53], 3: [18.3, 39], 8: [39.0, 44], 10: [37.5, 55], 12: [15.9, 40], 13: [44.8, 77], 15: [41.6, 54],
+const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [24.5, 53], 3: [18.3, 39], 8: [39.0, 44], 10: [43.8, 60], 12: [15.9, 40], 13: [44.8, 77], 15: [41.6, 54],
   17: [21.0, 38], 18: [36.0, 72], 19: [43.6, 70], 20: [42.9, 75], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [32.0, 59], 56: [34.4, 36] };
 for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
   const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025).`;
