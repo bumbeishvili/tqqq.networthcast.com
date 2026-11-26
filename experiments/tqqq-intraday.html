@@ -266,6 +266,9 @@
         <label class="ticker-pick" title="The fund whose days the chart draws.">
           <select id="select-ticker" aria-label="Ticker"></select>
         </label>
+        <label class="ticker-pick" title="What the bars under the chart show for each day.">
+          <select id="select-measure" aria-label="What the bars show"></select>
+        </label>
         <button type="button" class="filters-toggle" id="filters-toggle" aria-expanded="false" aria-controls="filters" title="Which days the charts show: month, weekday, trend, open and close, period. The number is how many filters are on.">Filters<span class="filters-count" id="filters-count"></span></button>
       </div>
     </div>
@@ -318,7 +321,7 @@
       <button type="button" class="scale-toggle" id="scale-toggle" aria-pressed="true" title="Switch the vertical axis between a symmetric log scale and a linear one">log</button>
     </div>
     <div class="under-chart">
-      <div class="weekday" title="Each weekday over the days the chart shows: how many closed up and down, or their usual close vs the previous session's close.">
+      <div class="weekday" title="Each weekday over the days the chart shows: the average or the median of the days' values, or how many were up and down.">
         <div class="weekday-head">
           <span class="metric-name" id="weekday-name"></span>
           <div class="segmented" id="weekday-stat" role="group" aria-label="What the weekday bars show"></div>
@@ -327,7 +330,7 @@
       </div>
       <div class="daily">
         <div class="daily-head">
-          <span class="metric-name" title="Each day's close vs the previous session's close, from the period's first day to its last. ⌘/Ctrl + scroll zooms the period, ⌘/Ctrl + drag slides it. Every other week is shaded. Days the other filters leave out of the chart are pale. A hollow bar is not a close yet: today so far, or the latest pre-market or after-hours price.">Daily change</span>
+          <span class="metric-name" id="daily-name" title="One bar a day, from the period's first day to its last. ⌘/Ctrl + scroll zooms the period, ⌘/Ctrl + drag slides it. Every other week is shaded. Days the other filters leave out of the chart are pale. A hollow bar is not final yet: today so far, or the latest pre-market or after-hours price."></span>
         </div>
         <div id="daily-chart"></div>
       </div>
@@ -480,7 +483,10 @@ const shortZoneName = timeZone =>
 // % change of that bar's close against the PREVIOUS session's close, the
 // basis a quote screen uses, so a day starts at its opening gap rather than
 // at zero and the 0% line is where yesterday closed. The first day in the
-// file has no previous close and is dropped.
+// file has no previous close and is dropped. A day also keeps its five
+// prices (`prices`: the previous close, its open, low, high and close), which
+// the bars under the chart measure against each other (DAY_MEASURES); the
+// low and the high are the session bars' own, from the High and Low columns.
 // A ten-year file is about 195,000 rows, and the page reads the data again
 // every minute: a day's rows are told by the Date column's own "M/D/YYYY"
 // prefix and a bar's minute is read off its "HH:MM" text, so only one stamp a
@@ -495,6 +501,8 @@ function buildDays(rows) {
       id: date.getTime(),
       date,
       open: +sorted[0].row.Open,
+      low: d3.min(sorted, bar => +bar.row.Low),
+      high: d3.max(sorted, bar => +bar.row.High),
       // A bar's minute is its END, so a 5-minute bar opening 09:30 lands on
       // 09:35 and a 1-minute bar opening 09:34 on the same 09:35; the two
       // resolutions share the minute grid the aggregates and matching use.
@@ -513,6 +521,7 @@ function buildDays(rows) {
       openVsPrevPct: points[0].pct,
       closeVsPrevPct: last.pct,
       close: last.close,
+      prices: { prev: prevClose, open: day.open, low: day.low, high: day.high, close: last.close },
       complete: last.minute === SESSION_CLOSE_MIN,
     };
   });
@@ -1384,38 +1393,66 @@ class IntradayOverlayChart extends ChartBase {
   }
 }
 
+// What the bars under the chart measure for each day: one of its five prices
+// against another, in percent (the user, 2026-11-26: "I want to see what is
+// opening price difference, what is min and max price difference also min and
+// prev day, max and prev day, also difference in closing and min, max and
+// closing and open and min, open and max and open and close ... basically I
+// want to see all combinations there in a new dropdown"). Every pair of the
+// five, ten in all, each against the one known first: the previous close
+// before the open, the open before the low and the high, and the low or the
+// high before the close. So "low vs open" is how far a day fell from its open
+// (0 or less) and "high vs low" its whole range (0 or more). Close vs prev
+// close, first, is what the bars showed before the choice.
+const DAY_PRICE_NAMES = { prev: 'prev close', open: 'open', low: 'low', high: 'high', close: 'close' };
+const DAY_MEASURES = [
+  ['close', 'prev'], ['open', 'prev'], ['low', 'prev'], ['high', 'prev'],
+  ['close', 'open'], ['low', 'open'], ['high', 'open'],
+  ['close', 'low'], ['close', 'high'], ['high', 'low'],
+].map(([of, base]) => {
+  const name = `${DAY_PRICE_NAMES[of]} vs ${DAY_PRICE_NAMES[base]}`;
+  return { id: `${of}-${base}`, of, base, name, label: name[0].toUpperCase() + name.slice(1) };
+});
+const DAY_MEASURE_DEFAULT = DAY_MEASURES[0];
+const DAY_MEASURE_STORAGE_KEY = 'tqqq-intraday-measure';
+const dayChange = (day, measure) => (day.prices[measure.of] / day.prices[measure.base] - 1) * 100;
+// The pre-market or after-hours print is a price against the last close: it
+// stands in for a close vs the previous close and for no other measure.
+const printMeasured = measure => measure === DAY_MEASURE_DEFAULT;
+
 // The weekday bars, over the days the chart draws (the user, 2026-11-22:
 // "daily bar chart (mon, tue, wed etc) average in the bottom, also a switch
 // for median"; the day after: "have count, median, average", and "when
 // choosing count ... red how many below and green how many in plus"). Each
-// weekday gets one bar for its usual close vs the previous session's close,
-// the mean or the median, or with Count two: the days that closed up, in
-// green over the line, and the days that closed down, in red under it. A day
-// that closed flat is neither. A session still open has no close yet and is
+// weekday gets one bar for its days' usual value of the measure picked
+// (DAY_MEASURES), the mean or the median, or with Count two: the days it was
+// up, in green over the line, and the days it was down, in red under it. A day
+// at 0 is neither. A session still open is not final yet and is
 // left out. The day stamps are the file's calendar dates at local midnight,
 // so getDay() is the New York weekday.
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 // A bar: its signed height, the text at its end, its tone, and the side of the line the text sits on.
-const closeBar = pct => { const tone = toneOf(pct); return { value: pct, text: fmtPct(tone === 'flat' ? 0 : pct), tone, side: pct >= 0 ? 'above' : 'below' }; };
-const countBars = closes => [
-  { value: d3.sum(closes, pct => toneOf(pct) === 'up'), tone: 'up', side: 'above' },
-  { value: -d3.sum(closes, pct => toneOf(pct) === 'down'), tone: 'down', side: 'below' },
+const changeBar = pct => { const tone = toneOf(pct); return { value: pct, text: fmtPct(tone === 'flat' ? 0 : pct), tone, side: pct >= 0 ? 'above' : 'below' }; };
+const countBars = changes => [
+  { value: d3.sum(changes, pct => toneOf(pct) === 'up'), tone: 'up', side: 'above' },
+  { value: -d3.sum(changes, pct => toneOf(pct) === 'down'), tone: 'down', side: 'below' },
 ].map(bar => ({ ...bar, text: String(Math.abs(bar.value)) }));
 // What the bars can show, in the order of the choice: its button, the block's
-// name, a weekday's bars from its closes, and the least extent the scale
-// spans either side of the line, so near-zero bars do not fill the plot.
+// name for a measure, a weekday's bars from its days' values, and the least
+// extent the scale spans either side of the line, so near-zero bars do not
+// fill the plot.
 const WEEKDAY_STATS = {
-  count: { button: 'Count', name: 'Up and down days by weekday', bars: countBars, leastExtent: 1 },
-  median: { button: 'Median', name: 'Median close by weekday', bars: closes => closes.length ? [closeBar(d3.median(closes))] : [], leastExtent: 0.05 },
-  average: { button: 'Average', name: 'Average close by weekday', bars: closes => closes.length ? [closeBar(d3.mean(closes))] : [], leastExtent: 0.05 },
+  count: { button: 'Count', name: () => 'Up and down days by weekday', bars: countBars, leastExtent: 1 },
+  median: { button: 'Median', name: measure => `Median ${measure.name} by weekday`, bars: changes => changes.length ? [changeBar(d3.median(changes))] : [], leastExtent: 0.05 },
+  average: { button: 'Average', name: measure => `Average ${measure.name} by weekday`, bars: changes => changes.length ? [changeBar(d3.mean(changes))] : [], leastExtent: 0.05 },
 };
 const WEEKDAY_DEFAULT_STAT = 'average';
-function buildWeekdayBars(days, stat) {
+function buildWeekdayBars(days, stat, measure) {
   const live = liveMarketDate();   // read once, not for each day: every reading builds date formatters
-  const closesByWeekday = d3.rollup(days.filter(d => fmtIsoDay(d.date) !== live), group => group.map(d => d.closeVsPrevPct), d => d.date.getDay());
+  const changesByWeekday = d3.rollup(days.filter(d => fmtIsoDay(d.date) !== live), group => group.map(d => dayChange(d, measure)), d => d.date.getDay());
   return WEEKDAYS.map((label, k) => {
-    const closes = closesByWeekday.get(k + 1) || [];   // getDay(): 1 is Monday
-    return { id: label, label, days: closes.length, bars: stat.bars(closes).map(bar => ({ ...bar, id: `${label}-${bar.side}`, label })) };
+    const changes = changesByWeekday.get(k + 1) || [];   // getDay(): 1 is Monday
+    return { id: label, label, days: changes.length, bars: stat.bars(changes).map(bar => ({ ...bar, id: `${label}-${bar.side}`, label })) };
   });
 }
 
@@ -1488,18 +1525,18 @@ class WeekdayBarChart extends ChartBase {
 // The daily bars, beside the weekday bars (the user, 2026-11-23: "also
 // include daily change chart, plus percent, minus percent etc, this one
 // should be date driven though, the start and end should be controlled by
-// this", the period slider). One bar a day, in date order: the day's close vs
-// the previous session's close, green up and red down. The period sets the
+// this", the period slider). One bar a day, in date order: the day's value of
+// the measure picked (DAY_MEASURES), green up and red down. The period sets the
 // first day and the last; a day the other filters leave out of the chart
 // keeps its place and is drawn pale, so the dates stay where they are.
 //
 // Today has a bar before its close too (the user, 2026-11-23: "if it's last,
 // say today", "and incorporate premarket too"). A session still open stands
-// at its change so far. Outside the session the proxy's latest pre-market,
-// after-hours or overnight print, the one the chart above pulses
-// (`extended`), takes one more place after the last day, at its change
-// against that day's close. Neither is a close yet: both are drawn hollow
-// and the hover names them.
+// at its value so far. Outside the session, while the bars measure the close
+// vs the previous close, the proxy's latest pre-market, after-hours or
+// overnight print, the one the chart above pulses (`extended`), takes one more
+// place after the last day, at its change against that day's close. Neither
+// is final yet: both are drawn hollow and the hover names them.
 //
 // `view` is the period slider's window, { first, days } in days from the
 // first loaded day: whole days at rest, fractions of a day while a zoom or a
@@ -1509,7 +1546,7 @@ class WeekdayBarChart extends ChartBase {
 // window as the last day's does, so it stays with the period's end.
 const DAILY_VIEW_SLACK = 1e-6;           // days: a window edge this close to a day's edge is on it
 const parseIsoDay = d3.timeParse('%Y-%m-%d');
-function buildDailyBars(allDays, view, shownDays, extended) {
+function buildDailyBars(allDays, view, shownDays, extended, measure) {
   const total = allDays.length, today = marketDateNow(), live = liveMarketDate();   // read once, not for each day
   const shown = new Set(shownDays.map(d => d.id));
   const printRoom = extended ? Math.max(0, Math.min(1, view.first + view.days - (total - 1))) : 0;
@@ -1518,11 +1555,11 @@ function buildDailyBars(allDays, view, shownDays, extended) {
   const to = Math.min(total + (extended ? 1 : 0), Math.ceil(view.first + days - DAILY_VIEW_SLACK));
   const dayBar = (at) => {
     const day = allDays[at], iso = fmtIsoDay(day.date);
-    return { ...closeBar(day.closeVsPrevPct), id: day.id, date: day.date, at, price: day.close, shown: shown.has(day.id), today: iso === today, unclosed: iso === live, note: iso === live ? 'so far' : null };
+    return { ...changeBar(dayChange(day, measure)), id: day.id, date: day.date, at, price: day.close, shown: shown.has(day.id), today: iso === today, unclosed: iso === live, note: iso === live ? 'so far' : null };
   };
   const printBar = () => {
     const iso = marketDateOf(new Date(extended.time));
-    return { ...closeBar(extended.changePct), id: 'extended', date: parseIsoDay(iso), at: total, price: extended.price, shown: true, today: iso === today, unclosed: true, note: EXTENDED_SESSION_NAMES[extended.session] };
+    return { ...changeBar(extended.changePct), id: 'extended', date: parseIsoDay(iso), at: total, price: extended.price, shown: true, today: iso === today, unclosed: true, note: EXTENDED_SESSION_NAMES[extended.session] };
   };
   return {
     view: { first: view.first, days },
@@ -2359,7 +2396,8 @@ function setupTrendFilter(latest, onChange) {
 }
 
 // What the weekday bars show: a button for each of WEEKDAY_STATS, the one
-// in use pressed, the block's name saying which. The choice is saved; with
+// in use pressed (the block's name, which says it with the measure, is set
+// at each refresh: showBarNames). The choice is saved; with
 // nothing saved, or storage blocked, it is the one the buttons show: the
 // default at first, and their own state on the page's later data refreshes.
 function readSavedWeekdayStat(fallback) {
@@ -2377,10 +2415,7 @@ function setupWeekdayStat(onChange) {
     .attr('type', 'button').attr('data-stat', key => key).text(key => WEEKDAY_STATS[key].button);
   const pressed = buttons.filter('[aria-pressed="true"]');
   const state = { stat: readSavedWeekdayStat(pressed.empty() ? WEEKDAY_DEFAULT_STAT : pressed.datum()) };
-  const show = () => {
-    buttons.attr('aria-pressed', key => String(key === state.stat));
-    d3.select('#weekday-name').text(WEEKDAY_STATS[state.stat].name);
-  };
+  const show = () => buttons.attr('aria-pressed', key => String(key === state.stat));
   buttons.on('click', (event, key) => {
     state.stat = key;
     writeSavedWeekdayStat(key);
@@ -2389,6 +2424,34 @@ function setupWeekdayStat(onChange) {
   });
   show();
   return state;
+}
+
+// The measure the bars under the chart show (DAY_MEASURES), a dropdown in the
+// toolbar. The pick is saved; with nothing saved, or storage blocked, it is
+// the one the dropdown shows: the first at first, and its own on the page's
+// later data refreshes. The desktop widget has no bars: nothing is read there.
+function readSavedMeasure(fallback) {
+  if (EMBED) return fallback;
+  let saved = null;
+  try { saved = localStorage.getItem(DAY_MEASURE_STORAGE_KEY); } catch { return fallback; }
+  return DAY_MEASURES.find(measure => measure.id === saved) || fallback;
+}
+function setupDayMeasure(onChange) {
+  const select = d3.select('#select-measure');
+  const shown = DAY_MEASURES.find(measure => measure.id === select.property('value'));
+  const state = { measure: readSavedMeasure(shown || DAY_MEASURE_DEFAULT) };
+  select.on('change', function () {
+    state.measure = DAY_MEASURES.find(measure => measure.id === this.value);
+    if (!EMBED) try { localStorage.setItem(DAY_MEASURE_STORAGE_KEY, this.value); } catch { /* storage unavailable */ }
+    onChange();
+  }).selectAll('option').data(DAY_MEASURES).join('option').attr('value', measure => measure.id).text(measure => measure.label);
+  select.property('value', state.measure.id);
+  return state;
+}
+// The two blocks' names say what they show: "Average high vs open by weekday", "High vs open by day".
+function showBarNames(stat, measure) {
+  d3.select('#weekday-name').text(stat.name(measure));
+  d3.select('#daily-name').text(`${measure.label} by day`);
 }
 
 // One chart for the page's life; every load, first or refresh, rebuilds the
@@ -2622,7 +2685,7 @@ function loadData() {
     let periodView = null;        // the slider's window, for the daily bars
     let shownDays = [];           // the days the chart drew last
     const drawDaily = () => {
-      const { bars, view } = buildDailyBars(allDays, periodView, shownDays, print);
+      const { bars, view } = buildDailyBars(allDays, periodView, shownDays, printMeasured(measure.measure) ? print : null, measure.measure);
       dailyChart.data(bars).view(view).render();
     };
 
@@ -2649,7 +2712,8 @@ function loadData() {
       }
       if (!EMBED) {
         const stat = WEEKDAY_STATS[weekday.stat];
-        weekdayChart.leastExtent(stat.leastExtent).data(buildWeekdayBars(days, stat)).render();
+        showBarNames(stat, measure.measure);
+        weekdayChart.leastExtent(stat.leastExtent).data(buildWeekdayBars(days, stat, measure.measure)).render();
         shownDays = days;
         drawDaily();
       }
@@ -2662,6 +2726,7 @@ function loadData() {
     const similar = setupSimilarFilter(guarded);
     const trend = setupTrendFilter(allDays[allDays.length - 1], guarded);
     const weekday = setupWeekdayStat(guarded);
+    const measure = setupDayMeasure(guarded);
     if (period) period.stop();   // a gesture on the data just replaced must not draw over the new
     period = setupPeriodSlider(allDays,
       (days, view) => { periodDays = days; periodView = view; guarded(); },
