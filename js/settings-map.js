@@ -911,8 +911,9 @@ function showMapPreview(view, box, key, period) {
     .render();
   return { tried: map.dots.size, done: mapIsDone(map) };
 }
-// A set's worst result among its neighbours, in the words the window uses.
-const mapWorstText = (job, dot) => `Worst case with one setting ${MAP_NEAR_PCT}% off: CAGR ${fitCagrText(job.cagrOf, dot.flat)}, max drawdown ${fitDdText(dot.flat)}.`;
+// A set's worst result among its neighbours, in the words the window uses: short and plain (the user, 2026-11-26, of
+// "Worst case with one setting 10% off: ...": "easy to understand words, just barely").
+const mapWorstText = (job, dot) => `A setting ${MAP_NEAR_PCT}% off: at worst CAGR ${fitCagrText(job.cagrOf, dot.flat)}, max drawdown ${fitDdText(dot.flat)}.`;
 // A dot's numbers on hover: its own, its worst case once checked, and how many settings it changes.
 function showMapTip(point, event) {
   const map = _map, dot = map.dots.get(point.id), tip = map.el.querySelector('.map-tip'), { cagrOf } = map.job;
@@ -959,9 +960,9 @@ function mapDetailHtml(map) {
   };
   const best = dot ? mapBestDot(map) : null;
   const notes = !dot ? [] : [dot.differs ? '' : 'Your settings now.',
-    dot === best ? `${MAP_BEST_LABEL}: ${mapValueText(mapDotValue(dot))}, the most here.`
-      : best ? `${mapValueText(mapDotValue(dot))}. The best makes ${mapMoneyText(mapDotValue(best))}.` : '',
-    dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what Run in the Fit window would pick.` : '',
+    dot === best ? 'The best on this map.'
+      : best ? `Not the best: $1 ends at ${mapMoneyText(mapDotValue(dot))}, the best's at ${mapMoneyText(mapDotValue(best))}.` : '',
+    dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what the Fit window would pick.` : '',
     dot.flat ? mapWorstText(job, dot) : (picked || dot === best) && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
   const changed = fitFreezeChanged(settings, choices);
   return (dot ? `<div class="map-detail-head"><span>CAGR <b>${fitCagrText(job.cagrOf, dot.r)}</b>, max drawdown <b>${fitDdText(dot.r)}</b></span>`
