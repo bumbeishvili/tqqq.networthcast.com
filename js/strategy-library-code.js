@@ -131,6 +131,21 @@ const QQQ_RSI_CHART_SNIPPET = `    const RSI_PANEL = "QQQ RSI(" + RW + ")", PRIC
 const STAT_PARAM_SNIPPET = `{ id: "stat", label: "Center line", text: "Use the {} for the line.", options: [{ value: "sma", label: "Moving average" }, { value: "median", label: "Median" }], default: "sma" }`;
 const STAT_PARAM_MEDIAN_SNIPPET = `{ id: "stat", label: "Center line", text: "Use the {} for the line.", options: [{ value: "median", label: "Median" }, { value: "sma", label: "Moving average" }], default: "median" }`;
 
+// ---- The funds a setting can pick ----
+// The user (2026-11-26): "make sur all funds appear in all dropdowns (where they make sense), in this case
+// soxs and sqqq make sense because they we are expecting price to come down, check it for other
+// strategies as well", then "Make sure all strategies have all options so fit works better".
+// A setting for money held while the rules are out (cash, a ceiling's hold, a crash exit's) takes every
+// fund the app carries, the two inverse ones too. A setting for the main fund, a fund held above a line
+// or a signal read from takes the long ones: an inverse fund there would turn the rule upside down.
+const LONG_FUNDS = ["tqqq", "qqq", "spy", "qld", "sso", "spxl", "gld", "soxl", "soxx"];
+const INVERSE_FUNDS = ["sqqq", "soxs"];
+const OUT_FUNDS = ["cash"].concat(LONG_FUNDS, INVERSE_FUNDS);
+const fundLabel = (fund) => (fund === "cash" ? "Cash" : fund.toUpperCase());
+// A fund setting's options as code text: `first` in the order the setting always had them, then the rest
+// of `pool` in the app's order.
+const fundOptionsSrc = (first, pool) => JSON.stringify(first.concat(pool.filter(fund => !first.includes(fund))).map(fund => ({ value: fund, label: fundLabel(fund) })));
+
 // A withdrawal is a negative amount in p.contributions: a real uploaded
 // transaction history has them. Every strategy below adds the day's amount to
 // cash, so a withdrawal larger than the cash on hand used to leave cash
@@ -416,8 +431,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #10 Canonical QQQ 200SMA → TQQQ else cash.
 CODE[10] = `{
   name: "QQQ 200-day SMA → TQQQ else cash",
-  params: [{ id: "signal", label: "Signal asset", text: "Watch {} against its line.", options: [{ value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }], default: "qqq" },
-           { id: "lev", label: "Leveraged ETF", text: "Hold {} while it is above the line, and cash while it is below.", options: [{ value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "sso", label: "SSO" }, { value: "spxl", label: "SPXL" }], default: "tqqq" },
+  params: [{ id: "signal", label: "Signal asset", text: "Watch {} against its line.", options: ${fundOptionsSrc(["qqq", "spy"], LONG_FUNDS)}, default: "qqq" },
+           { id: "lev", label: "Fund held", text: "Hold {} while it is above the line, and cash while it is below.", options: ${fundOptionsSrc(["tqqq", "qld", "sso", "spxl"], LONG_FUNDS)}, default: "tqqq" },
            { id: "window", label: "Window (days)", text: "The line covers the last {} days.", options:
       [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 160 },
            ${STAT_PARAM_MEDIAN_SNIPPET}],
@@ -957,8 +972,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // #25 Always-invested: 200SMA → TQQQ else QQQ (park in unleveraged, not cash).
 CODE[25] = `{
   name: "200SMA → TQQQ else QQQ (always in)",
-  params: [{ id: "signal", label: "Signal / park", text: "Watch {} against its line, and hold it while it is below.", options: [{ value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" }], default: "qqq" },
-           { id: "lev", label: "Leveraged ETF", text: "Hold {} while it is above.", options: [{ value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "sso", label: "SSO" }, { value: "spxl", label: "SPXL" }], default: "tqqq" },
+  params: [{ id: "signal", label: "Signal / park", text: "Watch {} against its line, and hold it while it is below.", options: ${fundOptionsSrc(["qqq", "spy"], LONG_FUNDS)}, default: "qqq" },
+           { id: "lev", label: "Fund held", text: "Hold {} while it is above.", options: ${fundOptionsSrc(["tqqq", "qld", "sso", "spxl"], LONG_FUNDS)}, default: "tqqq" },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
       Array.from({ length: 32 }, (_, k) => 5 + k).concat(Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 160 },
            ${STAT_PARAM_MEDIAN_SNIPPET}],
@@ -1005,14 +1020,8 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[26] = `{
   name: "Median overextension 250d",
   params: [
-    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" },
-      { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" },
-      { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
-    { id: "park", label: "Held when out", text: "Hold {} while it is overextended.", default: "cash", options: [
-      { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" },
-      { value: "qld", label: "QLD" } ] },
+    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "spxl", "sso", "qqq", "spy"], LONG_FUNDS)} },
+    { id: "park", label: "Held when out", text: "Hold {} while it is overextended.", default: "cash", options: ${fundOptionsSrc(["cash", "qqq", "spy", "sso", "qld"], OUT_FUNDS)} },
     { id: "threshold", label: "Sell when above line (%)", text: "It is overextended when it closes {} above its line.", unit: "%", default: 55, options:
       Array.from({ length: 191 }, (_, k) => 10 + k) },
     ${STAT_PARAM_MEDIAN_SNIPPET},
@@ -1240,14 +1249,11 @@ CODE[7] = `{
     { id: "lookback", label: "Lookback (days)", text: "At each month end, compare SPY's and QQQ's returns over the last {} trading days.", default: 430, options:
       Array.from({ length: 21 }, (_, k) => 21 + 5 * k).concat(Array.from({ length: 253 }, (_, k) => 126 + k), Array.from({ length: 101 }, (_, k) => 380 + k), Array.from({ length: 6 }, (_, k) => 484 + 4 * k)),
       tip: "252 trading days is 12 months, the length Antonacci uses." },
-    { id: "spFund", label: "When SPY leads", text: "If SPY did better, hold {}.", default: "spy", options: [
-      { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" }, { value: "spy", label: "SPY" } ],
+    { id: "spFund", label: "When SPY leads", text: "If SPY did better, hold {}.", default: "spy", options: ${fundOptionsSrc(["spxl", "sso", "spy"], LONG_FUNDS)},
       tip: "The fund held while SPY has the higher return." },
-    { id: "nqFund", label: "When QQQ leads", text: "If QQQ did better, hold {}.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "qqq", label: "QQQ" } ],
+    { id: "nqFund", label: "When QQQ leads", text: "If QQQ did better, hold {}.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "qqq"], LONG_FUNDS)},
       tip: "The fund held while QQQ has the higher return." },
-    { id: "park", label: "Held when out", text: "When the better one earned less than cash, hold {} instead.", default: "gld", options: [
-      { value: "cash", label: "cash" }, { value: "gld", label: "GLD" } ],
+    { id: "park", label: "Held when out", text: "When the better one earned less than cash, hold {} instead.", default: "gld", options: ${fundOptionsSrc(["cash", "gld"], OUT_FUNDS)},
       tip: "Cash earns the cash interest, standing in for T-bills." },
     ${mixCostParams("What cash earns, as T-bills would. It is also the return the better fund must beat.")}
   ],
@@ -1346,8 +1352,7 @@ CODE[14] = `{
     { id: "holdDays", label: "Phase two after (days)", text: "After holding TQQQ {} days, move to phase two.", default: 640, options:
       Array.from({ length: 68 }, (_, k) => 30 + 5 * k).concat([366], Array.from({ length: 146 }, (_, k) => 370 + 5 * k)),
       tip: "Calendar days since TQQQ was bought. 366 makes the gain long-term for US taxes." },
-    { id: "fund2", label: "Phase two fund", text: "Phase two holds {} as its stock part.", default: "qld", options: [
-      { value: "qld", label: "QLD" }, { value: "tqqq", label: "TQQQ" }, { value: "qqq", label: "QQQ" } ],
+    { id: "fund2", label: "Phase two fund", text: "Phase two holds {} as its stock part.", default: "qld", options: ${fundOptionsSrc(["qld", "tqqq", "qqq"], LONG_FUNDS.filter(fund => fund !== "gld"))},
       tip: "The stock part of phase two." },
     { id: "gold2", label: "Phase two gold (%)", text: "Phase two keeps {} in gold.", unit: "%", default: 100, options:
       Array.from({ length: 101 }, (_, k) => k),
@@ -1450,21 +1455,14 @@ ${END_ROW_ACTION}
 CODE[39] = `{
   name: "Overheat exit (sell when stretched)",
   params: [
-    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" },
-      { value: "spxl", label: "SPXL" }, { value: "sso", label: "SSO" },
-      { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
-    { id: "signal", label: "Signal read from", text: "Read the signal from {}.", default: "sso", options: [
-      { value: "sso", label: "SSO" }, { value: "spy", label: "SPY" },
-      { value: "qqq", label: "QQQ" }, { value: "tqqq", label: "TQQQ" } ] },
+    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "spxl", "sso", "qqq", "spy"], LONG_FUNDS)} },
+    { id: "signal", label: "Signal read from", text: "Read the signal from {}.", default: "sso", options: ${fundOptionsSrc(["sso", "spy", "qqq", "tqqq"], LONG_FUNDS)} },
     ${STAT_PARAM_SNIPPET},
     { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 150, options:
       [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 81 }, (_, k) => 117 + k), [200, 210], Array.from({ length: 31 }, (_, k) => 218 + k), Array.from({ length: 26 }, (_, k) => 250 + 10 * k)) },
     { id: "stretch", label: "Sell when above line (%)", text: "Sell when the signal closes {} above its line.", unit: "%", default: 20, options:
       Array.from({ length: 117 }, (_, k) => +(2 + 0.5 * k).toFixed(1)) },
-    { id: "park", label: "Held when out", text: "Then hold {} until it is back under.", default: "cash", options: [
-      { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" } ] },
+    { id: "park", label: "Held when out", text: "Then hold {} until it is back under.", default: "cash", options: ${fundOptionsSrc(["cash", "qqq", "spy", "sso"], OUT_FUNDS)} },
     { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
     { id: "tradeCost", fit: false, label: "Trading cost (%)", text: "Each buy and sell costs {} of the amount traded.", unit: "%", default: 0.02, options: [
@@ -1621,12 +1619,8 @@ ${END_ROW_ACTION}
 CODE[40] = `{
   name: "Median overextension (250d)",
   params: [
-    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" },
-      { value: "sso", label: "SSO" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
-    { id: "park", label: "Held when out", text: "Switch to {} when it runs far above its line.", default: "sqqq", options: [
-      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
+    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "spxl", "sso", "qqq", "spy"], LONG_FUNDS)} },
+    { id: "park", label: "Held when out", text: "Switch to {} when it runs far above its line.", default: "sqqq", options: ${fundOptionsSrc(["sqqq", "cash", "qqq", "spy", "sso", "qld"], OUT_FUNDS)} },
     ${STAT_PARAM_MEDIAN_SNIPPET},
     { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options:
       [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), [75], Array.from({ length: 10 }, (_, k) => 80 + 10 * k), [175, 180, 190, 200], Array.from({ length: 82 }, (_, k) => 209 + k), Array.from({ length: 21 }, (_, k) => 300 + 10 * k)) },
@@ -1867,9 +1861,7 @@ CODE[41] = `{
   name: "Median overextension with SQQQ and crash exit",
   params: [
     { section: "Fund & signal" },
-    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" },
-      { value: "sso", label: "SSO" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "spxl", "sso", "qqq", "spy"], LONG_FUNDS)} },
     { id: "stat", label: "Center line", text: "Compare its close with its {}.", default: "median", options: [
       { value: "median", label: "Median" }, { value: "sma", label: "Moving average" },
       { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
@@ -1878,9 +1870,7 @@ CODE[41] = `{
     { section: "Overextended — sell the melt-up" },
     { id: "overPct", label: "Above line (%)", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options:
       [2, 4, 5].concat(Array.from({ length: 4 }, (_, k) => 6 + 2 * k), [15, 18, 20, 22, 25, 28, 30, 32], Array.from({ length: 82 }, (_, k) => +(34.5 + 0.5 * k).toFixed(1)), Array.from({ length: 45 }, (_, k) => 80 + 5 * k)) },
-    { id: "park", label: "Then hold", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: [
-      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
+    { id: "park", label: "Then hold", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: ${fundOptionsSrc(["sqqq", "cash", "qqq", "spy", "sso", "qld"], OUT_FUNDS)} },
     { section: "Crash signal — the exit measures against this" },
     { id: "crashStat", label: "Center line", text: "The crash exit measures against {}.", default: "same", options: [
       { value: "same", label: "Same as main" }, { value: "median", label: "Median" },
@@ -1890,10 +1880,7 @@ CODE[41] = `{
     { section: "Crash exit — leave when it breaks down" },
     { id: "exitPct", label: "Below line (%)", text: "Sell on the first close under a level {} from that line.", unit: "%", default: -28, options:
       Array.from({ length: 201 }, (_, k) => +(20 - 0.5 * k).toFixed(1)) },
-    { id: "crashAsset", label: "Then hold", text: "Then hold {} until the price recovers above that level.", default: "cash", options: [
-      { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
-      { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
+    { id: "crashAsset", label: "Then hold", text: "Then hold {} until the price recovers above that level.", default: "cash", options: ${fundOptionsSrc(["cash", "sqqq", "qqq", "spy", "sso", "qld", "tqqq", "spxl"], OUT_FUNDS)} },
     { id: "slopeGate", label: "Only if line slope below (%/yr)", text: "Only while the line rises less than {} a year.", unit: "%", default: 20, options:
       [{ value: 999, label: "Off" }].concat(Array.from({ length: 201 }, (_, k) => -50 + k)) },
     { id: "belowGate", label: "Only after days below line", text: "And only after {} closes in a row under the line.", default: 10, options:
@@ -2211,9 +2198,7 @@ CODE[44] = `{
   name: "NFCI veto, med stretch with SQQQ and med crash exit",
   params: [
     { section: "Fund & signal" },
-    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" },
-      { value: "sso", label: "SSO" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "spxl", "sso", "qqq", "spy"], LONG_FUNDS)} },
     { id: "stat", label: "Center line", text: "Compare its close with its {}.", default: "median", options: [
       { value: "median", label: "Median" }, { value: "sma", label: "Moving average" },
       { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
@@ -2222,9 +2207,7 @@ CODE[44] = `{
     { section: "Overextended — sell the melt-up" },
     { id: "overPct", label: "Above line (%)", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options:
       [2, 4, 5].concat(Array.from({ length: 4 }, (_, k) => 6 + 2 * k), [15, 18, 20, 22, 25, 28, 30, 32], Array.from({ length: 82 }, (_, k) => +(34.5 + 0.5 * k).toFixed(1)), Array.from({ length: 45 }, (_, k) => 80 + 5 * k)) },
-    { id: "park", label: "Then hold", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: [
-      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
+    { id: "park", label: "Then hold", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: ${fundOptionsSrc(["sqqq", "cash", "qqq", "spy", "sso", "qld"], OUT_FUNDS)} },
     { section: "Crash signal — the exit measures against this" },
     { id: "crashStat", label: "Center line", text: "The crash exit measures against {}.", default: "same", options: [
       { value: "same", label: "Same as main" }, { value: "median", label: "Median" },
@@ -2234,10 +2217,7 @@ CODE[44] = `{
     { section: "Crash exit — leave when it breaks down" },
     { id: "exitPct", label: "Below line (%)", text: "Sell on the first close under a level {} from that line.", unit: "%", default: -28, options:
       Array.from({ length: 201 }, (_, k) => +(20 - 0.5 * k).toFixed(1)) },
-    { id: "crashAsset", label: "Then hold", text: "Then hold {} until the price recovers above that level.", default: "cash", options: [
-      { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
-      { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
+    { id: "crashAsset", label: "Then hold", text: "Then hold {} until the price recovers above that level.", default: "cash", options: ${fundOptionsSrc(["cash", "sqqq", "qqq", "spy", "sso", "qld", "tqqq", "spxl"], OUT_FUNDS)} },
     { id: "slopeGate", label: "Only if line slope below (%/yr)", text: "Only while the line rises less than {} a year.", unit: "%", default: 20, options:
       [{ value: 999, label: "Off" }].concat(Array.from({ length: 201 }, (_, k) => -50 + k)) },
     { id: "belowGate", label: "Only after days below line", text: "And only after {} closes in a row under the line.", default: 10, options:
@@ -2608,9 +2588,7 @@ CODE[45] = `{
   name: "SQQQ stretch, sell line + crash buy-back",
   params: [
     { section: "Fund & signal" },
-    { id: "asset", label: "Fund traded", tip: "The fund held whenever the strategy is in the market.", text: "Hold {} as the main fund.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qld", label: "QLD" }, { value: "spxl", label: "SPXL" },
-      { value: "sso", label: "SSO" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },
+    { id: "asset", label: "Fund traded", tip: "The fund held whenever the strategy is in the market.", text: "Hold {} as the main fund.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "spxl", "sso", "qqq", "spy"], LONG_FUNDS)} },
     { id: "stat", label: "Center line", tip: "What the price is compared to. A median is not pulled by spikes; a moving average is.", text: "Compare its close with its {}.", default: "median", options: [
       { value: "median", label: "Median" }, { value: "sma", label: "Moving average" },
       { value: "rsi", label: "RSI (vs its 50 midline)" } ] },
@@ -2619,16 +2597,11 @@ CODE[45] = `{
     { section: "Overextended — sell the melt-up" },
     { id: "overPct", label: "Above line (%)", tip: "Switch to the fund below when the price closes this far above the center line, and back on the first close under it.", text: "Switch out when it closes {} above the line.", unit: "%", default: 55, options:
       [2, 4, 5].concat(Array.from({ length: 4 }, (_, k) => 6 + 2 * k), [15, 18, 20, 22, 25, 28, 30, 32], Array.from({ length: 82 }, (_, k) => +(34.5 + 0.5 * k).toFixed(1)), Array.from({ length: 45 }, (_, k) => 80 + 5 * k)) },
-    { id: "park", label: "Then hold", tip: "What to hold until the price closes back under that line.", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: [
-      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" } ] },
+    { id: "park", label: "Then hold", tip: "What to hold until the price closes back under that line.", text: "Then hold {} until it closes back under the line.", default: "sqqq", options: ${fundOptionsSrc(["sqqq", "cash", "qqq", "spy", "sso", "qld"], OUT_FUNDS)} },
     { section: "Sell line — leave when it breaks down" },
     { id: "exitPct", label: "Level vs center line (%)", tip: "Sell on the first close under this level. Negative is below the center line, positive above it.", text: "Sell on the first close under a level {} from the line.", unit: "%", default: -3, options:
       Array.from({ length: 201 }, (_, k) => +(20 - 0.5 * k).toFixed(1)) },
-    { id: "crashAsset", label: "Then hold", tip: "What to hold after selling, until the strategy buys back.", text: "Then hold {} until it buys back.", default: "cash", options: [
-      { value: "cash", label: "Cash" }, { value: "sqqq", label: "SQQQ" }, { value: "qqq", label: "QQQ" },
-      { value: "spy", label: "SPY" }, { value: "sso", label: "SSO" }, { value: "qld", label: "QLD" },
-      { value: "tqqq", label: "TQQQ" }, { value: "spxl", label: "SPXL" } ] },
+    { id: "crashAsset", label: "Then hold", tip: "What to hold after selling, until the strategy buys back.", text: "Then hold {} until it buys back.", default: "cash", options: ${fundOptionsSrc(["cash", "sqqq", "qqq", "spy", "sso", "qld", "tqqq", "spxl"], OUT_FUNDS)} },
     { id: "confirmDays", label: "Buy back after closes above line", tip: "Closes in a row above the line before buying back. Selling needs one.", text: "Buy back after {} closes in a row above the line.", default: 5, options:
       Array.from({ length: 100 }, (_, k) => 1 + k) },
     { id: "dipReentry", label: "Re-enter a correction", tip: "Where the re-entry line sits between the center line and the correction's low. 25% is a quarter of the way down from the center line, 100% is the low itself. 0% waits for the sell line.", text: "In a correction, buy back above a line {} of the way from the center line down to its low.", unit: "%", default: 50, options:
@@ -3124,8 +3097,7 @@ CODE[47] = `{
     { section: "Ceiling — step aside" },
     { id: "topLead", label: "TQQQ ahead by at least (%)", tip: "TQQQ's growth over the lookback against QQQ's: 90 means TQQQ grew 1.9 times as much.", text: "Step aside when TQQQ is {} ahead of QQQ.", unit: "%", default: 125, options:
       Array.from({ length: 281 }, (_, k) => 20 + k).concat([{ value: 9999, label: "Off" }]) },
-    { id: "topHold", label: "Held instead", tip: "What is held from the ceiling until the lead falls back.", text: "Then hold {}.", default: "sqqq", options: [
-      { value: "sqqq", label: "SQQQ" }, { value: "cash", label: "Cash" }, { value: "qqq", label: "QQQ" } ] },
+    { id: "topHold", label: "Held instead", tip: "What is held from the ceiling until the lead falls back.", text: "Then hold {}.", default: "sqqq", options: ${fundOptionsSrc(["sqqq", "cash", "qqq"], OUT_FUNDS.filter(fund => fund !== "tqqq"))} },
     { id: "topDays", label: "SQQQ for at most (days)", tip: "After this many days SQQQ is sold to cash, which waits for the lead to fall back.", text: "Keep SQQQ for at most {} days, then cash.", default: 20, options:
       [{ value: 0, label: "No limit" }].concat(Array.from({ length: 126 }, (_, k) => 1 + k)) },
     { id: "backLead", label: "Back to TQQQ at lead ≤ (%)", tip: "At or above the ceiling means no band: back on the first close under the ceiling.", text: "Go back to TQQQ once the lead is down to {}.", unit: "%", default: 25, options:
@@ -5441,8 +5413,7 @@ CODE[57] = bareStrategy({
       { value: 1, label: "Monday" }, { value: 2, label: "Tuesday" }, { value: 3, label: "Wednesday" }, { value: 4, label: "Thursday" }, { value: 5, label: "Friday" } ] },
     { id: "tmLevels", label: "Buy and sell levels", tip: "The sale is at the first close over the level. Low and high is the rule as posted on r/TQQQ. With the close, every down close on the buying day buys and the first up close sells.", text: "under the prior day's {}.", default: "hl", options: [
       { value: "hl", label: "low, selling over its high" }, { value: "close", label: "close, selling over it" } ] },
-    { id: "tmSignal", label: "Signal fund", tip: "The fund whose closes, lows and highs are compared. TQQQ is the fund bought, whichever it is.", text: "The closes compared are those of {}.", default: "tqqq", options: [
-      { value: "tqqq", label: "TQQQ" }, { value: "qqq", label: "QQQ" }, { value: "spy", label: "SPY" } ] },`,
+    { id: "tmSignal", label: "Signal fund", tip: "The fund whose closes, lows and highs are compared. TQQQ is the fund bought, whichever it is.", text: "The closes compared are those of {}.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qqq", "spy"], [])} },`,   // only the funds with daily highs and lows (HIGH_LOW_FUNDS, js/data.js): the rule compares them
   columns: `    { key: "tmTrade", label: "Open trade", tip: "The day the open trade was bought. Blank when none is open." },`,
   rest: '"cash"',
   park: BARE_PARK_BETWEEN_TRADES,
