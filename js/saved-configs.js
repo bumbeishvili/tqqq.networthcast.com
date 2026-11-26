@@ -1776,7 +1776,7 @@ function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
   // never on the log alone (a strategy logging only trades + month ends misses
   // intra-month troughs). Falls back to log grain, then label grain, when the
   // strategy doesn't emit held/shares/cash. CAGR is money-weighted, unaffected.
-  const cagr = cfgMoneyWeightedCAGR(ctx, finalV);
+  const cagr = cfgMoneyWeightedCAGR(ctx, finalV), cagrYear = cagrSoFarThisYear(labels, series, ctx, cagr);
   const ddVals = points.map(p => p.value), ddDates = points.map(p => p.date);
   let dd = holdingsDD || customDailyDrawdown(log);
   if (!dd && typeof computeMaxDrawdown === 'function') {
@@ -1785,7 +1785,7 @@ function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
   if (!dd) dd = { pct: 0, peakDate: null, troughDate: null };
   // The trade at the latest day's close and the fund held at the end, for the card (js/signal-chart.js
   // dayEventOf, heldAtEnd). None from a log that is being run again: it may be yesterday's.
-  return { data: series, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate, dayEvent: stale ? null : dayEventOf(log), held: stale ? null : heldAtEnd(log) };
+  return { data: series, cagr, cagrYear, maxDD: dd.pct * 100, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate, dayEvent: stale ? null : dayEventOf(log), held: stale ? null : heldAtEnd(log) };
 }
 
 // Custom strategy series — served from the worker-result cache. On a cache miss
@@ -2086,7 +2086,7 @@ function computeConfigSeries(cfg, ctx) {
   const startV = data.length ? data[0] : 0;
   // #2 Money-weighted (IRR) return — same contribution schedule as the main
   // chart; only this strategy's final value differs.
-  const cagr = cfgMoneyWeightedCAGR(ctx, finalV);
+  const cagr = cfgMoneyWeightedCAGR(ctx, finalV), cagrYear = cagrSoFarThisYear(labels, data, ctx, cagr);
   // #3 Daily-sampled drawdown when we have control points to revalue daily;
   // otherwise fall back to the rebalance-grain series drawdown.
   const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
@@ -2095,7 +2095,7 @@ function computeConfigSeries(cfg, ctx) {
     : (ddControls && ddControls.length && dailyRows && typeof computeDailyMaxDrawdown === 'function')
     ? computeDailyMaxDrawdown(ddControls, dailyRows, ddKey)
     : ((typeof computeMaxDrawdown === 'function') ? computeMaxDrawdown(data, labels) : { pct: 0, peakDate: null, troughDate: null });
-  return { data, cagr, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed, dayEvent, held };
+  return { data, cagr, cagrYear, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed, dayEvent, held };
 }
 // What a built-in engine's run holds at its end, for its card (heldAtEnd, js/signal-chart.js): the
 // largest of its holdings by value at the latest prices, cash by its name. end: { h: { fund: shares }, cash }.
@@ -2129,7 +2129,7 @@ function appendConfigDatasets(chart, ctx) {
   window._editingConfigSim = null;
   for (const cfg of savedConfigs) {
     const s = computeConfigSeries(cfg, ctx);
-    window._configMetrics[cfg.id] = { cagr: s.cagr, maxDD: s.maxDD, start: s.start, end: s.end, ddPeak: s.ddPeak, ddTrough: s.ddTrough, event: s.dayEvent || null, held: s.held || null };
+    window._configMetrics[cfg.id] = { cagr: s.cagr, cagrYear: s.cagrYear, maxDD: s.maxDD, start: s.start, end: s.end, ddPeak: s.ddPeak, ddTrough: s.ddTrough, event: s.dayEvent || null, held: s.held || null };
     chart.data.datasets.push({
       label: cfg.name,
       data: s.data,
@@ -3072,6 +3072,7 @@ function buildConfigPillHtml(cfg) {
     metrics = `
       <div class="sc-metrics">
         <span class="sc-metric"><span class="sc-metric-label">CAGR</span> <span class="sc-metric-value ${cagrCls}">${cagrSign}${m.cagr.toFixed(1)}%</span></span>
+        ${Number.isFinite(m.cagrYear) ? `<span class="sc-metric"><span class="sc-metric-label">${dataYear()}</span> <span class="sc-metric-value ${m.cagrYear >= 0 ? 'positive' : 'negative'}">${fmtCagr(m.cagrYear)}</span></span>` : ''}
         ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRange ? tipIcon([ddRange.replace('–', ' to ')]) : ''}</span>` : ''}
       </div>`;
   }
@@ -5210,6 +5211,7 @@ function renderCustomPanelBody(cfgId) {
     html += `
       <div class="custom-stats">
         <div class="custom-stat"><span>CAGR</span><b class="${cagrCls}">${m.cagr >= 0 ? '+' : ''}${m.cagr.toFixed(1)}%</b></div>
+        ${Number.isFinite(m.cagrYear) ? `<div class="custom-stat"><span>${dataYear()} so far</span><b class="${m.cagrYear >= 0 ? 'positive' : 'negative'}">${fmtCagr(m.cagrYear)}</b></div>` : ''}
         <div class="custom-stat"><span>Max DD</span><b class="negative">${ddStr}</b>${ddRangeHtml}</div>
         <div class="custom-stat"><span>End</span><b>${(typeof fmtFull === 'function') ? fmtFull(m.end || 0) : Math.round(m.end || 0)}</b></div>
       </div>`;

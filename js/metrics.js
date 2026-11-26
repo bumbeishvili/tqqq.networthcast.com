@@ -82,6 +82,37 @@ function buildContributionFlows(initial, monthly, annualRaise, startDate, endDat
   return flows;
 }
 
+// A CAGR as the cards and panels write it: its sign and one decimal (+38.5%, −4.2%).
+const fmtCagr = (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+// The year a CAGR "so far" is of: the year of the data's last day (2026 on 26 November 2026).
+const dataYear = () => daily[daily.length - 1].date.slice(0, 4);
+// A run's money-weighted CAGR over the data's year so far (the user, 2026-11-26: "also inside cards and
+// strategy details, everywehre include 2026 cagr so far"), as the library's "2026–today" column counts it:
+// from the run's value at its last point before the year to its last value, with the money paid in or out
+// in between (the run's own contributions: money as its whole CAGR takes it). A run that starts inside the
+// year is the whole run: its own CAGR. null for a run that ends before the year, or has no value at its start.
+//   labels: the run's dates (YYYY-MM-DD); values: its value at each, null where it has none;
+//   money: { initial, monthly, annualRaise, contribSchedule }; wholeCagr: the run's CAGR.
+function cagrSoFarThisYear(labels, values, money, wholeCagr) {
+  const year = dataYear(), last = values.length - 1;
+  let end = last;
+  while (end >= 0 && values[end] == null) end--;
+  if (end < 0 || String(labels[end]).slice(0, 4) < year) return null;
+  let from = end;
+  while (from >= 0 && String(labels[from]).slice(0, 4) >= year) from--;
+  if (from < 0) return wholeCagr;
+  const startValue = values[from], finalValue = values[end];
+  if (!(startValue > 0) || !(finalValue > 0)) return null;
+  const yearsBetween = (a, b) => (new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / (365.25 * 86400000);
+  const offset = yearsBetween(labels[0], labels[from]), span = yearsBetween(labels[from], labels[end]);
+  const all = buildContributionFlows(money.initial, money.monthly, money.annualRaise, labels[0], labels[end],
+    (typeof monthlyData !== 'undefined' ? monthlyData : null), money.contribSchedule);
+  const flows = [{ t: 0, cf: -startValue }]
+    .concat(all.filter(f => f.t > offset + 1e-9).map(f => ({ t: f.t - offset, cf: f.cf })), { t: span, cf: finalValue });
+  const r = computeMoneyWeightedReturn(flows);
+  return r != null && Number.isFinite(r) ? r : null;
+}
+
 // Convenience: money-weighted CAGR (%) for one strategy given its contribution
 // schedule and final value. Falls back to the simple end/contributed CAGR when
 // the IRR can't be solved (degenerate or loss-to-zero streams). `schedule` is

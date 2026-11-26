@@ -594,12 +594,18 @@ function buildLegendChipsHtml(indices, opts) {
             ${rangeHtml}
           </div>`;
       }
+      const yearRow = m && Number.isFinite(m.cagrYear) ? `
+          <div class="legend-metric-row">
+            <span class="legend-metric-label">${dataYear()}</span>
+            <span class="legend-metric-value ${m.cagrYear >= 0 ? 'positive' : 'negative'}">${fmtCagr(m.cagrYear)}</span>
+          </div>` : '';
       metricsHtml = `
         <div class="legend-metrics">
           <div class="legend-metric-row">
             <span class="legend-metric-label">${primaryLabel}</span>
             <span class="legend-metric-value ${primaryCls}">${primaryStr}</span>
           </div>
+          ${yearRow}
           ${ddRow}
         </div>`;
     }
@@ -1204,7 +1210,7 @@ function renderStatsGrid(idx) {
     const cfg = getSavedConfigs().find(c => c.id === ecid);
     if (cfg && cfg.type !== 'custom' && PANEL_IDX_BY_KEY[cfg.type] === idx) {
       const cm = (window._configMetrics || {})[ecid];
-      if (cm) m = { cagr: cm.cagr, start: cm.start, end: cm.end, maxDD: cm.maxDD, ddPeak: cm.ddPeak, ddTrough: cm.ddTrough };
+      if (cm) m = { cagr: cm.cagr, cagrYear: cm.cagrYear, start: cm.start, end: cm.end, maxDD: cm.maxDD, ddPeak: cm.ddPeak, ddTrough: cm.ddTrough };
     }
   }
   if (!m) return '';
@@ -1216,7 +1222,7 @@ function renderStatsGrid(idx) {
   const ddRangeHtml = ddRange ? `<div class="strategy-stat-range">${ddRange}</div>` : '';
   return `
     <div class="strategy-stats">
-      ${statCard('CAGR', m.cagr >= 0 ? 'trendUp' : 'trendDown', cagrStr, cagrCls, '',
+      ${statCard('CAGR', m.cagr >= 0 ? 'trendUp' : 'trendDown', cagrStr, cagrCls, Number.isFinite(m.cagrYear) ? `${dataYear()} so far: ${fmtCagr(m.cagrYear)}` : '',
         'Money-weighted annual growth rate (IRR).&#10;&#10;Each contributed dollar is weighted by how long it was actually invested, so early money counts for more than a simple end÷start rate would give.')}
       ${statCard('Starting Balance', 'dollar', fmtFull(Math.round(m.start)), '', '',
         'Your position value at the start of the selected date range — the initial amount put to work here.')}
@@ -2825,6 +2831,8 @@ function render() {
     const dd = dailyDDByIdx[i] !== undefined ? dailyDDByIdx[i] : computeMaxDrawdown(series, labels);
     window._strategyMetrics[i] = {
       cagr:  cagrVal,
+      // A money-weighted CAGR counts the contributions as the whole one does; a plain one (a line's own balance) none.
+      cagrYear: cagrSoFarThisYear(labels, series, mainCagrIdx[i] !== undefined ? { initial, monthly, annualRaise, contribSchedule } : { initial: start, monthly: 0, annualRaise: 0, contribSchedule: null }, cagrVal),
       start,
       end,
       maxDD:    dd.pct * 100,

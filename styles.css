@@ -2591,10 +2591,12 @@
     color: var(--red-text);
   }
   /* The card's numbers, on one line; the ⓘ beside DD has the drawdown's dates. */
+  /* CAGR, the year so far and DD: one line where the card has the room, else DD (with its ⓘ) on the next, never cut. */
   .saved-config-pill .sc-metrics {
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: 12px;
+    gap: 2px 12px;
     margin-top: 4px;
     padding-left: 24px;
   }
@@ -4367,11 +4369,13 @@
   .map-chart { margin: 4px 0; }
   /* The chart's colours: js/settings-map-chart.js reads them off the plot at every render, and the legend under it draws its marks in them. */
   .settings-map-plot, .map-legend {
-    /* Dots are see-through with a thin line around them, so a pile of them reads darker than one. */
-    --map-dot: rgba(134, 118, 255, 0.2);                /* a combination of settings */
-    --map-dot-edge: rgba(96, 82, 214, 0.42);            /* the line around it */
-    --map-dot-sized: rgba(134, 118, 255, 0.26);         /* a tested one, sized by how it holds */
-    --map-dot-sized-edge: rgba(96, 82, 214, 0.85);      /* the line around that */
+    /* Dots are see-through with a thin line around them, so a pile of them reads darker than one. Faint, so that
+       tens of thousands still show where they pile up (the user, 2026-11-26, of a map gone solid: "maybe use even
+       smaller pacity"; were 0.2 / 0.42 and 0.26 / 0.85). */
+    --map-dot: rgba(134, 118, 255, 0.06);               /* a combination of settings */
+    --map-dot-edge: rgba(96, 82, 214, 0.2);             /* the line around it */
+    --map-dot-sized: rgba(134, 118, 255, 0.07);         /* a tested one, sized by how it holds */
+    --map-dot-sized-edge: rgba(96, 82, 214, 0.45);      /* the line around that */
     --map-hold: #ffcc00;                                /* buy and hold TQQQ */
     --map-hold-text: #8a6a00;                           /* and its name */
     --map-better: rgba(134, 118, 255, 0.1);       /* the quarter better on both counts */
@@ -4431,8 +4435,9 @@
   .map-key { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
   .map-key .info-icon { margin: 0; }
   .map-key i { flex: none; }
-  .map-key-dot { box-sizing: border-box; border: 1px solid var(--map-dot-sized-edge); border-radius: 50%; background: var(--map-dot-sized); }
-  .map-key-dot.is-pale { width: 4px; height: 4px; border-color: var(--map-dot-edge); background: var(--map-dot); }
+  /* The legend's dots stronger than one dot on the plot, which only shows as part of a pile. */
+  .map-key-dot { box-sizing: border-box; border: 1px solid rgba(96, 82, 214, 0.85); border-radius: 50%; background: rgba(134, 118, 255, 0.26); }
+  .map-key-dot.is-pale { width: 4px; height: 4px; border-color: rgba(96, 82, 214, 0.42); background: rgba(134, 118, 255, 0.2); }
   .map-key-dot.is-small { width: 7px; height: 7px; }
   .map-key-dot.is-hold { width: 11px; height: 11px; border: 1.5px solid var(--text); background: var(--map-hold); }
   .map-key-dot.is-best { width: 11px; height: 11px; border: 1.5px solid var(--text); background: var(--green); }
