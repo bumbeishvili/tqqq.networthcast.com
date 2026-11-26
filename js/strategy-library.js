@@ -39,8 +39,8 @@ const STRATEGY_LIBRARY = [
     rules: 'Each month end, pick the stronger of SPY and QQQ over 399 trading days. Enter: it beat T-bills → SPY if SPY led, QLD if QQQ led. Exit: it did not → SOXL. Switch: sell today, buy tomorrow. Freq: monthly.',
     here: '—', reported: 'Widely-cited momentum framework; LETF amplifies premium + whipsaw · T-bills here are the cash interest setting · defaults from your pick on the map of 2010–2025 (26 November 2026), 399 days with QLD when QQQ leads and SOXL when out: 41.5% a year, max drawdown 52% (the rounded fit before, 430 days with TQQQ and GLD: 41.5%, 70%; published settings: 30.1%, 76%) · the gain is SOXL’s: with GLD when out 23.6%, with cash 21.3% · 398 days 34.5% (63%), 400 days 37.5% (55%) · 2026 to 25 November −3% (before −40%) · 1994–2009 on the reconstructed prices −16.1% a year (before 1.5%)', src: 'QP' },
   { n: 8, name: 'Siegel 200-day ±1% band', tag: 'origin', runnable: true,
-    rules: 'Signal: SPY vs its 145-day average with a ±3.5% band. Enter: SPY closes 3.5% above → TQQQ. Exit: SPY closes 3.5% below → cash. Freq: daily.',
-    here: '—', reported: 'Origin of the whipsaw-buffer idea (DJIA 1886–2006) · defaults fitted to 2010–2025 and rounded: 37.7% a year, max drawdown 59% (published settings: 27.8%, 66%)', src: 'F' },
+    rules: 'Signal: SPY vs its 166-day average with a ±3.2% band. Enter: SPY closes 3.2% above → TQQQ. Exit: SPY closes 3.2% below → cash. Freq: daily.',
+    here: '—', reported: 'Origin of the whipsaw-buffer idea (DJIA 1886–2006) · defaults from your pick on the map of 2010–2025 (27 November 2026): a 3.2% band around the 166-day average (the rounded fit before, 3.5% and 145 days: 38.8% a year, max drawdown 57%, at the cost and interest below; published settings: 27.8%, 66%) · one step either way: a 3.1% band 36.2% (62%), 3.3% 38.1% (47%), 167 days 38.3% (47%)', src: 'F' },
   { n: 10, name: 'Bare trend line', formerNames: ['QQQ 200-day → TQQQ', 'QQQ 200-day → TQQQ (matched index, cash park)'], tag: 'app', runnable: true,
     rules: 'Signal: QQQ vs its 160-day median → trade TQQQ. Enter: above → TQQQ. Exit: below → cash. Freq: daily.',
     here: '32.8% / −55.9%', reported: "The app's canonical SMA config · defaults fitted to 2010–2025 and rounded: 36.7% a year, max drawdown 55% (published settings: 30.2%, 56%)", src: 'F·BH' },
@@ -407,7 +407,7 @@ STRATEGY_LIBRARY.push(
 // js/strategy-library-code.js; the user: "make sure all strategies have switching cost and cash percentage"). Their
 // notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
 // [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
-const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [24.5, 53], 3: [18.3, 39], 8: [38.8, 57], 10: [37.5, 55], 12: [15.9, 40], 13: [44.8, 77], 15: [41.6, 54],
+const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [24.5, 53], 3: [18.3, 39], 8: [39.0, 44], 10: [37.5, 55], 12: [15.9, 40], 13: [44.8, 77], 15: [41.6, 54],
   17: [21.0, 38], 18: [36.0, 72], 19: [43.6, 70], 20: [42.9, 75], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [32.0, 59], 56: [34.4, 36] };
 for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
   const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025).`;

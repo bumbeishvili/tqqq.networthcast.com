@@ -384,13 +384,14 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #8 Siegel ±band: SPY vs 200-SMA symmetric band → TQQQ/cash.
+// #8 Siegel ±band: SPY vs 200-SMA symmetric band → TQQQ/cash. Since 27 November 2026 the defaults are the user's pick
+// on the map of 2010-2025 ("set these as default"): a 3.2% band around the 166-day average (were 3.5% and 145 days).
 CODE[8] = `{
   name: "Siegel ±band SPY 200SMA → TQQQ/cash",
   params: [{ id: "band", label: "Band (% around line)", text: "Buy TQQQ when SPY closes {} above its line, and sell when it closes that far below.", unit: "%", options:
-      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 3.5 },
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 3.2 },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), Array.from({ length: 31 }, (_, k) => 74 + k), [110, 120], Array.from({ length: 24 }, (_, k) => 125 + k), Array.from({ length: 82 }, (_, k) => 149 + k), [240], Array.from({ length: 31 }, (_, k) => 246 + k), Array.from({ length: 23 }, (_, k) => 280 + 10 * k)), default: 145 },
+      [5].concat(Array.from({ length: 7 }, (_, k) => 10 + 10 * k), Array.from({ length: 31 }, (_, k) => 74 + k), [110, 120], Array.from({ length: 24 }, (_, k) => 125 + k), Array.from({ length: 82 }, (_, k) => 149 + k), [240], Array.from({ length: 31 }, (_, k) => 246 + k), Array.from({ length: 23 }, (_, k) => 280 + 10 * k)), default: 166 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
