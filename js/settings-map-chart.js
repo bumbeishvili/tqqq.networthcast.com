@@ -317,17 +317,19 @@ class SettingsMapChart {
     box.attr('x', size.x - PAD.x).attr('y', size.y - PAD.y).attr('width', size.width + 2 * PAD.x).attr('height', size.height + 2 * PAD.y);
   }
 
-  // The dot at a point of the plot, or null: of the dots whose edge is within hitRadius, the one
-  // whose centre is nearest. So a large dot is as easy to reach as a small one, and a small dot
-  // lying on a large one is still the one under the pointer.
+  // The dot at a point of the plot, or null. A point inside dots' areas is the biggest of them,
+  // the nearest centre among equals (the user, 2026-11-26: "small circle center might be close,
+  // but if big circle area covers click area, activate big circle, so priority"). A point outside
+  // every dot is the dot whose centre is nearest among those whose edge is within hitRadius.
   dotAt(px, py) {
     const { seen, hitRadius } = this.getState();
-    let near = null, least = Infinity;
+    let inside = null, insideAway = Infinity, near = null, least = Infinity;
     for (const m of seen || []) {   // a plain loop: this runs on every pointer move, over every dot in view
       const away = Math.hypot(m.px - px, m.py - py);
+      if (away <= m.r && (!inside || m.r > inside.r || (m.r === inside.r && away < insideAway))) { inside = m; insideAway = away; }
       if (away - m.r <= hitRadius && away < least) { least = away; near = m.d; }
     }
-    return near;
+    return inside ? inside.d : near;
   }
 
   // A rect over the plot owns the pointer: the ring and the caller's tooltip

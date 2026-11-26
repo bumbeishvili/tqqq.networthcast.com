@@ -1229,7 +1229,7 @@ const MIX_BOOKS_SNIPPET = `    const cost = (p.tradeCost || 0) / 100;
 
 // The three settings every mixed-fund strategy ends with. Their values are
 // costs and execution, not rules, so Fit leaves them alone (fit: false).
-const mixCostParams = (cashTip) => `{ id: "splitDays", fit: false, label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+const mixCostParams = (cashTip) => `{ id: "splitDays", label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ],
       tip: "Yes waits a day between the sale and the purchase. No does both at the same close." },
     { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
@@ -1628,7 +1628,7 @@ CODE[40] = `{
       [2].concat(Array.from({ length: 6 }, (_, k) => 5 + 5 * k), Array.from({ length: 82 }, (_, k) => +(34.5 + 0.5 * k).toFixed(1)), Array.from({ length: 45 }, (_, k) => 80 + 5 * k)) },
     // type:"bool" is required — without it the sandbox coerces the pick to the
     // STRING "false", which is truthy, and the toggle silently does nothing.
-    { id: "splitDays", fit: false, label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },
@@ -1886,7 +1886,7 @@ CODE[41] = `{
     { id: "belowGate", label: "Only after days below line", text: "And only after {} closes in a row under the line.", default: 10, options:
       [{ value: 0, label: "Off" }].concat(Array.from({ length: 100 }, (_, k) => 1 + k)) },
     { section: "Execution & costs" },
-    { id: "splitDays", fit: false, label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
@@ -2229,7 +2229,7 @@ CODE[44] = `{
       { value: "cycle", label: "NFCI calms OR a crash exit→recovery completes" },
       { value: "nfci", label: "NFCI calms only" } ] },
     { section: "Execution & costs" },
-    { id: "splitDays", fit: false, label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", label: "One trade per day", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
@@ -2616,7 +2616,7 @@ CODE[45] = `{
     { id: "sliceCap", label: "Slices per sold-out stint", tip: "Slices allowed before the strategy is fully back in.", text: "Slices allowed per sold-out stint: {}.", default: 1, options:
       Array.from({ length: 100 }, (_, k) => 1 + k).concat([{ value: 999, label: "No limit" }]) },
     { section: "Execution & costs" },
-    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "cashRate", fit: false, label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
@@ -3155,7 +3155,7 @@ CODE[47] = `{
     { id: "nfciVeto", label: "Credit veto (NFCI above)", tip: "Cash instead of TQQQ while the Chicago Fed's credit stress index is above this. Each weekly reading is used a week later.", text: "Hold cash instead of TQQQ while credit stress (NFCI) is above {}.", default: 0.5, options:
       [{ value: 0, label: "Off" }].concat(Array.from({ length: 141 }, (_, k) => +(0.1 + 0.01 * k).toFixed(2))) },
     { section: "Execution & costs" },
-    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch sells today and buys tomorrow. No: both at one close.", text: "Spread each switch over two days, selling at one close and buying at the next: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "cashRate", fit: false, label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,10,11,12] },
@@ -5081,7 +5081,7 @@ CODE[55] = `{
     { id: "tomAfter", label: "Turn: first days of a month", tip: "With the turn pattern: how many of the next month's first trading days TQQQ is held through.", text: "and the first {} trading days of the next.", default: 3, options: Array.from({ length: 11 }, (_, k) => k) },
     { id: "offHold", label: "Outside the window", tip: "What the money holds outside the TQQQ window.", text: "Outside the window hold {}.", default: "cash", options: [
       { value: "cash", label: "cash" }, { value: "qqq", label: "QQQ" } ] },
-    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch between TQQQ and QQQ sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch between TQQQ and QQQ sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] }
   ],
   columns: [{ key: "inWindow", label: "TQQQ window", tip: "1 while the calendar window holds TQQQ, 0 outside it." }],
@@ -5284,7 +5284,7 @@ function bareStrategy(spec) {
   const parkParam = !spec.park ? '' : `    { id: "park", label: "${spec.park.label}", tip: "${spec.park.tip}", text: "${spec.park.text}", default: "${spec.park.default || 'cash'}", options:
       ${JSON.stringify([{ value: "cash", label: "cash" }].concat(bareFundOptions(spec.fund ? BARE_FUNDS : BARE_PARK_FUNDS)))} },
 `;
-  const splitParam = !(spec.park || spec.out) ? '' : `    { id: "splitDays", fit: false, label: "One trade per day", tip: "Yes: a switch between ${spec.fund ? 'two funds' : 'TQQQ and the other fund'} sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days, selling at one close and buying at the next: {}.", type: "bool", default: ${spec.splitDefault === false ? 'false' : 'true'},${spec.out ? '' : ' when: { park: ' + JSON.stringify(BARE_PARK_FUNDS) + ' },'} options: [
+  const splitParam = !(spec.park || spec.out) ? '' : `    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch between ${spec.fund ? 'two funds' : 'TQQQ and the other fund'} sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days, selling at one close and buying at the next: {}.", type: "bool", default: ${spec.splitDefault === false ? 'false' : 'true'},${spec.out ? '' : ' when: { park: ' + JSON.stringify(BARE_PARK_FUNDS) + ' },'} options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
 `;
   return `{

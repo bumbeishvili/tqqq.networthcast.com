@@ -130,7 +130,7 @@ const MAP_FREEZE_TIP = [
   'The map then runs again without the combinations that change it.',
   'The Fit window uses the same ticks.',
 ].join('\n');
-const MAP_LINK_TIP = 'Copy a link that opens this map and starts it running.';
+const MAP_LINK_TIP = 'Share a link that opens this map and starts it running.';
 const MAP_CSV_TIP = "Download every dot as a CSV file: CAGR, max drawdown, and each setting's value.";
 const MAP_HOLD_LABEL = 'B&H TQQQ';   // buy and hold TQQQ, the yellow point
 const MAP_HOLD_TIP = 'Buy and hold TQQQ over the same years, with the same money.';
@@ -507,9 +507,9 @@ async function mapFill(map, measure, over) {
   while (!over()) {
     mapSync(map);
     const before = mapFrontMark(map);
-    // A picked dot is checked ahead of everything else.
-    const picked = map.picked ? map.dots.get(map.picked) : null;
-    if (picked && !picked.flat) await mapCheck(map, picked.values, measure);
+    // The dot the column shows is checked ahead of everything else: the clicked one, else the best.
+    const shown = map.picked ? map.dots.get(map.picked) : mapBestDot(map);
+    if (shown && !shown.flat) await mapCheck(map, shown.values, measure);
     if (over()) return false;
     const sets = mapBreed(map, rand, MAP_BREED);
     await Promise.all(sets.map(measure));
@@ -624,7 +624,7 @@ function buildMapWindowHtml(key, choices) {
     + `<div class="map-legend">${MAP_LEGEND.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${_escHtml(key.name)}${key.tip ? mapTipIcon(key.tip, key.tipAttr ? ' ' + key.tipAttr : '') : ''}</span>`).join('')}</div></div>`
     + `<div class="map-side"><div class="map-detail"></div></div></div>`
     + `<div class="fit-window-foot map-foot"><span class="map-status"><span class="map-count"></span>${mapTipIcon(MAP_RUN_TIP)}</span>`
-    + `<button type="button" class="map-csv-btn" data-map-link title="${_escHtml(MAP_LINK_TIP)}">Link</button>`
+    + `<button type="button" class="map-csv-btn" data-map-link title="${_escHtml(MAP_LINK_TIP)}">Share</button>`
     + `<button type="button" class="map-csv-btn" data-map-csv title="${_escHtml(MAP_CSV_TIP)}">CSV</button>`
     + `<button type="button" class="fit-run-btn map-run-btn" data-map-run></button></div></div>`
     + `<div class="map-tip" hidden></div>`;
@@ -704,9 +704,8 @@ function onMapWindowClick(e) {
   if (on('[data-map-close]')) { closeMapWindow(true); return; }
   if (on('[data-map-run]')) { if (map.run) stopMapWork(map); else startMapFill(map); return; }
   if (on('[data-map-csv]')) { downloadMapCsv(map); return; }
-  if (on('[data-map-link]')) { shareConfig(); return; }   // the page's share link, which names the open map (mapShareParams)
+  if (on('[data-map-link]')) { shareConfig(true); return; }   // the page's share link, which names the open map (mapShareParams), to the share sheet where there is one
   if (on('[data-map-clear]')) { pickMapDot(null); return; }
-  if (on('[data-map-freeze-reset]')) { setFitFreezeChoices(map.key, {}); redoMap(map); return; }
   if (on('[data-map-use]')) useMapDot(map);
 }
 // A dot picked on the chart (null: none). Unchecked, it is checked ahead of the others: a map
@@ -840,7 +839,7 @@ function hideMapTip() {
 // numbers, its worst case, and the whole strategy as its Settings read, which is the Freeze list
 // too: a tick box on each value a search can change (redoMap). The set is the dot that was
 // clicked, a value it changes struck through with the new one beside it, with Use and Clear
-// (which lets the dot go); until one is clicked, the settings as they are. The user (2026-11-25), of the search's result picked for
+// (which lets the dot go); until one is clicked, the best dot (the settings as they are before any). The user (2026-11-25), of the search's result picked for
 // the reader when it came in: "make sure this does not open without clicking, it appeared
 // sudden", and "display clicked strategy it's own scrollable container on the right". Written
 // only when it changes: it is asked for many times a second while a map fills, and a button
@@ -853,7 +852,9 @@ function showMapDetail() {
 }
 function mapDetailHtml(map) {
   const { job } = map;   // none while every setting is frozen: the column is then the Freeze list alone
-  const picked = job && map.picked ? map.dots.get(map.picked) : null, dot = job ? picked || mapNowDot(map) : null;   // no dot at all before the first run comes in
+  // The clicked dot; until one is clicked the best (the user, 2026-11-26: "when strategy search is happening, make sure
+  // by default best is chosen on the right"); before any dot, the settings as they are; none before the first run.
+  const picked = job && map.picked ? map.dots.get(map.picked) : null, dot = job ? picked || mapBestDot(map) || mapNowDot(map) : null;
   const free = new Map(job ? job.space.map(s => [s.id, s]) : []);
   const settings = fitSettings(map.key), byId = new Map(settings.map(s => [s.id, s])), choices = fitFreezeChoices(map.key);
   // A value as it is, or where the dot changes it the one it has now struck through with the dot's
@@ -869,15 +870,14 @@ function mapDetailHtml(map) {
     dot === best ? `${MAP_BEST_LABEL}: ${mapValueText(mapDotValue(dot))}, the most here.`
       : best ? `${mapValueText(mapDotValue(dot))}. The best makes ${mapMoneyText(mapDotValue(best))}.` : '',
     dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what Run in the Fit window would pick.` : '',
-    dot.flat ? mapWorstText(job, dot) : picked && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
+    dot.flat ? mapWorstText(job, dot) : (picked || dot === best) && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
   const changed = fitFreezeChanged(settings, choices);
   return (dot ? `<div class="map-detail-head"><span>CAGR <b>${fitCagrText(job.cagrOf, dot.r)}</b>, max drawdown <b>${fitDdText(dot.r)}</b></span>`
     + (dot.differs ? '<button type="button" class="map-use-btn" data-map-use>Use</button>' : '')
     + (picked ? '<button type="button" class="map-clear-btn" data-map-clear>Clear</button>' : '') + '</div>' : '')
     + notes.map(note => `<div class="map-near">${_escHtml(note)}</div>`).join('')
     + `<div class="map-strategy"><div class="map-freeze-head"><b>Freeze</b>${mapTipIcon(MAP_FREEZE_TIP)}<span class="fit-freeze-notice">${fitFreezeNotice(changed)}</span></div>`
-    + buildFitStrategyHtml(map.key, value)
-    + `<button type="button" class="fit-freeze-reset" data-map-freeze-reset${changed ? '' : ' disabled'}>Reset</button></div>`;
+    + buildFitStrategyHtml(map.key, value) + '</div>';
 }
 // The frozen settings or the years changed: the map is worked out again for the settings that are
 // free now, on the years picked now. The user (2026-11-25): "I want freeze component to also

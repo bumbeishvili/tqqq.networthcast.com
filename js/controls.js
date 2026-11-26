@@ -772,7 +772,9 @@ const SHARE_FRAGMENT_PARAMS = ['scz', 'sc', 'txz', 'tx'];
 // the exact same view. Includes sliders, strategy params, toggles, envelope
 // opacity, dataset visibility (per-line legend toggles), and the analytics
 // modal state (open + selected strategy + selected baseline).
-async function shareConfig() {
+// sheet: hand the link to the device's share sheet where there is one (the map's Share); else, and
+// from the page's own Share button, copy it.
+async function shareConfig(sheet) {
   const get = (id) => document.getElementById(id);
   const params = new URLSearchParams();
   // Snapshot the pinned range NOW, before any await below — the click that
@@ -1016,6 +1018,11 @@ async function shareConfig() {
   const fragmentText = fragment.toString();
   const url = window.location.origin + window.location.pathname + '?' + params.toString() + (fragmentText ? '#' + fragmentText : '');
 
+  // Closing the sheet without sharing rejects with an AbortError, which is no failure; a sheet that cannot open copies the link.
+  if (sheet && navigator.share) navigator.share({ title: document.title, url }).catch((e) => { if (e.name !== 'AbortError') copyShareLink(url); });
+  else copyShareLink(url);
+}
+function copyShareLink(url) {
   const toast = document.getElementById('share-toast');
   if (toast) toast.textContent = 'Link copied to clipboard';
   navigator.clipboard.writeText(url).then(() => {
