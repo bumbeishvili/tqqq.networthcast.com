@@ -1242,18 +1242,20 @@ const mixCostParams = (cashTip) => `{ id: "splitDays", label: "One trade per day
 // #7 Antonacci dual momentum, leveraged: at each month end, the stronger of
 // SPY and QQQ over 12 months; if it beat cash over the same months, hold its
 // 3× fund (SPXL or TQQQ), else cash. Cash stands in for T-bills, at the cash
-// interest setting, which is also the return to beat.
+// interest setting, which is also the return to beat. Since 26 November 2026 the defaults are the user's pick on the
+// map of 2010 to 2025 ("set this as default"): 399 days, QLD when QQQ leads, SOXL when the better one earned less
+// than cash (were 430, TQQQ and GLD).
 CODE[7] = `{
   name: "Antonacci dual momentum — SPY vs QQQ → SPXL/TQQQ or cash",
   params: [
-    { id: "lookback", label: "Lookback (days)", text: "At each month end, compare SPY's and QQQ's returns over the last {} trading days.", default: 430, options:
+    { id: "lookback", label: "Lookback (days)", text: "At each month end, compare SPY's and QQQ's returns over the last {} trading days.", default: 399, options:
       Array.from({ length: 21 }, (_, k) => 21 + 5 * k).concat(Array.from({ length: 253 }, (_, k) => 126 + k), Array.from({ length: 101 }, (_, k) => 380 + k), Array.from({ length: 6 }, (_, k) => 484 + 4 * k)),
       tip: "252 trading days is 12 months, the length Antonacci uses." },
     { id: "spFund", label: "When SPY leads", text: "If SPY did better, hold {}.", default: "spy", options: ${fundOptionsSrc(["spxl", "sso", "spy"], LONG_FUNDS)},
       tip: "The fund held while SPY has the higher return." },
-    { id: "nqFund", label: "When QQQ leads", text: "If QQQ did better, hold {}.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "qqq"], LONG_FUNDS)},
+    { id: "nqFund", label: "When QQQ leads", text: "If QQQ did better, hold {}.", default: "qld", options: ${fundOptionsSrc(["tqqq", "qld", "qqq"], LONG_FUNDS)},
       tip: "The fund held while QQQ has the higher return." },
-    { id: "park", label: "Held when out", text: "When the better one earned less than cash, hold {} instead.", default: "gld", options: ${fundOptionsSrc(["cash", "gld"], OUT_FUNDS)},
+    { id: "park", label: "Held when out", text: "When the better one earned less than cash, hold {} instead.", default: "soxl", options: ${fundOptionsSrc(["cash", "gld"], OUT_FUNDS)},
       tip: "Cash earns the cash interest, standing in for T-bills." },
     ${mixCostParams("What cash earns, as T-bills would. It is also the return the better fund must beat.")}
   ],
