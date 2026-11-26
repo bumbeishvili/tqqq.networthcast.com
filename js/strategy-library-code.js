@@ -5046,9 +5046,31 @@ const lateWeekTexts = (late) => [
   `{ section: "${late.section}", tip: "${late.tip}" }`,
   `TQQQ fell ${late.mondayFell} on average on the Monday after such a close and moved ${late.mondayElse} after the others.`,
   late.trendTip];
-CODE[74] = lateWeekTexts(Object.assign({ section: "Late-week SQQQ" }, FIT_LATE_WEEK)).reduce(
-  (text, was, k) => replacedOnce(text, was, lateWeekTexts(FIT_2010_2025_LATE_WEEK)[k], `#74: #53's late-week text ${k + 1}`),
-  withDefaults(CODE[53], { name: FIT_2010_2025, defaults: FIT_2010_2025_DEFAULTS }));
+// #53 with other defaults, its three late-week texts swapped for the copy's own (#74, #76).
+const fitWithDefaults = (n, name, defaults, late) => lateWeekTexts(Object.assign({ section: "Late-week SQQQ" }, FIT_LATE_WEEK)).reduce(
+  (text, was, k) => replacedOnce(text, was, lateWeekTexts(late)[k], `#${n}: #53's late-week text ${k + 1}`),
+  withDefaults(CODE[53], { name, defaults }));
+CODE[74] = fitWithDefaults(74, FIT_2010_2025, FIT_2010_2025_DEFAULTS, FIT_2010_2025_LATE_WEEK);
+// ===== #76: "SOXL, TQQQ, QQQ - 1984-2025 fit" (the user, 2026-11-26, pasting the Fit note and the panel of their
+// copy of #53 after a pick on the map of 1984 to 2025: "Set a new 1984-2025 strategy and remove all others soxl
+// tqqq qqq strategies that were fit on 1983 today"; #53 is off the catalog since, js/strategy-library.js) =====
+// #53's rules with the note's 26 settings moved: lookback 554 days with the start averaged over ±57; ceiling at
+// 127% into SQQQ with no day limit of its own, back at 29%; the bear exit 28.5% under the median, only while the
+// median rises less than 8% a year, after 3 closes; overextended at 68% over a 256-day median; SQQQ 17 days at
+// most; NFCI over 0.36; SOXL's lead over 240 days, held from under -70% until it turns down 80 points, and only at
+// closes with SOXL over its 10-day average; Big days 14.5% up, 21.5% down; the Month-end dip from 33% to 68% under
+// the high, sold on the next month's first day; the late-week RSI skip at 29.5, the lagging week over 18 days, the
+// down trend on a 44-day median. The note read max drawdown 87.1% -> 54.5% on 1984 to 2025; these values give
+// both to the decimal, and with $80K and $3K a month a money-weighted 114.2% -> 144.2% a year (the note: 114.3%
+// -> 144.4%). The numbers are on the card. It is fitted on 1984 to 2025, so those years are no test of it.
+const FIT_1984_2025 = "SOXL, TQQQ, QQQ - 1984-2025 fit";
+const FIT_1984_2025_DEFAULTS = {
+  lookbackDays: 554, startAvgDays: 57, topLead: 127, topDays: 0, backLead: 29, bearUnder: 28.5, bearSlope: 8, bearCloses: 3, overPct: 68, overWindow: 256,
+  sqqqMaxDays: 17, nfciVeto: 0.36, soxlLeadDays: 240, soxlLeadEnter: -70, soxlSell: "turn", soxlTrail: 80, soxlConfirm: 10, bigRise: 14.5, bigDrop: 21.5,
+  dipUnder: 33, dipUnderMax: 68, dipSellDay: 1, lateRsiSkip: true, lateRsiLevel: 29.5, lateLagDays: 18, lateTrendDays: 44 };
+const FIT_1984_2025_LATE_WEEK = { section: "Late-week SQQQ", mondayFell: "1.88%", mondayElse: "+0.13%", trendTip: "On here, at 44 days.",
+  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 83 trades, 54% of them up, 3.8% each on average; about 40% of the gain came in 2022." };
+CODE[76] = fitWithDefaults(76, FIT_1984_2025, FIT_1984_2025_DEFAULTS, FIT_1984_2025_LATE_WEEK);
 // Steady fit with it, Q1 2010 to Q4 2025: 155.6% a year to 175.5% with the same 39.3% drawdown
 // (2010-17 91.1% to 94.7%, 2018-25 241.6% to 289.7%), 2026 the same. It is less steady with it:
 // the worst 12 months go from -4.0% to -35.1% (May 2014 to May 2015), and 2015 and 2021 make 8%
