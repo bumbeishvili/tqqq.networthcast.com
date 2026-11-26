@@ -91,8 +91,9 @@ const fmtWholePct = (v) => (v >= 0 ? '+' : '') + (Math.round(v) || 0).toLocaleSt
 const fmtCardDD = (pct) => (pct > 99 ? fmtDD(pct) : '−' + Math.round(pct) + '%');
 // The year so far after a CAGR on a card or a chip: its figure, small, tight to the CAGR and a little below its
 // baseline, and an ⓘ that says what it is (the user, 2026-11-26: "remove in 2026 text, just add info icon where it
-// will say what it is, move that small number closer to big number and a bitbottom").
-const yearCagrTip = () => `${dataYear()} so far: the yearly rate from the last close of ${dataYear() - 1} to the latest close, with this year's deposits counted.`;
+// will say what it is, move that small number closer to big number and a bitbottom"), in as few words as it takes
+// (the user, of a longer one: "just say this year cagr so far, what the fuck is with thos elengthy words").
+const yearCagrTip = () => `${dataYear()} CAGR so far`;
 const yearCagrHtml = (v) => `<span class="year-cagr"><span class="year-cagr-value ${v >= 0 ? 'positive' : 'negative'}">${fmtWholePct(v)}</span>`
   + `<span class="info-icon year-cagr-info" tabindex="0" data-tip="${yearCagrTip()}">ⓘ</span></span>`;
 // The year a CAGR "so far" is of: the year of the data's last day (2026 on 26 November 2026).
