@@ -48,8 +48,8 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: SSO\'s own price vs its 30-day median. Enter: above → SSO. Exit: below → cash. Freq: daily.',
     here: '14.9% / −42.2%', reported: 'Sharpe 0.555 vs 0.524 B&H SPY (5-yr) · defaults from your pick on the map of 2010–2025 (27 November 2026): SSO against its own 30-day median, 401 trades in 16 years (the rounded fit before, a 400-day average: 15.9% a year, max drawdown 40%, at the cost and interest below; published settings: 14.1%, 42%) · 20 days 13.4% (33%), 40 days 11.9% (36%), the average in place of the median 12.6% (32%)', src: 'SSO' },
   { n: 13, name: 'Hollywood +4%/−3% band', formerNames: ['Hollywood SPY 200SMA +4%/−3% → TQQQ/QQQ'], tag: 'community', runnable: true,
-    rules: 'Signal: SPY vs its 15-day median. Enter: SPY closes 3% above → TQQQ. Exit: SPY closes 5.5% below → QQQ (never cash). Freq: daily.',
-    here: '40.6% / −59.9%', reported: '27.3% CAGR · −95.8% DD · Sharpe 0.71 (1985–2026) · defaults fitted to 2010–2025 and rounded: 44.9% a year, max drawdown 77% (published settings: 38.9%, 60%)', src: 'HW' },
+    rules: 'Signal: SPY vs its 169-day average. Enter: SPY closes 3.2% above → TQQQ. Exit: SPY closes 2.5% below → QQQ (never cash). Freq: daily.',
+    here: '40.6% / −59.9%', reported: '27.3% CAGR · −95.8% DD · Sharpe 0.71 (1985–2026) · defaults from your pick on the map of 2010–2025 (27 November 2026): in at 3.2% over SPY’s 169-day average, QQQ at 2.5% under (the rounded fit before, 3% and 5.5% around a 15-day median: 44.8% a year, max drawdown 77%, at the cost and interest below; published settings: 38.9%, 60%) · in at 3.1% 40.6% (66%), out at 2.4% 40.9% (54%), 168 days 40.6% (54%), the median in place of the average 34.3% (72%)', src: 'HW' },
   { n: 14, name: 'Three-phase TQQQ/QLD/GLDM', tag: 'community', runnable: true,
     rules: 'Enter: SPY closes 0.5% above its 10-day median → TQQQ. Exit: SPY closes 7.5% under it → gold. After 640 days: gold, until SPY has gone 7.5% under and back 0.5% above. Switch: sell today, buy tomorrow. Freq: daily.',
     here: '—', reported: 'Published backtest sheet with dated trades · here GLD stands in for GLDM (0.40% vs 0.10% yearly fee) and cash for SGOV · defaults fitted to 2010–2025 and rounded: 54.7% a year, max drawdown 58% (published settings 4%/−3% bands, 200-day average, 366 days, 50/50 mixes: 28.9%, 51%)', src: '3PH' },
@@ -407,7 +407,7 @@ STRATEGY_LIBRARY.push(
 // js/strategy-library-code.js; the user: "make sure all strategies have switching cost and cash percentage"). Their
 // notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
 // [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
-const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [24.5, 53], 3: [18.3, 39], 8: [39.0, 44], 10: [43.8, 60], 12: [14.3, 25], 13: [44.8, 77], 15: [41.6, 54],
+const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [24.5, 53], 3: [18.3, 39], 8: [39.0, 44], 10: [43.8, 60], 12: [14.3, 25], 13: [42.4, 54], 15: [41.6, 54],
   17: [21.0, 38], 18: [36.0, 72], 19: [43.6, 70], 20: [42.9, 75], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [32.0, 59], 56: [34.4, 36] };
 for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
   const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025).`;

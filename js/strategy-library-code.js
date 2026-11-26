@@ -504,16 +504,18 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #13 Hollywood SPY 200SMA +4/-3 → TQQQ/QQQ.
+// #13 Hollywood SPY 200SMA +4/-3 → TQQQ/QQQ. Since 27 November 2026 the defaults are the user's pick on the map of
+// 2010-2025 ("set this default for this"): in at 3.2% over SPY's 169-day moving average, QQQ at 2.5% under (were 3%
+// and 5.5% around a 15-day median).
 CODE[13] = `{
   name: "Hollywood SPY 200SMA +4/-3 → TQQQ/QQQ",
   params: [{ id: "entry", label: "Enter band (% above)", text: "Hold TQQQ once SPY closes {} above its line.", unit: "%", options:
-      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 3 },
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 3.2 },
            { id: "exit", label: "Exit band (% below)", text: "Switch to QQQ once SPY closes {} below it.", unit: "%", options:
-      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 5.5 },
+      Array.from({ length: 101 }, (_, k) => +(0.1 * k).toFixed(1)), default: 2.5 },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      [5].concat(Array.from({ length: 31 }, (_, k) => 6 + k), Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)), default: 15 },
-           ${STAT_PARAM_MEDIAN_SNIPPET}],
+      [5].concat(Array.from({ length: 31 }, (_, k) => 6 + k), Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 104 }, (_, k) => 117 + k), Array.from({ length: 28 }, (_, k) => 230 + 10 * k)), default: 169 },
+           ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
              { key: "tqqqLine", label: "TQQQ line", tip: "Where SPY must close to switch to TQQQ: the center plus the enter band." },
