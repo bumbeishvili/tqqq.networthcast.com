@@ -74,6 +74,11 @@ const MAP_STALL_ROUNDS = 120;
 const MAP_SHOWN = 10;              // two results differ from a tenth of a point on, as the numbers read
 const MAP_NEAR_BEST = 12;          // the dots that make the most after MAP_BEST_YEARS, the nearest to the green line: a share of each round's sets is bred from them
 const MAP_BEST_SHARE = 0.5;        // that share
+const MAP_CLIMB_STEPS = [1, 2, 4, 8, 16];   // the places either way along a number setting's list a climb tries
+const MAP_CLIMB_PASSES = 20;       // a climb stops after this many passes over the settings, if it has not come to rest
+const MAP_KICK_SETTINGS = [2, 5];  // a kick moves this many of the best's settings, at least and at most
+const MAP_KICK_NEAR = 0.6;         // of a number setting's kicks, the share to a value near its own,
+const MAP_KICK_REACH = 0.15;       // within this share of its list's length either way; the rest to any value
 const MAP_PROGRESS = { star: 0.1, fit: 0.4, stall: 0.1 };   // the shares of the percentage for the first step, the search, and the quiet rounds at the end; the checks take the rest
 const MAP_FIT_LABEL = 'Fit';       // the name on the plot of the set the search ended on
 const MAP_WORST_LABEL = 'worst case';   // and of the end of a picked dot's dotted line
@@ -125,7 +130,8 @@ const MAP_WORST_TIP = [
 const MAP_RUN_TIP = [
   `The map tries new combinations until ${MAP_STALL_ROUNDS} rounds in a row find nothing better. Then it stops.`,
   'Half of them are bred from the dots nearest the green line.',
-  'From each new best it searches, one setting at a time, for a dot above the line.',
+  'From the best it climbs, one setting at a time, a few steps along its list, for a dot above the line.',
+  'Each round it also moves 2 to 5 of the best\'s settings at random and climbs from there.',
   'Stop pauses it. Resume continues.',
 ].join('\n');
 const MAP_FREEZE_TIP = [
@@ -391,11 +397,17 @@ function mapBreed(map, rand, count) {
 }
 // ---- Pushing the best dot up ----
 // The user (2026-11-26): "are we somehow able to drive mapping process to improve the best strategy
-// in map", then of the green line: "by best I mean above this line". From each new best dot the map
-// runs the Fit window's own search (fitSearch) for the most money after MAP_BEST_YEARS, one setting at a
-// time from the dot's values: what it ends on is above the line through the best, or the best itself. A dot it
-// set out from is kept with the runs (store.mapClimbed, with the free settings and the frozen
-// values), so a map opened again does not search from it again.
+// in map", then of the green line: "by best I mean above this line", then "So we did not improve
+// anything in finding the best variant quality wise. I am most interested in that". From the best
+// dot the map climbs: each shown setting tries a few values along its list with the others held, the
+// one that makes most after MAP_BEST_YEARS stays, until a pass moves nothing. Then, every round, a
+// kick: a few of the best's settings moved at random, and a climb from there. Measured against the
+// map's earlier search (Fit's own, every value of every setting) in the benchmark of 2026-11-26
+// (scratchpad search/bench.cjs, the same 20,000 runs each, the middle of three starts): 84-25 -
+// Late-week + overextended $1,301 against $1,147, 84-25 - SOXL, TQQQ, QQQ $12,188 against $7,745,
+// Min the same $569; after 2,000 runs $720 against $218 and $5,914 against $1,082. A dot climbed
+// from, and where its climb rests, are kept with the runs (store.mapClimbed, with the free settings
+// and the frozen values), so a map opened again does not climb from them again.
 // A result under MAP_BEST_MIN_CAGR scores nothing: the search then climbs by the final value alone until it is over.
 const mapBestRule = (job) => ({ goal: 'score', plateau: false, minFinal: -Infinity, maxDd: Infinity, scoreOf: (r) => { const cagr = mapCagr(job, r); return cagr >= MAP_BEST_MIN_CAGR ? mapBestValue(cagr, r.dd) : -Infinity; } });
 const mapClimbKey = (map, dot) => JSON.stringify([dot.id, map.job.space.map(s => s.id), mapHeld(map.job)]);
@@ -405,14 +417,65 @@ function mapUnclimbedBest(map) {
   const best = mapBestDot(map);
   return best && !mapClimbedOf(map.job).has(mapClimbKey(map, best)) ? best : null;
 }
-async function mapClimb(map, measure, from) {
-  const { job, run } = map, cur = Object.assign({}, from.values);
-  run.fit = { get stopped() { return run.stopped; }, stage: 1, stages: 1, phase: 'rounds', round: 1, done: 0, total: 0, base: 0, span: 1 };
-  await fitSearch(run.fit, fitSpaceOf({}, job.space), cur, { rule: mapBestRule(job), measure, cagrOf: job.cagrOf });
-  run.fit = null;
+// The values a climb tries for a setting from `own`: a number MAP_CLIMB_STEPS places either way along its
+// list, a named choice every other value.
+function mapClimbValues(s, own) {
+  const x = s.number(own);
+  if (x == null || s.numbered.length < 2) return s.values.filter(v => String(v) !== String(own));
+  const k = d3.leastIndex(s.numbered, o => Math.abs(o.x - x));
+  return MAP_CLIMB_STEPS.flatMap(d => [k - d, k + d]).filter(i => i >= 0 && i < s.numbered.length).map(i => s.numbered[i].v).filter(v => String(v) !== String(own));
+}
+const mapShuffled = (list, rand) => { const out = list.slice(); for (let i = out.length - 1; i > 0; i--) { const j = Math.floor(rand() * (i + 1)); [out[i], out[j]] = [out[j], out[i]]; } return out; };
+// A climb from `values`: each shown setting in turn, in a random order, tries its climb values with the
+// others held, and the one that scores higher than where the climb stands stays; until a pass moves
+// nothing (or MAP_CLIMB_PASSES). Resolves to where it rests: { values, r }.
+async function mapStepClimb(map, measure, values, rand) {
+  const { job, run } = map, rule = mapBestRule(job);
+  let cur = mapSettled(map.space, job.cur, values), r = await measure(cur);
+  for (let pass = 0; pass < MAP_CLIMB_PASSES && !run.stopped; pass++) {
+    let moved = false;
+    for (const s of mapShuffled(map.space, rand)) {
+      if (run.stopped) break;
+      if (s.values.length < 2 || !s.shown(cur)) continue;
+      const tries = mapClimbValues(s, cur[s.id]).map(v => mapSettled(map.space, job.cur, Object.assign({}, cur, { [s.id]: v })));
+      const results = await Promise.all(tries.map(measure));
+      let k = -1;
+      results.forEach((x, i) => { if (fitBetter(rule, x, k < 0 ? r : results[k])) k = i; });
+      if (k >= 0) { cur = tries[k]; r = results[k]; moved = true; }
+    }
+    if (!moved) break;
+  }
+  return { values: cur, r };
+}
+// A climb from a dot: it and where the climb rests are marked climbed from.
+async function mapClimb(map, measure, from, rand) {
+  const { job, run } = map, rest = await mapStepClimb(map, measure, from.values, rand);
   if (run.stopped) return;
   mapClimbedOf(job).add(mapClimbKey(map, from));
+  mapClimbedOf(job).add(mapClimbKey(map, { id: fitRunKey(job.store, rest.values) }));
   mapSync(map);
+}
+// A kick from the best: MAP_KICK_SETTINGS of its shown settings moved at random, a number mostly to a value
+// within MAP_KICK_REACH of its list's length of its own, else any value; then a climb from there.
+function mapKicked(map, values, rand) {
+  const out = Object.assign({}, values), [least, most] = MAP_KICK_SETTINGS, k = least + Math.floor(rand() * (most - least + 1));
+  for (const s of mapShuffled(map.space.filter(t => t.values.length > 1 && t.shown(out)), rand).slice(0, k)) {
+    const x = s.number(out[s.id]);
+    if (x != null && s.numbered.length > 1 && rand() < MAP_KICK_NEAR) {
+      const i = d3.leastIndex(s.numbered, o => Math.abs(o.x - x)), span = Math.max(2, Math.round(s.numbered.length * MAP_KICK_REACH));
+      out[s.id] = s.numbered[Math.max(0, Math.min(s.numbered.length - 1, i + Math.round((rand() * 2 - 1) * span)))].v;
+    } else out[s.id] = mapPick(rand, s.values);
+  }
+  return mapSettled(map.space, map.job.cur, out);
+}
+async function mapKick(map, measure, rand) {
+  const best = mapBestDot(map);
+  if (!best) return false;
+  const rest = await mapStepClimb(map, measure, mapKicked(map, best.values, rand), rand);
+  if (map.run.stopped) return false;
+  mapClimbedOf(map.job).add(mapClimbKey(map, { id: fitRunKey(map.job.store, rest.values) }));
+  mapSync(map);
+  return true;
 }
 // The next frontier set to check: an unchecked one of the frontier as the numbers show it; first
 // those that beat the settings as they are on both counts; of them the one furthest on the plot
@@ -499,6 +562,13 @@ async function mapFill(map, measure, over) {
     await Promise.all(sets.map(measure));
     run.star.done += sets.length;
   }
+  // From the best dot, a climb for one above the green line, and again from what it finds: first, so the
+  // best is pushed up early.
+  run.step = 'best';
+  for (let best = mapUnclimbedBest(map); best; best = mapUnclimbedBest(map)) {
+    await mapClimb(map, measure, best, rand);
+    if (over()) return false;
+  }
   if (map.ask) {
     run.step = 'fit';
     run.searched = 0;
@@ -507,12 +577,6 @@ async function mapFill(map, measure, over) {
       if (over()) return false;
       run.searched++;   // the first is the one the Fit window asked for: its result is marked "Fit", and picked only by a click
     }
-  }
-  // From the best dot, a search for one above the green line, and again from what it finds.
-  run.step = 'best';
-  for (let best = mapUnclimbedBest(map); best; best = mapUnclimbedBest(map)) {
-    await mapClimb(map, measure, best);
-    if (over()) return false;
   }
   // The rounds below came to their end before on these settings and this plan (in its other shape, or from another start): only the searches were missing.
   if (job.store.mapDone === map.doneKey) return true;
@@ -536,9 +600,10 @@ async function mapFill(map, measure, over) {
     if (steadier) await mapCheck(map, steadier, measure);
     if (over()) return false;
     mapSync(map);
-    // A new best, from the bred sets or the checks: the search for one above the line goes on from it.
+    // A new best, from the bred sets or the checks: a climb from it; else a kick from the best.
     const climbed = mapUnclimbedBest(map);
-    if (climbed) await mapClimb(map, measure, climbed);
+    if (climbed) await mapClimb(map, measure, climbed, rand);
+    else await mapKick(map, measure, rand);
     if (over()) return false;
     mapSync(map);
     const quiet = !onFrontier && !steadier && !climbed && mapFrontMark(map) === before;
@@ -555,7 +620,7 @@ function mapPercent(map) {
   const share = () => {
     if (run.step === 'star') return P.star * star;
     if (run.step === 'fit') return P.star + P.fit * (run.searched + (run.fit ? fitPercent(run.fit) / 100 : 0)) / map.plans.length;
-    if (run.step === 'best') return P.star + P.fit;
+    if (run.step === 'best') return P.star;
     const front = mapFronts(map).shownOwn, checks = front.length ? front.filter(mapFlat).length / front.length : 1;
     return P.star + P.fit + (1 - P.star - P.fit - P.stall) * checks + P.stall * run.stalled / MAP_STALL_ROUNDS;
   };
