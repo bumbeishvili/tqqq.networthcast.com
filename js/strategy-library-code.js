@@ -6295,16 +6295,18 @@ ${bareFn(rsiLevel)}
 
 // ===== #73: #72 with the overextended line of the fits (the user, 2026-11-24, on that day's study of
 // the two in one account: "I like this, put it in a separate strategy") =====
-// #72 acts in a down trend, the fund under its 30-day median. The line acts at the other end: the
-// fund is left while it closes more than 55% above the median of its last 255 closes, today's
-// included, and bought back at the first close that does not. It is the SQQQ line of #53 and #71,
-// read the same way. The two rules almost never act at once: since 2010 TQQQ closed over the line
-// on 450 days, and #72 held SQQQ on 5 of them.
-// Q1 2010 to Q4 2025 at the defaults: 198.3% a year (max drawdown 56%, worst 12 months -21%)
-// against 149.1% (56%, -39%) for #72; 2026 to 23 November +582% against +251%. The 68 stays over
-// the line of those years: SQQQ up in 54, x4.8 in all, x3.0 without the five best. The stays of
-// 11 sessions or more lose (SQQQ up in 5 of 15). 255 days and 55% were fitted inside #53 on these
-// same years; the drawdown is #72's own (March to November 2018) and the line leaves it alone.
+// #72 acts in a down trend, the fund under its median. The line acts at the other end: the fund is
+// left while it closes more than 54% above the median of its last 242 closes, today's included,
+// and bought back at the first close that does not. It is the SQQQ line of #53 and #71, read the
+// same way. The two rules almost never act at once: of the 383 closes over the line in 2010-2025,
+// #72's rule held SQQQ on 7.
+// The defaults since 26 November 2026 are the user's pick on the map of Q1 2010 to Q4 2025 ("set
+// this as default for this strategy"): the line at 54% over the 242-day median, and three of #72's
+// settings of its own, the down trend under the 41-day median or less than 0.5% over it and the RSI
+// over 9 days. Q1 2010 to Q4 2025: 223.9% a year (max drawdown 43%, worst 12 months -7%) against
+// 198.3% (56%, -21%) at the defaults until then (#72's own, 55% over the 255-day median, the fits'
+// line fitted inside #53 on these same years); 2026 to 25 November +472% against +528%. The 67 stays
+// over the line in 2010-2025: SQQQ up in 56, x5.8 in all, x3.7 without the five best.
 // withOverextendedLine adds the rule to #72's text, so #72's rules stay written once:
 //   - five settings in a section of their own: the rule on or off, the fund read, the level, the
 //     median's length, and what is held (SQQQ, cash or another fund);
@@ -6317,13 +6319,13 @@ function withOverextendedLine(base, spec) {
   const once = (text, find, repl, what) => replacedOnce(text, find, repl, `withOverextendedLine(${spec.name}): ${what}`);
   const shown = { when: { overTake: true } };
   const params = `    { section: "Overextended" },
-    { id: "overTake", label: "Overextended", tip: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 2010-2025 TQQQ closed more than 55% above its 255-day median in 68 stretches, and SQQQ rose over 54 of them.", text: "Leave the fund while a fund is overextended: {}.", type: "bool", default: true, options: [
+    { id: "overTake", label: "Overextended", tip: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 2010-2025 TQQQ closed more than ${spec.pct}% above its ${spec.days}-day median in 67 stretches, and SQQQ rose over 56 of them.", text: "Leave the fund while a fund is overextended: {}.", type: "bool", default: true, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] },
     { id: "overFund", label: "Overextended fund", tip: "The fund whose closes are read.", text: "Overextended is {} closing", default: "tqqq", when: { overTake: true }, options:
       ${JSON.stringify(bareFundOptions(BARE_FUNDS))} },
-${withoutOff(hostParam(spec.host, "overPct", { ...shown, label: "Overextended by", text: "more than {} above", default: spec.pct, tip: "How far above its median the close must be. With the 255-day median in 2010-2025: 50% made 164.3% a year, 55% 198.3%, 60% 188.0%. At 45% the rule costs more than it adds." }))}
+${withoutOff(hostParam(spec.host, "overPct", { ...shown, label: "Overextended by", text: "more than {} above", default: spec.pct, tip: `How far above its median the close must be. With the ${spec.days}-day median in 2010-2025: 50% made 193.0% a year, 54% 223.9%, 55% 214.5%, 60% 197.6%. At 45%, 165.3%; without the rule, 157.3%.` }))}
 ${hostParam(spec.host, "overWindow", { ...shown, label: "Median over (days)", text: "the median of its last {} closes.", default: spec.days, tip: "How many closes the median covers, today's included. 250 is about a year." })}
-    { id: "overHold", label: "Held overextended", tip: "What the money is in while overextended. Cash in SQQQ's place made 177.2% a year in 2010-2025 against 198.3%. On the week's own days out the fund held in between comes first.", text: "Hold {} until the first close back under that.", default: "${spec.hold}", when: { overTake: true }, options:
+    { id: "overHold", label: "Held overextended", tip: "What the money is in while overextended. Cash in SQQQ's place made 193.1% a year in 2010-2025 against 223.9%. On the week's own days out the fund held in between comes first.", text: "Hold {} until the first close back under that.", default: "${spec.hold}", when: { overTake: true }, options:
       ${JSON.stringify([{ value: "cash", label: "cash" }].concat(bareFundOptions(BARE_FUNDS)))} },
 `;
   const setup = `    // The overextended line: a fund's close against the median of its last closes, today's included, as
@@ -6374,7 +6376,11 @@ ${hostParam(spec.host, "overWindow", { ...shown, label: "Median over (days)", te
   t = once(t, 'cards: [card].concat(tripCards), decision: decision }', 'cards: [card].concat(overCards, tripCards), decision: overDecision }', 'the dashboard');
   return t;
 }
-CODE[73] = withOverextendedLine(CODE[72], { name: "Late-week + overextended SQQQ", host: CODE[71], pct: 55, days: 255, hold: "sqqq" });
+// The defaults the user set on 26 November 2026 from the map (the comment above): the line's two in
+// the spec, #72's three with withDefaults, so #72 itself keeps its own.
+const LATE_WEEK_OVER = "Late-week + overextended SQQQ";
+CODE[73] = withDefaults(withOverextendedLine(CODE[72], { name: LATE_WEEK_OVER, host: CODE[71], pct: 54, days: 242, hold: "sqqq" }),
+  { name: LATE_WEEK_OVER, defaults: { trendUnder: -0.5, trendDays: 41, rsiDays: 9 } });
 
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----
 // #10, #19, #7 and #20 chart the fund or the measure their rule reads. As bare entries they get

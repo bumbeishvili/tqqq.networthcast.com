@@ -4,9 +4,10 @@
  * js/strategy-library-code.js). Pure Node — no browser/server. Checks, on the repo's
  * own price history:
  *   1. its settings are #72's with the line's five in a section of their own, before
- *      the execution section, and #72's defaults untouched;
- *   2. with the rule off it trades as #72 does, row for row: a lump sum,
- *      contributions and a withdrawal, one trade per day;
+ *      the execution section, and #72's defaults but for the three it sets itself
+ *      (the user's pick on the map, 26 November 2026);
+ *   2. with the rule off it trades as #72 does at those three, row for row: a lump
+ *      sum, contributions and a withdrawal, one trade per day;
  *   3. at its defaults it holds, at every close, the line's fund where the line says
  *      so or #72 holds it, and #72's fund otherwise; with cash over the line, #72's
  *      days in its fund held in between come first;
@@ -29,7 +30,8 @@ const ck = (name, ok, detail) => {
 
 const MIN = 72, OVER = 73, STEADY = 71;
 const OVER_IDS = ['overTake', 'overFund', 'overPct', 'overWindow', 'overHold'];
-const LEVEL = 55, DAYS = 255;   // the line's defaults
+const LEVEL = 54, DAYS = 242;   // the line's defaults
+const OWN = { trendUnder: -0.5, trendDays: 41, rsiDays: 9 };   // #72's settings #73 sets its own defaults for
 const { dates, tqqq: T } = data;
 const START = dates.findIndex(d => d >= '2010-01-04') - 1, END = dates.findIndex(d => d >= '2026-11-23');
 const run = (n, settings = {}, contributions = {}) => { const strategy = strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions, startIdx: START, endIdx: END, dailyDisplay: true }); };
@@ -46,8 +48,9 @@ const min = strategyOf(MIN), over = strategyOf(OVER);
   const at = over.params.findIndex(param => param.section === 'Overextended');
   ck('the five follow that section in order', over.params.slice(at + 1, at + 6).map(param => param.id).join() === OVER_IDS.join());
   const minDefaults = defaultsOf(min), defaults = defaultsOf(over);
-  ck('#72\'s defaults are untouched', minIds.every(id => JSON.stringify(defaults[id]) === JSON.stringify(minDefaults[id])));
-  ck('the line\'s defaults: on, TQQQ, 55% over the 255-day median, SQQQ', JSON.stringify(OVER_IDS.map(id => defaults[id])) === JSON.stringify([true, 'tqqq', LEVEL, DAYS, 'sqqq']), JSON.stringify(OVER_IDS.map(id => defaults[id])));
+  ck('#72\'s defaults but for the three it sets itself, which #72 keeps as they were', minIds.every(id => JSON.stringify(defaults[id]) === JSON.stringify(id in OWN ? OWN[id] : minDefaults[id]))
+    && JSON.stringify([minDefaults.trendUnder, minDefaults.trendDays, minDefaults.rsiDays]) === '[0,30,10]', JSON.stringify(Object.keys(OWN).map(id => [id, minDefaults[id], defaults[id]])));
+  ck(`the line\'s defaults: on, TQQQ, ${LEVEL}% over the ${DAYS}-day median, SQQQ`, JSON.stringify(OVER_IDS.map(id => defaults[id])) === JSON.stringify([true, 'tqqq', LEVEL, DAYS, 'sqqq']), JSON.stringify(OVER_IDS.map(id => defaults[id])));
   const byId = Object.fromEntries(settingsOf(over).map(param => [param.id, param]));
   ck('the four that belong to the rule show only while it is on', OVER_IDS.slice(1).every(id => JSON.stringify(byId[id].when) === '{"overTake":true}'));
   ck('the level has no Off choice: the rule\'s own setting switches it', !byId.overPct.options.some(option => option && option.label === 'Off') && byId.overPct.options.length > 100);
@@ -59,9 +62,9 @@ const min = strategyOf(MIN), over = strategyOf(OVER);
   const monthly = Object.fromEntries(dates.slice(START + 1, END + 1).filter((date, k, all) => k === 0 || all[k - 1].slice(0, 7) !== date.slice(0, 7)).map(date => [date, 4000]));
   const withMoney = { ...monthly, '2020-06-15': -50000 };
   [['a lump sum', {}, {}], ['contributions and a withdrawal', {}, withMoney], ['one trade per day', { splitDays: true }, {}], ['cash in between', { park: 'cash' }, withMoney]].forEach(([tag, settings, contributions]) => {
-    ck(`rule off, ${tag}: #72 row for row`, sameRows(run(OVER, { ...settings, overTake: false }, contributions).log, run(MIN, settings, contributions).log));
+    ck(`rule off, ${tag}: #72 row for row`, sameRows(run(OVER, { ...settings, overTake: false }, contributions).log, run(MIN, { ...OWN, ...settings }, contributions).log));
   });
-  ck('rule off: no panel, no card, #72\'s call', (() => { const mine = run(OVER, { overTake: false }), theirs = run(MIN);
+  ck('rule off: no panel, no card, #72\'s call', (() => { const mine = run(OVER, { overTake: false }), theirs = run(MIN, OWN);
     return JSON.stringify(mine.lines) === JSON.stringify(theirs.lines) && JSON.stringify(mine.signals) === JSON.stringify(theirs.signals); })());
 }
 
@@ -71,13 +74,14 @@ const overAt = (() => {
   for (let i = DAYS - 1; i < dates.length; i++) {
     const sorted = Array.from(T.slice(i - DAYS + 1, i + 1)).sort((a, b) => a - b);
     if (!(sorted[0] > 0)) continue;
-    rel[i] = (T[i] / sorted[(DAYS - 1) / 2] - 1) * 100;   // 255 closes: the middle one
+    const mid = DAYS >> 1, median = DAYS % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;   // an even count: the two middle ones' average
+    rel[i] = (T[i] / median - 1) * 100;
     state[i] = rel[i] > LEVEL ? 1 : 0;
   }
   return { state, rel };
 })();
 const index = Object.fromEntries(dates.map((date, i) => [date, i]));
-const minHeld = Object.fromEntries(run(MIN).log.map(row => [index[row.date], row.held]));
+const minHeld = Object.fromEntries(run(MIN, OWN).log.map(row => [index[row.date], row.held]));
 
 // ---- 3. The holdings ----
 {
@@ -90,15 +94,14 @@ const minHeld = Object.fromEntries(run(MIN).log.map(row => [index[row.date], row
   const wrongCash = cash.filter(row => row.held !== (minHeld[index[row.date]] === 'SQQQ' ? 'SQQQ' : overAt.state[index[row.date]] ? 'CASH' : 'TQQQ'));
   ck('cash over the line: #72\'s SQQQ days come first', wrongCash.length === 0 && cash.some(row => row.held === 'CASH') && cash.some(row => overAt.state[index[row.date]] && row.held === 'SQQQ'), wrongCash.slice(0, 3).map(row => row.date + ' ' + row.held).join(', '));
   const same = run(OVER, { overHold: 'tqqq' });
-  ck('TQQQ over the line trades nothing: #72\'s rows, and the card says so', sameRows(same.log, run(MIN).log) && same.signals.cards.some(card => card.label === 'Overextended' && card.value === 'No trades' && /trades nothing/.test(card.tip)));
+  ck('TQQQ over the line trades nothing: #72\'s rows, and the card says so', sameRows(same.log, run(MIN, OWN).log) && same.signals.cards.some(card => card.label === 'Overextended' && card.value === 'No trades' && /trades nothing/.test(card.tip)));
 }
 
 // ---- 4. The reading and the books ----
 {
-  const mine = run(OVER), steady = run(STEADY).log;
+  const mine = run(OVER), steady = run(STEADY, { overPct: LEVEL, overWindow: DAYS }).log;   // #71 with the line set as #73's
   const offBy = (rows, theirs) => rows.reduce((worst, row) => (theirs(row) == null ? worst : Math.max(worst, Math.abs(row.overRel - theirs(row)))), 0);
   const steadyAt = Object.fromEntries(steady.map(row => [row.date, row.overPct]));
-  ck('#71 charts the line with the same settings, so the check below compares like with like', defaultsOf(strategyOf(STEADY)).overPct === LEVEL && defaultsOf(strategyOf(STEADY)).overWindow === DAYS);
   ck('the reading is #71\'s on every close', mine.log.every(row => row.overRel != null) && offBy(mine.log, row => steadyAt[row.date]) < 1e-9, 'off by ' + offBy(mine.log, row => steadyAt[row.date]));
   ck('and the one worked out here from the closes', offBy(mine.log, row => overAt.rel[index[row.date]]) < 1e-9);
   // The account from the holdings alone: a fund's move over each session, and the trading cost on each side of a switch.
@@ -124,16 +127,16 @@ const minHeld = Object.fromEntries(run(MIN).log.map(row => [index[row.date], row
 
 // ---- 6. Marks, notes and the dashboard ----
 {
-  const mine = run(OVER), PANEL = 'TQQQ vs its 255-day median', TRADES = ['buy', 'sell', 'switch'];
+  const mine = run(OVER), PANEL = `TQQQ vs its ${DAYS}-day median`, TRADES = ['buy', 'sell', 'switch'];
   const lines = mine.lines.filter(line => line.group === PANEL);
   ck('the line has a panel of its own at full height: the reading and the level, each with a price', lines.map(line => line.key).join() === 'overRel,overLevel' && lines.every(line => line.tall && line.unit === '%' && line.priceKey), JSON.stringify(lines));
   const trades = mine.log.filter(row => TRADES.includes(row.action)), byLine = trades.filter(row => row.firedBy === PANEL);
   const ins = byLine.filter(row => row.held === 'SQQQ'), outs = byLine.filter(row => row.held === 'TQQQ');
   ck('its trades are marked in that panel', ins.length > 50 && outs.length > 50, `${ins.length} in, ${outs.length} out`);
-  ck('a trade into SQQQ there says overextended, at a close over the level', ins.every(row => /^Overextended: TQQQ \+\d+\.\d% against its 255-day median, more than 55% above it$/.test(row.note) && row.overRel > LEVEL), (ins.find(row => !/^Overextended/.test(row.note)) || {}).note);
-  ck('a trade back says so, at a close not over it', outs.every(row => /^Back under the overextended level: TQQQ [+−]\d+\.\d% against its 255-day median, the level is 55% above it$/.test(row.note) && row.overRel <= LEVEL), (outs.find(row => !/^Back under/.test(row.note)) || {}).note);
-  ck('#72\'s own trades keep their panels', trades.some(row => row.firedBy === 'TQQQ vs its 30-day median') && trades.some(row => row.firedBy === 'SOXX vs QQQ, 20 days'));
-  ck('the level\'s price is the median times 1.55', mine.log.every(row => Math.abs(row.overPx / (row.overClose / (1 + row.overRel / 100)) - 1.55) < 1e-9));
+  ck('a trade into SQQQ there says overextended, at a close over the level', ins.every(row => new RegExp(`^Overextended: TQQQ \\+\\d+\\.\\d% against its ${DAYS}-day median, more than ${LEVEL}% above it$`).test(row.note) && row.overRel > LEVEL), (ins.find(row => !/^Overextended/.test(row.note)) || {}).note);
+  ck('a trade back says so, at a close not over it', outs.every(row => new RegExp(`^Back under the overextended level: TQQQ [+−]\\d+\\.\\d% against its ${DAYS}-day median, the level is ${LEVEL}% above it$`).test(row.note) && row.overRel <= LEVEL), (outs.find(row => !/^Back under/.test(row.note)) || {}).note);
+  ck('#72\'s own trades keep their panels', trades.some(row => row.firedBy === `TQQQ vs its ${OWN.trendDays}-day median`) && trades.some(row => row.firedBy === 'SOXX vs QQQ, 20 days'));
+  ck(`the level\'s price is the median times ${1 + LEVEL / 100}`, mine.log.every(row => Math.abs(row.overPx / (row.overClose / (1 + row.overRel / 100)) - (1 + LEVEL / 100)) < 1e-9));
   ck('the log has the line\'s column', over.columns.some(column => column.key === 'overRel' && column.tip));
   const { cards, decision } = mine.signals;
   ck('the dashboard has the line\'s card after #72\'s', cards.map(card => card.label).slice(0, 2).join() === 'Late-week SQQQ,Overextended', cards.map(card => card.label).join());
