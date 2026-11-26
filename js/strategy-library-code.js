@@ -5035,7 +5035,7 @@ CODE[53] = withDefaults(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults
 // by 0.5 to 2.6 points: at 27% the buy of 8 April 2025 is missed and the fit makes 242% a year in place
 // of 300%. From 28% to 45% it makes 281% to 302% with the same drawdown.
 // Three texts of #53's late-week settings state facts of #53's own trades; #74 carries its own.
-const FIT_2010_2025 = "SOXL, TQQQ - 2010-2025 fit";
+const FIT_2010_2025 = "10-25 - SOXL, TQQQ";   // was "SOXL, TQQQ - 2010-2025 fit" until 26 November 2026
 const FIT_2010_2025_DEFAULTS = {
   startAvgDays: 60, topDays: 10, backLead: 40, bearUnder: 25, bearSlope: 0, sqqqMaxDays: 0, soxlLeadDays: 360, soxlLeadEnter: -20, soxlLeadExit: 150,
   bigRise: 8.5, dipDay: 10, dipSellDay: 1, lateFund: "soxs", lateRsiSkip: true, lateRsiDays: 7, lateTrendDays: 45 };
@@ -5063,7 +5063,7 @@ CODE[74] = fitWithDefaults(74, FIT_2010_2025, FIT_2010_2025_DEFAULTS, FIT_2010_2
 // down trend on a 44-day median. The note read max drawdown 87.1% -> 54.5% on 1984 to 2025; these values give
 // both to the decimal, and with $80K and $3K a month a money-weighted 114.2% -> 144.2% a year (the note: 114.3%
 // -> 144.4%). The numbers are on the card. It is fitted on 1984 to 2025, so those years are no test of it.
-const FIT_1984_2025 = "1984 - SOXL, TQQQ, QQQ";   // was "SOXL, TQQQ, QQQ - 1984-2025 fit" until 26 November 2026
+const FIT_1984_2025 = "84-25 - SOXL, TQQQ, QQQ";   // was "SOXL, TQQQ, QQQ - 1984-2025 fit", then "1984 - SOXL, TQQQ, QQQ", on 26 November 2026
 const FIT_1984_2025_DEFAULTS = {
   lookbackDays: 554, startAvgDays: 57, topLead: 127, topDays: 0, backLead: 29, bearUnder: 28.5, bearSlope: 8, bearCloses: 3, overPct: 68, overWindow: 256,
   sqqqMaxDays: 17, nfciVeto: 0.36, soxlLeadDays: 240, soxlLeadEnter: -70, soxlSell: "turn", soxlTrail: 80, soxlConfirm: 10, bigRise: 14.5, bigDrop: 21.5,
@@ -6436,7 +6436,7 @@ CODE[73] = withDefaults(withOverextendedLine(CODE[72], { name: LATE_WEEK_OVER, h
 // It is the steady one of the two: one step either way on any of its eight number settings makes
 // 92.2% to 98.9% on 1984-2025 and 106.9% to 116.2% on 2010-2025. The tips that quote #73's own
 // facts are swapped for this entry's, or for plain ones where they quoted a study of other settings.
-const LATE_WEEK_84_25 = "1984 - Late-week + overextended SQQQ";   // was "Late week 84-25 steady fit" until 26 November 2026
+const LATE_WEEK_84_25 = "84-25 - Late-week + overextended SQQQ";   // was "Late week 84-25 steady fit", then "1984 - Late-week + overextended SQQQ", on 26 November 2026
 CODE[75] = withTips(withDefaults(CODE[73], { name: LATE_WEEK_84_25, defaults: {
   trendUnder: -1.5, trendDays: 33, rsiFund: "qqq", rsiLevel: 30.5, lagDays: 12, lagBy: 5.5, lagHold: "weekend", overFund: "soxx", overPct: 43, overWindow: 233 } }),
 { name: LATE_WEEK_84_25, tips: {
@@ -6712,8 +6712,8 @@ ${SMA_ENGINE_SOURCE}
 // strategy of the old kind can be a copy of (smaAsCodeConfig).
 const SMA_LIBRARY = {
   43: ["SMA 200", {"fund": "tqqq", "signal": "qqq", "window": 200, "entryBuf": 0, "exitBuf": 0, "confirmBuy": 0, "confirmSell": 0, "settleDays": 1, "rsiSellWindow": 9, "rsiSell": 90, "rsiBuyWindow": 7, "rsiBuy": 80, "outAsset": "cash", "cashRate": 4, "easeIn": 15, "easeOut": 15, "tradeCost": 0.02, "brakeAsset": "tqqq", "brakePct": 40, "brakeWindow": 200}],
-  33: ["SMA · max return 2010–2025", {"fund": "sso", "signal": "spy", "window": 280, "entryBuf": 5, "exitBuf": 1.9, "confirmBuy": 3, "confirmSell": 10, "settleDays": 5, "rsiSellWindow": 3, "rsiSell": 20, "rsiBuyWindow": 22, "rsiBuy": 55, "outAsset": "tqqq", "cashRate": 0, "easeIn": 10, "easeOut": 5, "tradeCost": 0.02, "brakeAsset": "tqqq", "brakePct": 55, "brakeWindow": 250}],
-  34: ["SMA · min drawdown 2010–2025", {"fund": "tqqq", "signal": "qqq", "window": 30, "entryBuf": 0.1, "exitBuf": 3.5, "confirmBuy": 3, "confirmSell": 10, "settleDays": 1, "rsiSellWindow": 4, "rsiSell": 65, "rsiBuyWindow": 17, "rsiBuy": 65, "outAsset": "sso", "cashRate": 0, "easeIn": 7, "easeOut": 42, "tradeCost": 0.02, "brakeAsset": "sso", "brakePct": 35, "brakeWindow": 270}],
+  33: ["10-25 - SMA · max return", {"fund": "sso", "signal": "spy", "window": 280, "entryBuf": 5, "exitBuf": 1.9, "confirmBuy": 3, "confirmSell": 10, "settleDays": 5, "rsiSellWindow": 3, "rsiSell": 20, "rsiBuyWindow": 22, "rsiBuy": 55, "outAsset": "tqqq", "cashRate": 0, "easeIn": 10, "easeOut": 5, "tradeCost": 0.02, "brakeAsset": "tqqq", "brakePct": 55, "brakeWindow": 250}],
+  34: ["10-25 - SMA · min drawdown", {"fund": "tqqq", "signal": "qqq", "window": 30, "entryBuf": 0.1, "exitBuf": 3.5, "confirmBuy": 3, "confirmSell": 10, "settleDays": 1, "rsiSellWindow": 4, "rsiSell": 65, "rsiBuyWindow": 17, "rsiBuy": 65, "outAsset": "sso", "cashRate": 0, "easeIn": 7, "easeOut": 42, "tradeCost": 0.02, "brakeAsset": "sso", "brakePct": 35, "brakeWindow": 270}],
   35: ["SMA · max return 1990–2025", {"fund": "spy", "signal": "qqq", "window": 30, "entryBuf": 13, "exitBuf": 12, "confirmBuy": 0, "confirmSell": 10, "settleDays": 5, "rsiSellWindow": 6, "rsiSell": 80, "rsiBuyWindow": 16, "rsiBuy": 70, "outAsset": "tqqq", "cashRate": 0, "easeIn": 7, "easeOut": 25, "tradeCost": 0.02, "brakeAsset": "sso", "brakePct": 30, "brakeWindow": 270}],
   36: ["SMA · min drawdown 1990–2025", {"fund": "tqqq", "signal": "spxl", "window": 220, "entryBuf": 0, "exitBuf": 5, "confirmBuy": 0, "confirmSell": 10, "settleDays": 0, "rsiSellWindow": 2, "rsiSell": 15, "rsiBuyWindow": 8, "rsiBuy": 45, "outAsset": "cash", "cashRate": 0, "easeIn": 4, "easeOut": 12, "tradeCost": 0.02, "brakeAsset": "sso", "brakePct": 30, "brakeWindow": 270}],
   37: ["SMA · max return 1953–2025", {"fund": "tqqq", "signal": "spxl", "window": 20, "entryBuf": 0.4, "exitBuf": 0.4, "confirmBuy": 0, "confirmSell": 0, "settleDays": 0, "rsiSellWindow": 12, "rsiSell": 80, "rsiBuyWindow": 17, "rsiBuy": 0, "outAsset": "spy", "cashRate": 0, "easeIn": 1, "easeOut": 6, "tradeCost": 0.02, "brakeAsset": "qld", "brakePct": 35, "brakeWindow": 300}],
@@ -6925,8 +6925,8 @@ ${NINESIG_ENGINE_SOURCE}
 // explorer's rows (#27-#32), each at its own settings (its former preset).
 const NINESIG_LIBRARY = {
   42: ["9sig", {"cashPct": 40, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "quarterly", "growth": 9, "crashDrop": 30, "crashWindow": 24, "spikeTarget": 60, "spike": 100, "buyPower": 90, "tradeCost": 0.02, "deploy": 0, "rebalancePoint": 0, "targetBase": "holding"}],
-  27: ["9sig · max return 2010–2025", {"cashPct": 90, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "monthly", "growth": 130, "crashDrop": 5, "crashWindow": 24, "spikeTarget": 0, "spike": 25, "buyPower": 100, "tradeCost": 0.02, "deploy": 75, "rebalancePoint": 10, "targetBase": "holding"}],
-  28: ["9sig · min drawdown 2010–2025", {"cashPct": 70, "parkAsset": "qld", "fund": "tqqq", "cashRate": 4, "period": "yearly", "growth": 12, "crashDrop": 25, "crashWindow": 21, "spikeTarget": 0, "spike": 100, "buyPower": 70, "tradeCost": 0.02, "deploy": 0, "rebalancePoint": 10, "targetBase": "holding"}],
+  27: ["10-25 - 9sig · max return", {"cashPct": 90, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "monthly", "growth": 130, "crashDrop": 5, "crashWindow": 24, "spikeTarget": 0, "spike": 25, "buyPower": 100, "tradeCost": 0.02, "deploy": 75, "rebalancePoint": 10, "targetBase": "holding"}],
+  28: ["10-25 - 9sig · min drawdown", {"cashPct": 70, "parkAsset": "qld", "fund": "tqqq", "cashRate": 4, "period": "yearly", "growth": 12, "crashDrop": 25, "crashWindow": 21, "spikeTarget": 0, "spike": 100, "buyPower": 70, "tradeCost": 0.02, "deploy": 0, "rebalancePoint": 10, "targetBase": "holding"}],
   29: ["9sig · max return 1990–2025", {"cashPct": 0, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "yearly", "growth": 150, "crashDrop": 5, "crashWindow": 36, "spikeTarget": 0, "spike": 200, "buyPower": 100, "tradeCost": 0.02, "deploy": 100, "rebalancePoint": 0, "targetBase": "holding"}],
   30: ["9sig · min drawdown 1990–2025", {"cashPct": 70, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "quarterly", "growth": 0.5, "crashDrop": 5, "crashWindow": 60, "spikeTarget": 0, "spike": 250, "buyPower": 70, "tradeCost": 0.02, "deploy": 50, "rebalancePoint": 30, "targetBase": "holding"}],
   31: ["9sig · max return 1953–2025", {"cashPct": 40, "parkAsset": "cash", "fund": "tqqq", "cashRate": 4, "period": "quarterly", "growth": 40, "crashDrop": 25, "crashWindow": 24, "spikeTarget": 0, "spike": 160, "buyPower": 85, "tradeCost": 0.02, "deploy": 100, "rebalancePoint": 30, "targetBase": "target"}],

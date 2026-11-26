@@ -1,5 +1,5 @@
 /*
- * Library strategy #74, "SOXL, TQQQ - 2010-2025 fit": #53 (the 1983 fit) at the settings of the
+ * Library strategy #74, "10-25 - SOXL, TQQQ" (was "SOXL, TQQQ - 2010-2025 fit"): #53 (the 1983 fit) at the settings of the
  * user's copy after a fit on Q1 2010 to Q4 2025 (the #74 section of js/strategy-library-code.js).
  * Pure Node — no browser/server. Checks, on the repo's own price history:
  *   1. its settings are #53's, in the same order, with sixteen defaults moved and no other:
@@ -48,7 +48,7 @@ const monthly = amount => Object.fromEntries(dates.slice(START + 1, END + 1).fil
   const byId = Object.fromEntries(settingsOf(mine).map(param => [param.id, param]));
   const optionValues = id => byId[id].options.map(option => (option && typeof option === 'object' ? option.value : option));
   ck('each of them is one of its setting\'s own choices', Object.entries(MOVED).every(([id, value]) => optionValues(id).includes(value)));
-  ck('its name is the user\'s', mine.name === 'SOXL, TQQQ - 2010-2025 fit', mine.name);
+  ck('its name, the old one kept for saved copies', mine.name === '10-25 - SOXL, TQQQ', mine.name);
 }
 
 // ---- 2. It is #53 with the fifteen set by hand ----
