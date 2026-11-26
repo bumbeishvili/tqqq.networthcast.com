@@ -2555,13 +2555,13 @@
   }
   /* The card's last line: the day's event, or the fund held now, on the left; Edit and Delete at the
      right end. The name has the top row to itself (the user, 2026-11-26: "move edit and delete button
-     in the bottom, so name has more space"). */
+     in the bottom, so name has more space"). It and the numbers start at the card's left edge, under
+     the eye (the user, 2026-11-26: "utilize right space a bit more, there is a space"). */
   .saved-config-pill .sc-foot {
     display: flex;
     align-items: center;
     gap: 6px;
     margin-top: 2px;
-    padding-left: 24px;
   }
   .saved-config-pill .sc-actions {
     display: inline-flex;
@@ -2598,7 +2598,6 @@
     align-items: baseline;
     gap: 2px 7px;
     margin-top: 4px;
-    padding-left: 24px;
   }
   .saved-config-pill .sc-metric {
     display: inline-flex;
@@ -2607,9 +2606,10 @@
     white-space: nowrap;
   }
   .saved-config-pill .sc-info { flex: none; align-self: center; margin: 0 0 0 1px; }
-  /* The year so far after a CAGR on a card or a chip: its figure and "in 2026", small, on the CAGR's baseline. */
-  .year-cagr { align-self: baseline; margin-left: 4px; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
-  .year-cagr-label { font-weight: 600; letter-spacing: 0.3px; color: var(--text-muted); }
+  /* The year so far after a CAGR on a card or a chip: its figure, small, 1px after the CAGR (the row's 4px gap less 3)
+     and a quarter of its height below the CAGR's baseline, then its ⓘ. */
+  .year-cagr { align-self: baseline; margin-left: -3px; position: relative; top: 0.25em; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
+  .year-cagr .year-cagr-info { margin: 0 0 0 2px; }
   .year-cagr-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
   .year-cagr-value.positive { color: var(--green-text); }
   .year-cagr-value.negative { color: var(--red-text); }
@@ -2628,11 +2628,11 @@
   .saved-config-pill .sc-metric-value.positive { color: var(--green-text); }
   .saved-config-pill .sc-metric-value.negative { color: var(--red-text); }
   /* The day's event: where the money goes at the latest day's close, a line under the card's numbers, its ⓘ beside it (js/saved-configs.js buildConfigPillHtml). */
-  /* The trade's line as running text, so a narrow card wraps it with the ⓘ right after the move, not at the line's far end. */
-  .saved-config-pill .sc-event { display: block; min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
-  .saved-config-pill .sc-event .sc-info { vertical-align: middle; margin-left: 4px; }
-  .saved-config-pill .sc-event-move { font-weight: 700; color: var(--accent-text); }
-  .saved-config-pill .sc-event-part { white-space: nowrap; }   /* "Switch today:" and the move each whole; a narrow card puts the move on the next line */
+  /* The trade's line: always one line, the ⓘ right after the words; a card too narrow for them cuts the words with "…", never the ⓘ. */
+  .saved-config-pill .sc-event { min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
+  .saved-config-pill .sc-event-move { display: flex; align-items: center; min-width: 0; font-weight: 700; color: var(--accent-text); }
+  .saved-config-pill .sc-event-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .saved-config-pill .sc-event .sc-info { margin-left: 4px; }
   /* On a day without a trade: the fund held now, in the event's place and type, paler. */
   .saved-config-pill .sc-holding { min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; font-weight: 700; color: var(--accent-text); opacity: 0.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .saved-config-pill .sc-event-move.action-buy { color: var(--green-text); }

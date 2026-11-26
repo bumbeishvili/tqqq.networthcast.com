@@ -2167,7 +2167,8 @@ document.addEventListener('click', (e) => {
     attemptCloseStrategyPanel();
     return;
   }
-  // Anywhere else on the chip → toggle dataset visibility.
+  // Anywhere else on the chip → toggle dataset visibility; its ⓘ (the year so far's) is read, on a phone by a tap.
+  if (e.target.closest('.info-icon')) return;
   const chip = e.target.closest('.legend-chip[data-idx]');
   if (!chip || !chart) return;
   const idx = +chip.dataset.idx;

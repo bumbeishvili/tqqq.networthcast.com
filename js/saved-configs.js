@@ -3092,12 +3092,10 @@ document.addEventListener('change', (e) => {
 // The colour of a card's day event, by the trade's kind: the log tables' own classes for a buy
 // and a sale; a switch and a rebalance keep the card's accent.
 const SC_EVENT_CLASS = { buy: 'action-buy', sell: 'action-sell' };
-// A card's trade in words (dayEventWords), each part kept whole and the ⓘ (icon, its HTML) kept with the move: on a
-// narrow card "Switch today:" and "TQQQ → SQQQ ⓘ" take a line each rather than run past the card's edge.
+// A card's trade in words (dayEventWords) and its ⓘ (icon, its HTML) right after them, on one line: a card too narrow
+// for the words cuts them with "…" and keeps the ⓘ (the user, 2026-11-26: "Make sure its one line").
 function dayEventHtml(event, icon) {
-  const words = dayEventWords(event), cut = words.indexOf(': ');
-  const part = (text, end) => `<span class="sc-event-part">${String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')}${end || ''}</span>`;
-  return cut < 0 ? part(words, icon) : part(words.slice(0, cut + 1)) + ' ' + part(words.slice(cut + 2), icon);
+  return `<span class="sc-event-text">${_escHtml(dayEventWords(event))}</span>${icon}`;
 }
 function buildConfigPillHtml(cfg) {
   const m = (window._configMetrics || {})[cfg.id] || {};

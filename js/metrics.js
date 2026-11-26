@@ -89,11 +89,12 @@ const fmtWholePct = (v) => (v >= 0 ? '+' : '') + (Math.round(v) || 0).toLocaleSt
 // A card's drawdown: a whole percent, but over 99% the decimals fmtDD keeps (−99.9419% and −100% are a live
 // account and a dead one).
 const fmtCardDD = (pct) => (pct > 99 ? fmtDD(pct) : '−' + Math.round(pct) + '%');
-// The year so far after a CAGR on a card or a chip, small, on the CAGR's baseline: its figure, then "in 2026" in the
-// same size (the user, 2026-11-26, after a bracketed two-line version: "let's just remove bracket , and display
-// current year cagr at the bottom right of bigger cagr number, and on the right side of it, say in 2026 same font size").
+// The year so far after a CAGR on a card or a chip: its figure, small, tight to the CAGR and a little below its
+// baseline, and an ⓘ that says what it is (the user, 2026-11-26: "remove in 2026 text, just add info icon where it
+// will say what it is, move that small number closer to big number and a bitbottom").
+const yearCagrTip = () => `${dataYear()} so far: the yearly rate from the last close of ${dataYear() - 1} to the latest close, with this year's deposits counted.`;
 const yearCagrHtml = (v) => `<span class="year-cagr"><span class="year-cagr-value ${v >= 0 ? 'positive' : 'negative'}">${fmtWholePct(v)}</span>`
-  + ` <span class="year-cagr-label">in ${dataYear()}</span></span>`;
+  + `<span class="info-icon year-cagr-info" tabindex="0" data-tip="${yearCagrTip()}">ⓘ</span></span>`;
 // The year a CAGR "so far" is of: the year of the data's last day (2026 on 26 November 2026).
 const dataYear = () => daily[daily.length - 1].date.slice(0, 4);
 // A run's money-weighted CAGR over the data's year so far (the user, 2026-11-26: "also inside cards and
