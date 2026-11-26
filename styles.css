@@ -4377,6 +4377,7 @@
     --map-worse: rgba(56, 56, 116, 0.07);         /* the quarter worse on both */
     --map-grid: rgba(56, 56, 116, 0.1);
     --map-frontier: rgba(56, 56, 116, 0.5);
+    --map-tie: rgba(0, 160, 36, 0.85);            /* the curve of results as good as the best one (the site's green, a little darker) */
   }
   /* A finger on the plot scrolls the window; once zoomed in it pans the plot. */
   .settings-map-svg { user-select: none; -webkit-user-select: none; touch-action: pan-y; }
@@ -4394,6 +4395,9 @@
   /* Buy and hold TQQQ: a yellow point with a dark edge, its name in the same yellow, darkened to read as text. */
   .settings-map-svg .flag-ring.hold { fill: var(--map-hold); stroke: var(--text); stroke-width: 1.5; }
   .settings-map-svg .flag-label.hold { fill: var(--map-hold-text); }
+  /* The best dot: green with a dark edge, its name in the site's green text. */
+  .settings-map-svg .flag-ring.best { fill: var(--green); stroke: var(--text); stroke-width: 1.5; }
+  .settings-map-svg .flag-label.best { fill: var(--green-text); }
   .settings-map-svg .quarter-label { font-weight: 600; }
   .settings-map-svg .pick-ring { fill: none; stroke: var(--text); stroke-width: 2; }
   .settings-map-svg .hover-ring { fill: none; stroke: var(--accent-text); stroke-width: 1.5; }
@@ -4426,6 +4430,8 @@
   .map-key-dot.is-pale { width: 4px; height: 4px; border-color: var(--map-dot-edge); background: var(--map-dot); }
   .map-key-dot.is-small { width: 7px; height: 7px; }
   .map-key-dot.is-hold { width: 11px; height: 11px; border: 1.5px solid var(--text); background: var(--map-hold); }
+  .map-key-dot.is-best { width: 11px; height: 11px; border: 1.5px solid var(--text); background: var(--green); }
+  .map-key-tie { width: 18px; border-top: 1.5px dashed var(--map-tie); }
   .map-key-dot.is-big { width: 18px; height: 18px; }
   .map-key-line { width: 18px; border-top: 1px solid var(--map-frontier); }
   .map-key-link { width: 18px; border-top: 1px dashed var(--text); }

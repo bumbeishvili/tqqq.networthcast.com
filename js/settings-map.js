@@ -100,7 +100,17 @@ const MAP_PLATEAU_TIP = [
   'Cliff: a small change makes it much worse.',
 ].join('\n');
 const MAP_UNTESTED_TIP = 'Not tested yet with a setting a little off. Click it to test it now.';
-const MAP_BEST_TIP = 'The line joins the best dots. For the same max drawdown, no dot has a higher CAGR.';
+const MAP_TOP_TIP = 'The line joins the dots with the highest CAGR. For the same max drawdown, no dot has a higher one.';
+const MAP_BEST_LABEL = 'Best';   // the combination that earns back its max drawdown fastest, the green point
+const MAP_BEST_TIP = [
+  'Best: the combination that earns back its max drawdown fastest, growing at its own CAGR.',
+  'Years = ln(1 / (1 − max drawdown)) / ln(1 + CAGR). Example: a 50% fall at 100% a year takes 1 year.',
+  'The fewer years, the better. The most years is the worst.',
+].join('\n');
+const MAP_TIE_TIP = [
+  'Every CAGR and max drawdown that earns its drawdown back as fast as the best.',
+  'The nearer a dot is to the line, the nearer it is to the best.',
+].join('\n');
 const MAP_WORST_TIP = [
   `Worst case: the lowest result when one setting is ${MAP_NEAR_PCT}% off.`,
   `Each setting is moved ${MAP_NEAR_PCT}% up and down, one at a time.`,
@@ -119,12 +129,15 @@ const MAP_LINK_TIP = 'Copy a link that opens this map and starts it running.';
 const MAP_CSV_TIP = "Download every dot as a CSV file: CAGR, max drawdown, and each setting's value.";
 const MAP_HOLD_LABEL = 'B&H TQQQ';   // buy and hold TQQQ, the yellow point
 const MAP_HOLD_TIP = 'Buy and hold TQQQ over the same years, with the same money.';
+// tipAttr: a key whose tip gets this map's numbers (showMapKeyTips).
 const MAP_LEGEND = [
-  { mark: 'dot is-hold', name: MAP_HOLD_LABEL, tip: MAP_HOLD_TIP, hold: true },
+  { mark: 'dot is-hold', name: MAP_HOLD_LABEL, tip: MAP_HOLD_TIP, tipAttr: 'data-map-hold-tip' },
+  { mark: 'dot is-best', name: 'best', tip: MAP_BEST_TIP, tipAttr: 'data-map-best-tip' },
+  { mark: 'tie', name: 'ties best', tip: MAP_TIE_TIP },
   { mark: 'dot is-pale', name: 'not tested', tip: MAP_UNTESTED_TIP },
   { mark: 'dot is-small', name: 'cliff' },
   { mark: 'dot is-big', name: 'plateau', tip: MAP_PLATEAU_TIP },
-  { mark: 'line', name: 'best', tip: MAP_BEST_TIP },
+  { mark: 'line', name: 'highest CAGR', tip: MAP_TOP_TIP },
   { mark: 'link', name: 'worst case', tip: MAP_WORST_TIP },
 ];
 let _map = null;   // the open window: { el, key, picked, chart, job, space, plans, floor, ask, doneKey, years, dots, byResult, twins, failed, version, places, fronts, most, drawn, run }
@@ -277,6 +290,30 @@ function mapCheckDot(map, dot) {
 }
 const mapDotList = (map) => Array.from(map.dots.values());
 const mapNowDot = (map) => (map.job ? map.dots.get(fitRunKey(map.job.store, map.job.cur)) : null) || null;
+// ---- The best dot: the one that earns back its max drawdown fastest ----
+// The user (2026-11-26), with a write-up that scores a result by its recovery time: "I want a clear
+// definition of the best strategy and worst one ... it should just highlight best strategy (with green
+// color, that has the best ratio for this time penalty), from there also display the line, that will
+// show which points are closest to best strategies".
+// The years a result needs, growing at its CAGR (in percent), to earn back its max drawdown (a share,
+// 0.3): ln(1 / (1 − dd)) / ln(1 + CAGR). The fewest is the best, the most the worst. A result with no
+// drawdown needs none; one that loses money a year never earns it back.
+const mapRecoveryYears = (cagr, dd) => (dd <= 0 ? 0 : cagr <= 0 || dd >= 1 ? Infinity : Math.log(1 / (1 - dd)) / Math.log(1 + cagr / 100));
+const mapDotYears = (dot) => mapRecoveryYears(dot.cagr, dot.r.dd);
+// The dot with the fewest years, or null while no dot earns its drawdown back. Read off once for each
+// state of the dots (map.version; setMapJob starts it over).
+function mapBestDot(map) {
+  if (!map.best || map.best.version !== map.version) {
+    const dot = d3.least(mapDotList(map), mapDotYears);
+    map.best = { version: map.version, dot: dot && Number.isFinite(mapDotYears(dot)) ? dot : null };
+  }
+  return map.best.dot;
+}
+// The curve of results that earn their drawdown back in `years`: the CAGR it takes at a max drawdown
+// of x percent, both in percent. Every dot lies on it or under it, the best one on it.
+const mapTieCagr = (years) => (x) => (Math.pow(1 / (1 - x / 100), 1 / years) - 1) * 100;
+const mapYearsText = (years) => years.toFixed(2) + ' years';   // two decimals: a strategy with a CAGR over 100% earns back its drawdown in under a year, and one decimal makes most good dots read alike
+const mapBackText = (years) => (Number.isFinite(years) ? `earns back its max drawdown in ${mapYearsText(years)}` : 'never earns back its max drawdown');
 const mapOwn = (dot) => dot.r, mapFlat = (dot) => dot.flat;
 // A dot's result, and its worst among its neighbours, as the numbers show them: in tenths of a
 // point. Two sets that read the same are one place on the frontier.
@@ -499,7 +536,7 @@ function stopMapWork(map) {
 function setMapJob(map, found, period) {
   const job = found.job || null;
   Object.assign(map, { job, frozen: !!found.frozen, inverted: !!(period && period.inverted), space: job ? job.space.map(mapSetting) : [], years: period ? period.text : null,
-    dots: new Map(), byResult: new Map(), twins: new Set(), failed: new Set(), version: 0, places: null, fronts: null, most: 0, drawn: null });
+    dots: new Map(), byResult: new Map(), twins: new Set(), failed: new Set(), version: 0, places: null, fronts: null, best: null, most: 0, drawn: null });
   // Buy and hold TQQQ over the same years with the same money (the user, 2026-11-25: "also include
   // buy hold tqqq point as yellow in the map, for given period whatever was drawdown and cagr").
   const hold = job ? window.previewBhTqqq(period) : null;
@@ -528,7 +565,7 @@ function buildMapWindowHtml(key, choices) {
     + `<span class="map-years">${fitYearPickHtml(FIT_YEAR_ENDS[0], choices)} to ${fitYearPickHtml(FIT_YEAR_ENDS[1], choices)}</span>`
     + `<button type="button" class="modal-close" data-map-close aria-label="Close">×</button></div>`
     + `<div class="fit-window-body map-body"><div class="map-main"><div class="map-chart"></div>`
-    + `<div class="map-legend">${MAP_LEGEND.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${_escHtml(key.name)}${key.tip ? mapTipIcon(key.tip, key.hold ? ' data-map-hold-tip' : '') : ''}</span>`).join('')}</div></div>`
+    + `<div class="map-legend">${MAP_LEGEND.map(key => `<span class="map-key"><i class="map-key-${key.mark}"></i>${_escHtml(key.name)}${key.tip ? mapTipIcon(key.tip, key.tipAttr ? ' ' + key.tipAttr : '') : ''}</span>`).join('')}</div></div>`
     + `<div class="map-side"><div class="map-detail"></div></div></div>`
     + `<div class="fit-window-foot map-foot"><span class="map-status"><span class="map-count"></span>${mapTipIcon(MAP_RUN_TIP)}</span>`
     + `<button type="button" class="map-csv-btn" data-map-link title="${_escHtml(MAP_LINK_TIP)}">Link</button>`
@@ -646,14 +683,16 @@ function useMapDot(map) {
 // The chart, the picked dot's lines and the foot: all that moves while a map fills.
 function showMap() {
   drawMap();
-  showMapHold();
+  showMapKeyTips();
   showMapDetail();
   showMapFoot();
 }
-// The legend's tip for buy & hold TQQQ, with its numbers on these years once they are known.
-function showMapHold() {
-  const map = _map, { hold, job } = map;
+// The legend's tips for buy & hold TQQQ and for the best dot, with their numbers on these years once they are known.
+function showMapKeyTips() {
+  const map = _map, { hold, job } = map, best = job ? mapBestDot(map) : null;
   map.el.querySelector('[data-map-hold-tip]').dataset.tip = hold ? `${MAP_HOLD_TIP}\nCAGR ${fitCagrText(job.cagrOf, hold)}, max drawdown ${fitDdText(hold)}.` : MAP_HOLD_TIP;
+  map.el.querySelector('[data-map-best-tip]').dataset.tip = best
+    ? `${MAP_BEST_TIP}\nThe best here: ${mapYearsText(mapDotYears(best))}, CAGR ${fitCagrText(job.cagrOf, best.r)}, max drawdown ${fitDdText(best.r)}.` : MAP_BEST_TIP;
 }
 // Where a dot stands, and where its worst result among its neighbours does, in percent.
 const mapOwnAt = (dot) => ({ x: dot.r.dd * 100, y: dot.cagr });
@@ -682,17 +721,20 @@ function drawMap() {
     .emptyText(map.inverted ? MAP_INVERTED_TEXT : map.frozen ? MAP_FROZEN_TEXT : 'Mapping…')
     .render();
 }
-// A map on a chart: its dots (a tested one sized by how it holds), the line through the best
-// ones, the settings as they are and the Fit mark. The window's chart, and the picture of the
-// map in the Fit window.
+// A map on a chart: its dots (a tested one sized by how it holds), the line through the ones with
+// the highest CAGR, the settings as they are, the best dot with the curve of results as good, and
+// the Fit mark. The window's chart, and the picture of the map in the Fit window.
 function mapPlot(map, chart) {
-  const now = mapNowDot(map), fit = mapFitDot(map), { hold } = map;
+  const now = mapNowDot(map), fit = mapFitDot(map), best = mapBestDot(map), { hold } = map;
   return chart
     .data(mapDotList(map).map(dot => Object.assign({ id: dot.id, size: dot.flat ? mapHolds(dot) : null }, mapOwnAt(dot))))
     .frontier(mapFronts(map).own.map(mapOwnAt))
     .now(now ? mapOwnAt(now) : null)
-    // Named places: the Fit window's pick, and buy & hold TQQQ in yellow.
-    .flags([].concat(fit ? Object.assign({ id: 'fit', label: MAP_FIT_LABEL }, mapOwnAt(fit)) : [],
+    .tie(best ? mapTieCagr(mapDotYears(best)) : null)
+    // Named places: the best dot in green, the Fit window's pick (one name with the best's when it is
+    // the same dot), and buy & hold TQQQ in yellow.
+    .flags([].concat(best ? Object.assign({ id: 'best', kind: 'best', label: best === fit ? `${MAP_BEST_LABEL} · ${MAP_FIT_LABEL}` : MAP_BEST_LABEL }, mapOwnAt(best)) : [],
+      fit && fit !== best ? Object.assign({ id: 'fit', label: MAP_FIT_LABEL }, mapOwnAt(fit)) : [],
       hold ? { id: 'hold', kind: 'hold', label: MAP_HOLD_LABEL, x: hold.dd * 100, y: map.job.cagrOf(hold.final) } : []));
 }
 // ---- The map's picture in the Fit window ----
@@ -727,6 +769,7 @@ function showMapTip(point, event) {
   const map = _map, dot = map.dots.get(point.id), tip = map.el.querySelector('.map-tip'), { cagrOf } = map.job;
   tip.innerHTML = `<b>CAGR ${fitCagrText(cagrOf, dot.r)} · max drawdown ${fitDdText(dot.r)}</b>`
     + (dot.flat ? `<span>worst case: ${fitCagrText(cagrOf, dot.flat)} · ${fitDdText(dot.flat)}</span>` : '')
+    + `<span>${dot === mapBestDot(map) ? 'best: ' : ''}${mapBackText(mapDotYears(dot))}</span>`
     + `<span>${dot.differs ? dot.differs + ' setting' + (dot.differs > 1 ? 's' : '') + ' changed' : 'your settings now'}</span>`;
   tip.hidden = false;
   const GAP = 14, box = tip.getBoundingClientRect();
@@ -765,7 +808,10 @@ function mapDetailHtml(map) {
       : `<s class="map-old">${_escHtml(slot.value)}</s> <b class="map-new">${_escHtml(s.text(dot.values[s.id]))}</b>`;
     return setting ? fitFreezeValueHtml(map.key, setting, fitFrozen(choices, setting), text, 'data-map-freeze-id') : text;
   };
+  const best = dot ? mapBestDot(map) : null;
   const notes = !dot ? [] : [dot.differs ? '' : 'Your settings now.',
+    dot === best ? `${MAP_BEST_LABEL}: ${mapBackText(mapDotYears(dot))}, the fastest here.`
+      : best ? `It ${mapBackText(mapDotYears(dot))}. The best takes ${mapYearsText(mapDotYears(best))}.` : '',
     dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what Run in the Fit window would pick.` : '',
     dot.flat ? mapWorstText(job, dot) : picked && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
   const changed = fitFreezeChanged(settings, choices);

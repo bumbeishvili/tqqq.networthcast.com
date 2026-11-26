@@ -34,6 +34,8 @@ class SettingsMapChart {
       link: null,          // { x, y }: a second point the picked dot is tied to with a line
       linkLabel: '',       // the name written at that point
       frontier: null,      // [{ x, y }] by x: a step line through them
+      tie: null,           // (x) => y, both in percent: a dashed curve across the plot, over the dots (the results as good as the best one)
+      tieStep: 2,          // px between the curve's points
       flags: null,         // [{ id, x, y, label, kind }]: named places, each a ring with its name; kind: a class of its own for the two
       xTitle: 'max drawdown',
       yTitle: 'CAGR',
@@ -124,7 +126,7 @@ class SettingsMapChart {
     const colour = (name) => getComputedStyle(plot.node()).getPropertyValue(name).trim();
     this.setState({ plot, canvas, svg, chart, ratio, colours: {
       dot: colour('--map-dot'), dotEdge: colour('--map-dot-edge'), dotSized: colour('--map-dot-sized'), dotSizedEdge: colour('--map-dot-sized-edge'),
-      better: colour('--map-better'), worse: colour('--map-worse'), grid: colour('--map-grid'), frontier: colour('--map-frontier'),
+      better: colour('--map-better'), worse: colour('--map-worse'), grid: colour('--map-grid'), frontier: colour('--map-frontier'), tie: colour('--map-tie'),
     } });
   }
 
@@ -152,7 +154,7 @@ class SettingsMapChart {
 
   // On the canvas, back to front: the two shaded quarters, the grid, the
   // frontier's step line, the plain dots, the sized ones (the largest first,
-  // so a small one is never hidden under a large one).
+  // so a small one is never hidden under a large one), the tie curve.
   drawDots() {
     const { canvas, ratio, data, now, frontier, x, y, chartWidth, chartHeight, colours, dotRadius, sizeRadius, edgeWidth } = this.getState();
     const cx = canvas.node().getContext('2d');
@@ -192,7 +194,29 @@ class SettingsMapChart {
     };
     paint(seen.filter(m => m.d.size == null), colours.dot, colours.dotEdge, edgeWidth[0]);
     paint(seen.filter(m => m.d.size != null).sort((a, b) => b.r - a.r), colours.dotSized, colours.dotSizedEdge, edgeWidth[1]);   // the largest first, so a small one on a large one shows
+    this.drawTie(cx);
     this.setState({ seen });
+  }
+
+  // The tie curve, worked out at every few px across the plot as it is zoomed, so it stays smooth at
+  // any zoom. Where it has no value (a drawdown of 100% or more) it breaks. A point far off the plot
+  // is held a plot's height past its edge: the canvas cuts the line there, and its slope inside
+  // the plot changes over one step at most.
+  drawTie(cx) {
+    const { tie, tieStep, x, y, chartWidth, chartHeight, colours } = this.getState();
+    if (!tie) return;
+    cx.strokeStyle = colours.tie; cx.lineWidth = 1.5; cx.setLineDash([5, 3]);
+    cx.beginPath();
+    let on = false;
+    for (let px = 0; px <= chartWidth + tieStep; px += tieStep) {
+      const py = y(tie(x.invert(px)));
+      if (!Number.isFinite(py)) { on = false; continue; }
+      const held = Math.max(-chartHeight, Math.min(2 * chartHeight, py));
+      if (on) cx.lineTo(px, held); else cx.moveTo(px, held);
+      on = true;
+    }
+    cx.stroke();
+    cx.setLineDash([]);
   }
 
   drawAxes() {
