@@ -1,5 +1,5 @@
 /*
- * Library strategy #75, "Late week 84-25 steady fit": #73 (Late-week + overextended SQQQ) at the
+ * Library strategy #75, "1984 - Late-week + overextended SQQQ" (was "Late week 84-25 steady fit"): #73 (Late-week + overextended SQQQ) at the
  * settings of the user's copy after a pick on the map of 1984 to 2025 (the #75 section of
  * js/strategy-library-code.js). Pure Node — no browser/server. Checks, on the repo's own price history:
  *   1. its settings are #73's, in the same order, with the panel's ten defaults moved and no other;
@@ -38,7 +38,7 @@ const pct = v => (v * 100).toFixed(1) + '%';
 
 // ---- 1. The settings ----
 {
-  ck('its name', mine.name === 'Late week 84-25 steady fit', mine.name);
+  ck('its name, the old one kept for saved copies', mine.name === '1984 - Late-week + overextended SQQQ', mine.name);
   const ids = settingsOf(mine).map(p => p.id), theirs = settingsOf(over).map(p => p.id);
   ck('#73\'s settings, in the same order', ids.join() === theirs.join(), ids.join());
   const d = defaultsOf(mine), d73 = defaultsOf(over);
@@ -64,7 +64,7 @@ const pct = v => (v * 100).toFixed(1) + '%';
   ck('seven tips swapped, the rest #73\'s', swapped.join() === TIPS.join(), swapped.join());
   ck('no swapped tip quotes #73\'s settings or the studies of other settings', TIPS.every(id => !/\b54%|242|255|20 days with 2%|most at 40|TQQQ closed/.test(a[id].tip)), TIPS.map(id => a[id].tip).find(t => /\b54%|242|255|20 days with 2%|most at 40|TQQQ closed/.test(t)));
   ck('the code is #73\'s but for its name, its defaults and those tips', (() => {
-    let t = CODE[OVER].replace('"Late-week + overextended SQQQ"', '"Late week 84-25 steady fit"');
+    let t = CODE[OVER].replace('"Late-week + overextended SQQQ"', '"1984 - Late-week + overextended SQQQ"');
     for (const id of Object.keys(a)) { if (a[id].tip !== b[id].tip) t = t.replace(JSON.stringify(b[id].tip), JSON.stringify(a[id].tip)); }
     return t.replace(/, default: [^,}]+/g, '') === CODE[MINE].replace(/, default: [^,}]+/g, '');
   })());

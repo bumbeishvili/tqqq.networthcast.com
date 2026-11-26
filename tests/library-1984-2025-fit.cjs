@@ -1,5 +1,5 @@
 /*
- * Library strategy #76, "SOXL, TQQQ, QQQ - 1984-2025 fit": #53 (the 1983 fit) at the 26 settings of the user's
+ * Library strategy #76, "1984 - SOXL, TQQQ, QQQ" (was "SOXL, TQQQ, QQQ - 1984-2025 fit"): #53 (the 1983 fit) at the 26 settings of the user's
  * copy after a pick on the map of 1984 to 2025 (the #76 section of js/strategy-library-code.js).
  * Pure Node — no browser/server. Checks, on the repo's own price history:
  *   1. its settings are #53's, in the same order, with the note's 26 defaults moved and no other;
@@ -39,7 +39,7 @@ const pct = v => (v * 100).toFixed(1) + '%';
 
 // ---- 1. The settings ----
 {
-  ck('its name', mine.name === 'SOXL, TQQQ, QQQ - 1984-2025 fit', mine.name);
+  ck('its name, the old one kept for saved copies', mine.name === '1984 - SOXL, TQQQ, QQQ', mine.name);
   const ids = settingsOf(mine).map(p => p.id);
   ck('#53\'s settings, in the same order', ids.join() === settingsOf(fit).map(p => p.id).join(), ids.join());
   const d = defaultsOf(mine), d53 = defaultsOf(fit);
@@ -68,7 +68,7 @@ const pct = v => (v * 100).toFixed(1) + '%';
   ck('only the late-week section, its weekend check and its down trend read differently from #53\'s', changed.join() === 'section Late-week SQQQ,lateWeekend,lateTrend', changed.join());
   ck('the code is #53\'s but for its name, its defaults and those three', (() => {
     const strip = t => t.replace(/, default: [^,}]+/g, '').replace(/tip: "[^"]*"/g, 'tip');
-    return strip(CODE[FIT].replace('"SOXL, TQQQ, QQQ - 1983 fit"', '"SOXL, TQQQ, QQQ - 1984-2025 fit"')) === strip(CODE[MINE]);
+    return strip(CODE[FIT].replace('"SOXL, TQQQ, QQQ - 1983 fit"', '"1984 - SOXL, TQQQ, QQQ"')) === strip(CODE[MINE]);
   })());
   // The facts the three state, from this strategy's own run, Q1 2010 to Q4 2025.
   const log = run(mine), late = []; let open = null;

@@ -5063,7 +5063,7 @@ CODE[74] = fitWithDefaults(74, FIT_2010_2025, FIT_2010_2025_DEFAULTS, FIT_2010_2
 // down trend on a 44-day median. The note read max drawdown 87.1% -> 54.5% on 1984 to 2025; these values give
 // both to the decimal, and with $80K and $3K a month a money-weighted 114.2% -> 144.2% a year (the note: 114.3%
 // -> 144.4%). The numbers are on the card. It is fitted on 1984 to 2025, so those years are no test of it.
-const FIT_1984_2025 = "SOXL, TQQQ, QQQ - 1984-2025 fit";
+const FIT_1984_2025 = "1984 - SOXL, TQQQ, QQQ";   // was "SOXL, TQQQ, QQQ - 1984-2025 fit" until 26 November 2026
 const FIT_1984_2025_DEFAULTS = {
   lookbackDays: 554, startAvgDays: 57, topLead: 127, topDays: 0, backLead: 29, bearUnder: 28.5, bearSlope: 8, bearCloses: 3, overPct: 68, overWindow: 256,
   sqqqMaxDays: 17, nfciVeto: 0.36, soxlLeadDays: 240, soxlLeadEnter: -70, soxlSell: "turn", soxlTrail: 80, soxlConfirm: 10, bigRise: 14.5, bigDrop: 21.5,
@@ -6436,7 +6436,7 @@ CODE[73] = withDefaults(withOverextendedLine(CODE[72], { name: LATE_WEEK_OVER, h
 // It is the steady one of the two: one step either way on any of its eight number settings makes
 // 92.2% to 98.9% on 1984-2025 and 106.9% to 116.2% on 2010-2025. The tips that quote #73's own
 // facts are swapped for this entry's, or for plain ones where they quoted a study of other settings.
-const LATE_WEEK_84_25 = "Late week 84-25 steady fit";
+const LATE_WEEK_84_25 = "1984 - Late-week + overextended SQQQ";   // was "Late week 84-25 steady fit" until 26 November 2026
 CODE[75] = withTips(withDefaults(CODE[73], { name: LATE_WEEK_84_25, defaults: {
   trendUnder: -1.5, trendDays: 33, rsiFund: "qqq", rsiLevel: 30.5, lagDays: 12, lagBy: 5.5, lagHold: "weekend", overFund: "soxx", overPct: 43, overWindow: 233 } }),
 { name: LATE_WEEK_84_25, tips: {
