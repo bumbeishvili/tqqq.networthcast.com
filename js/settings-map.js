@@ -242,9 +242,9 @@ function mapCagr(job, r) {
 function mapSync(map) {
   const { job, dots, byResult } = map;
   if (!job) { map.picked = null; return; }
-  const { cur, store } = job, free = new Set(job.space.map(s => s.id)), held = Object.keys(cur).filter(id => !free.has(id));
+  const { cur, store } = job, held = mapHeld(job);
   store.done.forEach((kept, id) => {
-    if (dots.has(id) || map.twins.has(id) || !held.every(h => String(kept.values[h]) === String(cur[h]))) return;
+    if (dots.has(id) || map.twins.has(id) || !held.every(([h, now]) => String(kept.values[h]) === String(now))) return;
     const differs = job.space.filter(s => String(kept.values[s.id]) !== String(cur[s.id])).length;
     const same = mapResultKey(kept.r), twin = byResult.get(same);
     if (twin && twin.differs <= differs) { map.twins.add(id); return; }
@@ -364,7 +364,10 @@ const mapResultKey = (r) => r.final + '|' + r.dd;
 // What a search's result is kept under, with the runs (store.mapFits): the settings it could
 // change, where each stood when it started, and the plan. A fit starts from the settings as they
 // are, so one from another start is another search.
-const mapPlanKey = (job, plan) => JSON.stringify([job.space.map(s => [s.id, job.cur[s.id]]), plan]);
+// The frozen settings' values a job stands on, [[id, value]]: a code strategy keeps one store of
+// runs whatever they are, so a map's dots, its searches and its end are each for these values.
+const mapHeld = (job) => { const free = new Set(job.space.map(s => s.id)); return Object.entries(job.cur).filter(([id]) => !free.has(id)); };
+const mapPlanKey = (job, plan) => JSON.stringify([job.space.map(s => [s.id, job.cur[s.id]]), plan, mapHeld(job)]);
 // The results of the searches run so far on these runs, by mapPlanKey: a result's key among the
 // dots (mapResultKey), or null where nothing met the limit.
 const mapFitsOf = (job) => job.store.mapFits || (job.store.mapFits = {});
@@ -510,8 +513,8 @@ function setMapPlan(map, period) {
   const { job } = map, plan = Object.assign(fitPlanOf(fitChoices()), { fewest: false });
   const floor = job ? fitFloorFor(map.key, plan, job.cagrOf, period) : { lacking: true };
   Object.assign(map, { floor: floor.floor || null, ask: !floor.lacking,
-    // What a done map goes with: the settings that were free, and the plan whatever its shape (the rounds do not depend on the shape).
-    doneKey: job ? job.space.map(s => s.id).join(',') + '|' + JSON.stringify(Object.assign({}, plan, { plateau: null })) : '',
+    // What a done map goes with: the settings that were free, the plan whatever its shape (the rounds do not depend on the shape), and the frozen settings' values.
+    doneKey: job ? job.space.map(s => s.id).join(',') + '|' + JSON.stringify(Object.assign({}, plan, { plateau: null })) + '|' + JSON.stringify(mapHeld(job)) : '',
     plans: plan.plateau ? [plan] : [plan, Object.assign({}, plan, { plateau: true })] });
 }
 const mapTipIcon = (tip, mark = '') => `<span class="info-icon" tabindex="0" data-tip-wide${mark} data-tip="${_escHtml(tip)}">ⓘ</span>`;
@@ -697,10 +700,10 @@ function mapPlot(map, chart) {
 // map opened now on the same years and frozen settings starts from. Gives back what the card
 // says beside it ({ tried, done }), or null when there is nothing to map. view: the caller's own
 // holder for the picture ({} at first), one for as long as its window is open: a window drawn
-// again draws on the chart it has, and the dots are read off the kept runs only when the years
-// or the frozen settings they stand on changed (the Fit mark follows every other choice).
+// again draws on the chart it has, and the dots are read off the kept runs only when the years,
+// the frozen settings or their values changed (the Fit mark follows every other choice).
 function showMapPreview(view, box, key, period) {
-  const free = fitFreeIds(key), stands = [period ? period.text : '', free ? Array.from(free).join(',') : ''].join('|');
+  const free = fitFreeIds(key), stands = [period ? period.text : '', free ? Array.from(free).join(',') : '', fitFrozenValues(key)].join('|');
   if (view.map && view.stands === stands) setMapPlan(view.map, period);
   else {
     const found = fitJobFor(key, period, true);
@@ -760,7 +763,7 @@ function mapDetailHtml(map) {
     const s = free.get(slot.id), setting = byId.get(slot.id);
     const text = !dot || !s || String(dot.values[s.id]) === String(job.cur[s.id]) ? `<span class="map-value">${_escHtml(slot.value)}</span>`
       : `<s class="map-old">${_escHtml(slot.value)}</s> <b class="map-new">${_escHtml(s.text(dot.values[s.id]))}</b>`;
-    return setting ? `<label class="fit-freeze-value"><input type="checkbox" data-map-freeze-id="${_escHtml(slot.id)}"${fitFrozen(choices, setting) ? ' checked' : ''}>${text}</label>` : text;
+    return setting ? fitFreezeValueHtml(map.key, setting, fitFrozen(choices, setting), text, 'data-map-freeze-id') : text;
   };
   const notes = !dot ? [] : [dot.differs ? '' : 'Your settings now.',
     dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what Run in the Fit window would pick.` : '',
@@ -793,11 +796,17 @@ async function redoMap(map) {
   showMap();
   if (map.job && !mapIsDone(map)) startMapFill(map);
 }
-// A tick on a value in the column freezes its setting, an empty box lets the map change it. A
-// year picked in the head is kept with the Fit window's choices, so Fit runs on it too.
+// A tick on a value in the column freezes its setting, an empty box lets the map change it, and a
+// frozen setting's dropdown sets it on the strategy. A year picked in the head is kept with the
+// Fit window's choices, so Fit runs on it too. Each runs the map again.
 function onMapWindowChange(e) {
-  const map = _map, box = e.target.closest('[data-map-freeze-id]'), year = e.target.closest('[data-fit-year]');
+  const map = _map, box = e.target.closest('[data-map-freeze-id]'), year = e.target.closest('[data-fit-year]'), set = e.target.closest('[data-fit-set-id]');
   if (!map) return;
+  if (set) {
+    setFitSettingValue(map.key, set.getAttribute('data-fit-set-id'), set.value);
+    redoMap(map);
+    return;
+  }
   if (year) {
     keepFitChoices(Object.assign(fitChoices(), { [year.getAttribute('data-fit-year')]: year.value }));
     redoMap(map);

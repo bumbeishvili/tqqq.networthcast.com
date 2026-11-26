@@ -357,15 +357,7 @@
     popup.addEventListener('click', (e) => {
       const row = e.target.closest('.pdrop-row');
       if (!row) return;
-      const v = row.dataset.value;
-      if (select.value !== v) {
-        setSelectValue(select, v);
-        // render() (via the change handler) rebuilds the panel, which moves
-        // the <select>; renderStrategyPanelBody snapshots + restores the value
-        // across that move, so it sticks. We just sync the trigger label.
-        select.dispatchEvent(new Event('change', { bubbles: true }));
-        syncTrigger(select);
-      }
+      pickValue(select, row.dataset.value);
       closePopup();
     });
 
@@ -441,6 +433,19 @@
       else o.removeAttribute('selected');
     });
   }
+  // A choice made for a select, as a click on a popup's row makes it, and as a
+  // Freeze list's dropdown makes it (js/saved-configs.js setFitSettingValue):
+  // set durably, then announced. render() (via the change handler) rebuilds
+  // the panel, which moves the <select>; renderStrategyPanelBody snapshots +
+  // restores the value across that move, so it sticks. The trigger label is
+  // synced last.
+  function pickValue(select, v) {
+    if (select.value === v) return;
+    setSelectValue(select, v);
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    syncTrigger(select);
+  }
+  window.pickPreviewValue = pickValue;
 
   // Wrap one native select with a trigger button. The select stays in the
   // DOM (hidden) and authoritative.

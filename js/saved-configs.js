@@ -3379,6 +3379,14 @@ function _cpKeyDown(e) { if (e.key === 'Escape') closeCustomParamPopup(); }
 function _cpDocDown(e) {
   if (_cpOpen && !_cpOpen.popup.contains(e.target) && e.target !== _cpOpen.trigger && !_cpOpen.trigger.contains(e.target)) closeCustomParamPopup();
 }
+// A code strategy's setting set to one of its choices, by hand: kept, the last fit's note dropped, the chart drawn again.
+function setCustomParamOption(cfg, sp, o) {
+  cfg.params = cfg.params || {};
+  cfg.params[sp.id] = (typeof o.value === 'boolean') ? o.value : String(o.value);
+  delete _fitNotes[cfg.id];
+  persistSavedConfigs();
+  if (typeof render === 'function') render();
+}
 function openCustomParamPopup(trigger, cfg, sp) {
   if (_cpOpen && _cpOpen.trigger === trigger) { closeCustomParamPopup(); return; }
   closeCustomParamPopup();
@@ -3403,7 +3411,7 @@ function openCustomParamPopup(trigger, cfg, sp) {
     const i = +row.getAttribute('data-cp-i');
     const o = opts[i]; if (!o) return;
     const c = savedConfigs.find(x => x.id === cfg.id);
-    if (c) { c.params = c.params || {}; c.params[sp.id] = (typeof o.value === 'boolean') ? o.value : String(o.value); delete _fitNotes[c.id]; persistSavedConfigs(); if (typeof render === 'function') render(); }
+    if (c) setCustomParamOption(c, sp, o);
     closeCustomParamPopup();
   });
   const sel = popup.querySelector('.pdrop-row.selected');
@@ -3603,6 +3611,46 @@ function fitFreeIds(key) {
 function fitFrozenIds(key) {
   const choices = fitFreezeChoices(key);
   return new Set(fitSettings(key).filter(s => fitFrozen(choices, s)).map(s => s.id));
+}
+// A setting's choices as its Freeze dropdown lists them ({ value, text }, the value as text), the
+// one set now (a value between the options, which a fit can set, in its place) and its name.
+function fitSettingChoices(key, id) {
+  if (fitIsPanel(key)) {
+    const el = document.getElementById(id);
+    return { name: window.previewFit.name(id), now: el.value, options: Array.from(el.options).filter(o => !o.disabled).map(o => ({ value: o.value, text: o.textContent.trim() })) };
+  }
+  const cfg = savedConfigs.find(c => c.id === key), sp = getCustomSchema(cfg).find(p => p && p.id === id), now = customParamValue(cfg, sp);
+  return { name: String(sp.label || sp.id), now: String(now), options: customParamOptionsWithCurrent(sp, now).map(o => ({ value: String(o.value), text: customOptionText(sp, o) })) };
+}
+// A setting set from a Freeze list's dropdown, the way its own dropdown in Settings sets it: a
+// panel's select as a click in its popup sets it (its change handlers keep it, put it in the share
+// link and draw the chart), a code strategy's choice as its popup sets it.
+function setFitSettingValue(key, id, value) {
+  if (fitIsPanel(key)) {
+    window.pickPreviewValue(document.getElementById(id), value);
+    return;
+  }
+  const cfg = savedConfigs.find(c => c.id === key), sp = getCustomSchema(cfg).find(p => p && p.id === id);
+  const option = customParamOptionsWithCurrent(sp, customParamValue(cfg, sp)).find(o => String(o.value) === value);
+  if (!option) throw new Error(`Freeze: ${value} is not a choice of ${id}`);
+  setCustomParamOption(cfg, sp, option);
+}
+// The frozen settings' values now, as text: what a picture of the map stands on besides its years and free settings.
+const fitFrozenValues = (key) => JSON.stringify(Array.from(fitFrozenIds(key), id => [id, fitSettingChoices(key, id).now]));
+// A value in a Freeze list: its tick box (ticked = frozen; boxAttr names the list's own attribute)
+// and, for a frozen setting, a plain dropdown of its choices that sets it on the strategy
+// (setFitSettingValue). The user (2026-11-26): "I want to be able to choose other option for
+// frozen settings ... it could be a simple dropdown, not data driven. The idea is to quickly
+// change frozen settings and map to start regenerating if I notice any mistake on my side, I
+// don't want to close, change and open again". A free setting's value is the search's to change:
+// it stays as `text` (markup) shows it.
+function fitFreezeValueHtml(key, setting, frozen, text, boxAttr) {
+  const box = `<input type="checkbox" ${boxAttr}="${_escHtml(setting.id)}"${frozen ? ' checked' : ''}>`;
+  if (!frozen) return `<label class="fit-freeze-value">${box}${text}</label>`;
+  const { name, now, options } = fitSettingChoices(key, setting.id);
+  const pick = `<select class="fit-freeze-pick" data-fit-set-id="${_escHtml(setting.id)}" aria-label="${_escHtml(name)}">`
+    + options.map(o => `<option value="${_escHtml(o.value)}"${o.value === now ? ' selected' : ''}>${_escHtml(o.text)}</option>`).join('') + `</select>`;
+  return `<label class="fit-freeze-value">${box}${pick}</label>`;
 }
 function fitNothingFree(key) {
   _fitNotes[key] = { text: 'Every setting is frozen, so nothing changed.', changes: [] };
@@ -4746,7 +4794,9 @@ function openFitWindow(key) {
     // One of the other choices: kept, and the window drawn again (the limit follows the goal).
     const picked = e.target.closest('[data-fit-pick]');
     if (picked) { setFitChoice(picked.getAttribute('data-fit-pick'), picked.value); showFitWindow(); return; }
-    if (fitFreezeTicked(el, key, e.target)) showFitMap();   // the map leaves out what differs in a frozen setting
+    const set = e.target.closest('[data-fit-set-id]');
+    if (set) { setFitSettingValue(key, set.getAttribute('data-fit-set-id'), set.value); showFitWindow(); return; }
+    if (fitFreezeTicked(el, key, e.target)) showFitWindow();   // the map leaves out what differs in a frozen setting; a value ticked now shows as its dropdown
   });
   // The limit as it is typed; Enter in its box runs the fit.
   el.addEventListener('input', (e) => {
@@ -4840,7 +4890,7 @@ function buildFitFreezeHtml(key, open) {
   const rows = buildFitStrategyHtml(key, (slot) => {
     const setting = byId.get(slot.id);
     if (!setting) return `<b>${_escHtml(slot.value)}</b>`;
-    return `<label class="fit-freeze-value"><input type="checkbox" data-fit-freeze-id="${_escHtml(slot.id)}"${fitFrozen(choices, setting) ? ' checked' : ''}><span>${_escHtml(slot.value)}</span></label>`;
+    return fitFreezeValueHtml(key, setting, fitFrozen(choices, setting), `<span>${_escHtml(slot.value)}</span>`, 'data-fit-freeze-id');
   });
   const changed = fitFreezeChanged(settings, choices);
   return `<div class="fit-freeze"><button type="button" class="fit-freeze-head" data-fit-freeze-toggle aria-expanded="${open}"><span class="fit-freeze-arrow">${open ? '▾' : '▸'}</span><b>Freeze</b><span class="fit-freeze-notice">${fitFreezeNotice(changed)}</span></button>`

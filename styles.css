@@ -4347,6 +4347,9 @@
   .fit-freeze-value { display: inline-flex; align-items: center; gap: 4px; padding: 0 5px; border: 1px solid var(--border); border-radius: 5px; line-height: 1.5; color: var(--text); white-space: nowrap; vertical-align: baseline; cursor: pointer; }
   .fit-freeze-value:has(input:checked) { border-color: var(--accent); background: rgba(134, 118, 255, 0.12); }
   .fit-freeze-value input { flex: none; width: calc(11px * var(--ui-scale)); height: calc(11px * var(--ui-scale)); margin: 0; accent-color: var(--accent); cursor: pointer; }
+  /* A frozen value: a plain dropdown of its choices in the box's place, as wide as its choice where the browser can. */
+  .fit-freeze-pick { font: inherit; color: var(--text); background: transparent; border: 0; padding: 0; margin: 0; max-width: 16em; field-sizing: content; cursor: pointer; }
+  .fit-freeze-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
   .fit-freeze-reset { display: block; margin-top: 6px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: none; font: inherit; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); cursor: pointer; }
   .fit-freeze-reset:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
   .fit-freeze-reset:disabled { opacity: 0.45; cursor: default; }
