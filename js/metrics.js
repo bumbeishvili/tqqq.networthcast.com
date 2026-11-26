@@ -82,8 +82,13 @@ function buildContributionFlows(initial, monthly, annualRaise, startDate, endDat
   return flows;
 }
 
-// A CAGR as the cards and panels write it: its sign and one decimal (+38.5%, −4.2%).
-const fmtCagr = (v) => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+// The year so far as the cards, chips and panels write it: its sign and a whole percent (+117%, -15%, +1,440%)
+// (the user, 2026-11-26: "round it to nearest whol number").
+const fmtYearCagr = (v) => (v >= 0 ? '+' : '') + (Math.round(v) || 0).toLocaleString('en-US') + '%';
+// The year so far beside a CAGR on a card or a chip: small, on two lines, "(2026)" over its figure (the user,
+// 2026-11-26: "display 2026 in brackets smaller fonts, two lines on the side of CAGR, both small font").
+const yearCagrHtml = (v) => `<span class="year-cagr"><span class="year-cagr-label">(${dataYear()})</span>`
+  + `<span class="year-cagr-value ${v >= 0 ? 'positive' : 'negative'}">${fmtYearCagr(v)}</span></span>`;
 // The year a CAGR "so far" is of: the year of the data's last day (2026 on 26 November 2026).
 const dataYear = () => daily[daily.length - 1].date.slice(0, 4);
 // A run's money-weighted CAGR over the data's year so far (the user, 2026-11-26: "also inside cards and

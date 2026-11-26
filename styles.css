@@ -2591,7 +2591,7 @@
     color: var(--red-text);
   }
   /* The card's numbers, on one line; the ⓘ beside DD has the drawdown's dates. */
-  /* CAGR, the year so far and DD: one line where the card has the room, else DD (with its ⓘ) on the next, never cut. */
+  /* CAGR with the year so far beside it, and DD: one line; a card too narrow for it puts DD (with its ⓘ) on the next, never cut. */
   .saved-config-pill .sc-metrics {
     display: flex;
     flex-wrap: wrap;
@@ -2607,6 +2607,12 @@
     white-space: nowrap;
   }
   .saved-config-pill .sc-info { flex: none; align-self: center; margin: 0 0 0 1px; }
+  /* The year so far beside a CAGR on a card or a chip: "(2026)" over its figure, small, on two lines. */
+  .year-cagr { display: inline-flex; flex-direction: column; align-items: flex-start; align-self: center; margin-left: 4px; font-size: calc(7.5px * var(--ui-scale)); line-height: 1.1; white-space: nowrap; }
+  .year-cagr-label { font-weight: 600; letter-spacing: 0.3px; color: var(--text-muted); }
+  .year-cagr-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+  .year-cagr-value.positive { color: var(--green-text); }
+  .year-cagr-value.negative { color: var(--red-text); }
   .saved-config-pill .sc-metric-label {
     font-size: calc(8px * var(--ui-scale));
     font-weight: 600;

@@ -3071,8 +3071,7 @@ function buildConfigPillHtml(cfg) {
     const ddRange = (typeof fmtDDRange === 'function') ? fmtDDRange(m.ddPeak, m.ddTrough) : '';
     metrics = `
       <div class="sc-metrics">
-        <span class="sc-metric"><span class="sc-metric-label">CAGR</span> <span class="sc-metric-value ${cagrCls}">${cagrSign}${m.cagr.toFixed(1)}%</span></span>
-        ${Number.isFinite(m.cagrYear) ? `<span class="sc-metric"><span class="sc-metric-label">${dataYear()}</span> <span class="sc-metric-value ${m.cagrYear >= 0 ? 'positive' : 'negative'}">${fmtCagr(m.cagrYear)}</span></span>` : ''}
+        <span class="sc-metric"><span class="sc-metric-label">CAGR</span> <span class="sc-metric-value ${cagrCls}">${cagrSign}${m.cagr.toFixed(1)}%</span>${Number.isFinite(m.cagrYear) ? yearCagrHtml(m.cagrYear) : ''}</span>
         ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRange ? tipIcon([ddRange.replace('–', ' to ')]) : ''}</span>` : ''}
       </div>`;
   }
@@ -5211,7 +5210,7 @@ function renderCustomPanelBody(cfgId) {
     html += `
       <div class="custom-stats">
         <div class="custom-stat"><span>CAGR</span><b class="${cagrCls}">${m.cagr >= 0 ? '+' : ''}${m.cagr.toFixed(1)}%</b></div>
-        ${Number.isFinite(m.cagrYear) ? `<div class="custom-stat"><span>${dataYear()} so far</span><b class="${m.cagrYear >= 0 ? 'positive' : 'negative'}">${fmtCagr(m.cagrYear)}</b></div>` : ''}
+        ${Number.isFinite(m.cagrYear) ? `<div class="custom-stat"><span>${dataYear()} so far</span><b class="${m.cagrYear >= 0 ? 'positive' : 'negative'}">${fmtYearCagr(m.cagrYear)}</b></div>` : ''}
         <div class="custom-stat"><span>Max DD</span><b class="negative">${ddStr}</b>${ddRangeHtml}</div>
         <div class="custom-stat"><span>End</span><b>${(typeof fmtFull === 'function') ? fmtFull(m.end || 0) : Math.round(m.end || 0)}</b></div>
       </div>`;
