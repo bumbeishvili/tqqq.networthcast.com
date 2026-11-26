@@ -5150,20 +5150,24 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // and the average move use closes only (a true range needs highs and lows,
 // which the reconstruction before 1985 does not have), so the rule reads the
 // same on every day of the chart. Its position before the Entry is replayed
-// without trades, so a moved Entry inside a trend starts long. Defaults fitted
-// to 2010-2025 over the option grids: a 15-day breakout, a 100-day exit, no
-// stop (37.6% a year, drawdown 81%); the Turtles' 55/20 with a 3-move stop made
-// 3.0%, 20/10 with a 2-move stop 9.2%. The stop's window is moot with the stop off.
+// without trades, so a moved Entry inside a trend starts long. Since 26
+// November 2026 the defaults are the user's pick on the map of 2010-2025 ("set
+// this default"): a 19-day breakout, a 40-day exit, a stop 4.5 average moves
+// below the peak, the moves over 5 days (34.4% a year, drawdown 36%, with the
+// cost and cash interest). They were the fit over the option grids: a 15-day
+// breakout, a 100-day exit, no stop (37.6% a year, drawdown 81%, before the cost
+// and interest); the Turtles' 55/20 with a 3-move stop made 3.0%, 20/10 with a
+// 2-move stop 9.2%.
 CODE[56] = `{
   name: "Donchian breakout + ATR stop",
   params: [
-    { id: "entryDays", label: "Buy above the high of (days)", tip: "TQQQ is bought at a close above its highest close of this many prior days. The Turtles used 20 and 55.", text: "Buy TQQQ when it closes above its highest close of the last {} days.", default: 15, options:
-      [5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200, 220, 250, 300] },
-    { id: "exitDays", label: "Sell under the low of (days)", tip: "TQQQ is sold at a close under its lowest close of this many prior days. The Turtles used 10 and 20.", text: "Sell when it closes under its lowest close of the last {} days,", default: 100, options:
+    { id: "entryDays", label: "Buy above the high of (days)", tip: "TQQQ is bought at a close above its highest close of this many prior days. The Turtles used 20 and 55.", text: "Buy TQQQ when it closes above its highest close of the last {} days.", default: 19, options:
+      [5, 10, 15, 19, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200, 220, 250, 300] },
+    { id: "exitDays", label: "Sell under the low of (days)", tip: "TQQQ is sold at a close under its lowest close of this many prior days. The Turtles used 10 and 20.", text: "Sell when it closes under its lowest close of the last {} days,", default: 40, options:
       [3, 5, 7, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 150] },
-    { id: "atrMult", label: "Stop: average moves below the peak", tip: "The trailing stop sits this many average daily moves under the highest close since the entry. The Turtles used 2 true ranges.", text: "or under a stop {} average daily moves below its highest close since the buy.", default: 0, options:
+    { id: "atrMult", label: "Stop: average moves below the peak", tip: "The trailing stop sits this many average daily moves under the highest close since the entry. The Turtles used 2 true ranges.", text: "or under a stop {} average daily moves below its highest close since the buy.", default: 4.5, options:
       Array.from({ length: 19 }, (_, k) => +(1 + 0.5 * k).toFixed(1)).concat([{ value: 0, label: "Off" }]) },
-    { id: "atrDays", label: "Average move over (days)", tip: "The average absolute close-to-close change over this many days: the unit the stop is measured in.", text: "The average move covers the last {} days.", default: 20, options:
+    { id: "atrDays", label: "Average move over (days)", tip: "The average absolute close-to-close change over this many days: the unit the stop is measured in.", text: "The average move covers the last {} days.", default: 5, options:
       [5, 7, 10, 14, 20, 25, 30, 40, 50, 60, 80, 100] }
   ],
   columns: [
