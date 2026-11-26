@@ -112,11 +112,13 @@ const MAP_TOP_TIP = 'The line joins the dots with the highest CAGR. For the same
 const MAP_BEST_YEARS = 7;   // the time over which the best is judged: the max drawdown at its start, the CAGR after it (2.5, then 5, then 7 at the user's word, 2026-11-26)
 const MAP_BEST_MIN_CAGR = 12;   // % a year: a dot under this is never the best (the user, 2026-11-26: "make sure the cagr under 12 never wins")
 const MAP_BEST_LABEL = 'Best';   // the combination that makes the most in that time, the green point
+// Told as a story in plain words (the user, 2026-11-26, of a version with the formula: "this is written too
+// shitly, I always say use clear simple words").
 const MAP_BEST_TIP = [
-  `Best: the most money after ${MAP_BEST_YEARS} years, with the max drawdown at the start and the CAGR after it.`,
-  `$1 becomes (1 − max drawdown) × (1 + CAGR)^${MAP_BEST_YEARS}. Example: a 50% fall, then 100% a year: ${mapMoneyText(mapBestValue(100, 0.5))}.`,
-  `Under $1: the drawdown is not earned back in ${MAP_BEST_YEARS} years. The least money is the worst.`,
-  `A CAGR under ${MAP_BEST_MIN_CAGR}% is never the best.`,
+  'Best: the settings that end with the most money in this test.',
+  `Put in $1. It falls by its max drawdown right away, then grows at its CAGR for ${MAP_BEST_YEARS} years.`,
+  `Example: a 50% fall leaves ${mapMoneyText(0.5)}. Then 100% a year doubles it ${MAP_BEST_YEARS} times: ${mapMoneyText(mapBestValue(100, 0.5))}.`,
+  `Under ${MAP_BEST_MIN_CAGR}% CAGR it is never the best.`,
 ].join('\n');
 const MAP_TIE_TIP = [
   `Every CAGR and max drawdown that makes as much as the best after ${MAP_BEST_YEARS} years.`,
@@ -563,8 +565,10 @@ async function mapFill(map, measure, over) {
     run.star.done += sets.length;
   }
   // From the best dot, a climb for one above the green line, and again from what it finds: first, so the
-  // best is pushed up early.
+  // best is pushed up early. The first step's runs are made dots here, not left to the redraw's ticker: a
+  // first step quicker than a tick (or a run with no ticker, as the benchmark's) would find no best.
   run.step = 'best';
+  mapSync(map);
   for (let best = mapUnclimbedBest(map); best; best = mapUnclimbedBest(map)) {
     await mapClimb(map, measure, best, rand);
     if (over()) return false;
@@ -827,7 +831,7 @@ function showMapKeyTips() {
   const map = _map, { hold, job } = map, best = job ? mapBestDot(map) : null;
   map.el.querySelector('[data-map-hold-tip]').dataset.tip = hold ? `${MAP_HOLD_TIP}\nCAGR ${fitCagrText(job.cagrOf, hold)}, max drawdown ${fitDdText(hold)}.` : MAP_HOLD_TIP;
   map.el.querySelector('[data-map-best-tip]').dataset.tip = best
-    ? `${MAP_BEST_TIP}\nThe best here: ${mapMoneyText(mapDotValue(best))}, CAGR ${fitCagrText(job.cagrOf, best.r)}, max drawdown ${fitDdText(best.r)}.` : MAP_BEST_TIP;
+    ? `${MAP_BEST_TIP}\nBest here: $1 becomes ${mapMoneyText(mapDotValue(best))}. CAGR ${fitCagrText(job.cagrOf, best.r)}, max drawdown ${fitDdText(best.r)}.` : MAP_BEST_TIP;
 }
 // Where a dot stands, and where its worst result among its neighbours does, in percent.
 const mapOwnAt = (dot) => ({ x: dot.r.dd * 100, y: dot.cagr });
