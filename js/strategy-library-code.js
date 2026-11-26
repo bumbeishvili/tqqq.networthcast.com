@@ -6404,26 +6404,28 @@ CODE[73] = withDefaults(withOverextendedLine(CODE[72], { name: LATE_WEEK_OVER, h
 // ===== #75: #73 at the settings of the user's copy after a pick on the map of 1984-2025 (the user,
 // 2026-11-26, on a screenshot of that copy: "Create this new strategy, call it Late week 84-25 steady
 // fit") =====
-// Ten settings differ from #73's: the down trend under the 33-day median or less than 1.5% over it;
-// the RSI read on QQQ, at 30.5; the lagging-fund rule over 12 days, by more than 5.5%, staying out to
-// the weekend; and the line read on SOXX, at 43% over its 233-day median. The copy's panel and its
-// fit note are matched to the day: a max drawdown of 64.8% from 25 October 2022 to 9 May 2023 on any
-// period since 2010, and 75.1% on 1984-2025. $100K lump sum: 1984-2025 99.4% a year (max drawdown
-// 75.1%) against 65.2% (99.9%) for #73; Q1 2010 to Q4 2025 110.7% (64.8%) against 223.9% (42.6%).
-// It is the steady one of the two: one step either way on any of its eight number settings makes
-// 92.2% to 98.9% on 1984-2025 and 106.9% to 116.2% on 2010-2025. The tips that quote #73's own
-// facts are swapped for this entry's, or for plain ones where they quoted a study of other settings.
+// Thirteen settings differ from #73's. The first pick moved ten; later that day the user set a second pick on the
+// same map as the defaults ("set this as default"; the map: CAGR 109.2%, max drawdown 70.2%): the down trend under
+// the 28-day median or less than 3.5% over it; the RSI read on SPY over 6 days, at 32.5; the lagging-fund rule on
+// SSO against QLD, over 10 days, by more than 1.5%, staying out to the weekend; and the line read on SOXX, at 44%
+// over its 234-day median. With $80K and $3K a month on 1984-2025 these make a money-weighted 109.1% a year with a
+// 70.2% max drawdown. $100K lump sum: 1984-2025 105.9% a year (max drawdown 70.2%) against 99.4% (75.1%) at the
+// first pick and 65.2% (99.9%) for #73; Q1 2010 to Q4 2025 92.8% (62.9%) against 110.7% (64.8%) and 223.9% (42.6%).
+// One step either way on any of its eight number settings makes 94.7% to 106.5% on 1984-2025 and 83.9% to 93.9% on
+// 2010-2025. The tips that quote #73's own facts are swapped for this entry's, or for plain ones where they quoted
+// a study of other settings.
 const LATE_WEEK_84_25 = "84-25 - Late-week + overextended SQQQ";   // was "Late week 84-25 steady fit", then "1984 - Late-week + overextended SQQQ", on 26 November 2026
 CODE[75] = withTips(withDefaults(CODE[73], { name: LATE_WEEK_84_25, defaults: {
-  trendUnder: -1.5, trendDays: 33, rsiFund: "qqq", rsiLevel: 30.5, lagDays: 12, lagBy: 5.5, lagHold: "weekend", overFund: "soxx", overPct: 43, overWindow: 233 } }),
+  trendUnder: -3.5, trendDays: 28, rsiFund: "spy", rsiDays: 6, rsiLevel: 32.5, lagFund: "sso", lagDays: 10, lagVs: "qld", lagBy: 1.5, lagHold: "weekend",
+  overFund: "soxx", overPct: 44, overWindow: 234 } }),
 { name: LATE_WEEK_84_25, tips: {
   rsiLevel: "The week is skipped with the RSI at this level or under.",
   lagTake: "Yes: a week skipped for a low RSI is taken all the same when one fund's return trails another's at that close. Left out with one trade per day and another fund held in between.",
   lagBy: "How far under the other fund's return, in points.",
   lagHold: "One day: the fund is bought back at the next close. The days before the weekend: at the last close before a weekend, or where the days out end.",
-  overTake: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 1984-2025 SOXX closed more than 43% above its 233-day median in 61 stretches, and SQQQ rose over 47 of them; since 2010 in 6, and SQQQ rose over 5.",
-  overPct: "How far above its median the close must be. With SOXX's 233-day median in 1984-2025: 40% made 88.7% a year, 43% 99.4%, 45% 91.2%, 50% 80.6%. Since 2010 every level from 35% to 55% made 107% to 111%.",
-  overHold: "What the money is in while overextended. Cash in SQQQ's place made 90.2% a year in 1984-2025 against 99.4%. On the week's own days out the fund held in between comes first.",
+  overTake: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 1984-2025 SOXX closed more than 44% above its 234-day median in 54 stretches, and SQQQ rose over 47 of them; since 2010 in 5, and SQQQ rose over 4.",
+  overPct: "How far above its median the close must be. With SOXX's 234-day median in 1984-2025: 40% made 94.6% a year, 44% 105.9%, 47% 93.5%, 50% 88.3%. Since 2010 every level from 35% to 55% made 93% to 96%.",
+  overHold: "What the money is in while overextended. Cash in SQQQ's place made 97.1% a year in 1984-2025 against 105.9%. On the week's own days out the fund held in between comes first.",
 } });
 
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----

@@ -1,15 +1,14 @@
 /*
  * Library strategy #75, "84-25 - Late-week + overextended SQQQ" (was "Late week 84-25 steady fit"): #73 (Late-week + overextended SQQQ) at the
- * settings of the user's copy after a pick on the map of 1984 to 2025 (the #75 section of
- * js/strategy-library-code.js). Pure Node — no browser/server. Checks, on the repo's own price history:
- *   1. its settings are #73's, in the same order, with the panel's ten defaults moved and no other;
- *   2. it trades as #73 does with those ten set by hand, row for row, with a lump sum, with
+ * settings of the user's copy after two picks on the map of 1984 to 2025, the second set as the defaults on 26 November
+ * 2026 (the #75 section of js/strategy-library-code.js). Pure Node — no browser/server. Checks, on the repo's own price history:
+ *   1. its settings are #73's, in the same order, with the 13 defaults moved and no other;
+ *   2. it trades as #73 does with those 13 set by hand, row for row, with a lump sum, with
  *      contributions and a withdrawal, and with one trade per day;
  *   3. its texts are #73's but for its name and seven tips: the four that quoted a study of other
  *      settings are plain, and the line's three quote this strategy's own facts, which are checked
  *      here against its runs;
- *   4. it has the drawdowns the user's copy showed: 64.8% from 25 October 2022 to 9 May 2023 on a
- *      period from 2010, and 75.1% on 1984 to 2025 (the map's fit note).
+ *   4. it has the map's drawdown of the second pick: 70.2% on 1984 to 2025.
  *
  *   node tests/library-late-week-84-25.cjs
  */
@@ -23,8 +22,8 @@ const ck = (name, ok, detail) => {
 };
 
 const OVER = 73, MINE = 75;
-// The user's panel, where it differs from #73's defaults.
-const MOVED = { trendUnder: -1.5, trendDays: 33, rsiFund: 'qqq', rsiLevel: 30.5, lagDays: 12, lagBy: 5.5, lagHold: 'weekend', overFund: 'soxx', overPct: 43, overWindow: 233 };
+// The second pick, where it differs from #73's defaults.
+const MOVED = { trendUnder: -3.5, trendDays: 28, rsiFund: 'spy', rsiDays: 6, rsiLevel: 32.5, lagFund: 'sso', lagDays: 10, lagVs: 'qld', lagBy: 1.5, lagHold: 'weekend', overFund: 'soxx', overPct: 44, overWindow: 234 };
 const TIPS = ['rsiLevel', 'lagTake', 'lagBy', 'lagHold', 'overTake', 'overPct', 'overHold'];
 const { dates, sqqq: SQ } = data, at = d => dates.findIndex(x => x >= d);
 const Y84 = at('1984-01-01') - 1, Y2010 = at('2010-01-04') - 1, END = at('2026-01-01') - 1, LAST = dates.length - 1;
@@ -43,15 +42,15 @@ const pct = v => (v * 100).toFixed(1) + '%';
   ck('#73\'s settings, in the same order', ids.join() === theirs.join(), ids.join());
   const d = defaultsOf(mine), d73 = defaultsOf(over);
   const moved = ids.filter(id => JSON.stringify(d[id]) !== JSON.stringify(d73[id]));
-  ck('the panel\'s ten defaults moved, and no other', moved.join() === Object.keys(MOVED).sort((a, b) => ids.indexOf(a) - ids.indexOf(b)).join() && moved.every(id => JSON.stringify(d[id]) === JSON.stringify(MOVED[id])),
+  ck('the 13 defaults moved, and no other', moved.join() === Object.keys(MOVED).sort((a, b) => ids.indexOf(a) - ids.indexOf(b)).join() && moved.every(id => JSON.stringify(d[id]) === JSON.stringify(MOVED[id])),
     moved.map(id => `${id} ${JSON.stringify(d73[id])} -> ${JSON.stringify(d[id])}`).join(', '));
 }
 
-// ---- 2. It is #73 with the ten set by hand ----
+// ---- 2. It is #73 with the 13 set by hand ----
 {
   const monthly = Object.fromEntries(dates.slice(Y2010 + 1, END + 1).filter((date, k, all) => k === 0 || all[k - 1].slice(0, 7) !== date.slice(0, 7)).map(date => [date, 4000]));
   const withMoney = { ...monthly, '2020-06-15': -50000 };
-  ck('a lump sum from 1984: #73 with the ten, row for row', sameRows(run(mine, {}, { from: Y84 }), run(over, MOVED, { from: Y84 })));
+  ck('a lump sum from 1984: #73 with the 13, row for row', sameRows(run(mine, {}, { from: Y84 }), run(over, MOVED, { from: Y84 })));
   ck('contributions and a withdrawal: row for row', sameRows(run(mine, {}, { contributions: withMoney }), run(over, MOVED, { contributions: withMoney })));
   ck('one trade per day: row for row', sameRows(run(mine, { splitDays: true }), run(over, { ...MOVED, splitDays: true })));
 }
@@ -71,9 +70,9 @@ const pct = v => (v * 100).toFixed(1) + '%';
   // The line's facts its tips quote, from its own runs (1984 to 2025, $100K).
   const cagr = settings => pct(perYear(run(mine, settings, { from: Y84 })));
   const own = cagr({});
-  ck(`the level's tip: 40% ${cagr({ overPct: 40 })}, 43% ${own}, 45% ${cagr({ overPct: 45 })}, 50% ${cagr({ overPct: 50 })}`, a.overPct.tip.includes(`40% made ${cagr({ overPct: 40 })} a year, 43% ${own}, 45% ${cagr({ overPct: 45 })}, 50% ${cagr({ overPct: 50 })}`), a.overPct.tip);
-  const since = [35, 40, 43, 45, 50, 55].map(l => perYear(run(mine, { overPct: l })) * 100);
-  ck('and since 2010 every level from 35% to 55% makes 107% to 111%', since.every(v => Math.round(v) >= 107 && Math.round(v) <= 111), since.map(v => v.toFixed(1)).join(', '));
+  ck(`the level's tip: 40% ${cagr({ overPct: 40 })}, 44% ${own}, 47% ${cagr({ overPct: 47 })}, 50% ${cagr({ overPct: 50 })}`, a.overPct.tip.includes(`40% made ${cagr({ overPct: 40 })} a year, 44% ${own}, 47% ${cagr({ overPct: 47 })}, 50% ${cagr({ overPct: 50 })}`), a.overPct.tip);
+  const since = [35, 40, 44, 45, 50, 55].map(l => perYear(run(mine, { overPct: l })) * 100);
+  ck('and since 2010 every level from 35% to 55% makes 93% to 96%', since.every(v => Math.round(v) >= 93 && Math.round(v) <= 96), since.map(v => v.toFixed(1)).join(', '));
   ck(`the held fund's tip: cash ${cagr({ overHold: 'cash' })} against ${own}`, a.overHold.tip.includes(`made ${cagr({ overHold: 'cash' })} a year in 1984-2025 against ${own}`), a.overHold.tip);
   const stays = (from, to) => { const log = run(mine, {}, { from, to }), out = []; let s = -1;
     log.forEach((r, k) => { const on = r.overRel > MOVED.overPct; if (on && s < 0) s = k; if (!on && s >= 0) { out.push(SQ[at(log[k].date)] / SQ[at(log[s].date)] > 1); s = -1; } }); return out; };
@@ -82,11 +81,10 @@ const pct = v => (v * 100).toFixed(1) + '%';
     a.overTake.tip.includes(`in ${all.length} stretches, and SQQQ rose over ${all.filter(Boolean).length} of them; since 2010 in ${recent.length}, and SQQQ rose over ${recent.filter(Boolean).length}.`), a.overTake.tip);
 }
 
-// ---- 4. The user's copy ----
+// ---- 4. The map's numbers ----
 {
-  const since2010 = fallOf(run(mine, {}, { to: LAST })), fit = fallOf(run(mine, {}, { from: Y84 }));
-  ck('from 2010: a max drawdown of 64.8%, 25 October 2022 to 9 May 2023, as the panel showed', pct(since2010.fall) === '64.8%' && since2010.from === '2022-10-25' && since2010.to === '2023-05-09', `${pct(since2010.fall)} ${since2010.from} to ${since2010.to}`);
-  ck('1984 to 2025: 75.1%, as the fit note said', pct(fit.fall) === '75.1%', pct(fit.fall));
+  const fit = fallOf(run(mine, {}, { from: Y84 }));
+  ck('1984 to 2025: 70.2%, as the map said', pct(fit.fall) === '70.2%', pct(fit.fall));
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : 'library late week 84-25 steady fit: all checks passed');
