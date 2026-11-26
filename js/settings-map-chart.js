@@ -131,9 +131,17 @@ class SettingsMapChart {
   }
 
   // The dots' spread with a little room around it, drawdown never under zero.
-  // The zoom then takes its part of that (applyZoom).
+  // The zoom then takes its part of that (applyZoom). While zoomed in the frame
+  // holds still, so dots that come in later appear where they belong in the view
+  // instead of moving it (the user, 2026-11-26: "make sure when new ones
+  // discovered added they does not shift zoomd in result"); back at the whole
+  // map (Reset zoom, or zoomed all the way out) it takes every dot in again.
   calculateScales() {
-    const { data, now, link, flags, chartWidth, chartHeight, padShare } = this.getState();
+    const { data, now, link, flags, chartWidth, chartHeight, padShare, transform, x0: heldX, y0: heldY } = this.getState();
+    if (transform && transform.k > 1 && heldX && heldY) {
+      heldX.range([0, chartWidth]); heldY.range([chartHeight, 0]);
+      return;
+    }
     const points = (data || []).concat(now || [], link || [], flags || []);
     const spread = (values, floor) => {
       const lo = d3.min(values), hi = d3.max(values), pad = Math.max((hi - lo) * padShare, 1);
@@ -355,7 +363,9 @@ class SettingsMapChart {
       // d3 scales a wheel step tenfold while Ctrl is down, which is right for a pinch and far too fast for a mouse wheel with the key held.
       .wheelDelta(event => -event.deltaY * (event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : wheelK))
       .on('zoom', (event) => {
+        const leaving = this.getState().transform.k > 1 && event.transform.k <= 1;
         this.setState({ transform: event.transform });
+        if (leaving) this.calculateScales();   // back at the whole map: the frame held while zoomed takes in the dots that came since
         this.draw();
       });
     zoom.scaleExtent([1, maxZoom]).extent([[0, 0], [chartWidth, chartHeight]]).translateExtent([[0, 0], [chartWidth, chartHeight]]);

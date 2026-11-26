@@ -103,11 +103,11 @@ const MAP_PLATEAU_TIP = [
 ].join('\n');
 const MAP_UNTESTED_TIP = 'Not tested yet with a setting a little off. Click it to test it now.';
 const MAP_TOP_TIP = 'The line joins the dots with the highest CAGR. For the same max drawdown, no dot has a higher one.';
-const MAP_BEST_YEARS = 2.5;   // the time over which the best is judged: the max drawdown at its start, the CAGR after it
+const MAP_BEST_YEARS = 5;   // the time over which the best is judged: the max drawdown at its start, the CAGR after it (2.5 until the user's "let's use 5 years instead", 2026-11-26)
 const MAP_BEST_LABEL = 'Best';   // the combination that makes the most in that time, the green point
 const MAP_BEST_TIP = [
   `Best: the most money after ${MAP_BEST_YEARS} years, with the max drawdown at the start and the CAGR after it.`,
-  `$1 becomes (1 − max drawdown) × (1 + CAGR)^${MAP_BEST_YEARS}. Example: a 50% fall, then 100% a year: $2.83.`,
+  `$1 becomes (1 − max drawdown) × (1 + CAGR)^${MAP_BEST_YEARS}. Example: a 50% fall, then 100% a year: ${mapMoneyText(mapBestValue(100, 0.5))}.`,
   `Under $1: the drawdown is not earned back in ${MAP_BEST_YEARS} years. The least money is the worst.`,
 ].join('\n');
 const MAP_TIE_TIP = [
@@ -304,11 +304,14 @@ const mapNowDot = (map) => (map.job ? map.dots.get(fitRunKey(map.job.store, map.
 // than cagr 42 with 32% drawdown"); asked which pairs tie, the user gave the rule that replaced it: "I
 // think it's about 2.5 year period, suppose you got your drawdown at the start of year right away, so
 // the best cagr is the one that fixes it in 2.5 years period or sooner and has the best cagr overall
-// aftr that time passes".
+// aftr that time passes". The same day: "let's use 5 years instead of 2.5 years for the best ratio".
 // What $1 becomes after MAP_BEST_YEARS with the max drawdown (a share, 0.3) at the start and the CAGR
 // (in percent) after it: (1 − dd) × (1 + CAGR)^years. The most is the best, the least the worst; under
-// $1 the drawdown is not earned back in that time. 42% at a 32% drawdown makes $1.63, 9% at 2.4% $1.21.
-const mapBestValue = (cagr, dd) => (1 - dd) * Math.pow(Math.max(0, 1 + cagr / 100), MAP_BEST_YEARS);
+// $1 the drawdown is not earned back in that time. Over 5 years 42% at a 32% drawdown makes $3.93, 9%
+// at 2.4% $1.50. A declaration, so MAP_BEST_TIP's example can use it.
+function mapBestValue(cagr, dd) {
+  return (1 - dd) * Math.pow(Math.max(0, 1 + cagr / 100), MAP_BEST_YEARS);
+}
 const mapDotValue = (dot) => mapBestValue(dot.cagr, dot.r.dd);
 // The dot that makes the most, or null with no dot. Read off once for each state of the dots
 // (map.version; setMapJob starts it over).
@@ -320,7 +323,9 @@ function mapBestDot(map) {
 // x percent, both in percent. It starts above zero, bends up gently and then steeply toward a 100%
 // drawdown. Every dot lies on it or under it, the best one on it.
 const mapTieCagr = (value) => (x) => (Math.pow(value / (1 - x / 100), 1 / MAP_BEST_YEARS) - 1) * 100;
-const mapMoneyText = (value) => '$' + (value < 100 ? value.toFixed(2) : Math.round(value).toLocaleString('en-US'));
+function mapMoneyText(value) {   // a declaration, so MAP_BEST_TIP's example can use it
+  return '$' + (value < 100 ? value.toFixed(2) : Math.round(value).toLocaleString('en-US'));
+}
 const mapValueText = (value) => `$1 becomes ${mapMoneyText(value)} after ${MAP_BEST_YEARS} years`;
 const mapOwn = (dot) => dot.r, mapFlat = (dot) => dot.flat;
 // A dot's result, and its worst among its neighbours, as the numbers show them: in tenths of a
