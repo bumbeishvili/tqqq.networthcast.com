@@ -1320,6 +1320,15 @@ function heldAtEnd(log) {
 // The second line of that ⓘ, read when the card is drawn (the time the prices stand at arrives
 // after the first run, and moves with every live price): while the day still trades, that the
 // price is no close yet; once it has closed, which close the trade was made at.
+// A card's trade in words: what it does and when (the user, 2026-11-26: for the blue line "switch today").
+// "Switch today: TQQQ → SQQQ"; a move that already starts with what it does ("Buy TQQQ") takes the day after it;
+// a trade of an earlier day than today in New York (a weekend's card) names its date ("Switch 21 Nov: ...").
+const DAY_EVENT_VERB = { buy: 'Buy', sell: 'Sell', switch: 'Switch', rebalance: 'Rebalance' };
+function dayEventWords(event) {
+  const now = Object.fromEntries(NY_CLOCK.formatToParts(new Date()).map(p => [p.type, p.value]));
+  const when = event.date === `${now.year}-${now.month}-${now.day}` ? 'today' : _miniDayMonth(Date.parse(event.date));
+  return /^(Buy|Sell|Switch|Rebalance)\b/.test(event.move) ? `${event.move} ${when}` : `${DAY_EVENT_VERB[event.kind]} ${when}: ${event.move}`;
+}
 function dayEventClose(event) {
   const open = minutesBeforeClose(event.date, window._dataFetchedAt);
   return open != null ? _miniNotFinal(open) : `Final at ${_miniCloseName(Date.parse(event.date), false)}.`;

@@ -3092,6 +3092,13 @@ document.addEventListener('change', (e) => {
 // The colour of a card's day event, by the trade's kind: the log tables' own classes for a buy
 // and a sale; a switch and a rebalance keep the card's accent.
 const SC_EVENT_CLASS = { buy: 'action-buy', sell: 'action-sell' };
+// A card's trade in words (dayEventWords), each part kept whole and the ⓘ (icon, its HTML) kept with the move: on a
+// narrow card "Switch today:" and "TQQQ → SQQQ ⓘ" take a line each rather than run past the card's edge.
+function dayEventHtml(event, icon) {
+  const words = dayEventWords(event), cut = words.indexOf(': ');
+  const part = (text, end) => `<span class="sc-event-part">${String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;')}${end || ''}</span>`;
+  return cut < 0 ? part(words, icon) : part(words.slice(0, cut + 1)) + ' ' + part(words.slice(cut + 2), icon);
+}
 function buildConfigPillHtml(cfg) {
   const m = (window._configMetrics || {})[cfg.id] || {};
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3117,9 +3124,9 @@ function buildConfigPillHtml(cfg) {
   // (js/signal-chart.js dayEventOf). The card shows where the money goes, in the trade's colour,
   // and no more. The ⓘ beside it is two lines: why, said once, and whether the price is final.
   const event = m.event, sentence = (text) => (/[.!?]$/.test(text) ? text : text + '.');
-  const eventHtml = event ? `<div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${esc(event.move)}</b>${tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)])}</div>`
-    // On a day without a trade the same line names the fund held now, paler and alone.
-    : m.held ? `<div class="sc-holding">${esc(m.held)}</div>` : '';
+  const eventHtml = event ? `<div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${dayEventHtml(event, tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)]))}</b></div>`
+    // On a day without a trade the same line names the fund held now, paler (the user, 2026-11-26: "it should say Currently TQQQ").
+    : m.held ? `<div class="sc-holding">Currently ${esc(m.held)}</div>` : '';
   const eyeSvg = hidden
     ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
     : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';

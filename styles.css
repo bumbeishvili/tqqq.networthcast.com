@@ -2596,7 +2596,7 @@
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    gap: 2px 12px;
+    gap: 2px 7px;
     margin-top: 4px;
     padding-left: 24px;
   }
@@ -2607,9 +2607,8 @@
     white-space: nowrap;
   }
   .saved-config-pill .sc-info { flex: none; align-self: center; margin: 0 0 0 1px; }
-  /* The year so far beside a CAGR on a card or a chip: the year over its figure, small, on two lines, one bracket
-     around both (curved lines left and right as tall as the two lines). */
-  .year-cagr { display: inline-flex; flex-direction: column; align-items: center; align-self: center; margin-left: 5px; padding: 0 4px; border: solid var(--text-muted); border-width: 0 1px; border-radius: 5px / 50%; font-size: calc(7.5px * var(--ui-scale)); line-height: 1.1; white-space: nowrap; }
+  /* The year so far after a CAGR on a card or a chip: its figure and "in 2026", small, on the CAGR's baseline. */
+  .year-cagr { align-self: baseline; margin-left: 4px; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
   .year-cagr-label { font-weight: 600; letter-spacing: 0.3px; color: var(--text-muted); }
   .year-cagr-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
   .year-cagr-value.positive { color: var(--green-text); }
@@ -2629,8 +2628,11 @@
   .saved-config-pill .sc-metric-value.positive { color: var(--green-text); }
   .saved-config-pill .sc-metric-value.negative { color: var(--red-text); }
   /* The day's event: where the money goes at the latest day's close, a line under the card's numbers, its ⓘ beside it (js/saved-configs.js buildConfigPillHtml). */
-  .saved-config-pill .sc-event { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
-  .saved-config-pill .sc-event-move { font-weight: 700; color: var(--accent-text); white-space: nowrap; }
+  /* The trade's line as running text, so a narrow card wraps it with the ⓘ right after the move, not at the line's far end. */
+  .saved-config-pill .sc-event { display: block; min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
+  .saved-config-pill .sc-event .sc-info { vertical-align: middle; margin-left: 4px; }
+  .saved-config-pill .sc-event-move { font-weight: 700; color: var(--accent-text); }
+  .saved-config-pill .sc-event-part { white-space: nowrap; }   /* "Switch today:" and the move each whole; a narrow card puts the move on the next line */
   /* On a day without a trade: the fund held now, in the event's place and type, paler. */
   .saved-config-pill .sc-holding { min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; font-weight: 700; color: var(--accent-text); opacity: 0.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .saved-config-pill .sc-event-move.action-buy { color: var(--green-text); }
