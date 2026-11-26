@@ -1135,6 +1135,30 @@ function customWorkerMain() {
     try { self[k] = undefined; } catch (e) {}
   });
   var DATA = null, DATA_ROWS = null;   // DATA_ROWS: DATA as daily row objects, built on first need
+  function dataRows() {
+    if (!DATA_ROWS) DATA_ROWS = DATA.dates.map(function (d, i) {
+      return { date: d, tqqq: DATA.tqqq[i], qqq: DATA.qqq[i], spy: DATA.spy[i], qld: DATA.qld[i], sso: DATA.sso[i], spxl: DATA.spxl[i], sqqq: DATA.sqqq[i], gld: DATA.gld[i], soxl: DATA.soxl[i], soxx: DATA.soxx[i], soxs: DATA.soxs[i] };
+    });
+    return DATA_ROWS;
+  }
+  // A run's final value and max drawdown, as the main thread's fitScore reads them off a full answer: the last
+  // finite value among the rows with a date; the drawdown of the returned holdings revalued at every daily
+  // close, else of the rows' held, shares and cash so revalued, else of the rows' values. Null with no value.
+  function scoreOf(rawLog, res) {
+    if (typeof computeDailyMaxDrawdownMulti !== 'function' || typeof buildCustomDDControls !== 'function' || typeof computeMaxDrawdown !== 'function') {
+      throw new Error('This page cannot score a run in its worker: the drawdown measures (js/metrics.js, js/analytics.js) are not loaded.');
+    }
+    var rows = [], ri;
+    for (ri = 0; ri < rawLog.length; ri++) if (rawLog[ri] && rawLog[ri].date != null) rows.push(rawLog[ri]);
+    var final = null;
+    for (ri = rows.length - 1; ri >= 0 && final == null; ri--) { var fv = rows[ri].value; if (typeof fv === 'number' && isFinite(fv)) final = fv; }
+    if (final == null) return null;
+    var dd = null;
+    if (res && Array.isArray(res.holdings) && res.holdings.length) dd = computeDailyMaxDrawdownMulti(res.holdings, dataRows());
+    if (!dd) { var controls = buildCustomDDControls(rows); if (controls) dd = computeDailyMaxDrawdownMulti(controls, dataRows()); }
+    if (!dd) dd = computeMaxDrawdown(rows.map(function (r) { return r.value; }), rows.map(function (r) { return r.date; }));
+    return { final: final, dd: dd.pct };
+  }
   function sanitize(raw) {
     var s = String(raw || '').trim();
     var f = s.match(/```[a-zA-Z0-9]*\s*([\s\S]*?)```/);
@@ -1280,15 +1304,21 @@ function customWorkerMain() {
     if (numeric) { var n = Number(raw); return isFinite(n) ? n : (sp.default != null ? sp.default : 0); }
     return raw != null ? String(raw) : (sp.default != null ? String(sp.default) : '');
   }
+  var compiled = { code: null, mod: null, schema: null };   // the last code text read, its strategy and its settings
   self.onmessage = function (e) {
     var msg = e.data || {};
     if (msg.type === 'data') { DATA = msg.data; DATA_ROWS = null; return; }
     if (msg.type !== 'run') return;
     var out;
     try {
-      var mod = evalMod(msg.code);
-      var schema = Array.isArray(mod.params) ? mod.params : [];
-      try { schema = JSON.parse(JSON.stringify(schema)); } catch (e0) { schema = []; }
+      // The strategy is read and its settings copied once for each code text: a Fit search or a map sends
+      // the same code thousands of times, and reading it again each time took a good part of every run.
+      if (msg.code !== compiled.code) {
+        var fresh = evalMod(msg.code), copy = Array.isArray(fresh.params) ? fresh.params : [];
+        try { copy = JSON.parse(JSON.stringify(copy)); } catch (e0) { copy = []; }
+        compiled = { code: msg.code, mod: fresh, schema: copy };
+      }
+      var mod = compiled.mod, schema = compiled.schema;
       var p = {}, g = msg.globals || {}, key;
       for (key in g) p[key] = g[key];
       var raw = msg.rawParams || {};
@@ -1299,6 +1329,14 @@ function customWorkerMain() {
       var res = mod.run(DATA, p);
       var rawLog = Array.isArray(res) ? res : (res && Array.isArray(res.log) ? res.log : null);
       if (!rawLog) throw new Error('Your function must return an array of { date, value } (or { log: [...] }).');
+      // A caller that keeps only the final value and the max drawdown (the Fit search and the map) asks
+      // for those alone (answer: 'score'), measured as the main thread's fitScore measures a full answer:
+      // two numbers go back where most of a megabyte went, and the pool's workers stop waiting on the
+      // main thread to unpack them.
+      if (msg.answer === 'score') {
+        self.postMessage({ reqId: msg.reqId, score: scoreOf(rawLog, res) });
+        return;
+      }
       // A caller that reads only each row's value asks for that alone
       // (answer: 'values' — the analytics windows' pooled runs). A full-history
       // answer is megabytes of rows, holdings and lines, and the main thread
@@ -1330,10 +1368,7 @@ function customWorkerMain() {
       // built-in lines are, and only that result goes back.
       var holdingsDD = null;
       if (res && Array.isArray(res.holdings) && res.holdings.length && typeof computeDailyMaxDrawdownMulti === 'function') {
-        if (!DATA_ROWS) DATA_ROWS = DATA.dates.map(function (d, i) {
-          return { date: d, tqqq: DATA.tqqq[i], qqq: DATA.qqq[i], spy: DATA.spy[i], qld: DATA.qld[i], sso: DATA.sso[i], spxl: DATA.spxl[i], sqqq: DATA.sqqq[i], gld: DATA.gld[i], soxl: DATA.soxl[i], soxx: DATA.soxx[i], soxs: DATA.soxs[i] };
-        });
-        holdingsDD = computeDailyMaxDrawdownMulti(res.holdings, DATA_ROWS);
+        holdingsDD = computeDailyMaxDrawdownMulti(res.holdings, dataRows());
       }
       // The run's end state, which the main thread marks at extended-hours
       // prints for the badge (extendedMoveOf, js/utils.js): a multi-fund
@@ -1410,10 +1445,13 @@ const _customRunTimers = {}; // cfgId -> { sig, t }
 // A fresh sandbox worker running customWorkerMain: the live line's worker and
 // each of the Fit search's pool (fitPool).
 function newCustomWorker() {
-  // computeDailyMaxDrawdownMulti (js/metrics.js) goes in as its source, so a
-  // strategy's returned holdings are measured as the chart's own lines are.
-  // The widget page loads no metrics.js and shows no drawdown.
-  const dd = typeof computeDailyMaxDrawdownMulti === 'function' ? computeDailyMaxDrawdownMulti.toString() + '\n' : '';
+  // The drawdown measures go in as their source (js/metrics.js, js/analytics.js), so a strategy's returned
+  // holdings are measured as the chart's own lines are, and a 'score' answer (fitScore's two numbers) is
+  // measured in the worker as the main thread measures a full one. A page without them (analytics.js is not
+  // on the widget's) gives a worker that cannot answer 'score': such a run fails with its reason.
+  const dd = [typeof computeDailyMaxDrawdownMulti === 'function' ? computeDailyMaxDrawdownMulti.toString() : '',
+    typeof buildCustomDDControls === 'function' ? 'var DD_ASSET_KEYS = ' + JSON.stringify(DD_ASSET_KEYS) + ';\n' + buildCustomDDControls.toString() : '',
+    typeof computeMaxDrawdown === 'function' ? computeMaxDrawdown.toString() : ''].join('\n') + '\n';
   const src = dd + '(' + customWorkerMain.toString() + ')()';
   return new Worker(URL.createObjectURL(new Blob([src], { type: 'application/javascript' })));
 }
@@ -3682,7 +3720,7 @@ function restoreFitFreezeFromShare(text) {
 // each row's date and value alone (see customWorkerMain). data: the prices the
 // workers run on (buildCustomData), as they stood when the search was set up.
 function fitPool(data) {
-  const size = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
+  const size = Math.max(1, (navigator.hardwareConcurrency || 4) - 1);   // every core but one (was at most 6, 2026-11-26)
   const spawn = () => { const w = newCustomWorker(); w.postMessage({ type: 'data', data }); return w; };
   const slots = Array.from({ length: size }, () => ({ w: spawn(), finish: null }));
   const queue = [];
@@ -3712,8 +3750,10 @@ function fitPool(data) {
   };
 }
 
-// The final value and max drawdown (the panel's own measure) of one run.
+// The final value and max drawdown (the panel's own measure) of one run: a 'score' answer's own two
+// numbers (measured in the worker the same way), else read off the full answer.
 function fitScore(msg) {
+  if (msg && 'score' in msg) return msg.score;
   const log = msg && msg.log;
   if (!log || !log.length) return null;
   let final = null;
@@ -4555,7 +4595,7 @@ function customFitJob(cfg, ctx, free, peek) {
     },
     start: () => {
       const pool = fitPool(data);
-      return { measure: fitMeasure(store, p => pool.run(cfg.code, globals, p).then(fitScore)), close: pool.close };
+      return { measure: fitMeasure(store, p => pool.run(cfg.code, globals, p, 'score').then(fitScore)), close: pool.close };
     },
   };
 }
