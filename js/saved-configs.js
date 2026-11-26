@@ -3079,11 +3079,9 @@ function buildConfigPillHtml(cfg) {
   // (js/signal-chart.js dayEventOf). The card shows where the money goes, in the trade's colour,
   // and no more. The ⓘ beside it is two lines: why, said once, and whether the price is final.
   const event = m.event, sentence = (text) => (/[.!?]$/.test(text) ? text : text + '.');
-  const eventHtml = event ? `
-      <div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${esc(event.move)}</b>${tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)])}</div>`
+  const eventHtml = event ? `<div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${esc(event.move)}</b>${tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)])}</div>`
     // On a day without a trade the same line names the fund held now, paler and alone.
-    : m.held ? `
-      <div class="sc-holding">${esc(m.held)}</div>` : '';
+    : m.held ? `<div class="sc-holding">${esc(m.held)}</div>` : '';
   const eyeSvg = hidden
     ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
     : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
@@ -3100,7 +3098,10 @@ function buildConfigPillHtml(cfg) {
         </span>
         <span class="sc-dot" style="background:${cfg.color}"></span>
         <span class="sc-name">${esc(cfg.name)}</span>
-        ${cfg.type === 'custom' ? `<span class="sc-badge" title="Custom strategy (runs in a sandbox)">ƒ</span>` : ''}
+      </div>
+      ${metrics}
+      <div class="sc-foot">
+        ${eventHtml}
         <div class="sc-actions">
           <button type="button" class="sc-edit" title="Edit in sidebar" aria-label="Edit">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
@@ -3110,7 +3111,6 @@ function buildConfigPillHtml(cfg) {
           </button>
         </div>
       </div>
-      ${metrics}${eventHtml}
     </div>`;
 }
 function renderSavedConfigPills() {

@@ -2553,14 +2553,25 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* The card's last line: the day's event, or the fund held now, on the left; Edit and Delete at the
+     right end. The name has the top row to itself (the user, 2026-11-26: "move edit and delete button
+     in the bottom, so name has more space"). */
+  .saved-config-pill .sc-foot {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+    padding-left: 24px;
+  }
   .saved-config-pill .sc-actions {
     display: inline-flex;
     align-items: center;
     gap: 2px;
     flex-shrink: 0;
+    margin-left: auto;
   }
   .saved-config-pill .sc-actions button {
-    padding: 3px;
+    padding: 2px 3px;
     background: transparent;
     border: none;
     border-radius: 4px;
@@ -2609,10 +2620,10 @@
   .saved-config-pill .sc-metric-value.positive { color: var(--green-text); }
   .saved-config-pill .sc-metric-value.negative { color: var(--red-text); }
   /* The day's event: where the money goes at the latest day's close, a line under the card's numbers, its ⓘ beside it (js/saved-configs.js buildConfigPillHtml). */
-  .saved-config-pill .sc-event { display: flex; align-items: center; gap: 4px; margin-top: 3px; padding-left: 24px; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
+  .saved-config-pill .sc-event { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
   .saved-config-pill .sc-event-move { font-weight: 700; color: var(--accent-text); white-space: nowrap; }
   /* On a day without a trade: the fund held now, in the event's place and type, paler. */
-  .saved-config-pill .sc-holding { margin-top: 3px; padding-left: 24px; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; font-weight: 700; color: var(--accent-text); opacity: 0.5; white-space: nowrap; }
+  .saved-config-pill .sc-holding { min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; font-weight: 700; color: var(--accent-text); opacity: 0.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .saved-config-pill .sc-event-move.action-buy { color: var(--green-text); }
   .saved-config-pill .sc-event-move.action-sell { color: var(--red-text); }
   .saved-config-pill.is-hidden { opacity: var(--state-hidden-opacity); }
@@ -3207,18 +3218,6 @@
     color: var(--text);
   }
   .tx-preview-table tr:last-child td { border-bottom: none; }
-
-  /* Custom strategy pill badge */
-  .saved-config-pill .sc-badge {
-    flex-shrink: 0;
-    font: 600 calc(9px * var(--ui-scale)) 'JetBrains Mono', monospace;
-    padding: 1px 5px;
-    border-radius: 4px;
-    background: rgba(134, 118, 255, 0.16);
-    color: var(--text);
-    text-transform: none;
-  }
-  .saved-config-pill .sc-badge.warn { background: rgba(232, 137, 11, 0.18); color: var(--orange-text); }
 
   /* Custom strategy sidebar */
   .custom-warn {
