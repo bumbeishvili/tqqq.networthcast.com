@@ -5069,18 +5069,21 @@ const MONTH_OPTIONS_SRC = JSON.stringify(["January", "February", "March", "April
 // the month's return), on TQQQ. The window is decided from the calendar alone,
 // at the close before each day: hold TQQQ while tomorrow is inside the window,
 // cash or QQQ outside it. A switch between two funds takes two days (sell at
-// one close, buy at the next) unless "One trade per day" is No. Defaults
-// fitted to 2010-2025 over every month pair and both parking choices: October
-// through July, cash outside (43.3% a year, drawdown 75%; the Halloween months
-// November through April made 15.3%). The turn's defaults stay the published
-// last 1 and first 3 days: its own fit ran to "nearly always in".
+// one close, buy at the next) unless "One trade per day" is No. Since 26
+// November 2026 the season is the user's pick on the map of 2010-2025 ("set
+// this as default"): May through November, cash outside, the Halloween months
+// turned around. It was the fit over every month pair and both parking choices,
+// October through July (43.3% a year, drawdown 75%, before the trading cost and
+// cash interest; the Halloween months November through April made 15.3%). The
+// turn's defaults stay the published last 1 and first 3 days: its own fit ran to
+// "nearly always in".
 CODE[55] = `{
   name: "Seasonal TQQQ",
   params: [
     { id: "pattern", label: "Pattern", tip: "The season: TQQQ from the first trading day of the start month to the last of the end month. The turn: TQQQ through the last few trading days of every month and the first few of the next.", text: "Hold TQQQ by the calendar: {}.", default: "season", options: [
       { value: "season", label: "the season, start month to end month" }, { value: "turn", label: "the turn of every month" } ] },
-    { id: "startMonth", label: "Season starts", tip: "The first month of the TQQQ season (the Halloween indicator buys at the end of October).", text: "The season runs from the first trading day of {}", default: 10, options: ${MONTH_OPTIONS_SRC} },
-    { id: "endMonth", label: "Season ends", tip: "The last month of the TQQQ season (the Halloween indicator sells at the end of April).", text: "to the last trading day of {}.", default: 7, options: ${MONTH_OPTIONS_SRC} },
+    { id: "startMonth", label: "Season starts", tip: "The first month of the TQQQ season (the Halloween indicator buys at the end of October).", text: "The season runs from the first trading day of {}", default: 5, options: ${MONTH_OPTIONS_SRC} },
+    { id: "endMonth", label: "Season ends", tip: "The last month of the TQQQ season (the Halloween indicator sells at the end of April).", text: "to the last trading day of {}.", default: 11, options: ${MONTH_OPTIONS_SRC} },
     { id: "tomBefore", label: "Turn: last days of a month", tip: "With the turn pattern: how many of a month's last trading days TQQQ is held through. The month's remaining trading days are counted from the calendar's weekdays when the data has not reached them yet.", text: "With the turn pattern, hold TQQQ through the last {} trading days of a month", default: 1, options: Array.from({ length: 11 }, (_, k) => k) },
     { id: "tomAfter", label: "Turn: first days of a month", tip: "With the turn pattern: how many of the next month's first trading days TQQQ is held through.", text: "and the first {} trading days of the next.", default: 3, options: Array.from({ length: 11 }, (_, k) => k) },
     { id: "offHold", label: "Outside the window", tip: "What the money holds outside the TQQQ window.", text: "Outside the window hold {}.", default: "cash", options: [
