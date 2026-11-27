@@ -95,10 +95,10 @@ const STRATEGY_LIBRARY = [
     hidden: true,   // the user, 2026-11-27: "remove this strategy completelly from library"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Signal: SSO vs its own 150-day SMA. Exit: signal closes >20% above the SMA \u2192 park (cash by default). Enter: any time it is not. Freq: daily. Signal and traded fund are separate knobs. Overextension filter only \u2014 like Median overextension 250d it has no downside rule, so it holds through every crash.',
     here: '\u2014', reported: 'Hand-picked; numbers are this app\u2019s own backtest, not an external claim' },
-  { n: 40, name: 'Overextension, SQQQ park', formerNames: ['Median overextension (250d) \u2014 SQQQ park'], tag: 'picked', runnable: true,
+  { n: 40, name: 'Min - Overextension, SQQQ park', formerNames: ['Median overextension (250d) \u2014 SQQQ park', 'Overextension, SQQQ park'], tag: 'picked', runnable: true,
     rules: 'Hold TQQQ. When it closes 55% above its 250-day median, sell and buy SQQQ. Buy back when it drops under. Checked daily. No stop-loss.',
     here: '82.8% / \u221279.1%', reported: 'Hand-picked; numbers are this app\u2019s own backtest, not an external claim' },
-  { n: 41, name: 'Overextension + crash exit', formerNames: ['Median overextension with SQQQ and crash exit'], tag: 'picked', runnable: true,
+  { n: 41, name: 'Min - Overextension + crash exit', formerNames: ['Median overextension with SQQQ and crash exit', 'Overextension + crash exit'], tag: 'picked', runnable: true,
     rules: 'Hold TQQQ. When it closes 55% above its 250-day median, switch to SQQQ. When it closes 28% below the median — and the median itself has stopped rising (slope under +20%/yr, 10+ straight days below the line) — sell to cash. Buy back when the price recovers above the exit line. Checked daily, one trade per day.',
     here: '\u2014', reported: 'Hand-picked; tuned by sweep on 2010\u20132025, so treat the headline as in-sample. Numbers are this app\u2019s own backtest' },
   // --- optimizer winners (tag 'overfit'): the single top-ranked row from each
@@ -352,7 +352,7 @@ STRATEGY_LIBRARY.push(
   { n: 61, name: 'Bare crash exit', tag: 'bare', runnable: true,
     rules: 'Hold TQQQ. Switch to SOXL when it closes 4.5% under its 20-day median while the median is rising less than 76% a year. Back to TQQQ at the first close above that level.\n\n' + bareOtherFundRules,
     here: '\u2014',
-    reported: 'The crash exit of NFCI veto and Overextension + crash exit, here on its own. The defaults are your pick on the map of 2010–2025 (27 November 2026): 4.5% under the 20-day median while it rises less than 76% a year, after one close under it, SOXL while out (were 28%, 250 days, 20%, 10 closes, cash). With $80K and $3K a month 69.4% a year, max drawdown 62.1% (before: 46.3%, 69.9%). 2026 to date −45% ($100K once; −14% before). At the settings before: Q1 2010 to Q4 2025: 45.5% a year (max drawdown 70%, worst 12 months −48%) against 40.0% (82%) for buy & hold TQQQ. Out 5 times; TQQQ fell during one, and moved −6.7% on average while out. 2010–17 45.7%, 2018–25 45.2%. The last time out ended on 20 January 2023. January to 19 November 2026: in TQQQ throughout, −6.5%.' },
+    reported: 'The crash exit of NFCI veto and Min - Overextension + crash exit, here on its own. The defaults are your pick on the map of 2010–2025 (27 November 2026): 4.5% under the 20-day median while it rises less than 76% a year, after one close under it, SOXL while out (were 28%, 250 days, 20%, 10 closes, cash). With $80K and $3K a month 69.4% a year, max drawdown 62.1% (before: 46.3%, 69.9%). 2026 to date −45% ($100K once; −14% before). At the settings before: Q1 2010 to Q4 2025: 45.5% a year (max drawdown 70%, worst 12 months −48%) against 40.0% (82%) for buy & hold TQQQ. Out 5 times; TQQQ fell during one, and moved −6.7% on average while out. 2010–17 45.7%, 2018–25 45.2%. The last time out ended on 20 January 2023. January to 19 November 2026: in TQQQ throughout, −6.5%.' },
   { n: 62, name: 'Bare sell line', tag: 'bare', runnable: true,
     rules: 'Hold TQQQ. Switch to SOXL on the first close 8.5% under its 7-day median. Back to TQQQ after one close above that line.\n\n' + bareOtherFundRules,
     here: '\u2014',
