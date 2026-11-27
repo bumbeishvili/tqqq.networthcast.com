@@ -6103,8 +6103,9 @@ CODE[70] = bareStrategy({
 
 // #70's defaults since 27 November 2026: the user's pick on the map of 2010-2025 ("include this", "as default"): SOXX
 // outside the signal, a switch at one close (were cash, two days). With $80K and $3K a month 34.6% a year, max drawdown
-// 43.5% (before: 21.3%, 29.8%).
-CODE[70] = withDefaults(CODE[70], { name: "Bare MACD", defaults: { park: "soxx", splitDays: false } });
+// 43.5% (before: 21.3%, 29.8%). Since the same evening MACD (4, 40, 14), the user's "use this as default" of the
+// Fit window at those numbers (12, 26, 9 before): with $80K and $3K a month 44.3% a year, max drawdown 42.9% (34.7%, 43.5%).
+CODE[70] = withDefaults(CODE[70], { name: "Bare MACD", defaults: { fastDays: 4, slowDays: 40, signalDays: 14, park: "soxx", splitDays: false } });
 
 // #72 Min - late-week SQQQ, built as a bare entry and named by the user: first "Short strat -
 // late-week SQQQ" ("Just call it short strat - instead of bare"), then "Min" in its place
