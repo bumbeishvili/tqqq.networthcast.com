@@ -1399,25 +1399,26 @@ class IntradayOverlayChart extends ChartBase {
 // prev day, max and prev day, also difference in closing and min, max and
 // closing and open and min, open and max and open and close ... basically I
 // want to see all combinations there in a new dropdown"). Every pair of the
-// five, ten in all, each against the one known first: the previous close
-// before the open, the open before the low and the high, and the low or the
-// high before the close. So "low vs open" is how far a day fell from its open
-// (0 or less) and "high vs low" its whole range (0 or more). Close vs prev
-// close, first, is what the bars showed before the choice.
+// five, ten in all, each the move from the one that came first, which its name
+// gives first, and listed in the order the prices come in the day: the
+// previous close, the open, the low, the high, the close (the user, 2026-11-27:
+// "sort it so earlier always shows early, prev close vs today open, prev close
+// vs today min, prev close vs today max ect, so sort based on time it
+// happened, if time is not available like for min amd max, first have min,
+// then max"). So "open vs low" is how far a day fell from its open (0 or less)
+// and "low vs high" its whole range (0 or more). Prev close vs close is what
+// the bars showed before the choice, and is still picked first.
 const DAY_PRICE_NAMES = { prev: 'prev close', open: 'open', low: 'low', high: 'high', close: 'close' };
-const DAY_MEASURES = [
-  ['close', 'prev'], ['open', 'prev'], ['low', 'prev'], ['high', 'prev'],
-  ['close', 'open'], ['low', 'open'], ['high', 'open'],
-  ['close', 'low'], ['close', 'high'], ['high', 'low'],
-].map(([of, base]) => {
-  const name = `${DAY_PRICE_NAMES[of]} vs ${DAY_PRICE_NAMES[base]}`;
+const DAY_PRICE_ORDER = Object.keys(DAY_PRICE_NAMES);
+const DAY_MEASURES = DAY_PRICE_ORDER.flatMap((base, k) => DAY_PRICE_ORDER.slice(k + 1).map((of) => {
+  const name = `${DAY_PRICE_NAMES[base]} vs ${DAY_PRICE_NAMES[of]}`;
   return { id: `${of}-${base}`, of, base, name, label: name[0].toUpperCase() + name.slice(1) };
-});
-const DAY_MEASURE_DEFAULT = DAY_MEASURES[0];
+}));
+const DAY_MEASURE_DEFAULT = DAY_MEASURES.find(measure => measure.id === 'close-prev');
 const DAY_MEASURE_STORAGE_KEY = 'tqqq-intraday-measure';
 const dayChange = (day, measure) => (day.prices[measure.of] / day.prices[measure.base] - 1) * 100;
 // The pre-market or after-hours print is a price against the last close: it
-// stands in for a close vs the previous close and for no other measure.
+// stands in for prev close vs close and for no other measure.
 const printMeasured = measure => measure === DAY_MEASURE_DEFAULT;
 
 // The weekday bars, over the days the chart draws (the user, 2026-11-22:
@@ -2428,8 +2429,8 @@ function setupWeekdayStat(onChange) {
 
 // The measure the bars under the chart show (DAY_MEASURES), a dropdown in the
 // toolbar. The pick is saved; with nothing saved, or storage blocked, it is
-// the one the dropdown shows: the first at first, and its own on the page's
-// later data refreshes. The desktop widget has no bars: nothing is read there.
+// the one the dropdown shows: prev close vs close at first, and its own on the
+// page's later data refreshes. The desktop widget has no bars: nothing is read there.
 function readSavedMeasure(fallback) {
   if (EMBED) return fallback;
   let saved = null;
@@ -2448,7 +2449,7 @@ function setupDayMeasure(onChange) {
   select.property('value', state.measure.id);
   return state;
 }
-// The two blocks' names say what they show: "Average high vs open by weekday", "High vs open by day".
+// The two blocks' names say what they show: "Average open vs high by weekday", "Open vs high by day".
 function showBarNames(stat, measure) {
   d3.select('#weekday-name').text(stat.name(measure));
   d3.select('#daily-name').text(`${measure.label} by day`);
