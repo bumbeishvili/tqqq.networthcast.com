@@ -5794,6 +5794,14 @@ CODE[62] = bareStrategy({
     const decision = callOf(!soldNow, "Sell line", relText(p.endIdx) + " vs " + (p.exitPct || 0) + "%", soldNow ? "sold; buys back after " + closesText + " above the sell line" : "TQQQ " + relText(p.endIdx) + " against its median");`,
 });
 
+// #59-#62's defaults since 27 November 2026: the user's picks on the maps of 2010-2025 ("set these as defaults"). With
+// $80K and $3K a month, before in brackets: month-end dip 44.1% a year, max drawdown 41.2% (13.4%, 17.2%); big days
+// 53.3%, 60.3% (48.5%, 82.6%); crash exit 69.4%, 62.1% (46.3%, 69.9%); sell line 72.7%, 63.6% (37.7%, 48.1%).
+CODE[59] = withDefaults(CODE[59], { name: "Bare month-end dip", defaults: { dipDay: 6, dipUnder: 5, dipUnderMax: 68, dipSellDay: 3, park: "soxx" } });
+CODE[60] = withDefaults(CODE[60], { name: "Bare big days", defaults: { bigRise: 5 } });
+CODE[61] = withDefaults(CODE[61], { name: "Bare crash exit", defaults: { window: 20, exitPct: -4.5, slopeGate: 76, belowGate: 1, park: "soxl" } });
+CODE[62] = withDefaults(CODE[62], { name: "Bare sell line", defaults: { window: 7, exitPct: -8.5, confirmDays: 1, park: "soxl" } });
+
 // #63 Bare buy-back line: the dip-buy of #45 as a trade of its own. In #45 the line only acts
 // while the sell line has sold, and the TQQQ it buys is kept once the price is back above the sell
 // line. Alone it needs an end: here the trade runs from the first close at or under the buy-back
