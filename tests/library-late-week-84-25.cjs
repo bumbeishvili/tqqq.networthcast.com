@@ -27,7 +27,8 @@ const MOVED = { trendUnder: -3.5, trendDays: 28, rsiFund: 'spy', rsiDays: 5, rsi
 const TIPS = ['rsiLevel', 'lagTake', 'lagBy', 'lagHold', 'overTake', 'overPct', 'overHold'];
 const { dates, sqqq: SQ } = data, at = d => dates.findIndex(x => x >= d);
 const Y84 = at('1984-01-01') - 1, Y2010 = at('2010-01-04') - 1, END = at('2026-01-01') - 1, LAST = dates.length - 1;
-const over = strategyOf(OVER), mine = strategyOf(MINE);
+// #75 is built from #73's code before the user's pick of 27 November 2026 for #73 (LATE_WEEK_OVER_BASE).
+const over = new Function('"use strict"; return (' + CODE.LATE_WEEK_OVER_BASE + '\n);')(), mine = strategyOf(MINE);
 const run = (strategy, settings = {}, { contributions = {}, from = Y2010, to = END } = {}) =>
   strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions, startIdx: from, endIdx: to, dailyDisplay: true }).log;
 const sameRows = (a, b) => a.length === b.length && a.every((row, k) => row.value === b[k].value && row.held === b[k].held && row.action === b[k].action && row.note === b[k].note);
@@ -63,7 +64,7 @@ const pct = v => (v * 100).toFixed(1) + '%';
   ck('seven tips swapped, the rest #73\'s', swapped.join() === TIPS.join(), swapped.join());
   ck('no swapped tip quotes #73\'s settings or the studies of other settings', TIPS.every(id => !/\b54%|242|255|20 days with 2%|most at 40|TQQQ closed/.test(a[id].tip)), TIPS.map(id => a[id].tip).find(t => /\b54%|242|255|20 days with 2%|most at 40|TQQQ closed/.test(t)));
   ck('the code is #73\'s but for its name, its defaults and those tips', (() => {
-    let t = CODE[OVER].replace('"Late-week + overextended SQQQ"', '"84-25 - Late-week + overextended"');
+    let t = CODE.LATE_WEEK_OVER_BASE.replace('"Late-week + overextended SQQQ"', '"84-25 - Late-week + overextended"');
     for (const id of Object.keys(a)) { if (a[id].tip !== b[id].tip) t = t.replace(JSON.stringify(b[id].tip), JSON.stringify(a[id].tip)); }
     return t.replace(/, default: [^,}]+/g, '') === CODE[MINE].replace(/, default: [^,}]+/g, '');
   })());

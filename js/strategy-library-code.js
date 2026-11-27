@@ -6453,6 +6453,30 @@ CODE[75] = withTips(withDefaults(CODE[73], { name: LATE_WEEK_84_25, defaults: {
   overHold: "What the money is in while overextended. Cash in SQQQ's place made 97.5% a year in 1984-2025 against 105.8%. On the week's own days out the fund held in between comes first.",
 } });
 
+// ===== #73 at the user's pick on the map of Q1 2010 to Q4 2025 (27 November 2026, on their copy of #75 at that map's
+// best: "also set this as default for 10-25 late week strategy, not default for this name") =====
+// It holds SOXL, and SOXS in between: the down trend read on QLD, 1% or more under its 26-day median; the RSI on QQQ
+// over 10 days at 41.5; the lagging rule on SOXL against TQQQ over 16 days by more than 3%, for one day; the line on
+// SPXL at 67% over its 390-day median, SOXS over it. With $80K and $3K a month a money-weighted 286.6% a year with a
+// 64.8% max drawdown (the map: 287.2%, 64.8%); $100K lump sum 285.9% (64.8%) against 223.9% (42.6%) before. #75 is
+// built from #73 as it was before the pick (LATE_WEEK_OVER_BASE, which the tests also read), so it keeps its own. The
+// tips that quoted a study of the settings before are plain, and the line's three quote this pick's own facts.
+const LATE_WEEK_OVER_BASE = CODE[73];
+CODE[73] = withTips(withDefaults(LATE_WEEK_OVER_BASE, { name: LATE_WEEK_OVER, defaults: {
+  trendFund: "qld", trendUnder: 1, trendDays: 26, fund: "soxl", park: "soxs", rsiFund: "qqq", rsiDays: 10, rsiLevel: 41.5, lagFund: "soxl", lagDays: 16, lagVs: "tqqq", lagBy: 3,
+  overFund: "spxl", overPct: 67, overWindow: 390, overHold: "soxs" } }),
+{ name: LATE_WEEK_OVER, tips: {
+  weekendCheck: "Yes: at the last close before a weekend inside the days out, the fund is bought back if it is not under the close it was sold at. Left out with one trade per day and another fund held in between.",
+  rsiSkip: "Yes: a week is skipped, and the fund held through it, when the RSI is at the level or under at the close that would leave the fund.",
+  rsiLevel: "The week is skipped with the RSI at this level or under.",
+  lagTake: "Yes: a week skipped for a low RSI is taken all the same when one fund's return trails another's at that close. Left out with one trade per day and another fund held in between.",
+  lagBy: "How far under the other fund's return, in points.",
+  lagHold: "One day: the fund is bought back at the next close. The days before the weekend: at the last close before a weekend, or where the days out end.",
+  overTake: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 2010-2025 SPXL closed more than 67% above its 390-day median in 45 stretches, and SOXS rose over 38 of them.",
+  overPct: "How far above its median the close must be. With SPXL's 390-day median in 2010-2025: 60% made 218.6% a year, 65% 257.0%, 67% 285.9%, 70% 229.9%, 75% 181.7%. Without the rule, 173.3%.",
+  overHold: "What the money is in while overextended. Cash in SOXS's place made 232.1% a year in 2010-2025, SQQQ 257.0%, against 285.9%. On the week's own days out the fund held in between comes first.",
+} });
+
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----
 // #10, #19, #7 and #20 chart the fund or the measure their rule reads. As bare entries they get
 // TQQQ's price as the chart's first panel, their own lines under it at full height, and their
@@ -7012,6 +7036,7 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'upgradeWithdrawalHandling', { value: upgradeWithdrawalHandling });
   Object.defineProperty(module.exports, 'withCostAndCash', { value: withCostAndCash });
   Object.defineProperty(module.exports, 'COST_CASH_BASE', { value: COST_CASH_BASE });
+  Object.defineProperty(module.exports, 'LATE_WEEK_OVER_BASE', { value: LATE_WEEK_OVER_BASE });
   Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });

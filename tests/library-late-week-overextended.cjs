@@ -15,11 +15,15 @@
  *      holdings replayed from the closes with the entry's books;
  *   5. a run without the line's settings is a run at their defaults;
  *   6. the line's trades are marked in its panel and say why, and the dashboard
- *      carries its card and its reading in today's call.
+ *      carries its card and its reading in today's call;
+ *   7. the entry is that code at the user's pick on the map of 2010-2025 (27 November 2026): its defaults and nine
+ *      tips, and the map's drawdown with the map's money.
+ * Sections 1-6 check the line on the code as it was before the pick (LATE_WEEK_OVER_BASE, which #75 is built from):
+ * the line on TQQQ into SQQQ, Min's fund TQQQ, which #71's line and #72's holdings read the same way.
  *
  *   node tests/library-late-week-overextended.cjs
  */
-const { data, strategyOf, settingsOf, defaultsOf } = require('./library-harness.cjs');
+const { CODE, data, strategyOf, settingsOf, defaultsOf } = require('./library-harness.cjs');
 
 let failures = 0;
 const ck = (name, ok, detail) => {
@@ -34,10 +38,12 @@ const LEVEL = 54, DAYS = 242;   // the line's defaults
 const OWN = { trendUnder: -0.5, trendDays: 41, rsiDays: 9 };   // #72's settings #73 sets its own defaults for
 const { dates, tqqq: T } = data;
 const START = dates.findIndex(d => d >= '2010-01-04') - 1, END = dates.findIndex(d => d >= '2026-11-23');
-const run = (n, settings = {}, contributions = {}) => { const strategy = strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions, startIdx: START, endIdx: END, dailyDisplay: true }); };
+// #73's code before the user's pick of 27 November 2026, with its defaults then.
+const overBase = new Function('"use strict"; return (' + CODE.LATE_WEEK_OVER_BASE + '\n);')();
+const run = (n, settings = {}, contributions = {}) => { const strategy = n === OVER ? overBase : strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions, startIdx: START, endIdx: END, dailyDisplay: true }); };
 const sameRows = (mine, theirs) => mine.length === theirs.length && mine.every((row, k) => row.value === theirs[k].value && row.held === theirs[k].held && row.action === theirs[k].action && row.note === theirs[k].note);
 
-const min = strategyOf(MIN), over = strategyOf(OVER);
+const min = strategyOf(MIN), over = overBase;
 
 // ---- 1. The settings ----
 {
@@ -120,7 +126,7 @@ const minHeld = Object.fromEntries(run(MIN, OWN).log.map(row => [index[row.date]
 
 // ---- 5. The fallbacks ----
 {
-  const strategy = strategyOf(OVER), bare = Object.fromEntries(Object.entries(defaultsOf(strategy)).filter(([id]) => !OVER_IDS.includes(id)));
+  const strategy = overBase, bare = Object.fromEntries(Object.entries(defaultsOf(strategy)).filter(([id]) => !OVER_IDS.includes(id)));
   const without = strategy.run(data, { ...bare, initial: 100000, contributions: {}, startIdx: START, endIdx: END, dailyDisplay: true }).log;
   ck('a run without the line\'s settings is a run at their defaults', sameRows(without, run(OVER).log));
 }
@@ -143,8 +149,24 @@ const minHeld = Object.fromEntries(run(MIN, OWN).log.map(row => [index[row.date]
   ck('today\'s call carries both readings', decision.reasons.map(reason => reason.name).join() === 'Late-week SQQQ,Overextended', JSON.stringify(decision.reasons));
   // A day the line holds the money: the call is the line's, with its reading first.
   const held = dates.findIndex((date, i) => i > START && overAt.state[i] && minHeld[i] === 'TQQQ');
-  const then = strategyOf(OVER).run(data, { ...defaultsOf(over), initial: 100000, contributions: {}, startIdx: START, endIdx: held, dailyDisplay: true }).signals;
+  const then = overBase.run(data, { ...defaultsOf(over), initial: 100000, contributions: {}, startIdx: START, endIdx: held, dailyDisplay: true }).signals;
   ck('on a day the line holds SQQQ the call says so', then.decision.action === 'Hold SQQQ' && then.decision.tone === 'bad' && /^overextended: TQQQ \+/.test(then.decision.note) && then.decision.reasons[0].name === 'Overextended' && then.cards[1].value === 'SQQQ', JSON.stringify(then.decision));
+}
+
+// ---- 7. The entry at the user's pick ----
+{
+  const PICK = { trendFund: 'qld', trendUnder: 1, trendDays: 26, fund: 'soxl', park: 'soxs', rsiFund: 'qqq', rsiDays: 10, rsiLevel: 41.5, lagFund: 'soxl', lagDays: 16, lagVs: 'tqqq', lagBy: 3,
+    overFund: 'spxl', overPct: 67, overWindow: 390, overHold: 'soxs' };
+  const now = strategyOf(OVER), d = defaultsOf(now), was = defaultsOf(overBase);
+  const moved = Object.keys(d).filter(id => JSON.stringify(d[id]) !== JSON.stringify(was[id]));
+  ck('its defaults are the code before at the pick\'s 16, and no other', moved.slice().sort().join() === Object.keys(PICK).sort().join() && moved.every(id => d[id] === PICK[id]), moved.map(id => `${id} ${was[id]} -> ${d[id]}`).join(', '));
+  const tipsMoved = settingsOf(now).filter(p => p.tip !== settingsOf(overBase).find(q => q.id === p.id).tip).map(p => p.id);
+  ck('nine tips swapped: six plain, the line\'s three on its own facts', tipsMoved.join() === 'weekendCheck,rsiSkip,rsiLevel,lagTake,lagBy,lagHold,overTake,overPct,overHold', tipsMoved.join());
+  const E2025 = dates.findIndex(d => d >= '2026-01-01') - 1, monthly = Object.fromEntries(dates.slice(START + 1, E2025 + 1).filter((date, k, all) => k === 0 || all[k - 1].slice(0, 7) !== date.slice(0, 7)).map(date => [date, 3000]));
+  const log = now.run(data, { ...d, initial: 80000, contributions: monthly, startIdx: START, endIdx: E2025, dailyDisplay: true }).log;
+  let peak = 0, fall = 0; log.forEach(r => { peak = Math.max(peak, r.value); fall = Math.max(fall, 1 - r.value / peak); });
+  ck('with $80K and $3K a month on 2010-2025 its max drawdown is the map\'s 64.8%', (fall * 100).toFixed(1) === '64.8', (fall * 100).toFixed(1) + '%');
+  ck('it holds SOXL, and SOXS in between', log.some(r => r.held === 'SOXL') && log.some(r => r.held === 'SOXS') && !log.some(r => r.held === 'TQQQ' || r.held === 'SQQQ'));
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : 'library late-week + overextended: all checks passed');
