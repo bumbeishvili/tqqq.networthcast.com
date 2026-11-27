@@ -251,7 +251,7 @@ function upgradeSavedCode(code) { return upgradeDailyDisplay(upgradeWithdrawalHa
 // for entries renamed since copies of them were made. null for code that is not
 // a library copy. Used by js/saved-configs.js to bring unedited copies up to
 // the current library code at load.
-const LIBRARY_FORMER_NAMES = { 29: ['9sig · max return 1990–2025'], 35: ['SMA · max return 1990–2025'], 44: ['NFCI veto, med stretch with SQQQ and med crash exit'], 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back', 'SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
+const LIBRARY_FORMER_NAMES = { 40: ['Median overextension (250d)'], 29: ['9sig · max return 1990–2025'], 35: ['SMA · max return 1990–2025'], 44: ['NFCI veto, med stretch with SQQQ and med crash exit'], 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back', 'SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
 const codeName = code => { const m = /^\s*name:\s*"([^"]+)"/m.exec(String(code || '')); return m ? m[1] : null; };
 function libraryEntryOf(code) {
   const name = codeName(code);
@@ -6603,6 +6603,14 @@ CODE[44] = withDefaults(NFCI_VETO_BASE, { name: NFCI_10_25, defaults: {
 // here, after every entry built from #45's code (#49, the bare entries' hosted settings), so they keep theirs; the
 // code before (BUY_BACK_BASE, which the tests also read) keeps the old name line. No setting's tip quotes a default.
 const BUY_BACK_BASE = CODE[45];
+// #40 at the user's pick on the map of Q1 2010 to Q4 2025, renamed (27 November 2026: "set this, add 10-25 at the
+// start, just say overextension park"; was "Min - Overextension, SQQQ park" on the card, "Median overextension (250d)"
+// in the code). Four settings moved: SOXS when far above the line (SQQQ), the median over 234 closes (250), far above
+// at 53.5% (55%), a switch at one close (over two days). With $80K and $3K a month a money-weighted 85.0% a year, max
+// drawdown 81.3% (75.5%, 81.3% before). No entry is built from #40's code; the code before (OVER_PARK_BASE) is kept
+// for the tests.
+const OVER_PARK_BASE = CODE[40];
+CODE[40] = withDefaults(OVER_PARK_BASE, { name: "10-25 - Min - Overextension park", defaults: { park: "soxs", window: 234, overPct: 53.5, splitDays: false } });
 CODE[45] = withDefaults(BUY_BACK_BASE, { name: "10-25 - Stretch buy-back", defaults: {
   window: 234, overPct: 53.5, park: "soxs", crashAsset: "gld", confirmDays: 35, dipReentry: 97, sliceStop: 6.5, sliceCap: 2, splitDays: false } });
 
@@ -7169,6 +7177,7 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'MIN_LATE_WEEK_BASE', { value: MIN_LATE_WEEK_BASE });
   Object.defineProperty(module.exports, 'NFCI_VETO_BASE', { value: NFCI_VETO_BASE });
   Object.defineProperty(module.exports, 'BUY_BACK_BASE', { value: BUY_BACK_BASE });
+  Object.defineProperty(module.exports, 'OVER_PARK_BASE', { value: OVER_PARK_BASE });
   Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });
