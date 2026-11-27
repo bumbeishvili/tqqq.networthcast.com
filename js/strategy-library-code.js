@@ -6578,7 +6578,7 @@ CODE[72] = withTips(withDefaults(MIN_LATE_WEEK_BASE, { name: MIN_LATE_WEEK, defa
 // as 10-25 - nfci,overextend,crash"). Ten settings moved: the median over 251 closes (was 250), out over 55.5% (55%)
 // into SOXS (SQQQ); the crash exit read on the 210-day moving average (the median itself) at +6% (−28%) into SOXX
 // (cash), while that average rises less than 96% a year (20%) and after 2 closes under it (10); the credit veto at
-// 0.3 (0.4). With $80K and $3K a month a money-weighted 93.9% a year with a 54.5% max drawdown (82.6%, 60.2% before).
+// 0.3 (0.4). With $80K and $3K a month a money-weighted 94.2% a year with a 54.5% max drawdown (82.8%, 60.2% before).
 // Set here, after every entry built from #44's code (#48, the bare entries' settings), so they keep theirs; the code
 // before (NFCI_VETO_BASE, which the tests also read) keeps the old name line. No setting's tip quotes a default.
 const NFCI_10_25 = "10-25 - NFCI, overextend, crash";   // was "NFCI veto" on the card until 27 November 2026

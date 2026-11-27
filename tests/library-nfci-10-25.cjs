@@ -5,8 +5,8 @@
  *   1. its defaults are the code's before the pick (NFCI_VETO_BASE) with the ten the pick moved;
  *   2. it trades as that code does at those ten, row for row: a lump sum, contributions and a withdrawal, a switch at
  *      one close, cash in between;
- *   3. the map's numbers: with $80K and $3K a month a money-weighted 93.9% a year and a 54.5% max drawdown; $100K once
- *      93.8% (54.5%);
+ *   3. the map's numbers: with $80K and $3K a month a money-weighted 94.2% a year and a 54.5% max drawdown (82.8%
+ *      and 60.2% at the settings before), on the app's own rate; $100K once 93.8% (54.5%);
  *   4. what the card says of the credit rule: from 1953 it fired 13 times, the last from 30 November to 20 December 2007;
  *   5. NFCI veto + Turnaround Monday (#48) still runs the code before at its settings, and its card still starts with
  *      the rules NFCI veto had.
@@ -15,6 +15,7 @@
  */
 const fs = require('fs'), path = require('path'), vm = require('vm');
 const { CODE, data, strategyOf, settingsOf, defaultsOf } = require('./library-harness.cjs');
+const { moneyWeightedCAGR } = require('../js/metrics.js');
 
 let failures = 0;
 const ck = (name, ok, detail) => {
@@ -62,11 +63,17 @@ const sameRows = (a, b) => a.length === b.length && a.every((row, k) => row.valu
   const perYear = Math.pow(lump[lump.length - 1].value / lump[0].value, 1 / years(lump[0].date, lump[lump.length - 1].date)) - 1;
   ck('$100K once: 93.8% a year, max drawdown 54.5%', (perYear * 100).toFixed(1) === '93.8' && (fallOf(lump) * 100).toFixed(1) === '54.5', `${(perYear * 100).toFixed(1)}%, ${(fallOf(lump) * 100).toFixed(1)}%`);
   const contributions = Object.fromEntries(dates.slice(START + 1, END + 1).filter((d, k, all) => k === 0 || all[k - 1].slice(0, 7) !== d.slice(0, 7)).map(d => [d, 3000]));
-  const log = run(mine, {}, contributions, 80000).log, final = log[log.length - 1].value;
-  const flows = [[dates[START], 80000], ...Object.entries(contributions)];
-  let lo = -0.99, hi = 50;
-  for (let k = 0; k < 200; k++) { const r = (lo + hi) / 2, v = flows.reduce((s, [d, a]) => s + a * Math.pow(1 + r, years(d, dates[END])), 0); if (v < final) lo = r; else hi = r; }
-  ck('$80K and $3K a month: 93.9% a year money-weighted, max drawdown 54.5%', (lo * 100).toFixed(1) === '93.9' && (fallOf(log) * 100).toFixed(1) === '54.5', `${(lo * 100).toFixed(1)}%, ${(fallOf(log) * 100).toFixed(1)}%`);
+  // The map's rate is the chart's (cfgMoneyWeightedCAGR -> moneyWeightedCAGR in js/metrics.js): the strategy gets each $3K
+  // at the month's first close, the rate counts it at the month's last (the page's monthlyData rows). Timed at the first
+  // close it reads 93.9% here, 82.6% before.
+  const monthEnds = dates.filter((d, k) => k === dates.length - 1 || dates[k + 1].slice(0, 7) !== d.slice(0, 7)).map(d => [d]);
+  const mapRate = (strategy) => {
+    const log = run(strategy, {}, contributions, 80000).log, final = log[log.length - 1].value;
+    const rate = moneyWeightedCAGR(80000, 3000, 0, dates[START], dates[END], years(dates[START], dates[END]), final, monthEnds, 80000 + 3000 * Object.keys(contributions).length);
+    return `${rate.toFixed(1)}%, ${(fallOf(log) * 100).toFixed(1)}%`;
+  };
+  ck('$80K and $3K a month: 94.2% a year money-weighted, max drawdown 54.5%', mapRate(mine) === '94.2%, 54.5%', mapRate(mine));
+  ck('the settings before: 82.8% a year, max drawdown 60.2%', mapRate(base) === '82.8%, 60.2%', mapRate(base));
 }
 
 // ---- 4. The credit rule over the whole history ----
