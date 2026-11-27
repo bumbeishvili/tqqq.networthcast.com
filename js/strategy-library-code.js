@@ -5509,6 +5509,11 @@ ${TM_CHART_ROW}`,
       reasons: [{ name: TM_RULE, val: tmOpen ? "open since " + tmFrom : "no trade", tag: tmOpen ? "in · TQQQ" : OUT_NAME, lean: tmOpen ? "buy" : OUT_LEAN }] };`,
 });
 
+// #57's defaults since 27 November 2026: the user's pick on the map of 2010-2025 ("set these two as defaults"): a Friday
+// close under SPY's prior close buys TQQQ, the first close over it sells, QLD between trades (were Monday, TQQQ's low
+// and high, cash). With $80K and $3K a month 43.8% a year, max drawdown 45.9% (before: 29.8%, 31.4%).
+CODE[57] = withDefaults(CODE[57], { name: "Bare Turnaround Monday", defaults: { tmDay: 5, tmLevels: "close", tmSignal: "spy", park: "qld" } });
+
 // #58 Bare credit veto: the NFCI rule of #44, #47 and their children as the whole strategy: TQQQ,
 // and another fund while the index reads above the level. No price rule lifts it early (#44's "crash
 // cycle" release needs #44's crash exit). The dropdown reaches under zero, where the index has spent
