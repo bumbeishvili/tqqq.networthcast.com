@@ -1,6 +1,6 @@
 /*
- * Library strategy #75, "84-25 - Late-week + overextended SQQQ" (was "Late week 84-25 steady fit"): #73 (Late-week + overextended SQQQ) at the
- * settings of the user's copy after two picks on the map of 1984 to 2025, the second set as the defaults on 26 November
+ * Library strategy #75, "84-25 - Late-week + overextended" (was "Late week 84-25 steady fit", then "84-25 - Late-week + overextended SQQQ"): #73 (Late-week + overextended SQQQ) at the
+ * settings of the user's copy after three picks on the map of 1984 to 2025, the third set as the defaults on 27 November
  * 2026 (the #75 section of js/strategy-library-code.js). Pure Node — no browser/server. Checks, on the repo's own price history:
  *   1. its settings are #73's, in the same order, with the 13 defaults moved and no other;
  *   2. it trades as #73 does with those 13 set by hand, row for row, with a lump sum, with
@@ -22,8 +22,8 @@ const ck = (name, ok, detail) => {
 };
 
 const OVER = 73, MINE = 75;
-// The second pick, where it differs from #73's defaults.
-const MOVED = { trendUnder: -3.5, trendDays: 28, rsiFund: 'spy', rsiDays: 6, rsiLevel: 32.5, lagFund: 'sso', lagDays: 10, lagVs: 'qld', lagBy: 1.5, lagHold: 'weekend', overFund: 'soxx', overPct: 44, overWindow: 234 };
+// The third pick, where it differs from #73's defaults.
+const MOVED = { trendUnder: -3.5, trendDays: 28, rsiFund: 'spy', rsiDays: 5, rsiLevel: 32, lagFund: 'sso', lagDays: 18, lagVs: 'qld', lagBy: 1, lagHold: 'weekend', overFund: 'soxx', overPct: 44, overWindow: 234 };
 const TIPS = ['rsiLevel', 'lagTake', 'lagBy', 'lagHold', 'overTake', 'overPct', 'overHold'];
 const { dates, sqqq: SQ } = data, at = d => dates.findIndex(x => x >= d);
 const Y84 = at('1984-01-01') - 1, Y2010 = at('2010-01-04') - 1, END = at('2026-01-01') - 1, LAST = dates.length - 1;
@@ -37,7 +37,7 @@ const pct = v => (v * 100).toFixed(1) + '%';
 
 // ---- 1. The settings ----
 {
-  ck('its name, the old one kept for saved copies', mine.name === '84-25 - Late-week + overextended SQQQ', mine.name);
+  ck('its name, the old one kept for saved copies', mine.name === '84-25 - Late-week + overextended', mine.name);
   const ids = settingsOf(mine).map(p => p.id), theirs = settingsOf(over).map(p => p.id);
   ck('#73\'s settings, in the same order', ids.join() === theirs.join(), ids.join());
   const d = defaultsOf(mine), d73 = defaultsOf(over);
@@ -63,7 +63,7 @@ const pct = v => (v * 100).toFixed(1) + '%';
   ck('seven tips swapped, the rest #73\'s', swapped.join() === TIPS.join(), swapped.join());
   ck('no swapped tip quotes #73\'s settings or the studies of other settings', TIPS.every(id => !/\b54%|242|255|20 days with 2%|most at 40|TQQQ closed/.test(a[id].tip)), TIPS.map(id => a[id].tip).find(t => /\b54%|242|255|20 days with 2%|most at 40|TQQQ closed/.test(t)));
   ck('the code is #73\'s but for its name, its defaults and those tips', (() => {
-    let t = CODE[OVER].replace('"Late-week + overextended SQQQ"', '"84-25 - Late-week + overextended SQQQ"');
+    let t = CODE[OVER].replace('"Late-week + overextended SQQQ"', '"84-25 - Late-week + overextended"');
     for (const id of Object.keys(a)) { if (a[id].tip !== b[id].tip) t = t.replace(JSON.stringify(b[id].tip), JSON.stringify(a[id].tip)); }
     return t.replace(/, default: [^,}]+/g, '') === CODE[MINE].replace(/, default: [^,}]+/g, '');
   })());
@@ -72,7 +72,7 @@ const pct = v => (v * 100).toFixed(1) + '%';
   const own = cagr({});
   ck(`the level's tip: 40% ${cagr({ overPct: 40 })}, 44% ${own}, 47% ${cagr({ overPct: 47 })}, 50% ${cagr({ overPct: 50 })}`, a.overPct.tip.includes(`40% made ${cagr({ overPct: 40 })} a year, 44% ${own}, 47% ${cagr({ overPct: 47 })}, 50% ${cagr({ overPct: 50 })}`), a.overPct.tip);
   const since = [35, 40, 44, 45, 50, 55].map(l => perYear(run(mine, { overPct: l })) * 100);
-  ck('and since 2010 every level from 35% to 55% makes 93% to 96%', since.every(v => Math.round(v) >= 93 && Math.round(v) <= 96), since.map(v => v.toFixed(1)).join(', '));
+  ck('and since 2010 every level from 35% to 55% makes 111% to 115%', since.every(v => Math.round(v) >= 111 && Math.round(v) <= 115), since.map(v => v.toFixed(1)).join(', '));
   ck(`the held fund's tip: cash ${cagr({ overHold: 'cash' })} against ${own}`, a.overHold.tip.includes(`made ${cagr({ overHold: 'cash' })} a year in 1984-2025 against ${own}`), a.overHold.tip);
   const stays = (from, to) => { const log = run(mine, {}, { from, to }), out = []; let s = -1;
     log.forEach((r, k) => { const on = r.overRel > MOVED.overPct; if (on && s < 0) s = k; if (!on && s >= 0) { out.push(SQ[at(log[k].date)] / SQ[at(log[s].date)] > 1); s = -1; } }); return out; };
