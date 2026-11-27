@@ -251,7 +251,7 @@ function upgradeSavedCode(code) { return upgradeDailyDisplay(upgradeWithdrawalHa
 // for entries renamed since copies of them were made. null for code that is not
 // a library copy. Used by js/saved-configs.js to bring unedited copies up to
 // the current library code at load.
-const LIBRARY_FORMER_NAMES = { 29: ['9sig · max return 1990–2025'], 35: ['SMA · max return 1990–2025'], 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
+const LIBRARY_FORMER_NAMES = { 29: ['9sig · max return 1990–2025'], 35: ['SMA · max return 1990–2025'], 44: ['NFCI veto, med stretch with SQQQ and med crash exit'], 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
 const codeName = code => { const m = /^\s*name:\s*"([^"]+)"/m.exec(String(code || '')); return m ? m[1] : null; };
 function libraryEntryOf(code) {
   const name = codeName(code);
@@ -6574,6 +6574,18 @@ CODE[72] = withTips(withDefaults(MIN_LATE_WEEK_BASE, { name: MIN_LATE_WEEK, defa
   lagHold: "One day: the fund is bought back at the next close. The days before the weekend: at the last close before a weekend, or where the days out end. In those weeks the fall was the Thursday's; Friday rose 0.5% on average in 2010-2025.",
 } });
 
+// #44 at the user's pick on the map of Q1 2010 to Q4 2025, renamed (27 November 2026: "set this for nfci veto and name
+// as 10-25 - nfci,overextend,crash"). Ten settings moved: the median over 251 closes (was 250), out over 55.5% (55%)
+// into SOXS (SQQQ); the crash exit read on the 210-day moving average (the median itself) at +6% (−28%) into SOXX
+// (cash), while that average rises less than 96% a year (20%) and after 2 closes under it (10); the credit veto at
+// 0.3 (0.4). With $80K and $3K a month a money-weighted 93.9% a year with a 54.5% max drawdown (82.6%, 60.2% before).
+// Set here, after every entry built from #44's code (#48, the bare entries' settings), so they keep theirs; the code
+// before (NFCI_VETO_BASE, which the tests also read) keeps the old name line. No setting's tip quotes a default.
+const NFCI_10_25 = "10-25 - NFCI, overextend, crash";   // was "NFCI veto" on the card until 27 November 2026
+const NFCI_VETO_BASE = CODE[44];
+CODE[44] = withDefaults(NFCI_VETO_BASE, { name: NFCI_10_25, defaults: {
+  window: 251, overPct: 55.5, park: "soxs", crashStat: "sma", crashWindow: 210, exitPct: 6, crashAsset: "soxx", slopeGate: 96, belowGate: 2, nfciTh: 0.3 } });
+
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----
 // #10, #19, #7 and #20 chart the fund or the measure their rule reads. As bare entries they get
 // TQQQ's price as the chart's first panel, their own lines under it at full height, and their
@@ -7135,6 +7147,7 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'COST_CASH_BASE', { value: COST_CASH_BASE });
   Object.defineProperty(module.exports, 'LATE_WEEK_OVER_BASE', { value: LATE_WEEK_OVER_BASE });
   Object.defineProperty(module.exports, 'MIN_LATE_WEEK_BASE', { value: MIN_LATE_WEEK_BASE });
+  Object.defineProperty(module.exports, 'NFCI_VETO_BASE', { value: NFCI_VETO_BASE });
   Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });

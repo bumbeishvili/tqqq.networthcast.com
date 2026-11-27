@@ -65,8 +65,10 @@ const fit = strategyOf(FIT), fitDefaults = testDefaults(FIT, defaultsOf(fit)), i
 
 // ---- 2. On at the same closes as the NFCI strategy's price exit ----
 // The NFCI strategy with #53's median window and the exit's own numbers; its rows carry zone "crash" while its exit is on.
-const twin = settings => run(NFCI, { window: fitDefaults.overWindow, stat: 'median', exitPct: -settings.bearUnder, slopeGate: settings.bearSlope, belowGate: settings.bearCloses });
-// The NFCI strategy's own numbers and two others. A limit of exactly 0% on the median's rise is left out: the
+// Its exit measured against that median, as the bear exit copies it: since 27 November 2026 #44's defaults read the
+// exit on a 210-day moving average (the user's pick on the map of 2010-2025), so the twin names the main line.
+const twin = settings => run(NFCI, { window: fitDefaults.overWindow, stat: 'median', crashStat: 'same', crashWindow: 0, exitPct: -settings.bearUnder, slopeGate: settings.bearSlope, belowGate: settings.bearCloses });
+// The NFCI strategy's numbers before that pick and two others. A limit of exactly 0% on the median's rise is left out: the
 // two engines' medians differ in their last decimals, and while the median is flat that decides the day.
 const NFCI_EXIT = { ...fitDefaults, bearUnder: 28, bearSlope: 20, bearCloses: 10 };
 [NFCI_EXIT, { ...fitDefaults, bearUnder: 20, bearSlope: 10, bearCloses: 0 }, { ...fitDefaults, bearUnder: 35, bearSlope: 999, bearCloses: 20 }].forEach(settings => {
