@@ -2610,9 +2610,9 @@
      and a quarter of its height below the CAGR's baseline, then its ⓘ. */
   .year-cagr { align-self: baseline; margin-left: -3px; position: relative; top: 0.25em; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
   .year-cagr .year-cagr-info { margin: 0 0 0 2px; }
-  .year-cagr-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
-  .year-cagr-value.positive { color: var(--green-text); }
-  .year-cagr-value.negative { color: var(--red-text); }
+  .year-cagr-value, .sc-day-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+  .year-cagr-value.positive, .sc-day-value.positive { color: var(--green-text); }
+  .year-cagr-value.negative, .sc-day-value.negative { color: var(--red-text); }
   .saved-config-pill .sc-metric-label {
     font-size: calc(8px * var(--ui-scale));
     font-weight: 600;
@@ -2635,6 +2635,12 @@
   .saved-config-pill .sc-event .sc-info { margin-left: 4px; }
   /* On a day without a trade: the fund held now, in the event's place and type, paler. */
   .saved-config-pill .sc-holding { min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; font-weight: 700; color: var(--accent-text); opacity: 0.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* The trade or the fund, then the day's change: small, a quarter of its height under the line's baseline, as the
+     year's figure sits after a CAGR. A card too narrow for both cuts the words, never the figure. */
+  .saved-config-pill .sc-now { display: flex; align-items: baseline; min-width: 0; }
+  .saved-config-pill .sc-day { flex: none; align-self: baseline; margin-left: 3px; position: relative; top: 0.25em; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
+  .saved-config-pill .sc-day:empty { display: none; }
+  .saved-config-pill .sc-day .sc-day-info { margin: 0 0 0 2px; }
   .saved-config-pill .sc-event-move.action-buy { color: var(--green-text); }
   .saved-config-pill .sc-event-move.action-sell { color: var(--red-text); }
   .saved-config-pill.is-hidden { opacity: var(--state-hidden-opacity); }

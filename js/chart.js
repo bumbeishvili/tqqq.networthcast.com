@@ -2354,6 +2354,115 @@ function moneyForEntry(entryDate, sliderInitial, rate) {
     : { initial: sliderInitial, contribSchedule: undefined, ownMoney: null, txEffective: null };
 }
 
+// Day-over-day change for dataset i's end label. Every source caches a raw
+// YESTERDAY value — window._ydayValueByIdx for the native lines (fixed
+// indices, populated fresh every render()), window._configDayChange for
+// saved 9sig/sma/bh configs, window._customYesterdayResults for custom/
+// library-derived ones (filled in asynchronously by a worker round-trip) —
+// and the delta is computed HERE, at draw time, against whatever TODAY
+// value the chart is actually drawing. That keeps both sides of the diff
+// in the same units (the chart's values are deflated in place when the
+// inflation toggle is on; a precomputed nominal-today delta silently mixed
+// nominal and real dollars), and a today-value change between the
+// yesterday-fetch and this draw self-corrects instead of showing a stale
+// pairing.
+//
+// Outside the regular session the same end-state holdings (cached beside
+// the yesterday values: window._endHoldingsByIdx, window._configEndHoldings,
+// a custom run's endHoldings) are marked at the funds' latest pre-market or
+// after-hours prints instead (extendedMoveOf, js/utils.js), and the badge
+// names that session's move, "(after hours +1.3% · +$74.8K)" (the user,
+// 2026-11-06: not the previous day's change, the after-hours change). The
+// session's own change stands while there are no prints, and for a line
+// holding a fund without one.
+const endHoldingsFor = (i, ds) => {
+  if (window._endHoldingsByIdx && (i in window._endHoldingsByIdx)) return window._endHoldingsByIdx[i];
+  if (ds && ds._configSub) return null;
+  const cfgId = ds && ds._configId;
+  if (!cfgId) return null;
+  if (window._configEndHoldings && (cfgId in window._configEndHoldings)) return window._configEndHoldings[cfgId];
+  const cr = window._customResults && window._customResults[cfgId];
+  return cr && !cr.error ? cr.endHoldings : null;
+};
+const withSession = (delta, session) => delta ? { ...delta, session } : null;
+const extendedChangeFor = (i, ds, todayVal) => {
+  const end = endHoldingsFor(i, ds);
+  const move = end ? extendedMoveOf(end.h, end.cash) : null;
+  return move ? withSession(computeDayChange(todayVal * move.ratio, todayVal), move.session) : null;
+};
+const sessionChangeFor = (i, ds, todayVal) => {
+  if (window._ydayValueByIdx && (i in window._ydayValueByIdx)) {
+    return computeDayChange(todayVal, window._ydayValueByIdx[i]);
+  }
+  // Sub-series (9sig Holding/Target/Cash, a custom strategy's declared
+  // lines) share their parent's _configId — without this guard they'd diff
+  // their own value against the PARENT line's cached yesterday total.
+  if (ds && ds._configSub) return null;
+  const cfgId = ds && ds._configId;
+  if (!cfgId) return null;
+  if (window._configDayChange && (cfgId in window._configDayChange)) {
+    return computeDayChange(todayVal, window._configDayChange[cfgId]);
+  }
+  const cy = window._customYesterdayResults && window._customYesterdayResults[cfgId];
+  if (cy && !cy.error) return computeDayChange(todayVal, cy.value);
+  return null;
+};
+const dayChangeFor = (i, ds, todayVal) => {
+  if (ds && ds._txDay) return txLineDayChange(ds._txDay, todayVal);
+  return extendedChangeFor(i, ds, todayVal) || sessionChangeFor(i, ds, todayVal);
+};
+// The real account's sheet records values but no holdings, so its day move
+// is borrowed from the strategy it follows (window._txDay.move, see
+// js/saved-configs.js's txFollowMove): that strategy's own badge percent,
+// or a Buy & Hold's fixed one. { pct, session }, the session set when the
+// move is to an extended-hours print; null without a move.
+const txFollowPct = () => {
+  const move = window._txDay.move;
+  if ('pct' in move) {
+    const ext = move.holdings ? extendedMoveOf(move.holdings, 0) : null;
+    return ext ? { pct: (ext.ratio - 1) * 100, session: ext.session } : { pct: move.pct };
+  }
+  const last = chart.data.labels.length - 1;
+  const i = 'idx' in move ? move.idx : chart.data.datasets.findIndex(d => d._configId === move.cfgId && !d._configSub);
+  const delta = i >= 0
+    ? dayChangeFor(i, chart.data.datasets[i], chart.data.datasets[i].data[last])
+    : dayChangeFor(-1, { _configId: move.cfgId }, move.today); // a library strategy: no line, its run's value
+  return delta ? { pct: delta.pct, session: delta.session } : null;
+};
+// Portfolio's and Profit's day change: the followed move applied to the
+// latest reading less today's deposit gives yesterday's portfolio, and
+// yesterday's profit is that less what was in by yesterday. An
+// extended-hours move runs the other way, forward from the reading, which
+// stands at the close. Scaled into the chart's units (real $ when the
+// inflation toggle is on) through todayVal.
+const txLineDayChange = (line, todayVal) => {
+  const day = window._txDay;
+  const move = day && txFollowPct();
+  if (!move || move.pct == null) return null;
+  if (move.session) {
+    const printed = day.portfolio * (1 + move.pct / 100);
+    const [today, next] = line === 'actual'
+      ? [day.portfolio, printed]
+      : [day.portfolio - day.invested, printed - day.invested];
+    return withSession(computeDayChange(todayVal * next / today, todayVal), move.session);
+  }
+  const ydayPortfolio = (day.portfolio - day.flowToday) / (1 + move.pct / 100);
+  const [today, yday] = line === 'actual'
+    ? [day.portfolio, ydayPortfolio]
+    : [day.portfolio - day.invested, ydayPortfolio - (day.invested - day.flowToday)];
+  return computeDayChange(todayVal, todayVal * yday / today);
+};
+// A saved strategy's day change as its line's end label has it ({ pct, abs, session }, or null): only while the
+// chart ends on the latest day, against its line's value there, in the chart's units. Its card shows the percent
+// (js/saved-configs.js's dayChangeHtml).
+function configDayChange(cfgId) {
+  if (!chart || !chart._isLatestDaySelected) return null;
+  const i = chart.data.datasets.findIndex(ds => ds._configId === cfgId && !ds._configSub);
+  if (i < 0) return null;
+  const ds = chart.data.datasets[i];
+  return dayChangeFor(i, ds, ds.data[chart.data.labels.length - 1]);
+}
+
 function render() {
   if (!quarterlyData) return; // data not loaded yet
   // Live-edit: mirror sidebar changes into the open saved strategy before the
@@ -3179,104 +3288,6 @@ function render() {
   }
 
   // Plugin: draw end-of-line labels directly on canvas
-  // Day-over-day change for dataset i's end label. Every source caches a raw
-  // YESTERDAY value — window._ydayValueByIdx for the native lines (fixed
-  // indices, populated fresh every render()), window._configDayChange for
-  // saved 9sig/sma/bh configs, window._customYesterdayResults for custom/
-  // library-derived ones (filled in asynchronously by a worker round-trip) —
-  // and the delta is computed HERE, at draw time, against whatever TODAY
-  // value the chart is actually drawing. That keeps both sides of the diff
-  // in the same units (the chart's values are deflated in place when the
-  // inflation toggle is on; a precomputed nominal-today delta silently mixed
-  // nominal and real dollars), and a today-value change between the
-  // yesterday-fetch and this draw self-corrects instead of showing a stale
-  // pairing.
-  //
-  // Outside the regular session the same end-state holdings (cached beside
-  // the yesterday values: window._endHoldingsByIdx, window._configEndHoldings,
-  // a custom run's endHoldings) are marked at the funds' latest pre-market or
-  // after-hours prints instead (extendedMoveOf, js/utils.js), and the badge
-  // names that session's move, "(after hours +1.3% · +$74.8K)" (the user,
-  // 2026-11-06: not the previous day's change, the after-hours change). The
-  // session's own change stands while there are no prints, and for a line
-  // holding a fund without one.
-  const endHoldingsFor = (i, ds) => {
-    if (window._endHoldingsByIdx && (i in window._endHoldingsByIdx)) return window._endHoldingsByIdx[i];
-    if (ds && ds._configSub) return null;
-    const cfgId = ds && ds._configId;
-    if (!cfgId) return null;
-    if (window._configEndHoldings && (cfgId in window._configEndHoldings)) return window._configEndHoldings[cfgId];
-    const cr = window._customResults && window._customResults[cfgId];
-    return cr && !cr.error ? cr.endHoldings : null;
-  };
-  const withSession = (delta, session) => delta ? { ...delta, session } : null;
-  const extendedChangeFor = (i, ds, todayVal) => {
-    const end = endHoldingsFor(i, ds);
-    const move = end ? extendedMoveOf(end.h, end.cash) : null;
-    return move ? withSession(computeDayChange(todayVal * move.ratio, todayVal), move.session) : null;
-  };
-  const sessionChangeFor = (i, ds, todayVal) => {
-    if (window._ydayValueByIdx && (i in window._ydayValueByIdx)) {
-      return computeDayChange(todayVal, window._ydayValueByIdx[i]);
-    }
-    // Sub-series (9sig Holding/Target/Cash, a custom strategy's declared
-    // lines) share their parent's _configId — without this guard they'd diff
-    // their own value against the PARENT line's cached yesterday total.
-    if (ds && ds._configSub) return null;
-    const cfgId = ds && ds._configId;
-    if (!cfgId) return null;
-    if (window._configDayChange && (cfgId in window._configDayChange)) {
-      return computeDayChange(todayVal, window._configDayChange[cfgId]);
-    }
-    const cy = window._customYesterdayResults && window._customYesterdayResults[cfgId];
-    if (cy && !cy.error) return computeDayChange(todayVal, cy.value);
-    return null;
-  };
-  const dayChangeFor = (i, ds, todayVal) => {
-    if (ds && ds._txDay) return txLineDayChange(ds._txDay, todayVal);
-    return extendedChangeFor(i, ds, todayVal) || sessionChangeFor(i, ds, todayVal);
-  };
-  // The real account's sheet records values but no holdings, so its day move
-  // is borrowed from the strategy it follows (window._txDay.move, see
-  // js/saved-configs.js's txFollowMove): that strategy's own badge percent,
-  // or a Buy & Hold's fixed one. { pct, session }, the session set when the
-  // move is to an extended-hours print; null without a move.
-  const txFollowPct = () => {
-    const move = window._txDay.move;
-    if ('pct' in move) {
-      const ext = move.holdings ? extendedMoveOf(move.holdings, 0) : null;
-      return ext ? { pct: (ext.ratio - 1) * 100, session: ext.session } : { pct: move.pct };
-    }
-    const last = chart.data.labels.length - 1;
-    const i = 'idx' in move ? move.idx : chart.data.datasets.findIndex(d => d._configId === move.cfgId && !d._configSub);
-    const delta = i >= 0
-      ? dayChangeFor(i, chart.data.datasets[i], chart.data.datasets[i].data[last])
-      : dayChangeFor(-1, { _configId: move.cfgId }, move.today); // a library strategy: no line, its run's value
-    return delta ? { pct: delta.pct, session: delta.session } : null;
-  };
-  // Portfolio's and Profit's day change: the followed move applied to the
-  // latest reading less today's deposit gives yesterday's portfolio, and
-  // yesterday's profit is that less what was in by yesterday. An
-  // extended-hours move runs the other way, forward from the reading, which
-  // stands at the close. Scaled into the chart's units (real $ when the
-  // inflation toggle is on) through todayVal.
-  const txLineDayChange = (line, todayVal) => {
-    const day = window._txDay;
-    const move = day && txFollowPct();
-    if (!move || move.pct == null) return null;
-    if (move.session) {
-      const printed = day.portfolio * (1 + move.pct / 100);
-      const [today, next] = line === 'actual'
-        ? [day.portfolio, printed]
-        : [day.portfolio - day.invested, printed - day.invested];
-      return withSession(computeDayChange(todayVal * next / today, todayVal), move.session);
-    }
-    const ydayPortfolio = (day.portfolio - day.flowToday) / (1 + move.pct / 100);
-    const [today, yday] = line === 'actual'
-      ? [day.portfolio, ydayPortfolio]
-      : [day.portfolio - day.invested, ydayPortfolio - (day.invested - day.flowToday)];
-    return computeDayChange(todayVal, todayVal * yday / today);
-  };
   // The day's change as the end label words it: in full, "(-8.4% · -$483.6K)"; on a phone-width
   // chart the percent alone. Outside the regular session either names the session first.
   const deltaSession = (delta) => delta.session ? EXTENDED_SESSION_NAMES[delta.session] + ' ' : '';
@@ -3340,6 +3351,11 @@ function render() {
   };
   const endLabelPlugin = {
     id: 'endLabels',
+    // The cards carry the same day changes: a yesterday run or a newer extended-hours print repaints
+    // only the chart (chart.update), so the cards' figures follow it here.
+    afterUpdate() {
+      if (typeof refreshCardDayChanges === 'function') refreshCardDayChanges();
+    },
     // Size the reserved right margin to whatever the widest current label
     // actually needs, measured with the same fonts afterDraw renders with.
     // A fixed pixel guess (the old approach) works until a longer strategy

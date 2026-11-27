@@ -3097,6 +3097,27 @@ const SC_EVENT_CLASS = { buy: 'action-buy', sell: 'action-sell' };
 function dayEventHtml(event, icon) {
   return `<span class="sc-event-text">${_escHtml(dayEventWords(event))}</span>${icon}`;
 }
+// The day's change after a card's trade or fund, as its line's end label has it (configDayChange in js/chart.js): the
+// percent, small, and an ⓘ that says since which close (the user, 2026-11-27: "Lets also add todays change in
+// percentage under today held funds in small fonts as above 2026"). Empty without one.
+function dayChangeHtml(delta) {
+  if (!delta) return '';
+  const close = (date) => _miniCloseName(Date.parse(date), false);
+  const session = delta.session ? EXTENDED_SESSION_NAMES[delta.session] : '';
+  const tip = session
+    ? `${session[0].toUpperCase() + session.slice(1)} change since ${close(daily[daily.length - 1].date)}`
+    : `Change since ${close(daily[daily.length - 2].date)}`;
+  return `<span class="sc-day-value ${delta.pct >= 0 ? 'positive' : 'negative'}">${fmtDayChangePct(delta)}</span>`
+    + `<span class="info-icon sc-day-info" tabindex="0" data-tip="${tip}">ⓘ</span>`;
+}
+const cardDayChangeHtml = (cfgId) => `<span class="sc-day" data-day-change-for="${cfgId}">${dayChangeHtml(configDayChange(cfgId))}</span>`;
+// The cards' day changes redrawn where they moved (js/chart.js's endLabelPlugin, after each chart update).
+function refreshCardDayChanges() {
+  for (const el of document.querySelectorAll('.saved-config-pill .sc-day[data-day-change-for]')) {
+    const html = dayChangeHtml(configDayChange(el.dataset.dayChangeFor));
+    if (el.innerHTML !== html) el.innerHTML = html;
+  }
+}
 function buildConfigPillHtml(cfg) {
   const m = (window._configMetrics || {})[cfg.id] || {};
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -3125,6 +3146,8 @@ function buildConfigPillHtml(cfg) {
   const eventHtml = event ? `<div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${dayEventHtml(event, tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)]))}</b></div>`
     // On a day without a trade the same line names the fund held now, paler (the user, 2026-11-26: "it should say Currently TQQQ").
     : m.held ? `<div class="sc-holding">Currently ${esc(m.held)}</div>` : '';
+  // The day's change right after it.
+  const nowHtml = eventHtml ? `<div class="sc-now">${eventHtml}${cardDayChangeHtml(cfg.id)}</div>` : '';
   const eyeSvg = hidden
     ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
     : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';
@@ -3144,7 +3167,7 @@ function buildConfigPillHtml(cfg) {
       </div>
       ${metrics}
       <div class="sc-foot">
-        ${eventHtml}
+        ${nowHtml}
         <div class="sc-actions">
           <button type="button" class="sc-edit" title="Edit in sidebar" aria-label="Edit">
             <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
