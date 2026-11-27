@@ -994,14 +994,17 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #25 Always-invested: 200SMA → TQQQ else QQQ (park in unleveraged, not cash).
+// #25 Always-invested: 200SMA → TQQQ else QQQ (park in unleveraged, not cash). Since 27 November 2026 the defaults are
+// the user's pick on the map of 2010-2025 rerun with the drawdown taken at every close: SOXX against its 280-day moving
+// average, SOXX held under it (were QQQ and its 160-day median); 52.9% a year with $80K and $3K a month, max drawdown
+// 61.1% (before: 42.5%, 58.7%).
 CODE[25] = `{
   name: "200SMA → TQQQ else QQQ (always in)",
-  params: [{ id: "signal", label: "Signal / park", text: "Watch {} against its line, and hold it while it is below.", options: ${fundOptionsSrc(["qqq", "spy"], LONG_FUNDS)}, default: "qqq" },
+  params: [{ id: "signal", label: "Signal / park", text: "Watch {} against its line, and hold it while it is below.", options: ${fundOptionsSrc(["qqq", "spy"], LONG_FUNDS)}, default: "soxx" },
            { id: "lev", label: "Fund held", text: "Hold {} while it is above.", options: ${fundOptionsSrc(["tqqq", "qld", "sso", "spxl"], LONG_FUNDS)}, default: "tqqq" },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
-      Array.from({ length: 32 }, (_, k) => 5 + k).concat(Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 160 },
-           ${STAT_PARAM_MEDIAN_SNIPPET}],
+      Array.from({ length: 32 }, (_, k) => 5 + k).concat(Array.from({ length: 8 }, (_, k) => 40 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 280 },
+           ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "Signal", tip: "Close of the signal fund (the Signal setting): the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting). Above it the strategy holds the leveraged fund, under it the signal fund." }],
   run(data, p) {
@@ -1041,16 +1044,18 @@ ${WEEKLY_MONTH_END_SNIPPET}
 
 // #26 Median overextension 250d (hand-picked): sell when price runs >55% above its
 // 250-day rolling median, hold otherwise. An overextension filter, NOT a trend
-// filter — it only ever exits on strength, so it rides every crash to the bottom.
+// filter — it only ever exits on strength, so it rides every crash to the bottom. Since 27 November 2026 the defaults
+// are the user's pick on the map of 2010-2025: SOXS while overextended, at 54% over the 240-day median (were cash, 55%,
+// 250 days); 83.6% a year with $80K and $3K a month, max drawdown 81.3% (before: 59.5%, 81.3%).
 CODE[26] = `{
   name: "Median overextension 250d",
   params: [
     { id: "asset", label: "Fund traded", text: "Hold {} as the main fund.", default: "tqqq", options: ${fundOptionsSrc(["tqqq", "qld", "spxl", "sso", "qqq", "spy"], LONG_FUNDS)} },
-    { id: "park", label: "Held when out", text: "Hold {} while it is overextended.", default: "cash", options: ${fundOptionsSrc(["cash", "qqq", "spy", "sso", "qld"], OUT_FUNDS)} },
-    { id: "threshold", label: "Sell when above line (%)", text: "It is overextended when it closes {} above its line.", unit: "%", default: 55, options:
+    { id: "park", label: "Held when out", text: "Hold {} while it is overextended.", default: "soxs", options: ${fundOptionsSrc(["cash", "qqq", "spy", "sso", "qld"], OUT_FUNDS)} },
+    { id: "threshold", label: "Sell when above line (%)", text: "It is overextended when it closes {} above its line.", unit: "%", default: 54, options:
       Array.from({ length: 191 }, (_, k) => 10 + k) },
     ${STAT_PARAM_MEDIAN_SNIPPET},
-    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 250, options:
+    { id: "window", label: "Window (days)", text: "The line covers the last {} days.", default: 240, options:
       [5].concat(Array.from({ length: 20 }, (_, k) => 10 + 10 * k), Array.from({ length: 82 }, (_, k) => 209 + k), Array.from({ length: 21 }, (_, k) => 300 + 10 * k)) },
     { id: "cashRate", fit: false, label: "Cash interest (%/yr)", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
       0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,7,8] },

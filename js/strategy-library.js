@@ -84,13 +84,13 @@ const STRATEGY_LIBRARY = [
     rules: 'Below QQQ’s 160-day median: cash. Above it: TQQQ. At 14.6% above → all cash. Freq: daily.',
     here: '—', reported: 'Dot-com-froth insurance; app-implemented · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), no swap to QQQ and all cash at 14.6% above the line: with $80K and $3K a month 48.2% a year, max drawdown 44.2% (8.5% and 15%, the rounded fit before: 44.6%, 38.0%) · on the same money: all cash at 14.5% 47.3%, at 15% 45.0%; the swap to QQQ at 8.5% 45.6% (38.0%) · 2026 to date +22% ($100K once; −2% before) · published settings 30.7% (56%) with $100K once, before the cost and interest', src: 'HW' },
   { n: 25, name: 'Always invested + DCA', formerNames: ['Always-invested park + DCA-back-in'], tag: 'app', runnable: true,
-    rules: 'Above QQQ’s 160-day median: TQQQ. Below it: QQQ (never cash). Freq: daily.',
-    here: '39.5% / −58.7%', reported: '+6.91% avg holding QQQ vs bonds in downturns; app-implemented · defaults fitted to 2010–2025 and rounded: 41.3% a year, max drawdown 59% (published settings: 36.6%, 59%)', src: 'HW' },
+    rules: 'Above SOXX’s 280-day average: TQQQ. Below it: SOXX (never cash). Freq: daily.',
+    here: '39.5% / −58.7%', reported: '+6.91% avg holding QQQ vs bonds in downturns; app-implemented · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), SOXX against its 280-day moving average: with $80K and $3K a month 52.9% a year, max drawdown 61.1% (QQQ and its 160-day median, the rounded fit before: 42.5%, 58.7%) · on the same money: 270 days 52.7% (61.7%), 290 days 50.9% (64.6%), QQQ in SOXX’s place 33.3% (63.9%), the median 47.3% (72.6%) · published settings 36.6% (59%) with $100K once, before the cost and interest', src: 'HW' },
   // --- hand-picked (tag 'picked'): my own, not from a published write-up. No
   // `src`, so the card title renders as plain text instead of a dead link. ---
   { n: 26, name: 'Bare overextension', formerNames: ['Median overextension 250d'], tag: 'picked', runnable: true,
-    rules: 'Signal: traded fund vs the MEDIAN of its own last 250 closes. Exit: price > 55% above the median → park (cash by default). Enter: any time it is not. Freq: daily. Overextension filter only — there is no downside rule, so it holds all the way through every crash.',
-    here: '62.4% / −79.1%', reported: 'Hand-picked; numbers are this app’s own backtest, not an external claim' },
+    rules: 'Signal: traded fund vs the MEDIAN of its own last 240 closes. Exit: price > 54% above the median → SOXS. Enter: any time it is not. Freq: daily. Overextension filter only — there is no downside rule, so it holds all the way through every crash.',
+    here: '62.4% / −79.1%', reported: 'Hand-picked; numbers are this app’s own backtest, not an external claim · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), SOXS while overextended, at 54% over the 240-day median: with $80K and $3K a month 83.6% a year, max drawdown 81.3% (cash, 55% and 250 days before: 59.5%, 81.3%) · on the same money: 53% 75.9%, 55% 72.0%; 239 days 80.8%, 241 days 82.8%; cash in SOXS’s place 60.4% · 2026 to date +100% ($100K once; +23% before)' },
   { n: 39, name: 'SSO overheat exit', formerNames: ['Overheat exit \u2014 SSO signal (sell when stretched)'], tag: 'picked', runnable: true,
     hidden: true,   // the user, 2026-11-27: "remove this strategy completelly from library"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Signal: SSO vs its own 150-day SMA. Exit: signal closes >20% above the SMA \u2192 park (cash by default). Enter: any time it is not. Freq: daily. Signal and traded fund are separate knobs. Overextension filter only \u2014 like Median overextension 250d it has no downside rule, so it holds through every crash.',
@@ -411,7 +411,7 @@ STRATEGY_LIBRARY.push(
 // notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
 // [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
 const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [20.1, 44], 3: [16.6, 37], 8: [39.0, 44], 10: [44.0, 57], 12: [14.3, 25], 13: [42.4, 54], 15: [42.6, 54],
-  17: [21.0, 38], 18: [36.7, 62], 19: [44.8, 70], 20: [40.0, 58], 22: [35.5, 56], 23: [37.8, 55], 24: [45.1, 44], 25: [40.9, 59], 55: [27.1, 33], 56: [34.9, 36] };
+  17: [21.0, 38], 18: [36.7, 62], 19: [44.8, 70], 20: [40.0, 58], 22: [35.5, 56], 23: [37.8, 55], 24: [45.1, 44], 25: [50.7, 61], 55: [27.1, 33], 56: [34.9, 36] };
 for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
   const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025).`;
   entry.reported = /[.!?]$/.test(entry.reported) ? entry.reported + ' ' + said : entry.reported + ' · ' + said;
