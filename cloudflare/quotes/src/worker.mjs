@@ -46,6 +46,9 @@ const STALE_MS = 3 * 60 * 1000, NASDAQ = 'https://api.nasdaq.com/api/quote/', NA
 // repository's secrets); without them the Yahoo and Nasdaq path runs as before.
 const ALPACA = 'https://data.alpaca.markets/v2/stocks/trades/latest', ALPACA_BARS = 'https://data.alpaca.markets/v2/stocks/', ALPACA_TIMEOUT_MS = 4000;
 const ALPACA_TIMEFRAME = { '1m': '1Min', '5m': '5Min' }, ALPACA_LOOKBACK_DAYS = { '1d': 6, '5d': 10 };   // enough calendar days to hold the sessions asked for
+// Alpaca's market calendar, on its trading API with the same keys: the days the market trades and their open and
+// close (13:00 on an early close). Without the keys, or when it fails, every weekday counts, 09:30 to 16:00.
+const ALPACA_CALENDAR = 'https://api.alpaca.markets/v2/calendar', CALENDAR_SPAN_DAYS = 14, CALENDAR_TTL_MS = 6 * 3600 * 1000;
 const NASDAQ_UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
 const NY_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour12: false, weekday: 'short', year: 'numeric', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 const MONTHS = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
@@ -94,20 +97,20 @@ function quotesRoute(url) {
     key: '/quotes?symbols=' + list.join(','),
     ttl: QUOTE_TTL,
     build: async (env) => {
-      const quotes = {}, errors = {}, inSession = sessionNow();
+      const calendar = await marketCalendar(env), inSession = sessionNow(new Date(), calendar), quotes = {}, errors = {};
       const trades = inSession ? await alpacaTrades(list, env) : {};
       await Promise.all(list.map(async symbol => {
         try {
           const q = quoteOf(await chart(symbol, '1d', '1d'));
           const quote = trades[symbol] ? withTrade(q, trades[symbol], 'alpaca')
             : inSession && q.time && Date.now() - Date.parse(q.time) > STALE_MS ? await freshen(symbol, q) : q;
-          const extended = inSession ? null : await extendedOf(symbol, q);
+          const extended = inSession ? null : await extendedOf(symbol, q, new Date(), calendar);
           quotes[symbol] = extended ? { ...quote, extended } : quote;
         }
         catch (e) { errors[symbol] = String(e.message || e); }
       }));
       const ok = Object.keys(errors).length === 0;
-      return { ok, type: JSON_TYPE, text: JSON.stringify({ fetchedAt: new Date().toISOString(), quotes, ...(ok ? {} : { errors }) }) };
+      return { ok, type: JSON_TYPE, text: JSON.stringify({ fetchedAt: new Date().toISOString(), calendar: calendar ? 'alpaca' : 'weekdays', quotes, ...(ok ? {} : { errors }) }) };
     },
   };
 }
@@ -198,23 +201,27 @@ function quoteOf(result) {
 }
 
 // Outside the regular session the latest print is an extended-hours one. Yahoo's
-// chart with the pre-market and after-hours bars (04:00-09:30 and 16:00-20:00
-// New York) stamps its last bar with the latest trade, whatever the interval;
-// the session it falls in is read off the bar's own New York clock: the meta's
-// currentTradingPeriod rolls to the next day at midnight while the bars stay
-// the last session's, which made the after-hours print vanish from the site
-// after midnight (the user, 2026-11-06). The overnight session (20:00-04:00,
-// Blue Ocean, Sunday to Thursday nights) has no bars; its latest print is the
-// meta's fulldayPrice, which carries no time, so the print carries the time it
-// was read, and only on the nights it runs (a Friday or Saturday night has
-// none). A print stands until a regular session opens after it: Thursday's
-// after-hours print is still there after midnight, and Friday's all weekend,
-// as Yahoo's own page shows it (the user, 2026-11-08, on a Sunday: "overnight
-// also not visible"); a bar from before the latest open is a lagging feed and
-// no print. The quote keeps the regular session's price, time and prior close
-// (the files' basis); `extended` adds the session, the print, its time and its
-// change against the regular price. Null when there is no such print (a fund
-// nobody traded) or when the call fails: the regular quote stands on its own.
+// chart with the pre-market and after-hours bars (04:00 to the open and the close
+// to 20:00 New York) stamps its last bar with the latest trade, whatever the
+// interval; the session it falls in is read off the bar's own New York clock: the
+// meta's currentTradingPeriod rolls to the next day at midnight while the bars
+// stay the last session's, which made the after-hours print vanish from the site
+// after midnight (the user, 2026-11-06). The overnight session (20:00-04:00, Blue
+// Ocean, on the nights before a trading day) has no bars; its latest print is the
+// meta's fulldayPrice, which carries no time, so the print carries the time it was
+// read, and only on the nights it runs (a Friday or Saturday night has none).
+// The pre-market can have no bars either: on 27 Nov 2026, the day after
+// Thanksgiving, Yahoo's chart still ended at Wednesday 19:55 at 09:00 while the
+// fund traded (the user: "is the live data working currently? can't see
+// anything"); there too fulldayPrice is the print, unless a bar of this
+// pre-market is there. A print stands until a regular session opens after it:
+// Thursday's after-hours print is still there after midnight, Friday's all
+// weekend, and Wednesday's all Thanksgiving, as Yahoo's own page shows it; a bar
+// from before the latest open is a lagging feed and no print. The quote keeps the
+// regular session's price, time and prior close (the files' basis); `extended`
+// adds the session, the print, its time and its change against the regular price.
+// Null when there is no such print (a fund nobody traded) or when the call fails:
+// the regular quote stands on its own.
 const EXTENDED_INTERVAL = '5m';
 const PRE_FROM = 4 * 60, REGULAR_FROM = 9 * 60 + 30, POST_FROM = 16 * 60, OVERNIGHT_FROM = 20 * 60;   // New York minutes of day
 // An instant on New York's clock: the day as a count since 1970-01-01, its weekday (0 Sunday) and the minute of the day.
@@ -223,46 +230,82 @@ function nyClock(date) {
   const day = Date.UTC(+p.year, +p.month - 1, +p.day) / 86400000;
   return { day, weekday: (day + 4) % 7, minute: (+p.hour % 24) * 60 + +p.minute };   // day 0 was a Thursday
 }
-const nyMinute = date => nyClock(date).minute;
-// Whether a regular session (a weekday's 09:30; holidays count, as in sessionNow) opened after `from` and by `to`.
-function sessionOpenedBetween(from, to) {
+const isoDay = day => new Date(day * 86400000).toISOString().slice(0, 10);
+const clockMinutes = text => { const [h, m] = String(text).split(':'); return +h * 60 + +m; };
+// The market calendar for the days around today: { from, to, days: Map(day -> { open, close }) } in New York
+// minutes, a day the market is shut absent from `days`; kept for CALENDAR_TTL_MS. Null without the keys or on
+// any failure, and the clock's weekday rule stands in.
+let calendarMemo = null;   // { until, calendar }
+async function marketCalendar(env) {
+  const key = env && env.ALPACA_API_KEY, secret = env && env.ALPACA_API_SECRET;
+  if (!key || !secret) return null;
+  if (calendarMemo && calendarMemo.until > Date.now()) return calendarMemo.calendar;
+  const today = nyClock(new Date()).day, from = today - CALENDAR_SPAN_DAYS, to = today + CALENDAR_SPAN_DAYS;
+  try {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), ALPACA_TIMEOUT_MS);
+    const res = await fetch(ALPACA_CALENDAR + '?start=' + isoDay(from) + '&end=' + isoDay(to), { headers: { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret, 'Accept': 'application/json' }, signal: ctl.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    const list = await res.json();
+    if (!Array.isArray(list) || !list.length) return null;
+    const days = new Map(list.map(d => [Date.parse(d.date + 'T00:00:00Z') / 86400000, { open: clockMinutes(d.open), close: clockMinutes(d.close) }]));
+    const calendar = { from, to, days };
+    calendarMemo = { until: Date.now() + CALENDAR_TTL_MS, calendar };
+    return calendar;
+  } catch (e) { return null; }
+}
+// A day's regular hours { open, close } in New York minutes, or null when the market is shut that day: the
+// calendar's answer for the days it covers, the weekday rule otherwise.
+function marketDay(calendar, day) {
+  if (calendar && day >= calendar.from && day <= calendar.to) return calendar.days.get(day) || null;
+  const weekday = (day + 4) % 7;
+  return weekday === 0 || weekday === 6 ? null : { open: REGULAR_FROM, close: POST_FROM };
+}
+// Whether a regular session opened after `from` and by `to`.
+function sessionOpenedBetween(from, to, calendar) {
   const a = nyClock(from), b = nyClock(to);
   for (let day = a.day; day <= b.day; day++) {
-    const weekday = (day + 4) % 7;
-    if (weekday === 0 || weekday === 6) continue;
-    if ((day > a.day || a.minute < REGULAR_FROM) && (day < b.day || b.minute >= REGULAR_FROM)) return true;
+    const hours = marketDay(calendar, day);
+    if (hours && (day > a.day || a.minute < hours.open) && (day < b.day || b.minute >= hours.open)) return true;
   }
   return false;
 }
-// The overnight session by the clock: from 20:00 on a Sunday to Thursday night to 04:00 the next morning.
-function overnightNow(now) {
-  const { weekday, minute } = nyClock(now);
-  return minute >= OVERNIGHT_FROM ? weekday <= 4 : minute < PRE_FROM && weekday >= 1 && weekday <= 5;
+// The overnight session by the clock: from 20:00 to 04:00 the next morning, when that morning is a trading day.
+function overnightNow(now, calendar) {
+  const { day, minute } = nyClock(now);
+  return minute >= OVERNIGHT_FROM ? !!marketDay(calendar, day + 1) : minute < PRE_FROM && !!marketDay(calendar, day);
 }
-// The session a bar falls in by its New York clock; null for a regular-session bar.
-function barSession(epochSeconds) {
-  const m = nyMinute(new Date(epochSeconds * 1000));
-  return m >= POST_FROM && m < OVERNIGHT_FROM ? 'post' : m >= PRE_FROM && m < REGULAR_FROM ? 'pre' : null;
+// The pre-market by the clock: from 04:00 to the open on a trading day.
+function preMarketNow(now, calendar) {
+  const { day, minute } = nyClock(now), hours = marketDay(calendar, day);
+  return !!hours && minute >= PRE_FROM && minute < hours.open;
 }
-async function extendedOf(symbol, q, now = new Date()) {
+// The session a bar falls in by its New York clock (the after-hours from the day's close, 13:00 on an early
+// close); null for a regular-session bar.
+function barSession(epochSeconds, calendar) {
+  const { day, minute } = nyClock(new Date(epochSeconds * 1000)), hours = marketDay(calendar, day) || { open: REGULAR_FROM, close: POST_FROM };
+  return minute >= hours.close && minute < OVERNIGHT_FROM ? 'post' : minute >= PRE_FROM && minute < hours.open ? 'pre' : null;
+}
+async function extendedOf(symbol, q, now = new Date(), calendar = null) {
   if (!(q.price > 0)) return null;
   let result;
   try { result = await chart(symbol, '1d', EXTENDED_INTERVAL, true); } catch (e) { return null; }
   const ts = result.timestamp || [], close = (result.indicators.quote[0] || {}).close || [];
   let last = ts.length - 1;
   while (last >= 0 && !(close[last] > 0)) last--;
-  const bar = last >= 0 && !sessionOpenedBetween(new Date(ts[last] * 1000), now)
-    ? { session: barSession(ts[last]), price: close[last], time: new Date(ts[last] * 1000).toISOString() } : null;
+  const bar = last >= 0 && !sessionOpenedBetween(new Date(ts[last] * 1000), now, calendar)
+    ? { session: barSession(ts[last], calendar), price: close[last], time: new Date(ts[last] * 1000).toISOString() } : null;
+  // Overnight, or in a pre-market with no bar of its own: fulldayPrice, when something traded since the last bar.
+  const late = overnightNow(now, calendar) ? 'overnight' : preMarketNow(now, calendar) ? 'pre' : null;
   const fullday = result.meta.fulldayPrice;
-  const overnight = overnightNow(now) && fullday > 0 && (!bar || fullday !== bar.price);
-  const print = overnight ? { session: 'overnight', price: fullday, time: now.toISOString() } : bar && bar.session ? bar : null;
+  const fromFullday = late && fullday > 0 && !(bar && bar.session === late) && (!bar || fullday !== bar.price);
+  const print = fromFullday ? { session: late, price: fullday, time: now.toISOString() } : bar && bar.session ? bar : null;
   return print && { ...print, changePct: (print.price / q.price - 1) * 100 };
 }
-// New York session hours by the clock: a weekday, 09:30 to 16:00 (holidays included; Nasdaq's market status settles those).
-function sessionNow(now = new Date()) {
-  const p = {}; for (const { type, value } of NY_PARTS.formatToParts(now)) p[type] = value;
-  const minute = (+p.hour % 24) * 60 + +p.minute;
-  return !['Sat', 'Sun'].includes(p.weekday) && minute >= 9 * 60 + 30 && minute < 16 * 60;
+// New York session hours: a trading day, from its open to its close.
+function sessionNow(now = new Date(), calendar = null) {
+  const { day, minute } = nyClock(now), hours = marketDay(calendar, day);
+  return !!hours && minute >= hours.open && minute < hours.close;
 }
 // A New York wall-clock time ("Nov 5, 2026 1:24 PM ET", as Nasdaq writes it) as an ISO instant.
 function nasdaqTimeToIso(text) {

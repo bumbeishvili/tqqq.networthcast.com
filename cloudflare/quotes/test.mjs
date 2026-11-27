@@ -19,6 +19,10 @@ const SESSION_CLOCK = Date.UTC(2026, 10, 5, 18, 30);   // 13:30 EST, a Thursday
 let nowFixed = SESSION_CLOCK;
 let FULLDAY = null;   // the chart meta's fulldayPrice for TQQQ (the overnight print) when set
 let CHART_DAY = 0;   // days the Yahoo chart stub's bars are moved on from Thursday 11/5 (1: Friday's bars, as Yahoo serves them all weekend)
+let HALF_DAY = false;   // the chart day closes at 13:00 (the day after Thanksgiving)
+let PRE_ONLY = false;   // the chart with extended hours holds one bar of the chart day's pre-market, 08:30, and nothing else
+// Alpaca's market calendar for November 2026: weekdays, Thanksgiving (11/26) shut, the day after closing at 13:00.
+const HOLIDAY = '2026-11-26', EARLY_CLOSE = '2026-11-27';
 if (OFFLINE) {
   const open = Date.UTC(2026, 10, 5, 14, 30) / 1000;   // 2026-11-05 09:30 EST
   // Both clocks the worker reads stand at nowFixed: Date.now() and new Date() with
@@ -42,6 +46,16 @@ if (OFFLINE) {
       for (const sym of symbols) trades[sym] = { t: new Date(nowFixed - 5000).toISOString().replace('.000Z', '.123456789Z'), p: 40 + sym.length + 0.75, s: 100, x: 'V' };
       return Response.json({ trades });
     }
+    if (u.hostname === 'api.alpaca.markets' && u.pathname === '/v2/calendar') {
+      if (globalThis.__calendarDown) return new Response('unavailable', { status: 503 });
+      const days = [];
+      for (let t = Date.parse(u.searchParams.get('start') + 'T00:00:00Z'); t <= Date.parse(u.searchParams.get('end') + 'T00:00:00Z'); t += 86400000) {
+        const date = new RealDate(t).toISOString().slice(0, 10), weekday = new RealDate(t).getUTCDay();
+        if (weekday === 0 || weekday === 6 || date === HOLIDAY) continue;
+        days.push({ date, open: '09:30', close: date === EARLY_CLOSE ? '13:00' : '16:00', session_open: '0400', session_close: date === EARLY_CLOSE ? '1700' : '2000' });
+      }
+      return Response.json(days);
+    }
     if (u.hostname === 'api.nasdaq.com') {
       const symbol = u.pathname.split('/')[3];
       if (STALE[symbol] === 'nasdaq-down') return new Response('blocked', { status: 403 });
@@ -49,7 +63,9 @@ if (OFFLINE) {
     }
     const symbol = decodeURIComponent(u.pathname.split('/').pop()), prePost = u.searchParams.get('includePrePost') === 'true';
     const tradeAt = STALE[symbol] ? SESSION_CLOCK / 1000 - 70 * 60 : SESSION_CLOCK / 1000 - 30;   // a stale Yahoo print is 70 minutes old, a fresh one 30 seconds
-    const px = 40 + symbol.length, TRAIL = 3, POST = 5, day = open + CHART_DAY * 86400, close = day + 6.5 * 3600;
+    const px = 40 + symbol.length, TRAIL = 3, POST = 5, day = open + CHART_DAY * 86400, close = day + (HALF_DAY ? 3.5 : 6.5) * 3600;
+    if (prePost && PRE_ONLY) return Response.json({ chart: { result: [{ meta: { regularMarketPrice: px + 0.25, chartPreviousClose: px - 1, regularMarketTime: tradeAt, ...(FULLDAY && symbol === 'TQQQ' ? { fulldayPrice: FULLDAY } : {}) },
+      timestamp: [day - 3600], indicators: { quote: [{ open: [px - 0.5], high: [px - 0.5], low: [px - 0.7], close: [px - 0.6], volume: [10] }] } }], error: null } });
     // Three session minutes, the trailing print and the 16:00 bar. With the extended-hours
     // bars: an after-hours print at 16:10 as well, except for GLD, whose answer stops before the close.
     const session = [day, day + 60, day + 120, day + 147, close];
@@ -121,6 +137,50 @@ if (OFFLINE) {
   nowFixed = Date.UTC(2026, 10, 9, 2, 0);   // 21:00 EST, Sunday
   rp = await call('/quotes?symbols=TQQQ', { origin: site }); bp = await rp.json();
   check('Sunday night: fulldayPrice is the overnight print', sameAs(bp.quotes.TQQQ.extended, { session: 'overnight', price: 44.9, time: '2026-11-09T02:00:00.000Z' }), JSON.stringify(bp.quotes.TQQQ.extended));
+  // The market calendar (Alpaca's, with the keys). Thanksgiving week: the bars are Wednesday 11/25's, as Yahoo served them
+  // until Friday's open; Thursday is shut, Friday closes at 13:00.
+  const KEYS_CAL = { ALPACA_API_KEY: 'k', ALPACA_API_SECRET: 's' };
+  const wedPost = { session: 'post', price: 43.25, time: '2026-11-25T21:10:00.000Z' };
+  CHART_DAY = 20; FULLDAY = null;
+  nowFixed = Date.UTC(2026, 10, 26, 17, 0);   // 12:00 EST, Thanksgiving
+  globalThis.__calendarDown = true;
+  rp = await call('/quotes?symbols=TQQQ,SPY', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  check('Thanksgiving, the calendar down: every weekday counts, so the day counts as a session and Wednesday\'s print is dropped', bp.calendar === 'weekdays' && bp.quotes.TQQQ.extended === undefined, bp.calendar + ' ' + JSON.stringify(bp.quotes.TQQQ.extended));
+  globalThis.__calendarDown = false;
+  rp = await call('/quotes?symbols=TQQQ', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  check('Thanksgiving with the calendar: the market is shut, Wednesday\'s after-hours print stands', bp.calendar === 'alpaca' && sameAs(bp.quotes.TQQQ.extended, wedPost), bp.calendar + ' ' + JSON.stringify(bp.quotes.TQQQ.extended));
+  // Friday 08:52, the bars still Wednesday's and fulldayPrice moving: the pre-market print is fulldayPrice, timed when read.
+  FULLDAY = 48.41; nowFixed = Date.UTC(2026, 10, 27, 13, 52);   // 08:52 EST
+  rp = await call('/quotes?symbols=TQQQ,GLD', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  const pre = bp.quotes.TQQQ.extended;
+  check('pre-market without a bar of its own: fulldayPrice is the print, session pre, timed when read, change against the close', sameAs(pre, { session: 'pre', price: 48.41, time: '2026-11-27T13:52:00.000Z' }) && Math.abs(pre.changePct - (48.41 / 44.25 - 1) * 100) < 1e-9 && bp.quotes.TQQQ.price === 44.25, JSON.stringify(bp.quotes.TQQQ));
+  check('pre-market: a fund without a fulldayPrice whose last bar is a session bar has no extended field', bp.quotes.GLD.extended === undefined, JSON.stringify(bp.quotes.GLD.extended));
+  rp = await call('/quotes?symbols=TQQQ,QQQ', { origin: site }); bp = await rp.json();
+  check('pre-market without the keys (weekdays): fulldayPrice is the print as well', bp.calendar === 'weekdays' && sameAs(bp.quotes.TQQQ.extended, { session: 'pre', price: 48.41, time: '2026-11-27T13:52:00.000Z' }), JSON.stringify(bp.quotes.TQQQ.extended));
+  FULLDAY = 43.25; nowFixed = Date.UTC(2026, 10, 27, 13, 54);
+  rp = await call('/quotes?symbols=TQQQ', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  check('pre-market with fulldayPrice at Wednesday\'s last bar: nothing traded since, the after-hours print stands', sameAs(bp.quotes.TQQQ.extended, wedPost), JSON.stringify(bp.quotes.TQQQ.extended));
+  // A pre-market with its own bar (08:30): the timed bar is the print, not fulldayPrice.
+  CHART_DAY = 22; PRE_ONLY = true; FULLDAY = 48.41; nowFixed = Date.UTC(2026, 10, 27, 13, 56);
+  rp = await call('/quotes?symbols=TQQQ', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  check('pre-market with a bar of its own: that bar is the print, with its time', sameAs(bp.quotes.TQQQ.extended, { session: 'pre', price: 43.4, time: '2026-11-27T13:30:00.000Z' }), JSON.stringify(bp.quotes.TQQQ.extended));
+  PRE_ONLY = false; HALF_DAY = true; FULLDAY = null;
+  // The 13:00 close: at 12:00 the session runs (Alpaca's trade is the price); at 13:30 it has closed, no trade
+  // replaces the close, and the 13:10 bar is an after-hours print.
+  nowFixed = Date.UTC(2026, 10, 27, 17, 0);   // 12:00 EST
+  rp = await call('/quotes?symbols=TQQQ', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  check('early close, 12:00: in session, the Alpaca trade is the price, no extended field', bp.quotes.TQQQ.source === 'alpaca' && bp.quotes.TQQQ.extended === undefined, JSON.stringify(bp.quotes.TQQQ));
+  nowFixed = Date.UTC(2026, 10, 27, 18, 30);   // 13:30 EST
+  rp = await call('/quotes?symbols=TQQQ', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  check('early close, 13:30: the session is over, the close stands and the 13:10 bar is the after-hours print', bp.quotes.TQQQ.source === undefined && bp.quotes.TQQQ.price === 44.25 && sameAs(bp.quotes.TQQQ.extended, { session: 'post', price: 43.25, time: '2026-11-27T18:10:00.000Z' }), JSON.stringify(bp.quotes.TQQQ));
+  // Thanksgiving night runs overnight (Friday trades); the night before it does not (Thursday is shut).
+  HALF_DAY = false; CHART_DAY = 20; FULLDAY = 44.9;
+  nowFixed = Date.UTC(2026, 10, 26, 2, 0);   // 21:00 EST, Wednesday (back in time: other symbols, so no answer above is reused)
+  rp = await call('/quotes?symbols=TQQQ,SSO', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  check('the night before Thanksgiving: no overnight session, Wednesday\'s after-hours print stands', sameAs(bp.quotes.TQQQ.extended, wedPost), JSON.stringify(bp.quotes.TQQQ.extended));
+  nowFixed = Date.UTC(2026, 10, 27, 2, 0);   // 21:00 EST, Thanksgiving
+  rp = await call('/quotes?symbols=TQQQ,QLD', { origin: site, env: KEYS_CAL }); bp = await rp.json();
+  check('Thanksgiving night: Friday trades, so fulldayPrice is the overnight print', sameAs(bp.quotes.TQQQ.extended, { session: 'overnight', price: 44.9, time: '2026-11-27T02:00:00.000Z' }), JSON.stringify(bp.quotes.TQQQ.extended));
   CHART_DAY = 0; FULLDAY = null; nowFixed = SESSION_CLOCK;
   // with Alpaca keys: its trade is the in-session price for every symbol, Yahoo's prior close kept; a down Alpaca falls back to the path above
   const KEYS = { ALPACA_API_KEY: 'k', ALPACA_API_SECRET: 's' };
