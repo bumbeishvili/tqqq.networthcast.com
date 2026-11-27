@@ -75,14 +75,14 @@ const STRATEGY_LIBRARY = [
     rules: 'Map VIX to leverage: VIX<15 → 3×, 15–25 → 2×, 25–35 → 1×, >35 → cash. Freq: daily/weekly. Ancestor of the Alvarez VIX gate.',
     here: '—', reported: 'Transparent regime ladder; deleverages into fear', src: 'ALV·QC' },
   { n: 22, name: 'Connors RSI(2) dip-buy', formerNames: ['Connors RSI(2) dip-buy in uptrend'], tag: 'oscillator', runnable: true,
-    rules: 'Trend filter: QQQ above its 200-day median. Entry: buy TQQQ when QQQ’s RSI(2) drops under 20. Exit: RSI(2) over 95, or QQQ closes under the line. Freq: daily.',
-    here: '—', reported: 'Short-term mean-reversion inside the trend filter · defaults fitted to 2010–2025 and rounded: 30.2% a year, max drawdown 66% (published settings: 12.0%, 45%)', src: 'QS' },
+    rules: 'Trend filter: QQQ above its 200-day average. Entry: buy TQQQ when QQQ’s RSI(2) drops under 19.3. Exit: RSI(2) over 95.9, or QQQ closes under the line. Freq: daily.',
+    here: '—', reported: 'Short-term mean-reversion inside the trend filter · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), buy under RSI(2) 19.3, sell over 95.9, the moving average: with $80K and $3K a month 41.5% a year, max drawdown 46.9% (20, 95 and the median, the rounded fit before: 37.6%, 64.4%) · on the same money: buy under 19 41.3%, under 19.5 40.8%; sell over 95.5 39.6% (48.6%), over 96 40.0% (50.0%); the median 41.3% (61.6%) · 2026 to date −31% ($100K once; −2% before) · published settings 12.0% (45%) with $100K once, before the cost and interest', src: 'QS' },
   { n: 23, name: '200-day SMA + RSI', formerNames: ['200-day SMA + RSI exit & re-entry'], tag: 'app', runnable: true,
     rules: 'Above QQQ’s 200-day average, hold TQQQ. Overheat exit: RSI(10) reaches 81 → cash. Cool gate: buy back only once RSI(10) is under 60. Freq: daily.',
     here: '—', reported: 'Sell when overbought, wait for a dip to buy back; app-implemented · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), the exit at RSI(10) 81 and the moving average: with $80K and $3K a month 41.6% a year, max drawdown 54.8% (85 and the median, the rounded fit before: 39.3%, 62.1%) · on the same money: the exit at 80 39.9%, at 82 38.7%; buying back under 59 38.3%, under 61 40.9%; the median 41.4% (62.1%) · 2026 to date −45% ($100K once; −29% before) · published settings 34.7% (55%) with $100K once, before the cost and interest', src: 'CMP' },
   { n: 24, name: 'Bodyguard deleverage', formerNames: ['Bodyguard deleverage overlay (+30 / +40)'], tag: 'app', runnable: true,
-    rules: 'Below QQQ’s 160-day median: cash. Above it: TQQQ. At 8.5% above → swap TQQQ for QQQ. At 15% above → all cash. Freq: daily.',
-    here: '—', reported: 'Dot-com-froth insurance; app-implemented · defaults fitted to 2010–2025 and rounded: 41.2% a year, max drawdown 39% (published settings: 30.7%, 56%)', src: 'HW' },
+    rules: 'Below QQQ’s 160-day median: cash. Above it: TQQQ. At 14.6% above → all cash. Freq: daily.',
+    here: '—', reported: 'Dot-com-froth insurance; app-implemented · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), no swap to QQQ and all cash at 14.6% above the line: with $80K and $3K a month 48.2% a year, max drawdown 44.2% (8.5% and 15%, the rounded fit before: 44.6%, 38.0%) · on the same money: all cash at 14.5% 47.3%, at 15% 45.0%; the swap to QQQ at 8.5% 45.6% (38.0%) · 2026 to date +22% ($100K once; −2% before) · published settings 30.7% (56%) with $100K once, before the cost and interest', src: 'HW' },
   { n: 25, name: 'Always invested + DCA', formerNames: ['Always-invested park + DCA-back-in'], tag: 'app', runnable: true,
     rules: 'Above QQQ’s 160-day median: TQQQ. Below it: QQQ (never cash). Freq: daily.',
     here: '39.5% / −58.7%', reported: '+6.91% avg holding QQQ vs bonds in downturns; app-implemented · defaults fitted to 2010–2025 and rounded: 41.3% a year, max drawdown 59% (published settings: 36.6%, 59%)', src: 'HW' },
@@ -410,7 +410,7 @@ STRATEGY_LIBRARY.push(
 // notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
 // [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
 const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [20.1, 44], 3: [16.6, 37], 8: [39.0, 44], 10: [44.0, 57], 12: [14.3, 25], 13: [42.4, 54], 15: [42.6, 54],
-  17: [21.0, 38], 18: [36.7, 62], 19: [44.8, 70], 20: [40.0, 58], 22: [32.4, 65], 23: [37.8, 55], 24: [41.5, 39], 25: [40.9, 59], 55: [27.1, 33], 56: [34.9, 36] };
+  17: [21.0, 38], 18: [36.7, 62], 19: [44.8, 70], 20: [40.0, 58], 22: [35.5, 56], 23: [37.8, 55], 24: [45.1, 44], 25: [40.9, 59], 55: [27.1, 33], 56: [34.9, 36] };
 for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
   const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025).`;
   entry.reported = /[.!?]$/.test(entry.reported) ? entry.reported + ' ' + said : entry.reported + ' · ' + said;

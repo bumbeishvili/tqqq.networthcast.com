@@ -810,14 +810,17 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #22 Connors RSI(2) dip-buy within a 200-SMA uptrend.
+// #22 Connors RSI(2) dip-buy within a 200-SMA uptrend. Since 27 November 2026 the defaults are the user's pick on the map
+// of 2010-2025 rerun with the drawdown taken at every close: buy under RSI(2) 19.3, sell over 95.9, the line a moving
+// average (were 20, 95 and the median); 41.5% a year with $80K and $3K a month, max drawdown 46.9% (before: 37.6%,
+// 64.4%). 19.3 and 95.9 join the half steps.
 CODE[22] = `{
   name: "Connors RSI(2) dip-buy (200SMA trend)",
   params: [{ id: "buy", label: "Buy RSI(2) below", text: "Buy TQQQ when QQQ's RSI(2) drops under {} while QQQ is above its 200-day line.", options:
-      Array.from({ length: 100 }, (_, k) => +(0.5 + 0.5 * k).toFixed(1)), default: 20 },
+      Array.from({ length: 100 }, (_, k) => +(0.5 + 0.5 * k).toFixed(1)).concat(19.3).sort((a, b) => a - b), default: 19.3 },
            { id: "sell", label: "Sell RSI(2) above", text: "Sell when RSI(2) rises over {}, or when QQQ closes under the line.", options:
-      Array.from({ length: 120 }, (_, k) => +(40 + 0.5 * k).toFixed(1)), default: 95 },
-           ${STAT_PARAM_MEDIAN_SNIPPET}],
+      Array.from({ length: 120 }, (_, k) => +(40 + 0.5 * k).toFixed(1)).concat(95.9).sort((a, b) => a - b), default: 95.9 },
+           ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
              { key: "rsi", label: "RSI(2)", tip: "Wilder's RSI of QQQ's closes over 2 days, 0 to 100." },
@@ -928,13 +931,16 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #24 200SMA + Bodyguard (delever to QQQ, GTFO to cash).
+// #24 200SMA + Bodyguard (delever to QQQ, GTFO to cash). Since 27 November 2026 the defaults are the user's pick on the
+// map of 2010-2025 rerun with the drawdown taken at every close: no swap to QQQ, all cash at 14.6% above the line (were
+// 8.5% and 15%); 48.2% a year with $80K and $3K a month, max drawdown 44.2% (before: 44.6%, 38.0%). 14.6 joins the
+// half steps.
 CODE[24] = `{
   name: "200SMA + Bodyguard (delever/GTFO)",
   params: [{ id: "delev", label: "Delever→QQQ at (% above line)", text: "Switch TQQQ to QQQ when QQQ closes {} above its line.", unit: "%", options:
-      [{ value: 0, label: "Off" }].concat(Array.from({ length: 151 }, (_, k) => +(5 + 0.5 * k).toFixed(1))), default: 8.5 },
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 151 }, (_, k) => +(5 + 0.5 * k).toFixed(1))), default: 0 },
            { id: "gtfo", label: "Sell→cash at (% above line)", text: "Sell everything to cash when it closes {} above it.", unit: "%", options:
-      [{ value: 0, label: "Off" }].concat(Array.from({ length: 181 }, (_, k) => +(10 + 0.5 * k).toFixed(1))), default: 15 },
+      [{ value: 0, label: "Off" }].concat(Array.from({ length: 181 }, (_, k) => +(10 + 0.5 * k).toFixed(1)).concat(14.6).sort((a, b) => a - b)), default: 14.6 },
            { id: "window", label: "Window", text: "Below the line, hold cash. The line covers the last {} days.", options:
       [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 20 }, (_, k) => 260 + 10 * k), Array.from({ length: 30 }, (_, k) => 451 + k), [490, 500]), default: 160 },
            ${STAT_PARAM_MEDIAN_SNIPPET}],
