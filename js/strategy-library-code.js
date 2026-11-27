@@ -564,11 +564,13 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #15 Composer: QQQ 200-SMA trend AND RSI(14) not overbought → TQQQ else cash.
+// #15 Composer: QQQ 200-SMA trend AND RSI(14) not overbought → TQQQ else cash. Since 27 November 2026 the defaults are the user's pick on the map of 2010-2025 rerun with the drawdown taken at
+// every close ("set these defaults"): RSI under 75.5, 44.9% a year with
+// $80K and $3K a month, max drawdown 53.5% (75: 44.2%, 53.5%).
 CODE[15] = `{
   name: "Composer 200MA + RSI trend → TQQQ/cash",
   params: [{ id: "rsiMax", label: "Max RSI(14) to hold", text: "Hold TQQQ while QQQ is above its line and QQQ's RSI(14) is under {}.", options:
-      Array.from({ length: 101 }, (_, k) => +(50 + 0.5 * k).toFixed(1)), default: 75 },
+      Array.from({ length: 101 }, (_, k) => +(50 + 0.5 * k).toFixed(1)), default: 75.5 },
            { id: "window", label: "Window", text: "The line covers the last {} days.", options:
       [5].concat(Array.from({ length: 11 }, (_, k) => 10 + 10 * k), Array.from({ length: 108 }, (_, k) => 113 + k), Array.from({ length: 31 }, (_, k) => 226 + k), Array.from({ length: 25 }, (_, k) => 260 + 10 * k)), default: 160 },
            ${STAT_PARAM_MEDIAN_SNIPPET}],
@@ -714,11 +716,13 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #19 Golden/Death cross 50/200 on QQQ → TQQQ/cash.
+// #19 Golden/Death cross 50/200 on QQQ → TQQQ/cash. Since 27 November 2026 the defaults are the user's pick on the map of 2010-2025 rerun with the drawdown taken at
+// every close ("set these defaults"): the fast line over 73 days, 45.0% a year with $80K and $3K a
+// month, max drawdown 69.9% (75 days: 43.8%, 69.9%).
 CODE[19] = `{
   name: "Golden/Death Cross 50/200 → TQQQ/cash",
   params: [{ id: "fast", label: "Fast window", text: "Hold TQQQ while QQQ's fast line, over {} days, is above its slow line.", options:
-      Array.from({ length: 146 }, (_, k) => 5 + k), default: 75 },
+      Array.from({ length: 146 }, (_, k) => 5 + k), default: 73 },
            { id: "slow", label: "Slow window", text: "The slow line covers the last {} days.", options:
       Array.from({ length: 14 }, (_, k) => 50 + 10 * k).concat(Array.from({ length: 40 }, (_, k) => 181 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 100 }, (_, k) => 301 + k)), default: 335 },
            { id: "stat", label: "Center line", text: "Use the {} for both lines.", options: [{ value: "sma", label: "Moving average" }, { value: "median", label: "Median" }], default: "median" }],
@@ -753,13 +757,15 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #20 Volatility targeting: hold TQQQ scaled so trailing vol ≈ target; rest cash. Rebalance monthly.
+// #20 Volatility targeting: hold TQQQ scaled so trailing vol ≈ target; rest cash. Rebalance monthly. Since 27 November 2026 the defaults are the user's pick on the map of 2010-2025 rerun with the drawdown taken at
+// every close ("set these defaults"): 47.5% a year
+// over 20 days, 40.3% a year with $80K and $3K a month, max drawdown 58.3% (65% over 10 days: 43.1%, 74.8%).
 CODE[20] = `{
   name: "Vol-target TQQQ (scale to target vol)",
   params: [{ id: "target", label: "Target vol (%/yr)", text: "Size TQQQ so the holding swings about {} a year.", unit: "%", options:
-      Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)).concat(Array.from({ length: 40 }, (_, k) => 61 + k)), default: 65 },
+      Array.from({ length: 111 }, (_, k) => +(5 + 0.5 * k).toFixed(1)).concat(Array.from({ length: 40 }, (_, k) => 61 + k)), default: 47.5 },
            { id: "lookback", label: "Vol lookback (days)", text: "Measure the swings over the last {} days.", options:
-      Array.from({ length: 246 }, (_, k) => 5 + k), default: 10 }],
+      Array.from({ length: 246 }, (_, k) => 5 + k), default: 20 }],
   columns: [{ key: "share", label: "TQQQ share", tip: "Share of the account in TQQQ at the close." },
              { key: "vol", label: "Volatility", tip: "TQQQ's annualised volatility over the lookback. Each month the share is reset to the target divided by it, at most 100%." },
              { key: "target", label: "Target", tip: "The target volatility setting." }],

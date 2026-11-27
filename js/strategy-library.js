@@ -54,8 +54,8 @@ const STRATEGY_LIBRARY = [
     rules: 'Enter: SPY closes 0.8% above its 30-day median → TQQQ. Exit: SPY closes 1.4% under it → gold. After 105 days: gold, until SPY has gone 1.4% under and back 0.8% above. Switch: sell and buy at the same close. Freq: daily.',
     here: '—', reported: 'Published backtest sheet with dated trades · here GLD stands in for GLDM (0.40% vs 0.10% yearly fee) and cash for SGOV · defaults from your pick on the map of 2010–2025 (27 November 2026), with the cost and interest: 51.8% a year, max drawdown 48%, 120 trades (the rounded fit before, 0.5% and 7.5% around a 10-day median, phase two after 640 days, a switch over two days: 54.7%, 58%; published settings 4%/−3% bands, 200-day average, 366 days, 50/50 mixes: 28.9%, 51%) · in at 0.7% 49.0% (54%), defensive at 1.5% 48.6% (53%), a 20-day line 32.6% (55%), 40 days 42.3% (62%), a switch over two days 48.0% (54%) · 2026 to 25 November −34% (before −14%)', src: '3PH' },
   { n: 15, name: 'Composer TQQQ-RSI', formerNames: ['Composer TQQQ-RSI (200MA + RSI + PPO)'], tag: 'oscillator', runnable: true,
-    rules: 'Hold TQQQ while QQQ is above its 160-day median and its RSI(14) is under 75; otherwise cash. Freq: daily.',
-    here: '—', reported: '69.11% ann · −23.5% DD · Sharpe 1.47 (since Sep 2023, short) · defaults fitted to 2010–2025 and rounded: 40.8% a year, max drawdown 53% (published settings: 33.8%, 55%)', src: 'CMP' },
+    rules: 'Hold TQQQ while QQQ is above its 160-day median and its RSI(14) is under 75.5; otherwise cash. Freq: daily.',
+    here: '—', reported: '69.11% ann · −23.5% DD · Sharpe 1.47 (since Sep 2023, short) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), RSI under 75.5: with $80K and $3K a month 44.9% a year, max drawdown 53.5% (75, the rounded fit before: 44.2%, 53.5%) · $100K once: 75 41.6% (54%), 76 40.8% (54%); published settings 33.8% (55%) before the cost and interest', src: 'CMP' },
   { n: 16, name: 'Composer multi-signal', formerNames: ['Composer multi-signal + hedges'], tag: 'oscillator', runnable: false, needs: 'SQQQ/UVXY',
     rules: '#15 plus tactical hedges: brief SQQQ (−3×) or UVXY after extreme moves; TECL (3×) on sharp declines. Freq: daily.',
     here: '—', reported: 'Highest-complexity Composer variant', src: 'CMP' },
@@ -66,11 +66,11 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: QQQ’s weekly close vs its 173-day median. Enter: above → TQQQ. Exit: below → cash. Freq: weekly.',
     here: '—', reported: '+2,800% (Petrou comparison window) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), the 173-day median: with $80K and $3K a month 39.5% a year, max drawdown 62.1% (the rounded fit before, 495 days: 35.9%, 71.6%) · $100K once: 172 days 36.7% (62%), 174 days 35.0% (62%), the average in place of the median 32.2% (62%); 2010–17 27.4% a year, 2018–25 46.7%, 2026 to date +24%; 41 trades in 16 years (15 before); published settings 31.3% (62%) before the cost and interest', src: 'MACD' },
   { n: 19, name: 'Bare golden cross', formerNames: ['Golden cross 50/200', 'Golden / Death Cross 50/200'], tag: 'crossover', runnable: true,
-    rules: 'Enter: QQQ’s 75-day median crosses above its 335-day median → TQQQ. Exit: it crosses below → cash. Freq: daily.',
-    here: '35.6% / −69.9%', reported: 'Classic MA-crossover; slower than price-vs-200 · defaults fitted to 2010–2025 and rounded: 43.1% a year, max drawdown 70% (published settings: 32.1%, 70%)', src: 'GS' },
+    rules: 'Enter: QQQ’s 73-day median crosses above its 335-day median → TQQQ. Exit: it crosses below → cash. Freq: daily.',
+    here: '35.6% / −69.9%', reported: 'Classic MA-crossover; slower than price-vs-200 · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), the fast line over 73 days: with $80K and $3K a month 45.0% a year, max drawdown 69.9% (75 days, the rounded fit before: 43.8%, 69.9%) · $100K once: 72 days 43.9% (70%), 74 days 43.9% (70%); published settings 32.1% (70%) before the cost and interest', src: 'GS' },
   { n: 20, name: 'Bare volatility targeting', formerNames: ['Volatility targeting', 'Volatility targeting (scale leverage to target vol)'], tag: 'risk', runnable: true,
-    rules: 'Each month, hold the share of TQQQ that makes the holding swing about 65% a year, measured over the last 10 days; the rest in cash. Freq: monthly.',
-    here: '—', reported: 'Reduces tail risk without binary exits (QuantConnect) · defaults fitted to 2010–2025 and rounded: 42.6% a year, max drawdown 75% (published settings: 26.3%, 38%)', src: 'QC' },
+    rules: 'Each month, hold the share of TQQQ that makes the holding swing about 47.5% a year, measured over the last 20 days; the rest in cash. Freq: monthly.',
+    here: '—', reported: 'Reduces tail risk without binary exits (QuantConnect) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), 47.5% a year over 20 days: with $80K and $3K a month 40.3% a year, max drawdown 58.3% (65% over 10 days, the rounded fit before: 43.1%, 74.8%) · $100K once: 47% 39.8% (58%), 48% 40.2% (59%), over 19 days 40.0% (59%), over 21 days 39.3% (59%); published settings 26.3% (38%) before the cost and interest', src: 'QC' },
   { n: 21, name: 'VIX-scaled leverage ladder', tag: 'risk', runnable: false, needs: 'VIX',
     rules: 'Map VIX to leverage: VIX<15 → 3×, 15–25 → 2×, 25–35 → 1×, >35 → cash. Freq: daily/weekly. Ancestor of the Alvarez VIX gate.',
     here: '—', reported: 'Transparent regime ladder; deleverages into fear', src: 'ALV·QC' },
@@ -409,8 +409,8 @@ STRATEGY_LIBRARY.push(
 // js/strategy-library-code.js; the user: "make sure all strategies have switching cost and cash percentage"). Their
 // notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
 // [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
-const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [20.1, 44], 3: [16.6, 37], 8: [39.0, 44], 10: [44.0, 57], 12: [14.3, 25], 13: [42.4, 54], 15: [41.6, 54],
-  17: [21.0, 38], 18: [36.7, 62], 19: [43.6, 70], 20: [42.9, 75], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [27.1, 33], 56: [34.9, 36] };
+const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [20.1, 44], 3: [16.6, 37], 8: [39.0, 44], 10: [44.0, 57], 12: [14.3, 25], 13: [42.4, 54], 15: [42.6, 54],
+  17: [21.0, 38], 18: [36.7, 62], 19: [44.8, 70], 20: [40.0, 58], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [27.1, 33], 56: [34.9, 36] };
 for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
   const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025).`;
   entry.reported = /[.!?]$/.test(entry.reported) ? entry.reported + ' ' + said : entry.reported + ' · ' + said;
