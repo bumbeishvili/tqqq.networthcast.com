@@ -51,8 +51,10 @@
   .trend-rule select{field-sizing:content}   /* as wide as its choice, where the browser can */
   .trend-rule input{width:6.5ch;text-align:right}
   .trend-rule select:focus-visible,.trend-rule input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .trend-add,.trend-rule button{font:600 12.5px var(--sans);color:var(--muted);background:var(--panel);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer}
-  .trend-add:hover,.trend-rule button:hover{border-color:var(--accent);color:var(--accent)}
+  .trend-add,.trend-rule button,.filters-reset{font:600 12.5px var(--sans);color:var(--muted);background:var(--panel);border:1px solid var(--border2);border-radius:6px;padding:3px 9px;cursor:pointer}
+  .trend-add:hover,.trend-rule button:hover,.filters-reset:not(:disabled):hover{border-color:var(--accent);color:var(--accent)}
+  .filters-reset{margin-left:auto}   /* the row's right end */
+  .filters-reset:disabled{opacity:.45;cursor:default}
   /* Metric filters: one block per day statistic, each a labelled brushable
      histogram. Fixed sizes so the row never moves. */
   /* The two histograms share the room between the toggle and the period
@@ -290,6 +292,7 @@
           <span class="track"></span>
           <span class="switch-label">Similar trends only</span>
         </label>
+        <button type="button" class="filters-reset" id="filters-reset" title="Turn every filter off: all months and days, both switches, no trend rule, open and close any, the whole period.">Reset filters</button>
       </div>
       <div class="filters-row trend-rules" title="Keep the days on which a reading of the trend was more, or less, than a value. Each reading is taken at the close before the day: that close against the mean or the median of the last N closes, or against the close N days before it, in percent, or the RSI over N days. Every rule must hold.">
         <span class="metric-name">Trend</span>
@@ -2075,7 +2078,15 @@ function setupPeriodSlider(allDays, onChange, onView) {
     current = false;
     stopSettling();
   };
-  return { grip, zoom, settle, stop };
+  // Reset filters: the whole file, saved as both edges.
+  const reset = () => {
+    stopSettling();
+    start.property('value', 0);
+    end.property('value', last);
+    view = whole();
+    apply(true);
+  };
+  return { grip, zoom, settle, stop, reset };
 }
 
 // On/off switches whose state survives reloads, one localStorage key each.
@@ -2188,12 +2199,14 @@ function setupMetricHistogram(key, fund, allDays, onChange) {
 
   state.pass = d => { const v = METRICS[key].value(d); return v !== null && v >= state.lo && v <= state.hi; };
   state.narrowed = () => state.lo > min || state.hi < max;   // the range is less than the whole
+  state.reset = () => brushG.call(brush.move, fullRange());
   return state;
 }
 
 function setupMetricFilters(fund, allDays, latestId, onChange) {
   const filters = Object.keys(METRICS).map(key => setupMetricHistogram(key, fund, allDays, onChange));
-  return { filter: days => days.filter(d => d.id === latestId || filters.every(f => f.pass(d))), active: () => filters.filter(f => f.narrowed()).length };
+  return { filter: days => days.filter(d => d.id === latestId || filters.every(f => f.pass(d))), active: () => filters.filter(f => f.narrowed()).length,
+    reset: () => { for (const f of filters) f.reset(); } };
 }
 
 // Calendar filter (the user, 2026-11-25: "an option to filter out data, like
@@ -2237,7 +2250,14 @@ function setupCalendarFilter(onChange) {
     d3.select(pick.select).property('value', state.value);
     return state;
   });
-  return { filter: days => days.filter(day => picked.every(state => state.value === '' || state.pick.of(day) === +state.value)), active: () => picked.filter(state => state.value !== '').length };
+  const reset = () => {
+    for (const state of picked) {
+      state.value = '';
+      writeSavedPick(state.pick, '');
+      d3.select(state.pick.select).property('value', '');
+    }
+  };
+  return { filter: days => days.filter(day => picked.every(state => state.value === '' || state.pick.of(day) === +state.value)), active: () => picked.filter(state => state.value !== '').length, reset };
 }
 
 // The filters' panel: shut until its button is pressed, and as it was left on
@@ -2254,7 +2274,10 @@ function setupFiltersPanel() {
   });
 }
 // How many filters are on, beside the button's name; nothing while none is.
-const showFilterCount = count => d3.select('#filters-count').text(count || '');
+const showFilterCount = (count) => {
+  d3.select('#filters-count').text(count || '');
+  d3.select('#filters-reset').property('disabled', !count);
+};
 
 // Trend rules (the user, 2026-11-25: "I want to be able to filter based on
 // the trend. So for example, all days where median/mean/rsi were (more than,
@@ -2373,7 +2396,8 @@ function setupTrendRules(allDays, onChange) {
   }
   d3.select('#trend-add').on('click', () => { state.rules = state.rules.concat(newTrendRule(TREND_RULE_DEFAULT.measure, TREND_RULE_DEFAULT.side)); changed(); });
   draw(true);
-  return { filter: days => (state.rules.length ? days.filter(day => state.rules.every(rule => holds(rule, day))) : days), active: () => state.rules.length };
+  const reset = () => { state.rules = []; writeSavedTrendRules(state.rules); draw(false); };
+  return { filter: days => (state.rules.length ? days.filter(day => state.rules.every(rule => holds(rule, day))) : days), active: () => state.rules.length, reset };
 }
 
 // Similar-days control: just the toggle. With nothing saved it starts on
@@ -2386,6 +2410,7 @@ function setupSimilarFilter(onChange) {
     writeSavedSwitch(SIMILAR_STORAGE_KEY, state.on);
     onChange();
   });
+  state.reset = () => { state.on = false; writeSavedSwitch(SIMILAR_STORAGE_KEY, false); d3.select('#toggle-similar').property('checked', false); };
   return state;
 }
 
@@ -2404,6 +2429,7 @@ function setupTrendFilter(latest, onChange) {
     writeSavedSwitch(TREND_STORAGE_KEY, state.on);
     onChange();
   });
+  state.reset = () => { state.on = false; writeSavedSwitch(TREND_STORAGE_KEY, false); d3.select('#toggle-trend').property('checked', false); };
   return state;
 }
 
@@ -2744,6 +2770,14 @@ function loadData() {
       (days, view) => { periodDays = days; periodView = view; guarded(); },
       (view) => { periodView = view; if (!EMBED) drawDaily(); });
     dailyChart.domain(dailyDomain(asked)).onZoom(period.zoom).onPanStart(period.grip).onPanEnd(period.settle);   // its gestures move the slider's window
+    // Reset filters (the user, 2026-11-27: "make sure intraday has one reset filters option"): every filter that
+    // the Filters button counts goes back to keeping all days, held from redrawing until the last, then one draw.
+    d3.select('#filters-reset').on('click', () => {
+      ready = false;
+      for (const filter of [calendar, rules, metric, similar, trend, period]) filter.reset();
+      ready = true;
+      refresh();
+    });
     ready = true;
     refresh();
   }, error => {
