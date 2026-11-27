@@ -39,9 +39,11 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: SPY vs its 199-day average. Enter: above → SSO (2× S&P). Exit: below → cash. Freq: daily.',
     here: '≈ SSO rows', reported: '19.1% CAGR · −78.7% DD · Sharpe 0.51 (1928–2015) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), 199 days: with $80K and $3K a month 18.1% a year, max drawdown 33.6% (297 days, your pick of 26 November on the drawdown taken only on the logged days: 18.7%, 38.0%; 200 days, the published setting: 18.1%, 33.6%)', src: 'GB' },
   { n: 5, name: 'HedgeFundie 55/45 UPRO/TMF', formerNames: ["HedgeFundie's Excellent Adventure (55/45 UPRO/TMF)"], tag: 'portfolio', runnable: false, needs: 'TMF',
+    hidden: true,   // the user, 2026-11-27: "remove all strategies for which we don't have the data"; off the catalog, kept in the list for lookups by number
     rules: 'Static: 55% UPRO (3× S&P) + 45% TMF (3× long Treasury), quarterly rebalance. Optional 200-SMA overlay on the UPRO leg. Freq: quarterly.',
     here: '—', reported: 'Famous Bogleheads portfolio; 2022 exposed both-legs-down risk', src: 'BH' },
   { n: 6, name: 'Alvarez composite', formerNames: ['Alvarez UPRO/TQQQ composite'], tag: 'composite', runnable: false, needs: 'VIX',
+    hidden: true,   // the user, 2026-11-27: "remove all strategies for which we don't have the data"; off the catalog, kept in the list for lookups by number
     rules: 'Monthly. Gates: VIX≤25 · S&P>200-day MA · VWO mom>0 · BND mom>0. All true → 50% UPRO+50% TQQQ. 1–2 false → 50% QQQ+50% SPY. 3–4 false → 100% TLT.',
     here: '—', reported: '24.4% CAR · −54% DD (2010–2023)', src: 'ALV' },
   { n: 7, name: 'Bare dual momentum', formerNames: ['Antonacci dual momentum', 'Antonacci Dual Momentum → LETF sleeve (GEM)'], tag: 'momentum', runnable: true,
@@ -66,6 +68,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Hold TQQQ while QQQ is above its 160-day median and its RSI(14) is under 75.5; otherwise cash. Freq: daily.',
     here: '—', reported: '69.11% ann · −23.5% DD · Sharpe 1.47 (since Sep 2023, short) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), RSI under 75.5: with $80K and $3K a month 44.9% a year, max drawdown 53.5% (75, the rounded fit before: 44.2%, 53.5%) · $100K once: 75 41.6% (54%), 76 40.8% (54%); published settings 33.8% (55%) before the cost and interest', src: 'CMP' },
   { n: 16, name: 'Composer multi-signal', formerNames: ['Composer multi-signal + hedges'], tag: 'oscillator', runnable: false, needs: 'SQQQ/UVXY',
+    hidden: true,   // the user, 2026-11-27: "remove all strategies for which we don't have the data"; off the catalog, kept in the list for lookups by number
     rules: '#15 plus tactical hedges: brief SQQQ (−3×) or UVXY after extreme moves; TECL (3×) on sharp declines. Freq: daily.',
     here: '—', reported: 'Highest-complexity Composer variant', src: 'CMP' },
   { n: 17, name: 'Petrou weekly MACD', formerNames: ['Petrou weekly-MACD → TQQQ (+ stops)'], tag: 'crossover', runnable: true,
@@ -81,6 +84,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Each month, hold the share of TQQQ that makes the holding swing about 47.5% a year, measured over the last 20 days; the rest in cash. Freq: monthly.',
     here: '—', reported: 'Reduces tail risk without binary exits (QuantConnect) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), 47.5% a year over 20 days: with $80K and $3K a month 40.3% a year, max drawdown 58.3% (65% over 10 days, the rounded fit before: 43.1%, 74.8%) · $100K once: 47% 39.8% (58%), 48% 40.2% (59%), over 19 days 40.0% (59%), over 21 days 39.3% (59%); published settings 26.3% (38%) before the cost and interest', src: 'QC' },
   { n: 21, name: 'VIX-scaled leverage ladder', tag: 'risk', runnable: false, needs: 'VIX',
+    hidden: true,   // the user, 2026-11-27: "remove all strategies for which we don't have the data"; off the catalog, kept in the list for lookups by number
     rules: 'Map VIX to leverage: VIX<15 → 3×, 15–25 → 2×, 25–35 → 1×, >35 → cash. Freq: daily/weekly. Ancestor of the Alvarez VIX gate.',
     here: '—', reported: 'Transparent regime ladder; deleverages into fear', src: 'ALV·QC' },
   { n: 22, name: 'Connors RSI(2) dip-buy', formerNames: ['Connors RSI(2) dip-buy in uptrend'], tag: 'oscillator', runnable: true,
