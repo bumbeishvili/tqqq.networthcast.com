@@ -291,7 +291,7 @@
           <span class="switch-label">Similar trends only</span>
         </label>
       </div>
-      <div class="filters-row trend-rules" title="Keep the days on which a reading of the trend was more, or less, than a value. Each reading is taken at the close before the day: that close against the mean or the median of the last N closes, in percent, or the RSI over N days. Every rule must hold.">
+      <div class="filters-row trend-rules" title="Keep the days on which a reading of the trend was more, or less, than a value. Each reading is taken at the close before the day: that close against the mean or the median of the last N closes, or against the close N days before it, in percent, or the RSI over N days. Every rule must hold.">
         <span class="metric-name">Trend</span>
         <div class="trend-rule-list" id="trend-rule-list"></div>
         <button type="button" class="trend-add" id="trend-add">Add</button>
@@ -2264,11 +2264,17 @@ const showFilterCount = count => d3.select('#filters-count').text(count || '');
 // it is what was known at the day's open:
 //   mean, median   that close against the mean, or the median, of the last N
 //                  closes (itself among them), in percent: +5 is 5% over it;
+//   change         that close against the close N days before it, in percent:
+//                  over 1 day, the day before's own move, so "less than -1"
+//                  keeps the days after a fall of more than 1% (the user,
+//                  2026-11-27: "in downtrend, where previous day was down 1%,
+//                  how fridays changed on average between open and close");
 //   rsi            Wilder's RSI over N days, 0 to 100.
 // Every rule must hold. A day with too few days before it for a rule has no
 // reading and is left out, the latest day like any other. The rules are kept
 // (localStorage); the desktop widget shows the chart alone and applies none.
 const rollingGap = of => (closes, n) => closes.map((close, k) => (k < n - 1 ? null : (close / of(closes.slice(k - n + 1, k + 1)) - 1) * 100));
+const changeSeries = (closes, n) => closes.map((close, k) => (k < n ? null : (close / closes[k - n] - 1) * 100));
 // Wilder's RSI at each close: the first n changes averaged, each later one smoothed in at 1/n.
 function rsiSeries(closes, n) {
   let gain = 0, loss = 0;
@@ -2280,21 +2286,24 @@ function rsiSeries(closes, n) {
     return k < n ? null : loss === 0 ? 100 : 100 - 100 / (1 + gain / loss);
   });
 }
+// fewest: the fewest days the reading can be over (a mean of one close is the close itself).
 const TREND_RULE_MEASURES = {
-  mean: { name: 'Price vs mean', unit: '%', days: 50, value: 0, series: rollingGap(d3.mean) },
-  median: { name: 'Price vs median', unit: '%', days: 50, value: 0, series: rollingGap(d3.median) },
-  rsi: { name: 'RSI', unit: '', days: 14, value: 30, series: rsiSeries },
+  mean: { name: 'Price vs mean', unit: '%', days: 50, fewest: 2, value: 0, series: rollingGap(d3.mean) },
+  median: { name: 'Price vs median', unit: '%', days: 50, fewest: 2, value: 0, series: rollingGap(d3.median) },
+  change: { name: 'Price change', unit: '%', days: 1, fewest: 1, value: 0, series: changeSeries },
+  rsi: { name: 'RSI', unit: '', days: 14, fewest: 2, value: 30, series: rsiSeries },
 };
 const TREND_RULE_SIDES = {
   more: { name: 'more than', holds: (reading, value) => reading > value },
   less: { name: 'less than', holds: (reading, value) => reading < value },
 };
-const TREND_RULE_DAYS = [2, 400];        // the fewest and the most days a rule reads over
+const TREND_RULE_MOST_DAYS = 400;        // the most days a rule reads over
 const TREND_RULE_DEFAULT = { measure: 'mean', side: 'more' };
 const TREND_RULES_STORAGE_KEY = 'tqqq-intraday-trend-rules';
 const newTrendRule = (measure, side) => ({ measure, side, days: TREND_RULE_MEASURES[measure].days, value: TREND_RULE_MEASURES[measure].value });
+const validRuleDays = (measure, days) => Number.isInteger(days) && days >= TREND_RULE_MEASURES[measure].fewest && days <= TREND_RULE_MOST_DAYS;
 const validTrendRule = rule => !!rule && rule.measure in TREND_RULE_MEASURES && rule.side in TREND_RULE_SIDES
-  && Number.isInteger(rule.days) && rule.days >= TREND_RULE_DAYS[0] && rule.days <= TREND_RULE_DAYS[1] && Number.isFinite(rule.value);
+  && validRuleDays(rule.measure, rule.days) && Number.isFinite(rule.value);
 function readSavedTrendRules() {
   if (EMBED) return [];
   try {
@@ -2330,7 +2339,7 @@ function setupTrendRules(allDays, onChange) {
     inputs.filter(function () { return !typing || this !== document.activeElement; }).property('value', read);
     inputs.on('change', function (event, rule) {
       const typed = this.value.trim() === '' ? NaN : +this.value;
-      if (!isValid(typed)) { this.value = read(rule); return; }
+      if (!isValid(typed, rule)) { this.value = read(rule); return; }
       write(rule, typed);
       changed();
     });
@@ -2340,8 +2349,8 @@ function setupTrendRules(allDays, onChange) {
       const line = enter.append('span').attr('class', 'trend-rule');
       line.append('select').attr('class', 'rule-measure').attr('aria-label', 'What is read');
       line.append('span').text('of');
-      line.append('input').attr('class', 'rule-days').attr('type', 'number').attr('min', TREND_RULE_DAYS[0]).attr('max', TREND_RULE_DAYS[1]).attr('step', 1).attr('aria-label', 'Days');
-      line.append('span').text('days is');
+      line.append('input').attr('class', 'rule-days').attr('type', 'number').attr('max', TREND_RULE_MOST_DAYS).attr('step', 1).attr('aria-label', 'Days');
+      line.append('span').attr('class', 'rule-days-word');
       line.append('select').attr('class', 'rule-side').attr('aria-label', 'More or less');
       line.append('input').attr('class', 'rule-value').attr('type', 'number').attr('step', 'any').attr('aria-label', 'Value');
       line.append('span').attr('class', 'rule-unit');
@@ -2355,7 +2364,9 @@ function setupTrendRules(allDays, onChange) {
       changed();
     });
     lines.select('.rule-side').property('value', rule => rule.side).on('change', function (event, rule) { rule.side = this.value; changed(); });
-    numberField(lines.select('.rule-days'), typing, rule => rule.days, days => Number.isInteger(days) && days >= TREND_RULE_DAYS[0] && days <= TREND_RULE_DAYS[1], (rule, days) => { rule.days = days; });
+    lines.select('.rule-days').attr('min', rule => TREND_RULE_MEASURES[rule.measure].fewest);
+    numberField(lines.select('.rule-days'), typing, rule => rule.days, (days, rule) => validRuleDays(rule.measure, days), (rule, days) => { rule.days = days; });
+    lines.select('.rule-days-word').text(rule => (rule.days === 1 ? 'day is' : 'days is'));
     numberField(lines.select('.rule-value'), typing, rule => rule.value, Number.isFinite, (rule, value) => { rule.value = value; });
     lines.select('.rule-unit').text(rule => TREND_RULE_MEASURES[rule.measure].unit);
     lines.select('.rule-remove').on('click', (event, rule) => { state.rules = state.rules.filter(other => other !== rule); changed(); });
