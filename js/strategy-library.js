@@ -109,6 +109,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Top-ranked max return row from the 9sig overfit explorer, tuned on 2010–2025 (in-sample CAGR 55.33%, drawdown 69.91%). Runs as a code strategy on the app’s 9sig engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 2010–2025: 55.33% CAGR / −69.91% DD' },
   { n: 28, name: '10-25 - 9sig · min drawdown', formerNames: ['9sig · min drawdown 2010–2025'], tag: 'overfit', runnable: true,
+    hidden: true,   // the user, 2026-11-27: "remove this completelly"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Top-ranked min drawdown row from the 9sig overfit explorer, tuned on 2010–2025 (in-sample CAGR 30.01%, drawdown 19.41%). Runs as a code strategy on the app’s 9sig engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 2010–2025: 30.01% CAGR / −19.41% DD' },
   { n: 29, name: '9sig · max return 1990–2025', tag: 'overfit', runnable: true,
