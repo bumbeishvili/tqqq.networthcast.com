@@ -867,14 +867,17 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #23 TFTLT: QQQ 200SMA → TQQQ, RSI(10) overheat exit + cool-gate re-entry.
+// #23 TFTLT: QQQ 200SMA → TQQQ, RSI(10) overheat exit + cool-gate re-entry. Since 27 November 2026 the defaults are the
+// user's pick on the map of 2010-2025 rerun with the drawdown taken at every close ("set these two as default"): the
+// exit at RSI(10) 81 and the line a moving average (were 85 and the median); 41.6% a year with $80K and $3K a month,
+// max drawdown 54.8% (before: 39.3%, 62.1%).
 CODE[23] = `{
   name: "200-day SMA + RSI exit & re-entry",
   params: [{ id: "oh", label: "Overheat exit RSI(10) ≥", text: "Sell TQQQ when QQQ's RSI(10) reaches {}, even above the line.", options:
-      Array.from({ length: 100 }, (_, k) => +(50 + 0.5 * k).toFixed(1)).concat([{ value: 100, label: "Off" }]), default: 85 },
+      Array.from({ length: 100 }, (_, k) => +(50 + 0.5 * k).toFixed(1)).concat([{ value: 100, label: "Off" }]), default: 81 },
            { id: "cool", label: "Cool-gate re-entry RSI(10) <", text: "Then buy back only once RSI(10) is under {}.", options:
       Array.from({ length: 160 }, (_, k) => +(20 + 0.5 * k).toFixed(1)).concat([{ value: 100, label: "Off" }]), default: 60 },
-           ${STAT_PARAM_MEDIAN_SNIPPET}],
+           ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." },
              { key: "rsi", label: "RSI(10)", tip: "Wilder's RSI of QQQ's closes over 10 days, 0 to 100." },
