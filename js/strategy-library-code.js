@@ -1342,7 +1342,8 @@ ${END_ROW_ACTION}
 // its 200-day SMA. Phase one holds TQQQ; after 366 days held, phase two holds
 // 50% QLD + 50% gold; under the lower band, defensive holds 50% cash + 50%
 // gold until the upper band buys TQQQ again. GLD stands in for GLDM, cash at
-// the cash interest for SGOV.
+// the cash interest for SGOV. Its defaults are the user's map pick of 27
+// November 2026, set after withDefaults below.
 CODE[14] = `{
   name: "Three-phase SPY 200SMA +4/-3 → TQQQ, QLD + gold, cash + gold",
   params: [
@@ -3948,6 +3949,12 @@ function withTips(base, spec) {
   }
   return t;
 }
+// #14 at the user's pick on the map of 2010-2025 (27 November 2026, "set this as default"): in at 0.8% over SPY's
+// 30-day median, defensive at 1.4% under it, phase two after 105 days, and a switch at one close (were 0.5%, 7.5%,
+// 10 days, 640 days, two days). $100K lump sum, with the cost and cash interest: 51.8% a year, max drawdown 48%,
+// against 54.7% and 58%.
+CODE[14] = withDefaults(CODE[14], { name: "Three-phase SPY 200SMA +4/-3 → TQQQ, QLD + gold, cash + gold",
+  defaults: { entry: 0.8, exit: 1.4, window: 30, holdDays: 105, splitDays: false } });
 CODE[53] = withDefaults(CODE[52], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults: {
   // The floor holds cash with the way back since 2026-11-17 (the user: "I'd want the fix"); SQQQ after the break was the fitted value.
   lookbackDays: 546, startAvgDays: 60, topLead: 123, topDays: 61, backLead: 28, floorLead: 0, floorHold: "cash", floorBackDays: 20, floorBackOver: 2, floorBackCloses: 3, reentryLead: 35, reentryCloses: 10, deepLead: -30.5,
