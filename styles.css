@@ -4442,6 +4442,7 @@
   .map-clear-btn { flex: none; padding: 3px 12px; border: 1px solid var(--border); border-radius: 7px; background: none; font: inherit; font-weight: 600; color: var(--text-muted); cursor: pointer; }
   .map-clear-btn:hover { border-color: var(--accent); color: var(--text); }
   .map-near { margin-top: 4px; }
+  .map-name { margin-top: 8px; font-weight: 600; color: var(--text); }
   /* Under the chart: what its marks are, each drawn as the chart draws it (the dots at the chart's own sizes). */
   /* Three groups, each under its name (Marks, Dots, Lines), set apart by a wider gap than the keys inside one: a group
      that wraps to the next row starts it with its name, no divider left hanging at the row's start. */

@@ -969,6 +969,9 @@ function mapDetailHtml(map) {
     + (dot.differs ? '<button type="button" class="map-use-btn" data-map-use>Use</button>' : '')
     + (picked ? '<button type="button" class="map-clear-btn" data-map-clear>Clear</button>' : '') + '</div>' : '')
     + notes.map(note => `<div class="map-near">${_escHtml(note)}</div>`).join('')
+    // The strategy's name over its settings, so the column copied as text says whose they are (the user,
+    // 2026-11-27: "make sure name is also displayed just above freeze, so I can easliy copu paste").
+    + `<div class="map-name">${_escHtml(fitKeyName(map.key))}</div>`
     + `<div class="map-strategy"><div class="map-freeze-head"><b>Freeze</b>${mapTipIcon(MAP_FREEZE_TIP)}<span class="fit-freeze-notice">${fitFreezeNotice(changed)}</span></div>`
     + buildFitStrategyHtml(map.key, value) + '</div>';
 }
