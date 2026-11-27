@@ -3135,7 +3135,7 @@ function buildNativeSettingsHeaderHtml(type) {
   const note = _fitNotes[key] ? buildFitNoteHtml(_fitNotes[key]) : '';
   return `<div class="strategy-panel-section-label settings-head"><span>Settings</span><span class="settings-actions">`
     + `${FIT_PANELS[type] ? buildFitButtonHtml(key) : ''}`
-    + `<button type="button" class="settings-reset-btn" data-sc-reset="${type}"${atDefaults || (_fit && _fit.key === key) ? ' disabled' : ''}>Reset to default</button>`
+    + `<button type="button" class="settings-reset-btn" data-sc-reset="${type}"${atDefaults ? ' disabled' : ''}>Reset to default</button>`
     + `</span></div>${note}`;
 }
 // A setting changed by hand replaces the panel's last fit result.
@@ -3646,10 +3646,8 @@ const FIT_BETWEEN_MAX = 20;   // values tried on each side of a pick, between th
 const FIT_DD_TOL = 0.001;     // the second stage's room over the drawdown found: 0.1 of a point, what the note shows
 const FIT_LIMIT_RETRIES = 3;  // tries at getting past a rest short of the limit (fitSearch)
 const FIT_LIMIT_EASE = 0.05;  // how much each try eases the limit under where the settings stand
-let _fit = null;          // the running search: { key, goal, phase, round, done, total, stopped, close }
-let _fitWindow = null;    // { el, key, choices, freezeOpen, preview, closedHeight } while the Fit window is open (preview: the map picture's chart, showMapPreview; closedHeight: holdFitHeight)
-// key (a code strategy's cfg id, or "panel:9sig" / "panel:sma") -> the last
-// fit's result { text, changes: [{ label, from, to }] }, until a setting is changed by hand
+// key (a code strategy's cfg id, or "panel:9sig" / "panel:sma") -> what the map's last Use set
+// { text, changes: [{ label, from, to }] }, until a setting is changed by hand
 const _fitNotes = {};
 
 // ---- Fit: frozen settings ----
@@ -3778,8 +3776,6 @@ function setFitSettingValue(key, id, value) {
   if (!option) throw new Error(`Freeze: ${value} is not a choice of ${id}`);
   setCustomParamOption(cfg, sp, option);
 }
-// The frozen settings' values now, as text: what a picture of the map stands on besides its years and free settings.
-const fitFrozenValues = (key) => JSON.stringify(Array.from(fitFrozenIds(key), id => [id, fitSettingChoices(key, id).now]));
 // A value in a Freeze list: its tick box (ticked = frozen; boxAttr names the list's own attribute)
 // and, for a frozen setting, a plain dropdown of its choices that sets it on the strategy
 // (setFitSettingValue). The user (2026-11-26): "I want to be able to choose other option for
@@ -3794,10 +3790,6 @@ function fitFreezeValueHtml(key, setting, frozen, text, boxAttr) {
   const pick = `<select class="fit-freeze-pick" data-fit-set-id="${_escHtml(setting.id)}" aria-label="${_escHtml(name)}">`
     + options.map(o => `<option value="${_escHtml(o.value)}"${o.value === now ? ' selected' : ''}>${_escHtml(o.text)}</option>`).join('') + `</select>`;
   return `<label class="fit-freeze-value">${box}${pick}</label>`;
-}
-function fitNothingFree(key) {
-  _fitNotes[key] = { text: 'Every setting is frozen, so nothing changed.', changes: [] };
-  render();
 }
 // A shared strategy's choices: true / false by setting id, nothing else.
 const fitFreezeFromShared = (choices) => Object.fromEntries(Object.entries(choices).filter(([, frozen]) => typeof frozen === 'boolean'));
@@ -4102,7 +4094,6 @@ function fitFloor(plan, cagrOf, hold) {
 // last quarter), which for the year not over yet is the latest day. A fit on picked years runs
 // as it would with the chart's Entry and Exit moved there: quarter ends, the same money.
 const FIT_YEAR_ENDS = [{ id: 'fromYear', name: 'First year' }, { id: 'toYear', name: 'Last year' }];
-const FIT_YEARS_TIP = ['The years the fit runs on, from the start of the first to the end of the last.', 'It opens on 2010 to 2025.', 'This year ends on the latest day.', "The top choice follows the chart's Entry or Exit.", 'A year picked below it stays until you change it.'].join('\n');
 const fitYearOfQuarter = (idx) => +quarterlyData[idx][0].slice(0, 4);
 // The chart's own period as its sliders hold it (render keeps them inside the data and in order).
 const fitChartPeriod = () => ({ entryIdx: +document.getElementById('slider-entry').value, exitIdx: +document.getElementById('slider-exit').value });
@@ -4233,25 +4224,6 @@ function fitPercent(f) {
   f.most = Math.max(f.most || 0, Math.min(99, Math.floor(100 * (f.base + f.span * (stage - 1 + share) / stages))));
   return f.most;
 }
-function fitProgressText(f) { return `Fitting ${fitPercent(f)}% · Stop`; }
-// What the search is doing now, on hover.
-function fitStepText(f) {
-  const fewer = f.last ? `Fewer settings, ${f.out} taken out: a last tuning of the settings left. `
-    : f.again ? `Fewer settings, ${f.out} taken out so far: the whole search again from the settings left. `
-    : f.without ? `Fewer settings, ${f.out} taken out so far: trying without "${f.without}", the rest tuned again. ` : '';
-  const stage = (f.stages || 1) > 1 ? (f.stage === 2 ? 'Second stage, the highest CAGR at the drawdown found. ' : 'First stage, the lowest drawdown. ') : '';
-  return fewer + stage + (f.phase === 'between'
-    ? 'Last step: trying values between the options next to each pick.'
-    : `Round ${f.round} of up to ${FIT_MAX_PASSES}: each setting tries every option while the others stay put. A round that changes nothing ends the rounds early.`);
-}
-function fitShowProgress() {
-  if (!_fit) return;
-  document.querySelectorAll(`[data-fit-key="${CSS.escape(_fit.key)}"]`).forEach(b => {
-    b.textContent = fitProgressText(_fit);
-    b.title = fitStepText(_fit);
-    b.style.setProperty('--fit-pct', fitPercent(_fit) + '%');
-  });
-}
 
 // The search, shared by code strategies and the built-in panels. space lists
 // the settings it may change: { id, values, between(v) } with each setting's
@@ -4271,7 +4243,7 @@ async function fitSearch(state, space, cur, quest) {
   // One setting's values measured with the others held: each value (as text) with its result.
   const along = async (s, values) => {
     const results = await Promise.all(values.map(v => measure(Object.assign({}, cur, { [s.id]: v }))
-      .then(r => { state.done++; fitShowProgress(); return r; })));
+      .then(r => { state.done++; return r; })));
     return new Map(values.map((v, i) => [String(v), results[i]]));
   };
   // One setting tries its values with the others held; the best stays.
@@ -4327,7 +4299,6 @@ async function fitSearch(state, space, cur, quest) {
     if (!state.stopped) {
       const between = space.map(s => ({ s, values: s.between(cur[s.id]) }));
       Object.assign(state, { phase: 'between', done: 0, total: d3.sum(between, b => b.values.length) });
-      fitShowProgress();
       for (const b of between) { if (state.stopped) break; if (await sweep(b.s, b.values)) moved = true; }
     }
     state.settled = rested && !moved;
@@ -4358,35 +4329,9 @@ async function fitSearch(state, space, cur, quest) {
   }
   return best;
 }
-// ---- Fewest settings ----
-// The user (2026-11-23): "another lowest drawdown and best cagr option, but this time, it should be
-// focused on minimal parameters count. So that we are reducing the parameters count and trying to
-// simplify the strategy edge into what matters"; and, asked how: "I want most optimal settings found,
-// not the easiest implementation".
+// ---- Settings in use ----
 // A setting is in use while it shows (its `when` holds; a panel setting's rule is on) and is not
-// switched off. The search first runs as for the plain goal. Then come cycles of two steps.
-// Taking settings out: every single change that leaves fewer settings in use (a rule switched off,
-// a choice with fewer settings under it) is ranked by its result with nothing else touched. The
-// best stays at once if that result keeps FIT_FEWEST_KEEPS of the best result met so far: of its
-// CAGR for "Best CAGR"; for "Lowest drawdown" still over buy & hold, with a drawdown no more than
-// that share deeper. If not, the settings still in use are tuned around the change (the same search,
-// on what is left) and it stays if the tuned result keeps its share. One that fails gives way to
-// the next, up to FIT_FEWEST_TRIES a round; a round with none ends the step, and the note names
-// the one that came closest with what the result would be without it. The number in use never
-// goes back up in this step: no tuning may pick a value that brings a setting into use.
-// Searching again: the whole search from the fewer settings, every setting free, run until it
-// rests. Taking out never brings a setting back, so it can end on a set that is not the best of
-// its size; this can swap a rule in for another, and it often finds a better result than the first
-// search did (seen on 2026-11-23: 101.6%, then 106.6%, then 109.4% a year).
-// The answer, after up to FIT_FEWEST_CYCLES cycles or when a cycle leaves it where it was: of
-// every set of settings met on the way, the starting one included, the one with the fewest in use
-// that keeps its share of the best met; among those with as few, the best. Its settings get a
-// last tuning. The note also gives the best result met and how many settings it took: see fitFewest.
-const FIT_FEWEST_KEEPS = 0.95;
-const FIT_FEWEST_TRIES = 3;
-const FIT_FEWEST_CYCLES = 3;     // at most this many cycles of "search, then take settings out"
-const FIT_FEWEST_SETTLES = 3;    // a search is run again while it still moves a setting, at most this many times
-const FIT_FEWEST_STEP = 0.85;    // each search of a run leaves this share of the progress to the searches after it (their number is not known ahead)
+// switched off. The library's complexity score counts them (strategyComplexity).
 // The value that switches a setting off, if one does: its own mark (off: value), a yes/no setting's
 // No, or an option that reads as off ("Off", "No limit", "never", "off — …", "… (off)"). A setting
 // Fit leaves alone unless told otherwise (fit: false: a cost, how a trade is executed) has none: it
@@ -4412,13 +4357,12 @@ function fitShownWith(schema, sp, values) {
   });
 }
 const fitInUse = (s, values) => s.shown(values) && !(s.off !== undefined && String(values[s.id]) === String(s.off));
-const fitInUseCount = (space, values) => space.filter(s => fitInUse(s, values)).length;
 // A code strategy's setting as the search and the complexity score read it: its choices, the value
 // that switches it off, and whether it shows with a set of values.
 const customSettingSpace = (schema, sp) => ({ id: sp.id, values: customParamOptions(sp).map(o => fitStored(o.value)),
   off: fitOffValue(sp), shown: values => fitShownWith(schema, sp, values) });
 // How complex a strategy is (the user, 2026-11-24: "how complex are the strategies"), from the
-// settings in use as Fit's "fewest settings" counts them: how many there are, and points that weigh
+// settings in use as counted above: how many there are, and points that weigh
 // each by its choices, one point for each doubling of them. A yes/no switch is 1 point, a list of ten
 // funds about 3, a number with a hundred values about 7: a number gives a fit far more room than a
 // switch, and no weight is picked by hand.
@@ -4434,148 +4378,6 @@ function customComplexity(schema, cfg) {
   const rules = all.filter(sp => sp.fit !== false && customParamOptions(sp).length > 1);
   return strategyComplexity(rules.map(sp => customSettingSpace(schema, sp)), values);
 }
-// Does a simpler strategy's result keep its share of the best found? It has to meet the rule's
-// limit as well. `room`: how much it may fall short by.
-function fitKeeps(quest, r, ref, room = 1 - FIT_FEWEST_KEEPS) {
-  if (!fitReached(quest.rule, r)) return false;
-  if (quest.rule.goal === 'cagr') { const top = quest.cagrOf(ref.final); return quest.cagrOf(r.final) >= top - room * Math.abs(top); }
-  return r.dd <= ref.dd * (1 + room);
-}
-// From the search's result (found, with cur on its settings) to the fewest settings that keep it.
-// begun: the settings the fit started from and their result, a set like any other it meets.
-// Every result here is one the fit judges by (fitJudge): on a plateau, with the neighbours.
-// Ends with cur on the fewest settings and resolves to their result.
-async function fitFewest(state, space, cur, quest, found, begun) {
-  const better = (a, b) => fitBetter(quest.rule, a, b);
-  let ref = found;      // the best result seen, which every simpler one is held against
-  const keeps = (r, room) => fitKeeps(quest, r, ref, room);
-  let searches = 1;     // the searches run so far, the first included: each takes its stretch of the progress
-  const usedFirst = fitInUseCount(space, cur);
-  const stretch = (what) => {
-    Object.assign(state, what, { out: Math.max(0, usedFirst - fitInUseCount(space, cur)), stage: 1, phase: 'rounds', round: 1, done: 0, total: 0,
-      base: 1 - Math.pow(FIT_FEWEST_STEP, searches), span: Math.pow(FIT_FEWEST_STEP, searches) * (1 - FIT_FEWEST_STEP) });
-    searches++;
-  };
-  // A search run until it comes to rest: one run ends after its step between the options even when
-  // that step moved a setting (or after its last round while settings still moved), and the next
-  // run starts from there.
-  const settle = async (within, values, what) => {
-    let result = null;
-    for (let k = 0; k < FIT_FEWEST_SETTLES && !state.stopped; k++) {
-      stretch(what);
-      result = await fitSearch(state, within, values, quest);
-      if (state.settled) break;
-    }
-    return result;
-  };
-  const liveIds = (values, pinned) => space.filter(s => s !== pinned && fitInUse(s, values)).map(s => s.id).join('|');
-  // The settings in use tuned around a change, whose own setting stays put: one search, and another
-  // only while that could change the verdict. A search that moves a choice can bring other settings
-  // into view under it, which get a search of their own; and a result that falls short of its share
-  // by less than the room again is searched once more while the search still moves something.
-  // `pinned` is that setting; with none, it is the last tuning of the answer, run until it rests.
-  const tune = async (values, pinned) => {
-    let result = null;
-    for (let k = 0; k < FIT_FEWEST_SETTLES && !state.stopped; k++) {
-      const count = fitInUseCount(space, values), ids = liveIds(values, pinned);
-      const live = space.filter(s => s !== pinned && fitInUse(s, values)).map(s => Object.assign({}, s, {
-        values: s.values.filter(v => fitInUseCount(space, Object.assign({}, values, { [s.id]: v })) <= count) }));
-      stretch({ without: pinned ? pinned.label : '', again: false, last: !pinned });
-      result = await fitSearch(state, live, values, quest);
-      if (state.stopped || state.settled) break;                                             // at rest
-      if (!pinned || liveIds(values, pinned) !== ids) continue;                              // the answer's tuning; or new settings in view
-      if (keeps(result) || !keeps(result, 2 * (1 - FIT_FEWEST_KEEPS))) break;                // the verdict stands either way
-    }
-    return result;
-  };
-  // Every settled set of settings met, with its result, how many of its settings are in use and,
-  // where settings were taken out of it to the end, the one that came closest to going.
-  const met = [];
-  const same = (x, y) => space.every(s => String(x[s.id]) === String(y[s.id]));
-  const meet = (values, result, extra) => {
-    if (!result) return;
-    const known = met.find(m => same(m.values, values));
-    if (known) Object.assign(known, extra);
-    else met.push(Object.assign({ values: Object.assign({}, values), result, count: fitInUseCount(space, values) }, extra));
-  };
-  // The settings a single change of which leaves fewer in use.
-  const canGo = (values) => { const count = fitInUseCount(space, values); return space.filter(s => fitInUse(s, values) && s.values.some(v => fitInUseCount(space, Object.assign({}, values, { [s.id]: v })) < count)); };
-  // Settings taken out of cur one at a time, from its result: ends with cur on the fewer settings,
-  // state.next on the one that came closest to going and did not, and resolves to cur's result.
-  const takeOut = async (from) => {
-    let best = from;
-    state.next = null;
-    while (!state.stopped) {
-      const count = fitInUseCount(space, cur);
-      // Every single change that leaves fewer settings in use, the others as they are.
-      const changes = canGo(cur).flatMap(s => s.values.filter(v => String(v) !== String(cur[s.id]))
-        .map(v => ({ s, values: Object.assign({}, cur, { [s.id]: v }) })).filter(c => fitInUseCount(space, c.values) < count));
-      if (!changes.length) break;
-      const results = await Promise.all(changes.map(c => fitJudge(quest, space, c.values)));
-      if (state.stopped) break;
-      const order = changes.map((c, i) => Object.assign(c, { r: results[i] })).filter(c => c.r)
-        .sort((a, b) => (better(a.r, b.r) ? -1 : better(b.r, a.r) ? 1 : 0)).slice(0, FIT_FEWEST_TRIES);
-      let taken = false, closest = null;
-      for (const c of order) {
-        // A change the result keeps its share with as it stands stays without a search; any other
-        // gets the settings in use tuned around it first.
-        const tuned = keeps(c.r) ? c.r : await tune(c.values, c.s);
-        if (state.stopped) break;
-        if (keeps(tuned) && fitInUseCount(space, c.values) < count) {
-          Object.assign(cur, c.values);
-          best = tuned;
-          if (better(tuned, ref)) ref = tuned;
-          meet(cur, tuned);
-          taken = true;
-          break;
-        }
-        if (tuned && (!closest || better(tuned, closest.r))) closest = { label: c.s.label, r: tuned };
-      }
-      if (!taken) { state.next = closest; break; }
-    }
-    return best;
-  };
-  // The answer so far: of the sets met that keep their share of the best met, the one with the
-  // fewest settings in use; among those with as few, the best result.
-  const pick = () => met.filter(m => keeps(m.result))
-    .sort((x, y) => x.count - y.count || (better(x.result, y.result) ? -1 : better(y.result, x.result) ? 1 : 0))[0];
-  // Cycles of "take settings out, then search again". Taking out goes one setting at a time and
-  // never brings one back, so it can end on a set that is not the best of its size; the whole search
-  // run again from there, every setting free, can swap a rule in for another, and settings are taken
-  // out of what it finds. The run ends when a cycle leaves the answer where it was.
-  meet(begun.values, begun.result);
-  meet(cur, found);
-  let chosen = null, at = found, again = false;
-  for (let cycle = 1; cycle <= FIT_FEWEST_CYCLES && !state.stopped; cycle++) {
-    if (again) {
-      at = await settle(space, cur, { without: '', again: true });
-      if (state.stopped || same(cur, chosen.values)) break;   // the search moved nothing: done
-      if (better(at, ref)) ref = at;
-      meet(cur, at);
-    }
-    at = await takeOut(at);
-    if (state.stopped) break;
-    meet(cur, at, { next: state.next, ended: true });
-    const best = pick();
-    if (chosen && same(best.values, chosen.values)) break;
-    chosen = best;
-    // From the answer: the search again if the taking out ended on it, the taking out first if it is a set met before.
-    again = same(best.values, cur);
-    if (!again) { Object.assign(cur, best.values); at = best.result; }
-  }
-  if (!chosen) return found;   // stopped in the first cycle
-  Object.assign(cur, chosen.values);
-  // The answer's settings tuned once more: a removal that needed no search left them where they were.
-  const last = await tune(cur, null);
-  if (state.stopped) return found;
-  const result = better(last, chosen.result) ? last : chosen.result;
-  if (result !== last) Object.assign(cur, chosen.values);
-  state.next = chosen.ended ? chosen.next : null;
-  // For the note: the best result met on the way, with how many settings it took.
-  const top = met.reduce((x, y) => (better(y.result, x.result) ? y : x));
-  state.top = better(top.result, result) ? { r: top.result, count: top.count } : null;
-  return result;
-}
 // What a plan asks of the search, as fitBetter reads it. floor: the drawdown goal's floor (fitFloor).
 const fitRuleOf = (plan, floor) => ({ goal: plan.goal, plateau: plan.plateau, minFinal: plan.goal === 'dd' ? floor.final : -Infinity,
   maxDd: plan.goal === 'cagr' && plan.limit != null ? plan.limit / 100 : Infinity });
@@ -4585,41 +4387,6 @@ const fitRuleOf = (plan, floor) => ({ goal: plan.goal, plateau: plan.plateau, mi
 function fitSpaceOf(plan, space) {
   const whole = space.map(s => Object.assign({ all: s.values }, s)), rounded = plan.round ? whole.map(fitRoundSetting) : whole;
   return plan.plateau ? rounded.map(fitPlateauSetting) : rounded;
-}
-// One fit from start to the result note: runs the search, sets what it found
-// (job.apply), and writes the change list. job.plan: what the Fit window asked
-// for; job.floor: the drawdown goal's floor (fitFloor); job.years: the window's
-// years when the fit runs on them (fitPeriodOf's text), named in the note.
-async function fitRun(job) {
-  const { plan } = job;
-  const state = _fit = { key: job.key, goal: plan.goal, stage: 1, stages: plan.goal === 'dd' ? 2 : 1, phase: 'rounds', round: 1, done: 0, total: 0, stopped: false, close: job.close,
-    base: 0, span: plan.fewest ? 1 - FIT_FEWEST_STEP : 1 };
-  delete _fitNotes[job.key];
-  render();
-  const rule = fitRuleOf(plan, job.floor), quest = { rule, measure: job.measure, cagrOf: job.cagrOf };
-  const before = Object.assign({}, job.cur);
-  const start = await job.measure(Object.assign({}, before));
-  const space = fitSpaceOf(plan, job.space);
-  if (plan.round) space.forEach(s => { job.cur[s.id] = s.snap(job.cur[s.id]); });
-  // Where the search begins, one of the sets the fewest settings are picked from: the settings as
-  // they are, or on round numbers their round neighbours; with the result the fit judges them by.
-  const begun = !plan.fewest ? null : { values: Object.assign({}, plan.round ? job.cur : before), result: await fitJudge(quest, space, plan.round ? job.cur : before) };
-  let best = await fitSearch(state, space, job.cur, quest);
-  // The fewest settings: only from a search that met its limit.
-  if (plan.fewest && fitReached(rule, best) && !state.stopped) best = await fitFewest(state, space, job.cur, quest, best, begun);
-  job.close();
-  _fit = null;
-  if (state.stopped) { render(); return; }
-  // Nothing met the limit: the way toward it is not a result, so the settings
-  // stay as they were (the note says nothing changed).
-  const reached = fitReached(rule, best);
-  if (!reached) Object.assign(job.cur, before);
-  const changed = job.space.filter(s => String(job.cur[s.id]) !== String(before[s.id]));
-  const changes = fitChangesOf(job.space, before, job.cur);
-  if (changed.length) job.apply(job.cur, changed);
-  const inUse = plan.fewest ? { before: fitInUseCount(job.space, before), now: fitInUseCount(job.space, job.cur), of: job.space.length, next: state.next, top: state.top } : null;
-  _fitNotes[job.key] = { text: fitYearsNote(job.years) + fitNoteText(plan, job.floor, job.cagrOf, start, best, reached, changed.length, inUse), changes };
-  render();
 }
 // ---- Runs kept for the page ----
 // The user (2026-11-25, asking for the settings map): "many processes could be shared across so
@@ -4633,12 +4400,8 @@ async function fitRun(job) {
 const FIT_RUN_STORES = 4;
 const _fitRuns = new Map();   // key -> { stamp, ids, done: Map(fitRunKey -> { values, r: { final, dd } }) }, the last used last
 // ids: the settings a run's values hold, in the order its key lists them.
-// peek: only look (the Fit window's picture of the map). The key's kept runs then stay as they
-// are, also when they stand on something else (other years, other frozen settings), and the
-// empty store handed back in that case is not kept.
-function fitRunStore(key, stamp, ids, peek) {
+function fitRunStore(key, stamp, ids) {
   const kept = _fitRuns.get(key), store = kept && kept.stamp === stamp ? kept : { stamp, ids, done: new Map() };
-  if (peek) return store;
   _fitRuns.delete(key);
   _fitRuns.set(key, store);
   while (_fitRuns.size > FIT_RUN_STORES) _fitRuns.delete(_fitRuns.keys().next().value);
@@ -4657,11 +4420,6 @@ const fitMeasure = (store, run) => {
     return asked.get(k);
   };
 };
-// The drawdown goal with no buy & hold line to beat: say so, change nothing.
-function fitNoHurdle(key, fund) {
-  _fitNotes[key] = { text: fund ? `No buy & hold line for ${fund.toUpperCase()} to compare with, so nothing changed.` : 'The strategy holds no fund on this period, so nothing changed.', changes: [] };
-  render();
-}
 // ---- What a search works on ----
 // A key's settings as Fit and the map (js/settings-map.js) search them:
 //   cur      every setting's value as it stands (a panel: the free ones)
@@ -4675,7 +4433,7 @@ function fitNoHurdle(key, fund) {
 //            tells whether the search still goes on; a panel's runs end when it does not.
 // A code strategy's runs go to the sandbox worker pool, on the prices as they stood when the job
 // was set up.
-function customFitJob(cfg, ctx, free, peek) {
+function customFitJob(cfg, ctx, free) {
   const schema = getCustomSchema(cfg), params = schema.filter(sp => sp && sp.id != null && free.has(sp.id));
   // The prices as they stand now: every run of this job is on them, also one started after a live price came in.
   const globals = computeCustomGlobals(cfg, ctx), data = buildCustomData(), cur = {};
@@ -4686,7 +4444,7 @@ function customFitJob(cfg, ctx, free, peek) {
     const between = (v) => typeof v === 'string' && v !== '' && Number.isFinite(Number(v)) ? Number(v) : null;
     return v => options.has(String(v)) ? options.get(String(v)) : between(v);
   };
-  const store = fitRunStore(cfg.id, [cfg.code, JSON.stringify(globals), customDataStamp(ctx)].join('|'), Object.keys(cur), peek);
+  const store = fitRunStore(cfg.id, [cfg.code, JSON.stringify(globals), customDataStamp(ctx)].join('|'), Object.keys(cur));
   return {
     key: cfg.id, cur, store,
     settings: schema.filter(sp => sp && sp.id != null).map(sp => ({ id: sp.id, name: String(sp.label || sp.id), now: cur[sp.id], text: v => customOptionLabel(sp, v) })),
@@ -4713,7 +4471,7 @@ const FIT_YIELD_MS = 25;
 // Which selects may change, their names and one run's result come from
 // js/preview-dropdown.js (window.previewFit), which owns those engines' option
 // previews; which of them are frozen is the user's choice (fitFreeIds).
-function nativeFitJob(type, free, period, peek) {
+function nativeFitJob(type, free, period) {
   const pf = window.previewFit, key = 'panel:' + type;
   const selects = Array.from(free, id => document.getElementById(id));
   const base = pf.base(type, period), cur = {};
@@ -4726,7 +4484,7 @@ function nativeFitJob(type, free, period, peek) {
   // The engines read the prices as they are at each run: a live price that comes in while a search or an open map goes on
   // moves its later runs by that much, as it always did within one fit; the next search starts a new store.
   const ids = selects.map(el => el.id);
-  const store = fitRunStore(key, [pf.stamp(type, base, Object.fromEntries(selects.map(el => [el.id, optionsOf(el)[0]]))), ids.join(','), _customDataVersion].join('|'), ids, peek);
+  const store = fitRunStore(key, [pf.stamp(type, base, Object.fromEntries(selects.map(el => [el.id, optionsOf(el)[0]]))), ids.join(','), _customDataVersion].join('|'), ids);
   return {
     key, cur, store,
     settings: pf.settings(type).map(s => document.getElementById(s.id)).filter(Boolean).map(el => ({ id: el.id, name: pf.name(el.id), now: el.value, text: v => optionText(el, v) })),
@@ -4752,30 +4510,18 @@ function nativeFitJob(type, free, period, peek) {
 }
 // What can be searched for a key right now: { job } (customFitJob / nativeFitJob), { frozen: true }
 // when every setting is frozen, or null when there is nothing to search (no such strategy, no
-// setting with a choice, the chart not drawn yet). period: the fit's years where they are set
-// (fitPeriodOf), else the chart's period as it is. peek: only to look at the runs kept (fitRunStore).
-function fitJobFor(key, period, peek) {
+// setting with a choice, the chart not drawn yet). period: the map's years where they are set
+// (fitPeriodOf), else the chart's period as it is.
+function fitJobFor(key, period) {
   const free = fitFreeIds(key);
   if (fitIsPanel(key)) {
     const type = key.slice(6);
     if (!FIT_PANELS[type] || !window.previewFit || free === null) return null;
-    return free.size ? { job: nativeFitJob(type, free, period, peek) } : { frozen: true };
+    return free.size ? { job: nativeFitJob(type, free, period) } : { frozen: true };
   }
   const cfg = savedConfigs.find(c => c.id === key), ctx = window._customCtx;
   if (!cfg || !cfg.code || !ctx || free === null) return null;
-  return free.size ? { job: customFitJob(cfg, period ? fitPeriodCtx(ctx, period) : ctx, free, peek) } : { frozen: true };
-}
-// Is the search of a key still going on? What a panel's runs ask between two of them.
-const fitLive = () => !!_fit && !_fit.stopped;
-// Fit from the window's plan, on the chart's period or on the window's years (period, fitPeriodOf).
-async function runFit(key, plan, period) {
-  if (_fit) return;
-  const found = fitJobFor(key, period);
-  if (!found) return;
-  if (found.frozen) { fitNothingFree(key); return; }
-  const { job } = found, floor = fitFloorFor(key, plan, job.cagrOf, period);
-  if (floor.lacking) { fitNoHurdle(key, floor.fund); return; }
-  await fitRun({ ...job, ...job.start(fitLive), plan, floor: floor.floor, years: period ? period.text : null });
+  return free.size ? { job: customFitJob(cfg, period ? fitPeriodCtx(ctx, period) : ctx, free) } : { frozen: true };
 }
 // The drawdown goal's floor for a key and a plan: the least CAGR typed, else buy & hold of the
 // fund a code strategy holds most, or of the fund a panel buys. { floor } (null for the CAGR goal), or
@@ -4819,191 +4565,21 @@ const fitYearsNote = (years) => (years ? `On ${years}. ` : '');
 // A result's two numbers as the notes write them.
 const fitCagrText = (cagrOf, r) => cagrOf(r.final).toFixed(1) + '%';
 const fitDdText = (r) => (r.dd * 100).toFixed(1) + '%';
-// What a plateau's judgement (fitFlatOf) says of the neighbours: what the worst of them makes and
-// falls, each with the neighbour that gives it, the setting and the value it would stand at.
-function fitNearText(cagrOf, flat) {
-  const at = (spot) => spot ? ` (${spot.label} at ${spot.to})` : '';
-  return `With any one setting a tenth off either way: CAGR ${fitCagrText(cagrOf, flat)} or more${at(flat.low)}, max drawdown ${fitDdText(flat)} or less${at(flat.deep)}.`;
-}
-// What a plan asks for, as the note names it: "Lowest drawdown at 180% a year or more, and the highest CAGR at it, on a plateau".
-function fitAskText(plan, floor) {
-  const goal = plan.goal === 'cagr'
-    ? 'Best CAGR' + (plan.limit != null ? ` within a max drawdown of ${plan.limit}%` : '')
-    : `Lowest drawdown ${floor.ask}, and the highest CAGR at it`;
-  return goal + (plan.plateau ? ', on a plateau' : '') + (plan.round ? ', round numbers' : '') + (plan.fewest ? ', fewest settings' : '');
-}
-// The result line under Settings: what moved, on the chart's period. start: the settings' own
-// result before; best: the result the fit judged by, on a plateau with the settings' own in best.own.
-function fitNoteText(plan, floor, cagrOf, start, best, reached, nChanged, inUse) {
-  if (!best) return 'The runs failed, so nothing changed.';
-  const own = (r) => r.own || r;
-  const cagr = (r) => fitCagrText(cagrOf, r);
-  const dd = fitDdText;
-  const both = (r) => `CAGR ${cagr(r)}, max drawdown ${dd(r)}`;
-  const how = (plan.round ? ' in round numbers' : '') + (plan.plateau ? ' on a plateau' : '');
-  // A plateau's result holds for the neighbours too.
-  const near = (r) => plan.plateau ? ' ' + fitNearText(cagrOf, r) : '';
-  if (!reached) {
-    const closest = ` The closest found: ${both(own(best))}.${near(best)}`;
-    return plan.goal === 'dd'
-      ? `No setting${how} ${floor.none}, so nothing changed.${plan.limit != null ? closest : ''}`
-      : `No setting${how} kept the max drawdown within ${plan.limit}%, so nothing changed.${closest}`;
-  }
-  // The fewest settings: how many of the settings Fit may change are in use, against how many were.
-  const one = (r) => plan.goal === 'cagr' ? 'CAGR ' + cagr(own(r)) : 'max drawdown ' + dd(own(r)) + ', CAGR ' + cagr(own(r));
-  const used = !inUse ? '' : ` ${inUse.now} of ${inUse.of} settings in use${inUse.before !== inUse.now ? ', ' + inUse.before + ' before' : ''}.`
-    + (inUse.next ? ` The next to go would be "${inUse.next.label}": ${one(inUse.next.r)} without it.` : '')
-    + (inUse.top ? ` The best met on the way: ${one(inUse.top.r)} with ${inUse.top.count} in use.` : '');
-  const ask = fitAskText(plan, floor);
-  if (!nChanged) return `${ask}: the current settings are already the best found.${near(best)}${used}`;
-  const moved = `CAGR ${start ? cagr(start) + ' → ' : ''}${cagr(own(best))}, max drawdown ${start ? dd(start) + ' → ' : ''}${dd(own(best))}`;
-  // Settings short of the limit come up to it first, so the measure searched for can get worse.
-  const short = !start ? '' : plan.goal === 'dd' ? (start.final > floor.final ? '' : `The current settings ${floor.short}. `)
-    : (plan.limit == null || start.dd <= plan.limit / 100 ? '' : `The current settings fall further than ${plan.limit}%. `);
-  return `${short}${ask}: ${nChanged} setting${nChanged > 1 ? 's' : ''} changed. ${moved}.${near(best)}${used}`;
-}
 
-// The Fit button beside "Reset to default": it opens the Fit window; a running search shows its progress and stops on click.
+// The Fit button beside "Reset to default": it opens the map of the strategy's settings (js/settings-map.js). Since
+// 27 November 2026 there is no Fit window (the user: "let's get rid of actual fit functionality altogether and when
+// clicking on fit, directly open map window").
+const FIT_BUTTON_TIP = ['Opens the map: every combination of settings as a dot.', 'Click a dot, then Use to set its settings.'].join('\n');
 function buildFitButtonHtml(key) {
-  const running = _fit && _fit.key === key;
-  const tip = ['Opens the Fit window. It searches the settings for the best result and sets them.', "It uses the chart's years and money, unless you pick years there.", 'Frozen settings stay as they are: costs, cash interest and how trades execute, unless you untick them under Freeze.'].join('\n');
-  return `<span class="settings-fit-wrap"><button type="button" class="settings-reset-btn settings-fit-btn${running ? ' running' : ''}" data-fit-key="${_escHtml(key)}"${_fit && !running ? ' disabled' : ''}${running ? ` title="${_escHtml(fitStepText(_fit))}" style="--fit-pct:${fitPercent(_fit)}%"` : ''}>${running ? _escHtml(fitProgressText(_fit)) : 'Fit'}</button>`
-    + `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span></span>`;
+  return `<span class="settings-fit-wrap"><button type="button" class="settings-reset-btn settings-fit-btn" data-fit-key="${_escHtml(key)}">Fit</button>`
+    + `<span class="info-icon" tabindex="0" data-tip="${_escHtml(FIT_BUTTON_TIP)}">ⓘ</span></span>`;
 }
-// ---- The Fit window ----
-// Two parts side by side from 900px of screen, the window 60% of the page wide (the user,
-// 2026-11-25: "make it wider, so it takes 60% of page, and put much better, functional and
-// logical UI around"); one under the other on a narrower screen.
-//   The fit: what to freeze, then the choices as sentences with a dropdown in each (FIT_ROWS,
-//   FIT_LIMITS), the years first ("Fit years"), and Run under them. It opens on the choices of
-//   the last fit (fitChoices). The goal's sentence ends with the limit that goes with it, "with
-//   a max drawdown of" for the highest CAGR and "with a minimum CAGR of" for the lowest drawdown, each
-//   keeping what was typed for it (the user: "when switching between drawdown and cagr, drawdown
-//   and cagr input should not stay the same value").
-//   The map: a card of its own with a picture of the map as it stands (js/settings-map.js
-//   showMapPreview: the runs kept so far, nothing run) and "Open map", which opens the map in the
-//   window's place. The user: "i want that map button inside fit modal", then "make sure map is
-//   placed at better place so it does not interfere main fit, but also says I am the main
-//   character here".
-const FIT_MAP_TIP = ['Every combination of settings as a dot: max drawdown against CAGR.', 'It looks for better ones by itself.', 'The picture here is what it found so far.', 'Frozen settings stay as they are.'].join('\n');
-// What is being fitted, for the window's head: a strategy's name, a built-in panel's label.
+// Whose settings the map is of, for its head: a strategy's name, a built-in panel's label.
 const fitKeyName = (key) => fitIsPanel(key) ? BASE_LABELS[key.slice(6)] : savedConfigs.find(c => c.id === key).name;
-function buildFitWindowHtml(key, choices, freezeOpen) {
-  const tipIcon = (tip) => `<span class="info-icon" tabindex="0" data-tip="${_escHtml(tip)}">ⓘ</span>`;
-  // A sentence: its text with `control` where the {} stands. The word before the control, the
-  // control, what follows it and the ⓘ keep to one line, so no box or icon starts a line alone.
-  const said = (text, control, tip) => {
-    const at = text.indexOf('{}'), lead = text.slice(0, at).trimEnd(), word = lead.lastIndexOf(' ') + 1;
-    return `${_escHtml(lead.slice(0, word))}<span class="cp-tail">${_escHtml(lead.slice(word))} ${control}${_escHtml(text.slice(at + 2))} ${tipIcon(tip)}</span>`;
-  };
-  const line = (id, html) => `<div class="custom-param-line fit-line" data-fit-line="${id}">${html}</div>`;
-  const pick = (row) => `<select class="inline-select" data-fit-pick="${row.id}" aria-label="${row.name}">${row.options.map(([value, label]) =>
-    `<option value="${value}"${choices[row.id] === value ? ' selected' : ''}>${label}</option>`).join('')}</select>`;
-  const pair = (row) => line(row.id, said(row.text, pick(row), row.tip));
-  // The goal, then its limit: a number typed, in percent; an empty box reads what it means.
-  const limit = FIT_LIMITS[choices.goal];
-  const limitBox = `<span class="fit-limit"><input type="text" inputmode="decimal" data-fit-limit="${limit.id}" value="${_escHtml(choices[limit.id])}" placeholder="${limit.empty}" aria-label="${limit.name}, percent" autocomplete="off"><span class="fit-limit-unit">%</span></span>`;
-  const goalLine = (row) => line(row.id, said(row.text, pick(row), row.tip) + said(limit.text + '.', limitBox, limit.tip));
-  // The years: each end a dropdown (fitYearPickHtml).
-  const period = fitPeriodOf(choices), yearPick = (end) => fitYearPickHtml(end, choices);
-  const yearsRow = line('years', `Fit this strategy between ${yearPick(FIT_YEAR_ENDS[0])} and <span class="cp-tail">${yearPick(FIT_YEAR_ENDS[1])}. ${tipIcon(FIT_YEARS_TIP)}</span>`)
-    + (period && period.inverted ? `<div class="fit-years-note">The last year is before the first.</div>` : '');
-  const blocked = period && period.inverted ? ' disabled' : '';
-  const [goal, ...rest] = FIT_ROWS;
-  // The map's card: its picture and count are drawn in by showFitMap once the window stands.
-  const mapCard = `<div class="fit-map-card"><div class="fit-map-head"><b class="fit-map-title">Map</b>${tipIcon(FIT_MAP_TIP)}<span class="fit-map-count"></span></div>`
-    + `<div class="fit-map-preview" data-fit-map></div>`
-    + `<button type="button" class="fit-map-btn" data-fit-map${blocked}>Open map</button></div>`;
-  return `<div class="modal-backdrop" data-fit-close></div>`
-    + `<div class="modal-content fit-window fit-form-window" role="dialog" aria-modal="true" aria-label="Fit">`
-    + `<div class="fit-window-head"><h3>Fit</h3><span class="fit-window-name">${_escHtml(fitKeyName(key))}</span><button type="button" class="modal-close" data-fit-close aria-label="Close">×</button></div>`
-    + `<div class="fit-window-main"><div class="fit-window-body">${buildFitFreezeHtml(key, freezeOpen)}<div class="fit-lines">${yearsRow}${goalLine(goal)}${rest.map(pair).join('')}</div></div>${mapCard}</div>`
-    + `<div class="fit-window-foot"><button type="button" class="fit-run-btn" data-fit-run${blocked}>Run</button></div></div>`;
-}
-// The map's card filled in: the picture of the map as it stands for the window's years and frozen
-// settings, and how much of it there is. Drawn again whenever one of those, or the search the
-// "Fit" mark stands for, changes.
-function showFitMap() {
-  const { el, key, choices } = _fitWindow, period = fitPeriodOf(choices);
-  if (period && period.inverted) return;   // no such years: the picture is left empty, with Run and "Open map" off
-  const box = el.querySelector('.fit-map-preview'), seen = showMapPreview(_fitWindow.preview, box, key, period);
-  el.querySelector('.fit-map-count').textContent = seen && seen.tried ? `${seen.tried.toLocaleString('en-US')} tried${seen.done ? '. Done.' : ''}` : '';
-}
-function openFitWindow(key) {
-  closeFitWindow();
-  const el = document.createElement('div');
-  el.className = 'modal fit-modal';
-  _fitWindow = { el, key, choices: fitChoices(), freezeOpen: false, preview: {} };
-  el.innerHTML = buildFitWindowHtml(key, _fitWindow.choices, false);
-  document.body.appendChild(el);
-  document.body.classList.add('modal-open');
-  showFitMap();
-  holdFitHeight();
-  el.addEventListener('change', (e) => {
-    // A year picked: kept, and the window drawn again (an end before its start blocks Run and Map).
-    const year = e.target.closest('[data-fit-year]');
-    if (year) { setFitChoice(year.getAttribute('data-fit-year'), year.value); showFitWindow(); return; }
-    // One of the other choices: kept, and the window drawn again (the limit follows the goal).
-    const picked = e.target.closest('[data-fit-pick]');
-    if (picked) { setFitChoice(picked.getAttribute('data-fit-pick'), picked.value); showFitWindow(); return; }
-    const set = e.target.closest('[data-fit-set-id]');
-    if (set) { setFitSettingValue(key, set.getAttribute('data-fit-set-id'), set.value); showFitWindow(); return; }
-    if (fitFreezeTicked(el, key, e.target)) showFitWindow();   // the map leaves out what differs in a frozen setting; a value ticked now shows as its dropdown
-  });
-  // The limit as it is typed; Enter in its box runs the fit.
-  el.addEventListener('input', (e) => {
-    const box = e.target.closest('[data-fit-limit]');
-    if (box) { setFitChoice(box.getAttribute('data-fit-limit'), box.value); showFitMap(); }
-  });
-  el.addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.closest('[data-fit-limit]')) runFitWindow(); });
-  document.addEventListener('keydown', _fitWindowKey, true);
-}
-// A tick in a window's Freeze list freezes its setting, an empty box lets a search change it; the
-// notice beside "Freeze" and Reset follow. True when `target` was such a box.
-function fitFreezeTicked(el, key, target) {
-  const box = target.closest('[data-fit-freeze-id]');
-  if (!box) return false;
-  const settings = fitSettings(key), setting = settings.find(s => s.id === box.getAttribute('data-fit-freeze-id'));
-  setFitFrozen(key, setting, box.checked);
-  const changed = fitFreezeChanged(settings, fitFreezeChoices(key));
-  el.querySelector('.fit-freeze-notice').textContent = fitFreezeNotice(changed);
-  el.querySelector('[data-fit-freeze-reset]').disabled = !changed;
-  return true;
-}
-// One of the window's choices set and kept for the next time it opens.
-function setFitChoice(id, value) {
-  _fitWindow.choices[id] = value;
-  keepFitChoices(_fitWindow.choices);
-}
-// The window drawn again where it stands: after a choice (the limit's row follows the goal), and
-// when the Freeze list opens, closes or is reset.
-function showFitWindow() {
-  // What scrolls: the choices beside the map on a wide screen, the choices and the map together on a narrow one.
-  const { el, key, choices, freezeOpen } = _fitWindow, SCROLLERS = ['.fit-window-body', '.fit-window-main'];
-  const scrolled = SCROLLERS.map(sel => el.querySelector(sel).scrollTop);
-  el.innerHTML = buildFitWindowHtml(key, choices, freezeOpen);
-  SCROLLERS.forEach((sel, i) => { el.querySelector(sel).scrollTop = scrolled[i]; });
-  showFitMap();
-  holdFitHeight();
-}
-// The Freeze list opens inside the window as it stands: the window keeps the height it has with
-// the list closed, and the choices' side scrolls. The user (2026-11-25): "freeze should have
-// it's own scrollable container, it should not influence modal height, it should just make left
-// container scrollable". Each drawing is a new element, so the height set here goes with it.
-function holdFitHeight() {
-  const win = _fitWindow.el.querySelector('.fit-window');
-  if (_fitWindow.freezeOpen) win.style.height = _fitWindow.closedHeight + 'px';
-  else _fitWindow.closedHeight = win.getBoundingClientRect().height;
-}
-function runFitWindow() {
-  const { key, choices } = _fitWindow;
-  closeFitWindow();
-  runFit(key, fitPlanOf(choices), fitPeriodOf(choices));
-}
 // The strategy as its Settings read (fitFreezeLines), as markup: section names and sentences, with
 // valueHtml(slot) written where a setting's value sits (slot: { id, value }, the value as its
-// dropdown reads). The Freeze list puts a tick box there, the map's picked dot the old value
-// struck through and the new one beside it (js/settings-map.js).
+// dropdown reads). The map's column puts a tick box there, and for a dot that changes it the old
+// value struck through with the new one beside it (js/settings-map.js).
 function buildFitStrategyHtml(key, valueHtml) {
   // A sentence's pieces in a row. Text that touches a value ("RSI(" before it; "-day", "'s", a comma
   // or a full stop after it) is written with the value, so a line never breaks between the two.
@@ -5027,40 +4603,6 @@ function buildFitStrategyHtml(key, valueHtml) {
     const tag = line.block ? 'div' : 'span';
     return `<${tag} class="fit-freeze-line">${sentence(line.parts)}</${tag}>`;
   }).join(' ');
-}
-// The "Freeze" part of the Fit window: a head that opens it, then the strategy as its Settings read,
-// in small text, with a tick box on each value (ticked = frozen), and a way back to the usual ones.
-// The user (2026-11-23): "remove these additional texts, just say freeze" (no count, no tip line);
-// and, on a list of setting names: "not clearly mappable to strategy. So display the full strategy in
-// small text, the value in it, but checkbox over the value"; and "if non default values are chosen,
-// have a notice on the right side of Freeze button" ("2 changed").
-function buildFitFreezeHtml(key, open) {
-  const settings = fitSettings(key), choices = fitFreezeChoices(key);
-  if (!settings.length) return '';
-  const byId = new Map(settings.map(s => [s.id, s]));
-  // A value Fit can change carries the box; one with a single choice, or of a greyed-out dropdown, is plain.
-  const rows = buildFitStrategyHtml(key, (slot) => {
-    const setting = byId.get(slot.id);
-    if (!setting) return `<b>${_escHtml(slot.value)}</b>`;
-    return fitFreezeValueHtml(key, setting, fitFrozen(choices, setting), `<span>${_escHtml(slot.value)}</span>`, 'data-fit-freeze-id');
-  });
-  const changed = fitFreezeChanged(settings, choices);
-  return `<div class="fit-freeze"><button type="button" class="fit-freeze-head" data-fit-freeze-toggle aria-expanded="${open}"><span class="fit-freeze-arrow">${open ? '▾' : '▸'}</span><b>Freeze</b><span class="fit-freeze-notice">${fitFreezeNotice(changed)}</span></button>`
-    + `<div class="fit-freeze-body"${open ? '' : ' hidden'}>${rows}`
-    + `<button type="button" class="fit-freeze-reset" data-fit-freeze-reset${changed ? '' : ' disabled'}>Reset</button></div></div>`;
-}
-function closeFitWindow() {
-  if (!_fitWindow) return;
-  _fitWindow.el.remove();
-  _fitWindow = null;
-  document.body.classList.remove('modal-open');
-  document.removeEventListener('keydown', _fitWindowKey, true);
-}
-// Escape closes the window alone: the key stops here, so the panel under it stays open.
-function _fitWindowKey(e) {
-  if (e.key !== 'Escape') return;
-  e.stopPropagation();
-  closeFitWindow();
 }
 
 // Built-in header labels + tooltips for the log keys the build prompt asks a
@@ -5378,7 +4920,7 @@ function renderCustomPanelBody(cfgId) {
     const fitNote = _fitNotes[cfg.id] ? buildFitNoteHtml(_fitNotes[cfg.id]) : '';
     html += `<div class="strategy-panel-section-label settings-head" style="margin-top:14px"><span>Settings</span>`
       + `<span class="settings-actions">${buildFitButtonHtml(cfg.id)}`
-      + `<button type="button" class="settings-reset-btn" data-custom-reset="${_escHtml(cfg.id)}"${atDefaults || (_fit && _fit.key === cfg.id) ? ' disabled' : ''}>Reset to default</button></span></div>${fitNote}${controls}`;
+      + `<button type="button" class="settings-reset-btn" data-custom-reset="${_escHtml(cfg.id)}"${atDefaults ? ' disabled' : ''}>Reset to default</button></span></div>${fitNote}${controls}`;
   }
 
   // The signal mini chart: the lines the strategy declares (`lines:` in its
@@ -5606,28 +5148,10 @@ document.addEventListener('click', (e) => {
   if (reset) { resetPanelToDefaults(reset.getAttribute('data-sc-reset')); return; }
   const resetCustom = e.target.closest('[data-custom-reset]');
   if (resetCustom) { resetCustomToDefaults(resetCustom.getAttribute('data-custom-reset')); return; }
-  // The Fit window: a choice, Run, Map, its Freeze list (the head opens and closes it, Reset goes back to the usual ones), and the ways out.
-  if (_fitWindow && e.target.closest('.fit-modal')) {
-    if (e.target.closest('[data-fit-run]')) { runFitWindow(); return; }
-    if (e.target.closest('[data-fit-map]')) {
-      const { key, choices } = _fitWindow, period = fitPeriodOf(choices);
-      if (period && period.inverted) return;   // the picture is a way in too, and has no way to be greyed out
-      closeFitWindow();
-      openMapWindow(key);
-      return;
-    }
-    if (e.target.closest('[data-fit-freeze-toggle]')) { _fitWindow.freezeOpen = !_fitWindow.freezeOpen; showFitWindow(); return; }
-    if (e.target.closest('[data-fit-freeze-reset]')) { setFitFreezeChoices(_fitWindow.key, {}); showFitWindow(); return; }
-    if (e.target.closest('[data-fit-close]')) closeFitWindow();
-    return;
-  }
-  // Fit: the button opens the window, or stops a running search.
+  // Fit: the button opens the map of the key's settings, as Map in the Fit window did (the user, 2026-11-27: "when
+  // clicking on fit, directly open map window as if I clicked map battom from fit modal").
   const fitBtn = e.target.closest('[data-fit-key]');
-  if (fitBtn) {
-    if (_fit && _fit.key === fitBtn.getAttribute('data-fit-key')) { _fit.stopped = true; _fit.close(); return; }
-    openFitWindow(fitBtn.getAttribute('data-fit-key'));
-    return;
-  }
+  if (fitBtn) { openMapWindow(fitBtn.getAttribute('data-fit-key')); return; }
 
   // Parameters-panel config pills.
   const pill = e.target.closest('.saved-config-pill');

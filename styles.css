@@ -4274,19 +4274,12 @@
     background: rgba(134, 118, 255, 0.08);
   }
   .settings-reset-btn:disabled { opacity: 0.45; cursor: not-allowed; }
-  /* Fit (js/saved-configs.js buildFitButtonHtml): beside Reset to default, with its window and result line. */
+  /* Fit (js/saved-configs.js buildFitButtonHtml): beside Reset to default. It opens the map (js/settings-map.js), whose Use leaves a note under Settings. */
   .settings-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
   .settings-actions { display: inline-flex; align-items: center; gap: 8px; }
   .settings-fit-wrap { display: inline-flex; align-items: center; gap: 3px; }
-  .settings-fit-btn.running {
-    color: var(--accent-text); border-color: var(--accent); text-transform: none; letter-spacing: 0;
-    /* fills left to right as the search runs (js/saved-configs.js fitShowProgress) */
-    background: linear-gradient(to right, rgba(134, 118, 255, 0.18) var(--fit-pct, 0%), transparent var(--fit-pct, 0%));
-  }
-  /* The Fit window (js/saved-configs.js buildFitWindowHtml): a small dialog on the modal's backdrop. What to freeze, then a row
-     for each choice in the order it is made, the name left and its two options right, then Run. On a phone it is as wide as
-     the screen less a margin, and its body scrolls when the Freeze list is open. */
-  /* over the strategy panel it is opened from (150; on a phone the panel fills the screen), under the tooltips (10000) */
+  /* The map's window (js/settings-map.js) on the modal's backdrop, over the strategy panel it is opened from (150; on a phone
+     the panel fills the screen), under the tooltips (10000). It was the Fit window's; that window is gone since 27 November 2026. */
   .fit-modal { z-index: 400; }
   .fit-window { width: min(400px, calc(100vw - 24px)); height: auto; max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--shadow-lg); }
   .fit-window-head { display: flex; align-items: baseline; gap: 8px; padding: 12px 14px 8px; }
@@ -4301,60 +4294,20 @@
   .map-years { flex: none; display: inline-flex; align-items: baseline; gap: 6px; font-size: calc(11.5px * var(--ui-scale)); color: var(--text-muted); }
   @media (max-width: 899px) { .map-years { order: 1; flex-basis: 100%; } }
   .fit-window-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 4px; }
-  /* The Fit window itself (js/saved-configs.js buildFitWindowHtml). A narrow screen: the choices, then the map's card, scrolling together over Run. */
-  .fit-form-window { width: min(440px, calc(100vw - 24px)); }
-  .fit-window-main { flex: 1; min-height: 0; overflow-y: auto; }
-  .fit-form-window .fit-window-body { flex: none; overflow: visible; }
-  /* From 900px: 94% of the page, the choices with Run under them on the left, the map's card beside them taking two thirds
-     (the user, 2026-11-26: "for map make sure to utilize bigger screen space, looking into the map it's very important"). */
   @media (min-width: 900px) {
-    .fit-form-window { display: grid; width: 94vw; grid-template: "head head" auto "form map" minmax(0, 1fr) "run map" auto / minmax(360px, 1fr) minmax(0, 2fr); }
-    .fit-form-window .fit-window-head { grid-area: head; }
-    .fit-form-window .fit-window-main { display: contents; }
-    .fit-form-window .fit-window-body { grid-area: form; min-height: 0; overflow-y: auto; }
-    .fit-form-window .fit-window-foot { grid-area: run; border-top: 0; }
-    .fit-form-window .fit-map-card { grid-area: map; align-self: start; margin: 0 14px 12px 4px; }
-    /* The map: 96% of the screen, the chart with its legend on the left taking 70%, the strategy beside it in a column that scrolls by itself (its height is the chart's, whatever it holds). */
+    /* The map (the user, 2026-11-26: "for map make sure to utilize bigger screen space, looking into the map it's very important"): 96% of the screen, the chart with its legend on the left taking 70%, the strategy beside it in a column that scrolls by itself (its height is the chart's, whatever it holds). */
     .fit-window.map-window { width: 96vw; }
     .map-body { display: grid; grid-template-columns: minmax(0, 7fr) minmax(280px, 3fr); gap: 0 14px; overflow: hidden; }
     .map-side { position: relative; min-width: 0; border-left: 1px solid var(--border); }
     .map-side .map-detail { position: absolute; inset: 0 0 0 14px; overflow-y: auto; padding: 4px 4px 8px 0; }
   }
   .map-main { min-width: 0; }
-  /* The choices as sentences, a line each, in a strategy's own type (.custom-param-line): dropdowns and the limit's box inside the text. */
-  .fit-lines { padding: 6px 0 4px; border-top: 1px solid var(--border); }
-  .fit-line .inline-select { max-width: 100%; field-sizing: content; }   /* as wide as the choice it shows, where the browser can (else as its longest) */
-  .fit-line .fit-limit { vertical-align: baseline; width: calc(92px * var(--ui-scale)); margin: 0 2px; padding: 0 6px; border-radius: 4px; background: var(--surface2); line-height: 1.5; }
-  .fit-line .fit-limit input { padding: 2px 0; }
-  .fit-limit input:placeholder-shown + .fit-limit-unit { visibility: hidden; }   /* "any" and "buy & hold" are no percentages */
-  /* The map's card: its picture is the largest thing in the window, and a way in like the button under it. */
-  .fit-map-card { display: flex; flex-direction: column; gap: 8px; min-width: 0; margin: 4px 14px 12px; padding: 10px 12px 12px; border: 1px solid rgba(134, 118, 255, 0.45); border-radius: 12px; background: linear-gradient(180deg, rgba(134, 118, 255, 0.12), rgba(134, 118, 255, 0.03)); }
-  .fit-map-head { display: flex; align-items: center; gap: 2px; }
-  .fit-map-title { font-size: calc(15px * var(--ui-scale)); color: var(--text); }
-  .fit-map-count { margin-left: auto; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); }
-  .fit-map-preview { min-height: 150px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); overflow: hidden; cursor: pointer; }
-  .fit-map-preview:hover { border-color: var(--accent); }
-  .fit-map-card .fit-map-btn { padding: 8px 12px; border-color: var(--accent); background: var(--surface); }
-  /* the limit: a number and its percent sign in one box, inside the goal's sentence */
-  .fit-limit { display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; min-width: 0; border: 1px solid var(--border); }
-  .fit-limit:focus-within { border-color: var(--accent); }
-  .fit-limit input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-family: 'JetBrains Mono', monospace; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: right; }
-  .fit-limit input::placeholder { color: var(--text-muted); font-family: inherit; opacity: 0.8; }
-  .fit-limit-unit { font-size: calc(12px * var(--ui-scale)); color: var(--text-muted); }
-  .fit-years-note { padding: 0 0 4px; font-size: calc(11px * var(--ui-scale)); color: var(--red-text); }
-  .fit-run-btn:disabled, .fit-map-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .fit-run-btn:disabled { opacity: 0.45; cursor: not-allowed; }
   .fit-window-foot { display: flex; align-items: center; gap: 8px; padding: 10px 14px 12px; border-top: 1px solid var(--border); }
-  .fit-map-btn { flex: none; padding: 7px 16px; border: 1px solid var(--border); border-radius: 8px; background: none; font: inherit; font-size: calc(13px * var(--ui-scale)); font-weight: 600; color: var(--accent-text); cursor: pointer; }
-  .fit-map-btn:hover { border-color: var(--accent); background: rgba(134, 118, 255, 0.08); }
   .fit-run-btn { width: 100%; padding: 8px 12px; border: 0; border-radius: 8px; background: var(--accent); font: inherit; font-size: calc(13px * var(--ui-scale)); font-weight: 600; color: var(--bg); cursor: pointer; }
   .fit-run-btn:hover { filter: brightness(1.06); }
-  /* "Freeze" at the window's top (js/saved-configs.js buildFitFreezeHtml): a head that opens the strategy's sentences, a tick box on each value. */
-  .fit-freeze { padding-bottom: 2px; }
-  .fit-freeze-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 7px 0; border: 0; border-radius: 6px; background: none; font: inherit; font-size: calc(12px * var(--ui-scale)); color: var(--text); text-align: left; cursor: pointer; }
-  .fit-freeze-head:hover { background: rgba(134, 118, 255, 0.08); }
-  .fit-freeze-arrow { width: 10px; color: var(--text-muted); }
+  /* Freeze in the map's column (js/settings-map.js mapDetailHtml): the strategy's sentences, a tick box on each value. */
   .fit-freeze-notice { margin-left: auto; font-size: calc(10.5px * var(--ui-scale)); color: var(--accent-text); }   /* "2 changed": ticks that differ from the defaults */
-  .fit-freeze-body { padding: 0 0 6px; font-size: calc(11px * var(--ui-scale)); line-height: 2; color: var(--text-muted); }
   /* a section's name, as .custom-param-group writes it in Settings */
   .fit-freeze-section { margin: 6px 0 0; font-size: calc(9px * var(--ui-scale)); font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; line-height: 1.6; }
   .fit-freeze-glued { white-space: nowrap; }   /* a value and the text touching it stay on one line */
@@ -4365,9 +4318,6 @@
   /* A frozen value: a plain dropdown of its choices in the box's place, as wide as its choice where the browser can. */
   .fit-freeze-pick { font: inherit; color: var(--text); background: transparent; border: 0; padding: 0; margin: 0; max-width: 16em; field-sizing: content; cursor: pointer; }
   .fit-freeze-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 3px; }
-  .fit-freeze-reset { display: block; margin-top: 6px; padding: 3px 8px; border: 1px solid var(--border); border-radius: 6px; background: none; font: inherit; font-size: calc(11px * var(--ui-scale)); color: var(--text-muted); cursor: pointer; }
-  .fit-freeze-reset:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
-  .fit-freeze-reset:disabled { opacity: 0.45; cursor: default; }
   .fit-note { margin: 6px 0 2px; font-size: calc(11.5px * var(--ui-scale)); line-height: 1.4; color: var(--text-muted); }
   .fit-changes { margin: 4px 0 0; padding: 0; list-style: none; }
   /* A code strategy's explanation (js/saved-configs.js buildExplainHtml), as the 9sig panel's rules box. */

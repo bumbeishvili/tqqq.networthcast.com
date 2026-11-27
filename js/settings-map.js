@@ -7,27 +7,29 @@
 // and I want it to run itself and check all settings itself ... not just wait
 // for fit button, but itself finding some new strategies".
 //
-// "Map" in the Fit window opens a window with one dot for every set of the
+// The Fit button beside a strategy's settings opens a window with one dot for every set of the
 // strategy's settings that has been run on the chart's period and money: its
 // max drawdown across, its CAGR up (js/settings-map-chart.js draws it). Dashed
 // lines through the settings as they are split the plot in four; a set up and
 // to the left of them is better on both counts. The dots are the key's kept
-// runs (fitRunStore in js/saved-configs.js): a fit's runs are on the map, and
-// the map's runs make a later fit quicker. The settings frozen in the Fit
-// window stay as they are.
+// runs (fitRunStore in js/saved-configs.js), kept while the page lives. The
+// settings frozen in the column stay as they are. Since 27 November 2026 the
+// button opens this window itself: the Fit window, whose Map button it was, is
+// gone (the user: "let's get rid of actual fit functionality altogether and
+// when clicking on fit, directly open map window").
 //
 // The map fills itself from the moment it opens, and goes on until nothing new
 // shows (mapFill):
 //   1. The settings as they are, then every setting at each of its values with
 //      the others held.
-//   2. The search the Fit window is set to (its goal, limit, shape and
-//      numbers), run here without setting anything: the set it ends on is
-//      marked "Fit" on the plot. A window set to Cliff gets the same search
-//      on a plateau as well, unmarked: a plateau fit finds steady sets far
+//   2. The search of the kept choices (fitChoices: its goal, limit, shape and
+//      numbers, as the Fit window last had them), run without setting
+//      anything. On Cliff the same search runs on a plateau as well: a plateau
+//      fit finds steady sets far
 //      better than the rounds below do (2026-11-25, Late-week + overextended:
 //      after six minutes of rounds the checked sets' frontier held 187% at
 //      66% and 192% at 68%, CAGR at drawdown, where a plateau fit had 191% at
-//      60%). "Fewest settings" is left to Fit: it is many searches in a row.
+//      60%). "Fewest settings" is never run here: it is many searches in a row.
 //   3. Rounds, each of three steps.
 //      Breeding: new sets made from the frontier (the sets no other beats on
 //      both counts), one with one to three settings moved, or two mixed.
@@ -80,14 +82,12 @@ const MAP_KICK_SETTINGS = [2, 5];  // a kick moves this many of the best's setti
 const MAP_KICK_NEAR = 0.6;         // of a number setting's kicks, the share to a value near its own,
 const MAP_KICK_REACH = 0.15;       // within this share of its list's length either way; the rest to any value
 const MAP_PROGRESS = { star: 0.1, fit: 0.4, stall: 0.1 };   // the shares of the percentage for the first step, the search, and the quiet rounds at the end; the checks take the rest
-const MAP_FIT_LABEL = 'Fit';       // the name on the plot of the set the search ended on
 const MAP_WORST_LABEL = 'worst case';   // and of the end of a picked dot's dotted line
 const MAP_REDRAW_MS = 400;         // the window follows a running map this often
 const MAP_CHART_SHARE = 0.85;      // the chart's height against its width (a wide screen's chart is as tall as the screen allows),
 const MAP_CHART_MIN = 300;         // at least this many px (a phone's chart is narrow),
 const MAP_CHART_CHROME = 220;      // and at most the screen's height less what the window needs besides: its head, the legend, the buttons
 const MAP_HIT_PX = { fine: 14, coarse: 22 };   // how near a dot the pointer, or a finger, has to be
-const MAP_PREVIEW_HEIGHT = { share: 0.85, min: 150, chrome: 260 };   // the picture in the Fit window: its height against its width, at least min px, at most the screen's height less what the window needs besides
 const MAP_FROZEN_TEXT = 'Every setting is frozen.';
 const MAP_INVERTED_TEXT = 'The last year is before the first.';
 // What the reader sees, in everyday words, a thought a line (a tip keeps its line breaks).
@@ -98,7 +98,6 @@ const MAP_TIP = [
   'A dot up and left of the dashed lines beats your settings on both CAGR and max drawdown.',
   'The map tries new combinations by itself until it finds nothing better.',
   'Click a dot to see its settings. Use puts them on your strategy.',
-  'Fit marks what Run in the Fit window would pick.',
   'Zoom: ⌘ or Ctrl + scroll, or pinch. Drag to move.',
 ].join('\n');
 const MAP_PLATEAU_TIP = [
@@ -141,7 +140,6 @@ const MAP_RUN_TIP = [
 const MAP_FREEZE_TIP = [
   'Tick a value to freeze it: the map keeps it as it is.',
   'The map then only tries settings with that value.',
-  'The Fit window uses the same ticks.',
 ].join('\n');
 const MAP_LINK_TIP = 'Share a link that opens this map and starts it running.';
 const MAP_CSV_TIP = "Download every dot as a CSV file: CAGR, max drawdown, and each setting's value.";
@@ -533,11 +531,6 @@ const mapPlanKey = (job, plan) => JSON.stringify([job.space.map(s => [s.id, job.
 // dots (mapResultKey), or null where nothing met the limit.
 const mapFitsOf = (job) => job.store.mapFits || (job.store.mapFits = {});
 const mapSearched = (map, plan) => mapPlanKey(map.job, plan) in mapFitsOf(map.job);
-// The dot of the set the Fit window's own search (map.plans[0]) ended on, if it ran and ended within its limit.
-function mapFitDot(map) {
-  const fit = map.job ? mapFitsOf(map.job)[mapPlanKey(map.job, map.plans[0])] : null;
-  return (fit && map.byResult.get(fit)) || null;
-}
 // One of the map's searches (map.plans), run on its own runs with nothing set on the strategy.
 // Its result is kept with the runs, so a window opened later on the same choices has it without
 // searching. run.fit is what fitSearch keeps its progress in; it stops with the map.
@@ -581,7 +574,7 @@ async function mapFill(map, measure, over) {
     for (const plan of map.plans) {
       if (!mapSearched(map, plan)) await mapFitStage(map, measure, plan);
       if (over()) return false;
-      run.searched++;   // the first is the one the Fit window asked for: its result is marked "Fit", and picked only by a click
+      run.searched++;
     }
   }
   // The rounds below came to their end before on these settings and this plan (in its other shape, or from another start): only the searches were missing.
@@ -638,7 +631,7 @@ function mapPercent(map) {
 // them at the end. A run that fails while the work goes on is remembered (map.failed), so a
 // check does not wait for it.
 async function mapWork(map, kind, work) {
-  if (map.run || _fit || !map.job) return;
+  if (map.run || !map.job) return;
   const { job } = map, run = map.run = { kind, stopped: false, step: null, star: null, searched: 0, fit: null, stalled: 0, measure: null, close: null, ended: null };
   const runs = job.start(() => !run.stopped);
   run.close = runs.close;
@@ -671,8 +664,8 @@ function stopMapWork(map) {
 // ---- The window ----
 // The window's job and dots, from the settings, the frozen ones and the kept runs as they are now,
 // and the searches it will run (setMapPlan). found: what fitJobFor gave for the key ({} for years
-// that end before they start, which have no job); period: the Fit window's years where they are
-// set (fitPeriodOf), which the job was made for.
+// that end before they start, which have no job); period: the head's years where they are set
+// (fitPeriodOf), which the job was made for.
 function setMapJob(map, found, period) {
   const job = found.job || null;
   Object.assign(map, { job, frozen: !!found.frozen, inverted: !!(period && period.inverted), space: job ? job.space.map(mapSetting) : [], years: period ? period.text : null,
@@ -684,8 +677,8 @@ function setMapJob(map, found, period) {
   setMapPlan(map, period);
   mapSync(map);
 }
-// The searches a map runs, from the Fit window's choices as they are now: its plan without
-// "fewest settings", and for a window set to Cliff the same plan on a plateau after it.
+// The searches a map runs, from the kept choices as they are now (fitChoices): their plan without
+// "fewest settings", and on Cliff the same plan on a plateau after it.
 function setMapPlan(map, period) {
   const { job } = map, plan = Object.assign(fitPlanOf(fitChoices()), { fewest: false });
   const floor = job ? fitFloorFor(map.key, plan, job.cagrOf, period) : { lacking: true };
@@ -695,9 +688,9 @@ function setMapPlan(map, period) {
     plans: plan.plateau ? [plan] : [plan, Object.assign({}, plan, { plateau: true })] });
 }
 const mapTipIcon = (tip, mark = '') => `<span class="info-icon" tabindex="0" data-tip-wide${mark} data-tip="${_escHtml(tip)}">ⓘ</span>`;
-// The head names the strategy and the years it is mapped on, the Fit window's two year dropdowns
-// (the user, 2026-11-26: "also can you make sure we also have year filters for the map?").
-// choices: the Fit window's, which the years are one of.
+// The head names the strategy and the years it is mapped on, in two year dropdowns (the user,
+// 2026-11-26: "also can you make sure we also have year filters for the map?").
+// choices: the kept choices (fitChoices), which the years are one of.
 function buildMapWindowHtml(key, choices) {
   return `<div class="modal-backdrop" data-map-close></div>`
     + `<div class="modal-content fit-window map-window" role="dialog" aria-modal="true" aria-label="Map">`
@@ -720,7 +713,7 @@ function buildMapWindowHtml(key, choices) {
 // other people open it it will start processing accordingly". An open map rides in the page's
 // share link (shareConfig, js/controls.js) as `mp`, whose map it is (a panel by its name, a
 // saved strategy by its place among those the link carries, as `spc` names the open panel), and
-// `mc`, the Fit window's choices it runs on. What is frozen travels as it always did: a
+// `mc`, the kept choices it runs on (fitChoices). What is frozen travels as it always did: a
 // strategy's ticks with the strategy, a panel's in `fz`. The runs themselves do not travel: the
 // reader's map starts from nothing and fills itself.
 // shared: the strategies the link carries, in its order. Null with no map open, or one of a
@@ -732,15 +725,15 @@ function mapShareParams(shared) {
 }
 // On arrival (js/init.js): the link's choices are taken for this visit, and the map opens as soon
 // as its strategy can be mapped. A code strategy's settings come back with its first run, so the
-// way in is tried again until then, for a minute at most; a reader who opened Fit or a map by
-// hand meanwhile is left alone.
+// way in is tried again until then, for a minute at most; a reader who opened a map by hand
+// meanwhile is left alone.
 const MAP_LINK_WAIT = { everyMs: 250, tries: 240 };
 function openSharedMap(key, choicesText) {
   if (fitIsPanel(key) && !FIT_PANELS[key.slice(6)]) throw new Error('The link names a map of an unknown panel: ' + key.slice(6));
   if (choicesText) useSharedFitChoices(choicesText);
   let tries = 0;
   const attempt = () => {
-    if (_map || _fitWindow) return;
+    if (_map) return;
     openMapWindow(key);
     if (!_map && ++tries < MAP_LINK_WAIT.tries) setTimeout(attempt, MAP_LINK_WAIT.everyMs);
   };
@@ -749,11 +742,11 @@ function openSharedMap(key, choicesText) {
 // What fitJobFor gives for the key on these years, or {} (no job, the window still opens) for
 // years that end before they start: the head's dropdowns are the way to set them right.
 const mapJobFor = (key, period) => (period && period.inverted ? {} : fitJobFor(key, period));
-// Opened from the Fit window. It starts filling itself at once, unless it was done before on the same choices.
+// Opened by the Fit button. It starts filling itself at once, unless it was done before on the same choices.
 function openMapWindow(key) {
   const choices = fitChoices(), period = fitPeriodOf(choices), found = mapJobFor(key, period);
   if (!found) return;   // nothing to map: no such strategy, no setting with a choice, or the chart not drawn yet
-  closeMapWindow(false);
+  closeMapWindow();
   const el = document.createElement('div');
   el.className = 'modal fit-modal map-modal';
   const map = _map = { el, key, picked: null, chart: null, run: null };
@@ -767,27 +760,25 @@ function openMapWindow(key) {
   showMap();
   if (!mapIsDone(map)) startMapFill(map);
 }
-// back: the reader closed it, so the Fit window it was opened from comes back.
-async function closeMapWindow(back) {
+async function closeMapWindow() {
   const map = _map;
   if (!map) return;
   _map = null;
   map.el.remove();
   document.body.classList.remove('modal-open');
   document.removeEventListener('keydown', _mapWindowKey, true);
-  if (back) openFitWindow(map.key);
   await stopMapWork(map);
 }
 // Escape closes the window alone: the key stops here, so the panel under it stays open.
 function _mapWindowKey(e) {
   if (e.key !== 'Escape') return;
   e.stopPropagation();
-  closeMapWindow(true);
+  closeMapWindow();
 }
 function onMapWindowClick(e) {
   const map = _map, on = (selector) => e.target.closest(selector);
   if (!map) return;
-  if (on('[data-map-close]')) { closeMapWindow(true); return; }
+  if (on('[data-map-close]')) { closeMapWindow(); return; }
   if (on('[data-map-run]')) { if (map.run) stopMapWork(map); else startMapFill(map); return; }
   if (on('[data-map-csv]')) { downloadMapCsv(map); return; }
   if (on('[data-map-link]')) { shareConfig(true); return; }   // the page's share link, which names the open map (mapShareParams), to the share sheet where there is one
@@ -824,7 +815,7 @@ function useMapDot(map) {
   _fitNotes[job.key] = { text: `${fitYearsNote(map.years)}From the map: ${changed.length} setting${changed.length > 1 ? 's' : ''} changed. ${moved}.${dot.flat ? ' ' + mapWorstText(job, dot) : ''}`,
     changes: fitChangesOf(job.space, job.cur, dot.values) };
   job.apply(dot.values, changed);
-  closeMapWindow(false);
+  closeMapWindow();
   render();
 }
 
@@ -856,9 +847,9 @@ function drawMap() {
       // (the user, 2026-11-25: "make sure click can be discarded explicitly via button and not by empty area click on chart").
       .onPick((dot) => { if (dot) pickMapDot(dot.id); });
   }
-  // Asked for many times a second while the map fills itself: drawn again only when the dots, the pick, the mark or the room changed.
-  const width = box.getBoundingClientRect().width, fit = mapFitDot(map);
-  const state = [map.version, map.picked, fit ? fit.id : '', width, window.innerHeight, map.frozen].join('|');
+  // Asked for many times a second while the map fills itself: drawn again only when the dots, the pick or the room changed.
+  const width = box.getBoundingClientRect().width;
+  const state = [map.version, map.picked, width, window.innerHeight, map.frozen].join('|');
   if (map.drawn === state) return;
   map.drawn = state;
   const picked = map.picked ? map.dots.get(map.picked) : null;
@@ -872,44 +863,17 @@ function drawMap() {
 }
 // A map on a chart: its dots (a tested one sized by how it holds), the line through the ones with
 // the highest CAGR, the settings as they are, the best dot with the curve of results as good, and
-// the Fit mark. The window's chart, and the picture of the map in the Fit window.
+// buy & hold TQQQ.
 function mapPlot(map, chart) {
-  const now = mapNowDot(map), fit = mapFitDot(map), best = mapBestDot(map), { hold } = map;
+  const now = mapNowDot(map), best = mapBestDot(map), { hold } = map;
   return chart
     .data(mapDotList(map).map(dot => Object.assign({ id: dot.id, size: dot.flat ? mapHolds(dot) : null }, mapOwnAt(dot))))
     .frontier(mapFronts(map).own.map(mapOwnAt))
     .now(now ? mapOwnAt(now) : null)
     .tie(best ? mapTieCagr(mapDotValue(best)) : null)
-    // Named places: the best dot in green, the Fit window's pick (one name with the best's when it is
-    // the same dot), and buy & hold TQQQ in yellow.
-    .flags([].concat(best ? Object.assign({ id: 'best', kind: 'best', label: best === fit ? `${MAP_BEST_LABEL} · ${MAP_FIT_LABEL}` : MAP_BEST_LABEL }, mapOwnAt(best)) : [],
-      fit && fit !== best ? Object.assign({ id: 'fit', label: MAP_FIT_LABEL }, mapOwnAt(fit)) : [],
+    // Named places: the best dot in green and buy & hold TQQQ in yellow.
+    .flags([].concat(best ? Object.assign({ id: 'best', kind: 'best', label: MAP_BEST_LABEL }, mapOwnAt(best)) : [],
       hold ? { id: 'hold', kind: 'hold', label: MAP_HOLD_LABEL, x: hold.dd * 100, y: map.job.cagrOf(hold.final) } : []));
-}
-// ---- The map's picture in the Fit window ----
-// The map as it stands, from the runs kept so far and with nothing run, drawn into `box`: what a
-// map opened now on the same years and frozen settings starts from. Gives back what the card
-// says beside it ({ tried, done }), or null when there is nothing to map. view: the caller's own
-// holder for the picture ({} at first), one for as long as its window is open: a window drawn
-// again draws on the chart it has, and the dots are read off the kept runs only when the years,
-// the frozen settings or their values changed (the Fit mark follows every other choice).
-function showMapPreview(view, box, key, period) {
-  const free = fitFreeIds(key), stands = [period ? period.text : '', free ? Array.from(free).join(',') : '', fitFrozenValues(key)].join('|');
-  if (view.map && view.stands === stands) setMapPlan(view.map, period);
-  else {
-    const found = fitJobFor(key, period, true);
-    Object.assign(view, { stands, map: found ? { key, picked: null } : null });
-    if (found) setMapJob(view.map, found, period);
-  }
-  const { map } = view;
-  if (!map) return null;
-  view.chart = view.chart || new SettingsMapChart().interactive(false);
-  const width = box.getBoundingClientRect().width, H = MAP_PREVIEW_HEIGHT;
-  mapPlot(map, view.chart.container(box))
-    .svgHeight(map.dots.size ? Math.round(Math.max(H.min, Math.min(width * H.share, window.innerHeight - H.chrome))) : H.min)   // a map with nothing on it yet takes the least room
-    .emptyText(map.frozen ? MAP_FROZEN_TEXT : 'Not mapped yet')
-    .render();
-  return { tried: map.dots.size, done: mapIsDone(map) };
 }
 // A set's worst result among its neighbours, in the words the window uses: short and plain (the user, 2026-11-26, of
 // "Worst case with one setting 10% off: ...": "easy to understand words, just barely").
@@ -951,7 +915,7 @@ function mapDetailHtml(map) {
   const free = new Map(job ? job.space.map(s => [s.id, s]) : []);
   const settings = fitSettings(map.key), byId = new Map(settings.map(s => [s.id, s])), choices = fitFreezeChoices(map.key);
   // A value as it is, or where the dot changes it the one it has now struck through with the dot's
-  // beside it. One a search can change carries a tick box: ticked, it is frozen (Freeze, as in the Fit window).
+  // beside it. One a search can change carries a tick box: ticked, it is frozen (Freeze).
   const value = (slot) => {
     const s = free.get(slot.id), setting = byId.get(slot.id);
     const text = !dot || !s || String(dot.values[s.id]) === String(job.cur[s.id]) ? `<span class="map-value">${_escHtml(slot.value)}</span>`
@@ -962,7 +926,6 @@ function mapDetailHtml(map) {
   const notes = !dot ? [] : [dot.differs ? '' : 'Your settings now.',
     dot === best ? 'The best on this map.'
       : best ? `Not the best: $1 ends at ${mapMoneyText(mapDotValue(dot))}, the best's at ${mapMoneyText(mapDotValue(best))}.` : '',
-    dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what the Fit window would pick.` : '',
     dot.flat ? mapWorstText(job, dot) : (picked || dot === best) && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
   const changed = fitFreezeChanged(settings, choices);
   // A dot other than the settings now: each number with the one now struck through before it, as its settings are
@@ -986,7 +949,7 @@ function mapDetailHtml(map) {
 // keep every frozen setting as it is stay (a code strategy's runs are kept whatever is frozen; a
 // panel's start over), and the map fills itself again unless it was done for these settings and
 // years. A strategy's runs are kept for one set of years (fitRunStore): other years start the map
-// over, as they do in the Fit window, and so does going back to years mapped before.
+// over, and so does going back to years mapped before.
 // Years that end before they start have nothing to map: the chart says so until they are set right.
 // Changes made in a row: the last one's turn is the one that goes on.
 async function redoMap(map) {
@@ -1000,7 +963,7 @@ async function redoMap(map) {
 }
 // A tick on a value in the column freezes its setting, an empty box lets the map change it, and a
 // frozen setting's dropdown sets it on the strategy. A year picked in the head is kept with the
-// Fit window's choices, so Fit runs on it too. Each runs the map again.
+// choices (keepFitChoices), so the next map opens on it. Each runs the map again.
 function onMapWindowChange(e) {
   const map = _map, box = e.target.closest('[data-map-freeze-id]'), year = e.target.closest('[data-fit-year]'), set = e.target.closest('[data-fit-set-id]');
   if (!map) return;
@@ -1049,6 +1012,6 @@ function showMapFoot() {
   button.classList.toggle('running', filling);
   button.style.setProperty('--fit-pct', pct + '%');
   button.hidden = !map.job || done;
-  button.disabled = !!_fit || (!!map.run && !filling);
+  button.disabled = !!map.run && !filling;
   map.el.querySelector('[data-map-csv]').disabled = !tried;
 }
