@@ -5093,19 +5093,22 @@ const MONTH_OPTIONS_SRC = JSON.stringify(["January", "February", "March", "April
 // October through July (43.3% a year, drawdown 75%, before the trading cost and
 // cash interest; the Halloween months November through April made 15.3%). The
 // turn's defaults stay the published last 1 and first 3 days: its own fit ran to
-// "nearly always in".
+// "nearly always in". Since 27 November 2026 the season is the user's pick on the
+// map of 2010-2025 rerun with the drawdown taken at every close ("add these three
+// too"): July alone, QQQ outside, a switch at one close (27.4% a year with $80K and
+// $3K a month, max drawdown 32.4%; May to November with cash made 36.0% with 59.2%).
 CODE[55] = `{
   name: "Seasonal TQQQ",
   params: [
     { id: "pattern", label: "Pattern", tip: "The season: TQQQ from the first trading day of the start month to the last of the end month. The turn: TQQQ through the last few trading days of every month and the first few of the next.", text: "Hold TQQQ by the calendar: {}.", default: "season", options: [
       { value: "season", label: "the season, start month to end month" }, { value: "turn", label: "the turn of every month" } ] },
-    { id: "startMonth", label: "Season starts", tip: "The first month of the TQQQ season (the Halloween indicator buys at the end of October).", text: "The season runs from the first trading day of {}", default: 5, options: ${MONTH_OPTIONS_SRC} },
-    { id: "endMonth", label: "Season ends", tip: "The last month of the TQQQ season (the Halloween indicator sells at the end of April).", text: "to the last trading day of {}.", default: 11, options: ${MONTH_OPTIONS_SRC} },
+    { id: "startMonth", label: "Season starts", tip: "The first month of the TQQQ season (the Halloween indicator buys at the end of October).", text: "The season runs from the first trading day of {}", default: 7, options: ${MONTH_OPTIONS_SRC} },
+    { id: "endMonth", label: "Season ends", tip: "The last month of the TQQQ season (the Halloween indicator sells at the end of April).", text: "to the last trading day of {}.", default: 7, options: ${MONTH_OPTIONS_SRC} },
     { id: "tomBefore", label: "Turn: last days of a month", tip: "With the turn pattern: how many of a month's last trading days TQQQ is held through. The month's remaining trading days are counted from the calendar's weekdays when the data has not reached them yet.", text: "With the turn pattern, hold TQQQ through the last {} trading days of a month", default: 1, options: Array.from({ length: 11 }, (_, k) => k) },
     { id: "tomAfter", label: "Turn: first days of a month", tip: "With the turn pattern: how many of the next month's first trading days TQQQ is held through.", text: "and the first {} trading days of the next.", default: 3, options: Array.from({ length: 11 }, (_, k) => k) },
-    { id: "offHold", label: "Outside the window", tip: "What the money holds outside the TQQQ window.", text: "Outside the window hold {}.", default: "cash", options: [
+    { id: "offHold", label: "Outside the window", tip: "What the money holds outside the TQQQ window.", text: "Outside the window hold {}.", default: "qqq", options: [
       { value: "cash", label: "cash" }, { value: "qqq", label: "QQQ" } ] },
-    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch between TQQQ and QQQ sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days: {}.", type: "bool", default: true, options: [
+    { id: "splitDays", label: "One trade per day", tip: "Yes: a switch between TQQQ and QQQ sells today and buys tomorrow. No: both at one close.", text: "Spread a switch between two funds over two days: {}.", type: "bool", default: false, options: [
       { value: true, label: "Yes" }, { value: false, label: "No" } ] }
   ],
   columns: [{ key: "inWindow", label: "TQQQ window", tip: "1 while the calendar window holds TQQQ, 0 outside it." }],
@@ -5174,7 +5177,10 @@ ${WEEKLY_MONTH_END_SNIPPET}
 // cost and cash interest). They were the fit over the option grids: a 15-day
 // breakout, a 100-day exit, no stop (37.6% a year, drawdown 81%, before the cost
 // and interest); the Turtles' 55/20 with a 3-move stop made 3.0%, 20/10 with a
-// 2-move stop 9.2%.
+// 2-move stop 9.2%. Since 27 November 2026 the stop is 4.6 moves, the user's pick on the
+// map rerun with the drawdown taken at every close ("add these three too"; 37.0% a year
+// with $80K and $3K a month, max drawdown 32.3%; 4.5 made 36.3% with 32.4%). The map
+// tries values between a dropdown's steps, so 4.6 joins the half steps.
 CODE[56] = `{
   name: "Donchian breakout + ATR stop",
   params: [
@@ -5182,8 +5188,8 @@ CODE[56] = `{
       [5, 10, 15, 19, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 180, 200, 220, 250, 300] },
     { id: "exitDays", label: "Sell under the low of (days)", tip: "TQQQ is sold at a close under its lowest close of this many prior days. The Turtles used 10 and 20.", text: "Sell when it closes under its lowest close of the last {} days,", default: 40, options:
       [3, 5, 7, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100, 120, 150] },
-    { id: "atrMult", label: "Stop: average moves below the peak", tip: "The trailing stop sits this many average daily moves under the highest close since the entry. The Turtles used 2 true ranges.", text: "or under a stop {} average daily moves below its highest close since the buy.", default: 4.5, options:
-      Array.from({ length: 19 }, (_, k) => +(1 + 0.5 * k).toFixed(1)).concat([{ value: 0, label: "Off" }]) },
+    { id: "atrMult", label: "Stop: average moves below the peak", tip: "The trailing stop sits this many average daily moves under the highest close since the entry. The Turtles used 2 true ranges.", text: "or under a stop {} average daily moves below its highest close since the buy.", default: 4.6, options:
+      Array.from({ length: 19 }, (_, k) => +(1 + 0.5 * k).toFixed(1)).concat(4.6).sort((a, b) => a - b).concat([{ value: 0, label: "Off" }]) },
     { id: "atrDays", label: "Average move over (days)", tip: "The average absolute close-to-close change over this many days: the unit the stop is measured in.", text: "The average move covers the last {} days.", default: 5, options:
       [5, 7, 10, 14, 20, 25, 30, 40, 50, 60, 80, 100] }
   ],
