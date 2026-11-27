@@ -92,6 +92,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: traded fund vs the MEDIAN of its own last 250 closes. Exit: price > 55% above the median → park (cash by default). Enter: any time it is not. Freq: daily. Overextension filter only — there is no downside rule, so it holds all the way through every crash.',
     here: '62.4% / −79.1%', reported: 'Hand-picked; numbers are this app’s own backtest, not an external claim' },
   { n: 39, name: 'SSO overheat exit', formerNames: ['Overheat exit \u2014 SSO signal (sell when stretched)'], tag: 'picked', runnable: true,
+    hidden: true,   // the user, 2026-11-27: "remove this strategy completelly from library"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Signal: SSO vs its own 150-day SMA. Exit: signal closes >20% above the SMA \u2192 park (cash by default). Enter: any time it is not. Freq: daily. Signal and traded fund are separate knobs. Overextension filter only \u2014 like Median overextension 250d it has no downside rule, so it holds through every crash.',
     here: '\u2014', reported: 'Hand-picked; numbers are this app\u2019s own backtest, not an external claim' },
   { n: 40, name: 'Overextension, SQQQ park', formerNames: ['Median overextension (250d) \u2014 SQQQ park'], tag: 'picked', runnable: true,
