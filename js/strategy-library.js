@@ -113,7 +113,7 @@ const STRATEGY_LIBRARY = [
     hidden: true,   // the user, 2026-11-27: "remove this completelly"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Top-ranked min drawdown row from the 9sig overfit explorer, tuned on 2010–2025 (in-sample CAGR 30.01%, drawdown 19.41%). Runs as a code strategy on the app’s 9sig engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 2010–2025: 30.01% CAGR / −19.41% DD' },
-  { n: 29, name: '9sig · max return 1990–2025', tag: 'overfit', runnable: true,
+  { n: 29, name: '84-25 - 9sig', formerNames: ['9sig · max return 1990–2025'], tag: 'overfit', runnable: true,
     rules: 'Top-ranked max return row from the 9sig overfit explorer, tuned on 1990–2025 (in-sample CAGR 42.24%, drawdown 81.66%). Runs as a code strategy on the app’s 9sig engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 1990–2025: 42.24% CAGR / −81.66% DD' },
   { n: 30, name: '9sig · min drawdown 1990–2025', tag: 'overfit', runnable: true,
@@ -134,7 +134,7 @@ const STRATEGY_LIBRARY = [
     hidden: true,   // the user, 2026-11-27: "remoe this" / "and also this"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Top-ranked min drawdown row from the SMA overfit explorer, tuned on 2010–2025 (in-sample CAGR 61.01%, drawdown 44.5%). Runs as a code strategy on the app’s SMA engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 2010–2025: 61.01% CAGR / −44.5% DD' },
-  { n: 35, name: 'SMA · max return 1990–2025', tag: 'overfit', runnable: true,
+  { n: 35, name: '84-25 - SMA', formerNames: ['SMA · max return 1990–2025'], tag: 'overfit', runnable: true,
     rules: 'Top-ranked max return row from the SMA overfit explorer, tuned on 1990–2025 (in-sample CAGR 54.13%, drawdown 81.66%). Runs as a code strategy on the app’s SMA engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 1990–2025: 54.13% CAGR / −81.66% DD' },
   { n: 36, name: 'SMA · min drawdown 1990–2025', tag: 'overfit', runnable: true,
@@ -410,6 +410,24 @@ STRATEGY_LIBRARY.push(
     rules: 'Fitted to 1984-2025: 10-25 - Late-week + overextended as it was on 26 November 2026, with 13 settings moved. Hold SQQQ while SOXX closes more than 44% above the median of its last 234 closes, today’s included, and go back to TQQQ at the first close that does not. In a week where TQQQ’s Wednesday close is under the median of the 28 closes before it, or less than 3.5% over it, SQQQ from that close to Monday’s, with the weekend check. The week is skipped when SPY’s RSI over 5 days is at 32 or under at that close, and such a week is still taken, through the days before the weekend, when SSO’s return over 18 days is under QLD’s by more than 1%.\n\nAs settings: every setting of 10-25 - Late-week + overextended.',
     here: '—',
     reported: 'Your request (26 November 2026): your copy of Late-week + overextended SQQQ (now 10-25 - Late-week + overextended) after a pick on the map of 1984 to 2025, as a strategy of its own. Its defaults are your third pick on that map (27 November 2026), 13 settings off those of 10-25 - Late-week + overextended on 26 November (the first pick’s in brackets): the down trend under the 28-day median (33) or less than 3.5% over it (1.5%); the RSI read on SPY (QQQ) over 5 days (9), at 32 (30.5); the lagging-fund rule on SSO (SOXX) against QLD (QQQ), over 18 days (12), by more than 1% (5.5%); and the line at 44% (43%) over SOXX’s 234-day median (233). Your map’s numbers, 109.8% a year and a 70.2% max drawdown on 1984 to 2025 with $80K and $3K a month, are these settings’: 109.7% and 70.2% here. It is fitted on 1984 to 2025, so those years are no test of it. 1984 to 2025 (prices before 2010 reconstructed, SOXX before 1994 from a stand-in for its index): 105.8% a year (max drawdown 70.2%, July 2001 to April 2002; worst 12 months −66%) against 99.4% (75.1%, −70%) for the first pick, 65.2% (99.9%) for 10-25 - Late-week + overextended on 26 November and 11.5% for buy & hold TQQQ. Q1 2010 to Q4 2025: 111.4% a year (max drawdown 61.5%, May to December 2022; worst 12 months −25%) against 110.7% (64.8%, −54%) for the first pick, 92.8% (62.9%) for the second of 26 November, 223.9% (42.6%) for 10-25 - Late-week + overextended on 26 November and 40.0% for buy & hold TQQQ; 2010–17 97.7% (111.9%), 2018–25 126.0% (109.4%); no year down. January to 25 November 2026: up 164.4% against 101.9% for the first pick, 471.8% for 10-25 - Late-week + overextended on 26 November and −13.6% for TQQQ. One step either way on any of its eight number settings makes 95.3% to 105.9% a year on 1984 to 2025 and 98.4% to 112.1% on 2010 to 2025; the steepest is the RSI at 32.5 (95.3%, max drawdown 85.5%). The line read on TQQQ in place of SOXX: 78.7% on 1984 to 2025, 111.3% since 2010; the RSI read on TQQQ: 86.7% and 119.3%. Without the line: 83.4% (max drawdown 92.9%) on 1984 to 2025, 111.2% since 2010. Over 1984 to 2025 SOXX closed over the line in 54 stretches, and SQQQ rose over 47 of them; since 2010 in 5, and SQQQ rose over 4. In SQQQ on 25% of days since 1984, 20% since 2010.' });
+
+// Library order keeps each family of names together (the user, 2026-11-27: "in library order make sure that all
+// 10-25 84-25 min and bare strategies are together"). Each run of prefixes is one block, standing where the first
+// of its members stood, its members in that order of prefixes and otherwise as they were: the Bare entries; then
+// the Min entries, the 10-25 ones (its Min entries first, next to them) and the 84-25 ones. Every other entry keeps
+// its place. An entry named later with one of these prefixes joins its block by itself.
+const LIBRARY_NAME_RUNS = [['Bare '], ['Min - ', '10-25 - Min - ', '10-25 - ', '84-25 - ']];
+function keepNameRunsTogether(list, runs) {
+  return runs.reduce((order, prefixes) => {
+    const rank = e => prefixes.findIndex(p => e.name.startsWith(p));
+    const at = order.findIndex(e => rank(e) >= 0);
+    if (at < 0) return order;
+    const members = order.filter(e => rank(e) >= 0).sort((a, b) => rank(a) - rank(b));   // a stable sort
+    const others = order.filter(e => rank(e) < 0);
+    return others.slice(0, at).concat(members, others.slice(at));   // nothing before `at` is a member
+  }, list);
+}
+STRATEGY_LIBRARY.splice(0, STRATEGY_LIBRARY.length, ...keepNameRunsTogether(STRATEGY_LIBRARY.slice(), LIBRARY_NAME_RUNS));
 
 // The entries given a trading cost and cash interest on 26 November 2026 (withCostAndCash in
 // js/strategy-library-code.js; the user: "make sure all strategies have switching cost and cash percentage"). Their
