@@ -35,6 +35,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: SPY vs its 40-day average. Enter: above → SPXL (3× S&P). Exit: below → cash. Freq: daily.',
     here: '≈ #10', reported: '26.8% CAGR · −92.2% DD · Sharpe 0.47 (1928–2015) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), 40 days: with $80K and $3K a month 21.2% a year, max drawdown 37.3% (297 days, your pick of 26 November on the drawdown taken only on the logged days: 25.0%, 53.1%; 200 days, the published setting: 24.4%, 48.7%)', src: 'GB' },
   { n: 3, name: 'Gayed & Bilello LRS 2×', tag: 'academic', runnable: true,
+    hidden: true,   // the user, 2026-11-27: "also remove this"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Signal: SPY vs its 199-day average. Enter: above → SSO (2× S&P). Exit: below → cash. Freq: daily.',
     here: '≈ SSO rows', reported: '19.1% CAGR · −78.7% DD · Sharpe 0.51 (1928–2015) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), 199 days: with $80K and $3K a month 18.1% a year, max drawdown 33.6% (297 days, your pick of 26 November on the drawdown taken only on the logged days: 18.7%, 38.0%; 200 days, the published setting: 18.1%, 33.6%)', src: 'GB' },
   { n: 5, name: 'HedgeFundie 55/45 UPRO/TMF', formerNames: ["HedgeFundie's Excellent Adventure (55/45 UPRO/TMF)"], tag: 'portfolio', runnable: false, needs: 'TMF',
