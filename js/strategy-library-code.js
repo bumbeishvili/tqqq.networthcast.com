@@ -6070,6 +6070,8 @@ CODE[70] = bareStrategy({
 // A fourth time, the same day, on a screenshot of the settings with both rules in ("set this as
 // default"): the RSI over 10 days again; the rest as before. These make 149.1% a year (56%, worst
 // 12 months -39%) and 251% in 2026; the RSI over 9 days 153.8% (51%, -33%).
+// A fifth time, 27 November 2026, from the map: set further down, after #73 and #75, which are
+// built from this code as it was.
 // It is a weekly routine: the down trend is read where the week's days out start (at the sale and
 // at the purchase with one trade a day) and not again inside them, so the money never leaves TQQQ
 // late in a week. It comes back early in one case, the weekend check, on by default since
@@ -6475,6 +6477,26 @@ CODE[73] = withTips(withDefaults(LATE_WEEK_OVER_BASE, { name: LATE_WEEK_OVER, de
   overTake: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 2010-2025 SPXL closed more than 67% above its 390-day median in 45 stretches, and SOXS rose over 38 of them.",
   overPct: "How far above its median the close must be. With SPXL's 390-day median in 2010-2025: 60% made 218.6% a year, 65% 257.0%, 67% 285.9%, 70% 229.9%, 75% 181.7%. Without the rule, 173.3%.",
   overHold: "What the money is in while overextended. Cash in SOXS's place made 232.1% a year in 2010-2025, SQQQ 257.0%, against 285.9%. On the week's own days out the fund held in between comes first.",
+} });
+
+// ===== #72 at the user's pick on the map of Q1 2010 to Q4 2025 (27 November 2026, "set this as default") =====
+// Seven settings moved: the down trend under the 30-day median or less than 1.5% over it (was under it); the RSI read
+// on QQQ (TQQQ) at 41.5 (40); the lagging-fund rule on SPXL (SOXX) against QLD (QQQ) over 2 days (20) by more than
+// 1.5% (2%). With $80K and $3K a month a money-weighted 168.8% a year with a 41.2% max drawdown (the map: 169.2%,
+// 41.2%); $100K lump sum 170.4% (41.2%) against 149.1% (55.5%) before. Set here, after #73 and #75, which are built
+// from #72 as it was (MIN_LATE_WEEK_BASE, which the tests also read), so they keep their own. The run's fallbacks for
+// a missing setting stay as they were: the app hands every run each setting, stored or default. The tips that quote
+// facts of the settings before are redone at these.
+const MIN_LATE_WEEK = "Min - late-week SQQQ";
+const MIN_LATE_WEEK_BASE = CODE[72];
+CODE[72] = withTips(withDefaults(MIN_LATE_WEEK_BASE, { name: MIN_LATE_WEEK, defaults: {
+  trendUnder: -1.5, rsiFund: "qqq", rsiLevel: 41.5, lagFund: "spxl", lagDays: 2, lagVs: "qld", lagBy: 1.5 } }),
+{ name: MIN_LATE_WEEK, tips: {
+  weekendCheck: "Yes: at the last close before a weekend inside the days out, the fund is bought back if it is not under the close it was sold at. In the weeks taken in 2010-2025, TQQQ's Monday went the way of its Thursday and Friday: down 1.2% on average after a fall, up 1.2% after a rise. Left out with one trade per day and another fund held in between.",
+  rsiLevel: "The week is skipped with the RSI at this level or under. Skipping helped at every level from 25 to 45 in 2010-2025, most at 41.5; at 41 it made 145% a year against 170%, and at 50 it skips too many weeks.",
+  lagTake: "Yes: a week skipped for a low RSI is taken all the same when one fund's return trails another's at that close. In the skipped weeks where SPXL trailed QLD by more than 1.5% over 2 days, TQQQ fell on the Thursday by 3.3% on average in 2010-2017, 2.8% in 2018-2025 and 3.7% in the two such weeks of 2026. Left out with one trade per day and another fund held in between.",
+  lagBy: "How far under the other fund's return, in points. Of the 20 settings from 2 to 5 days and 0.5% to 2.5%, 14 beat leaving the rule off in both halves of 2010-2025; 2 days with 1.5% is the best of them.",
+  lagHold: "One day: the fund is bought back at the next close. The days before the weekend: at the last close before a weekend, or where the days out end. In those weeks the fall was the Thursday's; Friday rose 0.5% on average in 2010-2025.",
 } });
 
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----
@@ -7037,6 +7059,7 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'withCostAndCash', { value: withCostAndCash });
   Object.defineProperty(module.exports, 'COST_CASH_BASE', { value: COST_CASH_BASE });
   Object.defineProperty(module.exports, 'LATE_WEEK_OVER_BASE', { value: LATE_WEEK_OVER_BASE });
+  Object.defineProperty(module.exports, 'MIN_LATE_WEEK_BASE', { value: MIN_LATE_WEEK_BASE });
   Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });

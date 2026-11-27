@@ -19,7 +19,8 @@
  *   7. the entry is that code at the user's pick on the map of 2010-2025 (27 November 2026): its defaults and nine
  *      tips, and the map's drawdown with the map's money.
  * Sections 1-6 check the line on the code as it was before the pick (LATE_WEEK_OVER_BASE, which #75 is built from):
- * the line on TQQQ into SQQQ, Min's fund TQQQ, which #71's line and #72's holdings read the same way.
+ * the line on TQQQ into SQQQ, Min's fund TQQQ, which #71's line and #72's holdings read the same way. #72 there is #72
+ * as it was before its own pick of 27 November 2026 (MIN_LATE_WEEK_BASE), the code #73 is built from.
  *
  *   node tests/library-late-week-overextended.cjs
  */
@@ -40,10 +41,12 @@ const { dates, tqqq: T } = data;
 const START = dates.findIndex(d => d >= '2010-01-04') - 1, END = dates.findIndex(d => d >= '2026-11-23');
 // #73's code before the user's pick of 27 November 2026, with its defaults then.
 const overBase = new Function('"use strict"; return (' + CODE.LATE_WEEK_OVER_BASE + '\n);')();
-const run = (n, settings = {}, contributions = {}) => { const strategy = n === OVER ? overBase : strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions, startIdx: START, endIdx: END, dailyDisplay: true }); };
+// #72's code before the user's pick of 27 November 2026, with its defaults then.
+const minBase = new Function('"use strict"; return (' + CODE.MIN_LATE_WEEK_BASE + '\n);')();
+const run = (n, settings = {}, contributions = {}) => { const strategy = n === OVER ? overBase : n === MIN ? minBase : strategyOf(n); return strategy.run(data, { ...defaultsOf(strategy), ...settings, initial: 100000, contributions, startIdx: START, endIdx: END, dailyDisplay: true }); };
 const sameRows = (mine, theirs) => mine.length === theirs.length && mine.every((row, k) => row.value === theirs[k].value && row.held === theirs[k].held && row.action === theirs[k].action && row.note === theirs[k].note);
 
-const min = strategyOf(MIN), over = overBase;
+const min = minBase, over = overBase;
 
 // ---- 1. The settings ----
 {
