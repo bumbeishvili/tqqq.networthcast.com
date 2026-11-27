@@ -6045,6 +6045,14 @@ CODE[69] = bareStrategy({
     const decision = callOf(inNow, "RSI dip-buy", rsiVs, inNow ? "trade open until the RSI is over " + sellOver : rsiSays(p.endIdx));`,
 });
 
+// #67-#69's defaults since 27 November 2026: the user's picks on the maps of 2010-2025 ("set these as defaults"). With
+// $80K and $3K a month, before in brackets: SOXL lead 71.8% a year, max drawdown 62.1% (55.5%, 87.5%); RSI overheat
+// and RSI(2) dip-buy both 74.4%, 76.5% (44.1%, 81.6% and 45.9%, 69.3%). At these settings #68 and #69 are one rule:
+// TQQQ from QQQ's RSI(6) under 23 until it is over 92, SOXS the rest; they hold the same fund on every close.
+CODE[67] = withDefaults(CODE[67], { name: "Bare SOXL lead", defaults: { soxlLeadDays: 100, soxlLeadEnter: -10, soxlLeadExit: -50 } });
+CODE[68] = withDefaults(CODE[68], { name: "Bare RSI overheat", defaults: { rsiDays: 6, oh: 92, cool: 23, park: "soxs", splitDays: false } });
+CODE[69] = withDefaults(CODE[69], { name: "Bare RSI(2) dip-buy", defaults: { rsiDays: 6, buy: 23, sell: 92, park: "soxs", splitDays: false } });
+
 // #70 Bare MACD: #17's signal without its trailing stop: TQQQ while QQQ's MACD (12, 26 and 9-day
 // averages of its closes) is above its signal line and above zero. The averages run from the
 // data's first close, where #17 starts them 60 days before the Entry.
