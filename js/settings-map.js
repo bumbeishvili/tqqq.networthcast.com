@@ -965,7 +965,11 @@ function mapDetailHtml(map) {
     dot === mapFitDot(map) ? `${MAP_FIT_LABEL}: what the Fit window would pick.` : '',
     dot.flat ? mapWorstText(job, dot) : (picked || dot === best) && map.run ? `Testing it with each setting ${MAP_NEAR_PCT}% off…` : ''].filter(Boolean);
   const changed = fitFreezeChanged(settings, choices);
-  return (dot ? `<div class="map-detail-head"><span>CAGR <b>${fitCagrText(job.cagrOf, dot.r)}</b>, max drawdown <b>${fitDdText(dot.r)}</b></span>`
+  // A dot other than the settings now: each number with the one now struck through before it, as its settings are
+  // below (the user, 2026-11-27: "can you also do a strikethrough from current/now variant for cagr and max drawdown?").
+  const now = dot && dot.differs ? mapNowDot(map) : null;
+  const figure = (text, nowText) => (now && nowText !== text ? `<span class="map-figure"><s class="map-old">${nowText}</s> <b class="map-new">${text}</b></span>` : `<b>${text}</b>`);
+  return (dot ? `<div class="map-detail-head"><span>CAGR ${figure(fitCagrText(job.cagrOf, dot.r), now && fitCagrText(job.cagrOf, now.r))}, max drawdown ${figure(fitDdText(dot.r), now && fitDdText(now.r))}</span>`
     + (dot.differs ? '<button type="button" class="map-use-btn" data-map-use>Use</button>' : '')
     + (picked ? '<button type="button" class="map-clear-btn" data-map-clear>Clear</button>' : '') + '</div>' : '')
     + notes.map(note => `<div class="map-near">${_escHtml(note)}</div>`).join('')

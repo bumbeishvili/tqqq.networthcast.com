@@ -4465,6 +4465,7 @@
   .map-value { color: var(--text); }
   .map-old { color: var(--text-muted); }
   .map-new { color: var(--accent-text); font-weight: 700; }
+  .map-figure { white-space: nowrap; }   /* a figure now and the dot's stay on one line */
   .map-foot { gap: 10px; }
   @media (max-width: 420px) { .map-foot { flex-wrap: wrap; } .map-run-btn { flex: 1 1 100%; } }   /* a narrow phone: the count, Link and CSV on one line, the button that runs the map on a line of its own under them */
   .map-status { display: inline-flex; align-items: center; gap: 4px; min-width: 0; margin-right: auto; }
