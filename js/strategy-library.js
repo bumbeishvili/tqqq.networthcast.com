@@ -121,6 +121,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Top-ranked min drawdown row from the 9sig overfit explorer, tuned on 1990–2025 (in-sample CAGR 18.12%, drawdown 22.67%). Runs as a code strategy on the app’s 9sig engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 1990–2025: 18.12% CAGR / −22.67% DD' },
   { n: 31, name: '9sig · max return 1953–2025', tag: 'overfit', runnable: true,
+    hidden: true,   // the user, 2026-11-27: "remove sma and 9sig max return from 1953"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Top-ranked max return row from the 9sig overfit explorer, tuned on 1953–2025 (in-sample CAGR 19.96%, drawdown 96.58%). Runs as a code strategy on the app’s 9sig engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 1953–2025: 19.96% CAGR / −96.58% DD' },
   { n: 32, name: '9sig · min drawdown 1953–2025', tag: 'overfit', runnable: true,
@@ -142,6 +143,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Top-ranked min drawdown row from the SMA overfit explorer, tuned on 1990–2025 (in-sample CAGR 31.28%, drawdown 39.46%). Runs as a code strategy on the app’s SMA engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 1990–2025: 31.28% CAGR / −39.46% DD' },
   { n: 37, name: 'SMA · max return 1953–2025', tag: 'overfit', runnable: true,
+    hidden: true,   // the user, 2026-11-27: "remove sma and 9sig max return from 1953"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Top-ranked max return row from the SMA overfit explorer, tuned on 1953–2025 (in-sample CAGR 29.97%, drawdown 83.6%). Runs as a code strategy on the app’s SMA engine, so every knob stays editable. Selected by search over that window — expect the other windows to look much worse.',
     here: '—', reported: 'In-sample optimum over 1953–2025: 29.97% CAGR / −83.6% DD' },
   { n: 38, name: 'SMA · min drawdown 1953–2025', tag: 'overfit', runnable: true,
