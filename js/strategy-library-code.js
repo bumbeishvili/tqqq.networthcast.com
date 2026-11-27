@@ -5022,11 +5022,16 @@ CODE[53] = withDefaults(CODE[53], { name: "SOXL, TQQQ, QQQ - 1983 fit", defaults
 // of 300%. From 28% to 45% it makes 281% to 302% with the same drawdown.
 // Three texts of #53's late-week settings state facts of #53's own trades; #74 carries its own.
 const FIT_2010_2025 = "10-25 - SOXL, TQQQ";   // was "SOXL, TQQQ - 2010-2025 fit" until 26 November 2026
+// Since 27 November 2026 the user's pick on the map of 2010-2025 ("also set this as default for a 10-25 strategy"; the
+// map: CAGR 353.9%, max drawdown 37.6%), 26 settings moved from the fit of 24 November; 29 differ from #53's. With $80K
+// and $3K a month these make a money-weighted 353.2% a year with a 37.6% max drawdown; $100K lump sum 347.7% (41.2%)
+// against 287.4% (47.2%) at the settings before. The card has the rest.
 const FIT_2010_2025_DEFAULTS = {
-  startAvgDays: 60, topDays: 10, backLead: 40, bearUnder: 25, bearSlope: 0, sqqqMaxDays: 0, soxlLeadDays: 360, soxlLeadEnter: -20, soxlLeadExit: 150,
-  bigRise: 8.5, dipDay: 10, dipSellDay: 1, lateFund: "soxs", lateRsiSkip: true, lateRsiDays: 7, lateTrendDays: 45 };
-const FIT_2010_2025_LATE_WEEK = { section: "Late-week SOXS", mondayFell: "2.30%", mondayElse: "+1.41%", trendTip: "On here, at 45 days.",
-  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 67 trades, 66% of them up, 7.6% each on average; about 40% of the gain came in 2022." };
+  lookbackDays: 579, startAvgDays: 96, topLead: 109, topDays: 9, backLead: 29, bearUnder: 25.5, bearSlope: 21, bearCloses: 40, overPct: 53.5, overWindow: 234, sqqqMaxDays: 42,
+  soxlLeadDays: 340, soxlLeadEnter: -35, soxlLeadExit: 150, soxlSell: "turn", soxlTrail: 40, soxlTrailFrom: 40, soxlPile: true,
+  bigRise: 10, dipDay: 4, dipUnder: 34, dipUnderMax: 69, dipSellDay: 1, lateFund: "soxs", lateRsiSkip: true, lateRsiDays: 6, lateRsiLevel: 41.5, lateLagDays: 17, lateLagBy: 0.5, lateTrendDays: 37 };
+const FIT_2010_2025_LATE_WEEK = { section: "Late-week SOXS", mondayFell: "1.93%", mondayElse: "+0.07%", trendTip: "On here, at 37 days.",
+  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 101 trades, 65% of them up, 5.8% each on average; 42% of the gain came in 2022." };
 // A late-week text as #53's spec writes it into the settings, and as #74's does.
 const lateWeekTexts = (late) => [
   `{ section: "${late.section}", tip: "${late.tip}" }`,
