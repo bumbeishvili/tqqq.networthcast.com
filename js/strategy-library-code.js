@@ -670,11 +670,13 @@ ${WEEKLY_MONTH_END_SNIPPET}
   }
 }`;
 
-// #18 40-week SMA crossover: QQQ vs 200-day SMA checked WEEKLY (last trading day of ISO week).
+// #18 40-week SMA crossover: QQQ vs 200-day SMA checked WEEKLY (last trading day of ISO week). Since 27 November
+// 2026 the line is the user's pick on the map of 2010-2025 rerun with the drawdown taken at every close ("add these
+// two"): QQQ's 173-day median, 39.5% a year with $80K and $3K a month, max drawdown 62.1% (495 days: 35.9%, 71.6%).
 CODE[18] = `{
   name: "40-week SMA (weekly) → TQQQ/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold TQQQ while QQQ's weekly close is above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 16 }, (_, k) => 10 + 10 * k), Array.from({ length: 55 }, (_, k) => 166 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 31 }, (_, k) => 306 + k), Array.from({ length: 12 }, (_, k) => 340 + 10 * k), Array.from({ length: 44 }, (_, k) => 457 + k)), default: 495 },
+      [5].concat(Array.from({ length: 16 }, (_, k) => 10 + 10 * k), Array.from({ length: 55 }, (_, k) => 166 + k), Array.from({ length: 8 }, (_, k) => 230 + 10 * k), Array.from({ length: 31 }, (_, k) => 306 + k), Array.from({ length: 12 }, (_, k) => 340 + 10 * k), Array.from({ length: 44 }, (_, k) => 457 + k)), default: 173 },
            ${STAT_PARAM_MEDIAN_SNIPPET}],
   columns: [{ key: "assetPrice", label: "QQQ", tip: "QQQ's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "QQQ's average or median close over the window (the Center line setting). Checked only on the week end." }],

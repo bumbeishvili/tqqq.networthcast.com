@@ -63,8 +63,8 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: QQQ’s MACD (12/26/9). Enter: MACD above its signal line and zero → TQQQ. Exit: below either → cash, or TQQQ closes 15% under its high since the buy. Freq: daily.',
     here: '—', reported: '+11,194% (Feb 2010–Jul 2025) · defaults fitted to 2010–2025 and rounded: 18.7% a year, max drawdown 39% (published settings: 18.6%, 39%)', src: 'MACD' },
   { n: 18, name: '40-week SMA crossover', formerNames: ['40-week SMA crossover → TQQQ'], tag: 'crossover', runnable: true,
-    rules: 'Signal: QQQ’s weekly close vs its 495-day median. Enter: above → TQQQ. Exit: below → cash. Freq: weekly.',
-    here: '—', reported: '+2,800% (Petrou comparison window) · defaults fitted to 2010–2025 and rounded: 35.7% a year, max drawdown 72% (published settings: 31.3%, 62%)', src: 'MACD' },
+    rules: 'Signal: QQQ’s weekly close vs its 173-day median. Enter: above → TQQQ. Exit: below → cash. Freq: weekly.',
+    here: '—', reported: '+2,800% (Petrou comparison window) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), the 173-day median: with $80K and $3K a month 39.5% a year, max drawdown 62.1% (the rounded fit before, 495 days: 35.9%, 71.6%) · $100K once: 172 days 36.7% (62%), 174 days 35.0% (62%), the average in place of the median 32.2% (62%); 2010–17 27.4% a year, 2018–25 46.7%, 2026 to date +24%; 41 trades in 16 years (15 before); published settings 31.3% (62%) before the cost and interest', src: 'MACD' },
   { n: 19, name: 'Bare golden cross', formerNames: ['Golden cross 50/200', 'Golden / Death Cross 50/200'], tag: 'crossover', runnable: true,
     rules: 'Enter: QQQ’s 75-day median crosses above its 335-day median → TQQQ. Exit: it crosses below → cash. Freq: daily.',
     here: '35.6% / −69.9%', reported: 'Classic MA-crossover; slower than price-vs-200 · defaults fitted to 2010–2025 and rounded: 43.1% a year, max drawdown 70% (published settings: 32.1%, 70%)', src: 'GS' },
@@ -410,7 +410,7 @@ STRATEGY_LIBRARY.push(
 // notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
 // [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
 const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [20.1, 44], 3: [16.6, 37], 8: [39.0, 44], 10: [44.0, 57], 12: [14.3, 25], 13: [42.4, 54], 15: [41.6, 54],
-  17: [21.0, 38], 18: [36.0, 72], 19: [43.6, 70], 20: [42.9, 75], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [27.1, 33], 56: [34.9, 36] };
+  17: [21.0, 38], 18: [36.7, 62], 19: [43.6, 70], 20: [42.9, 75], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [27.1, 33], 56: [34.9, 36] };
 for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
   const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025).`;
   entry.reported = /[.!?]$/.test(entry.reported) ? entry.reported + ' ' + said : entry.reported + ' · ' + said;
