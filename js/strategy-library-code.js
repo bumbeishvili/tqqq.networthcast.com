@@ -6089,6 +6089,11 @@ CODE[70] = bareStrategy({
     const decision = callOf(bullNow, "MACD", macdVs, macdSays(p.endIdx));`,
 });
 
+// #70's defaults since 27 November 2026: the user's pick on the map of 2010-2025 ("include this", "as default"): SOXX
+// outside the signal, a switch at one close (were cash, two days). With $80K and $3K a month 34.6% a year, max drawdown
+// 43.5% (before: 21.3%, 29.8%).
+CODE[70] = withDefaults(CODE[70], { name: "Bare MACD", defaults: { park: "soxx", splitDays: false } });
+
 // #72 Min - late-week SQQQ, built as a bare entry and named by the user: first "Short strat -
 // late-week SQQQ" ("Just call it short strat - instead of bare"), then "Min" in its place
 // (2026-11-24: "instead of starting short strat, start with min"). The user, 2026-11-23: "let's add one bare strategy, in downtrend, buy
