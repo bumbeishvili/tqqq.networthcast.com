@@ -276,7 +276,8 @@ function buildCustomDDControls(log) {
   for (const r of log) {
     if (!r || typeof r.date !== 'string') return null;
     if (typeof r.cash !== 'number' || !Number.isFinite(r.cash)) return null;
-    const held = typeof r.held === 'string' ? r.held.toLowerCase() : null;
+    // "TQQQ + CASH" (a part in cash, as Bare volatility targeting writes it) is TQQQ's shares and the row's cash.
+    const held = typeof r.held === 'string' ? r.held.toLowerCase().replace(/\s*\+\s*cash$/, '') : null;
     if (!held) return null;
     const c = { date: r.date, cash: r.cash, h: {} };
     if (held !== 'cash') {

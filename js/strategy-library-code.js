@@ -6932,7 +6932,10 @@ for (const n of NINESIG_LIBRARY_NUMBERS) CODE[n] = nineSigStrategyCode(...NINESI
 // Bare Donchian breakout) keeps its books as cash plus share counts, moved by whole-account trades; this puts both
 // into those books the way bareStrategy keeps them: cash earns the cash interest each day after the first, and every
 // buy and sell pays the trading cost on the amount traded, a switch between two funds on both legs. The row's fee
-// is in a Fee column. Both settings are fit: false, so Fit and the map leave them as they are unless unticked under
+// is in a Fee column. Each row also says what it holds, its cash and its share count, so its drawdown is taken at
+// every daily close (buildCustomDDControls in js/metrics.js) on the cards, in Fit and on the map: without them it was
+// taken on the logged rows, trades and month ends, and missed a peak or a trough between them (Composer TQQQ-RSI at an
+// RSI cap of 77: 46.0% on the map's month-end rows, 54.8% at the daily closes). Both settings are fit: false, so Fit and the map leave them as they are unless unticked under
 // Freeze. Each step names what it must find, and a book it cannot account for is an error at load, not a run that
 // trades free.
 const COST_CASH_PARAMS = `{ id: "cashRate", fit: false, label: "Cash interest (%/yr)", tip: "Yearly rate earned on money held in cash.", text: "Cash earns {} a year.", unit: "%", default: 4, options: [
@@ -6970,7 +6973,10 @@ function withCostAndCash(code, name) {
   const rebalances = step("rebalance", /\bsh = \(total \* targetW\) \/ px; cash = total - sh \* px;/g,
     "{ const f = Math.abs(total * targetW - sh * px) * cost; fee += f; sh = ((total - f) * targetW) / px; cash = total - f - sh * px; }", 0);
   if (!(buys && sales) && !rebalances) throw new Error(name + ": withCostAndCash found no buy and sale, nor a rebalance");
-  step("log row", /\blog\.push\(\{ ?/g, "log.push({ fee: fee, ");
+  // The share counts of the books (one, or two that are never both above zero): their sum is the row's holding.
+  const books = (t.match(/let cash = p\.initial,([^;]*);/) || [])[1], shares = books ? [...books.matchAll(/\b(sh\w*) = 0\b/g)].map(m => m[1]) : [];
+  if (!shares.length) throw new Error(name + ": withCostAndCash found no share count in the books");
+  step("log row", /\blog\.push\(\{ ?/g, "log.push({ fee: fee, cash: cash, shares: " + shares.join(" + ") + ", ");
   // Nothing left that moves money without the cost.
   const free = t.match(/\b(sh\w*) \+?= cash \/ |\bcash \+?= sh\w* \* \w+;|cash \+= sold; \}|sh = \(total \* targetW\)/);
   if (free) throw new Error(name + ": withCostAndCash left a trade without the cost: " + free[0]);

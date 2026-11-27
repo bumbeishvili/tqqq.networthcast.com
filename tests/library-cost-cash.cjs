@@ -10,7 +10,11 @@
  *   3. at the defaults each of those pays a fee on every row that moves money (a rebalance when its weight
  *      moves) and on no other, and the cost alone ends it lower;
  *   4. a close held in cash earns a day of the interest: (1 + 4%)^(1/252);
- *   5. each of those cards gives what its defaults make now (COST_CASH_RESULTS in js/strategy-library.js).
+ *   5. each of those cards gives what its defaults make now (COST_CASH_RESULTS in js/strategy-library.js);
+ *   6. each of their rows says what it holds (cash, shares, the fund), so the drawdown is taken at every daily close:
+ *      the holdings add up to the row's value, and from a log of month ends (as the map's and Fit's runs keep) the
+ *      daily drawdown is the one of a log of every day. On the rows alone it was not (Composer TQQQ-RSI at 77:
+ *      46.0% against 54.8%).
  *
  *   node tests/library-cost-cash.cjs
  */
@@ -79,6 +83,24 @@ for (const n of added) {
     const cagr = +((Math.pow(log.at(-1).value / log[0].value, 1 / yrs) - 1) * 100).toFixed(1), dd = Math.round(fall * 100), [saidCagr, saidDd] = page.RESULTS[n] || [];
     const card = page.LIBRARY.find(e => e.n === n).reported;
     ck(`#${n} its card gives its defaults' ${cagr.toFixed(1)}% and ${dd}%`, saidCagr === cagr && saidDd === dd && card.includes(`: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025)`), `card ${saidCagr}%, ${saidDd}%`);
+  }
+}
+
+// ---- 6. Each row says what it holds; the drawdown is taken at every daily close ----
+{
+  const { buildCustomDDControls, computeDailyMaxDrawdownMulti } = require('../js/metrics.js');
+  const days = dates.map((date, i) => Object.assign({ date }, ...['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'].map(f => ({ [f]: data[f][i] }))));
+  const fund = r => String(r.held).toLowerCase().replace(/\s*\+\s*cash$/, '');
+  const fallOf = log => { let peak = 0, fall = 0; log.forEach(r => { peak = Math.max(peak, r.value); fall = Math.max(fall, 1 - r.value / peak); }); return fall * 100; };
+  for (const n of added) {
+    const st = strategyOf(n), go = extra => st.run(data, { ...defaultsOf(st), initial: 80000, contributions: monthly, startIdx: A, endIdx: END, ...extra }).log;
+    const sparse = go({}), everyDay = go({ dailyDisplay: true });
+    const off = sparse.find(r => !(typeof r.cash === 'number' && typeof r.shares === 'number')
+      || Math.abs(r.cash + r.shares * (fund(r) === 'cash' ? 0 : data[fund(r)][at(r.date)]) - r.value) > 1e-6 * Math.max(1, r.value));
+    ck(`#${n} each row's cash and shares add up to its value`, !off, off ? JSON.stringify({ date: off.date, held: off.held, cash: off.cash, shares: off.shares, value: off.value }) : '');
+    const controls = buildCustomDDControls(sparse), daily = controls && computeDailyMaxDrawdownMulti(controls, days);
+    ck(`#${n} from month-end rows the drawdown at the daily closes is the every-day log's`, daily && Math.abs(daily.pct * 100 - fallOf(everyDay)) < 0.15,   // pct is a share of 1
+      `${daily ? (daily.pct * 100).toFixed(2) : 'none'}% against ${fallOf(everyDay).toFixed(2)}% (the rows alone: ${fallOf(sparse).toFixed(2)}%)`);
   }
 }
 
