@@ -316,7 +316,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[2] = `{
   name: "Gayed LRS 3× — SPY 200SMA → SPXL/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold SPXL while SPY closes above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 297 },
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 40 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],
@@ -352,7 +352,7 @@ ${WEEKLY_MONTH_END_SNIPPET}
 CODE[3] = `{
   name: "Gayed LRS 2× — SPY 200SMA → SSO/cash",
   params: [{ id: "window", label: "Window (days)", text: "Hold SSO while SPY closes above its line over the last {} days.", options:
-      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 297 },
+      [5].concat(Array.from({ length: 18 }, (_, k) => 10 + 10 * k), Array.from({ length: 40 }, (_, k) => 181 + k), [230, 240, 250], Array.from({ length: 81 }, (_, k) => 257 + k), Array.from({ length: 17 }, (_, k) => 340 + 10 * k)), default: 199 },
            ${STAT_PARAM_SNIPPET}],
   columns: [{ key: "assetPrice", label: "SPY", tip: "SPY's close: the price the rule compares with the center line." },
              { key: "center", label: "Center", tip: "The signal fund's average or median close over the window (the Center line setting)." }],

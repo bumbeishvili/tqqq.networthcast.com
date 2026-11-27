@@ -24,11 +24,11 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: QQQ vs its 530-day median, read on the month’s last trading day. Enter: above → TQQQ. Exit: below → cash. Freq: monthly.',
     here: '31.3% / −69.9%', reported: '10.2% vs 9.3% B&H (S&P 1901–2012) · defaults fitted to 2010–2025 and rounded: 42.1% a year, max drawdown 70%, 3 trades (published settings: 31.8%, 70%)', src: 'F' },
   { n: 2, name: 'Gayed & Bilello LRS 3×', formerNames: ['Gayed & Bilello LRS 3× — Leverage for the Long Run'], tag: 'academic', runnable: true,
-    rules: 'Signal: SPY vs its 297-day average. Enter: above → SPXL (3× S&P). Exit: below → cash. Freq: daily.',
-    here: '≈ #10', reported: '26.8% CAGR · −92.2% DD · Sharpe 0.47 (1928–2015) · defaults from your pick on the map of 2010–2025 (26 November 2026), 297 days: 23.9% a year, max drawdown 54% (295 days, the rounded fit before: 23.2%, 54%; published settings: 21.7%, 52%)', src: 'GB' },
+    rules: 'Signal: SPY vs its 40-day average. Enter: above → SPXL (3× S&P). Exit: below → cash. Freq: daily.',
+    here: '≈ #10', reported: '26.8% CAGR · −92.2% DD · Sharpe 0.47 (1928–2015) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), 40 days: with $80K and $3K a month 21.2% a year, max drawdown 37.3% (297 days, your pick of 26 November on the drawdown taken only on the logged days: 25.0%, 53.1%; 200 days, the published setting: 24.4%, 48.7%)', src: 'GB' },
   { n: 3, name: 'Gayed & Bilello LRS 2×', tag: 'academic', runnable: true,
-    rules: 'Signal: SPY vs its 297-day average. Enter: above → SSO (2× S&P). Exit: below → cash. Freq: daily.',
-    here: '≈ SSO rows', reported: '19.1% CAGR · −78.7% DD · Sharpe 0.51 (1928–2015) · defaults from your pick on the map of 2010–2025 (26 November 2026), 297 days: 17.8% a year, max drawdown 39% (295 days, the rounded fit before: 17.3%, 39%; published settings: 16.0%, 37%)', src: 'GB' },
+    rules: 'Signal: SPY vs its 199-day average. Enter: above → SSO (2× S&P). Exit: below → cash. Freq: daily.',
+    here: '≈ SSO rows', reported: '19.1% CAGR · −78.7% DD · Sharpe 0.51 (1928–2015) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), 199 days: with $80K and $3K a month 18.1% a year, max drawdown 33.6% (297 days, your pick of 26 November on the drawdown taken only on the logged days: 18.7%, 38.0%; 200 days, the published setting: 18.1%, 33.6%)', src: 'GB' },
   { n: 5, name: 'HedgeFundie 55/45 UPRO/TMF', formerNames: ["HedgeFundie's Excellent Adventure (55/45 UPRO/TMF)"], tag: 'portfolio', runnable: false, needs: 'TMF',
     rules: 'Static: 55% UPRO (3× S&P) + 45% TMF (3× long Treasury), quarterly rebalance. Optional 200-SMA overlay on the UPRO leg. Freq: quarterly.',
     here: '—', reported: 'Famous Bogleheads portfolio; 2022 exposed both-legs-down risk', src: 'BH' },
@@ -409,7 +409,7 @@ STRATEGY_LIBRARY.push(
 // js/strategy-library-code.js; the user: "make sure all strategies have switching cost and cash percentage"). Their
 // notes were measured without them; each says what its defaults make with them, Q1 2010 to Q4 2025, $100K lump sum:
 // [CAGR %, max drawdown %] (tests/library-cost-cash.cjs's run).
-const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [24.5, 53], 3: [18.3, 39], 8: [39.0, 44], 10: [43.8, 60], 12: [14.3, 25], 13: [42.4, 54], 15: [41.6, 54],
+const COST_CASH_RESULTS = { 1: [42.5, 70], 2: [20.1, 44], 3: [16.6, 37], 8: [39.0, 44], 10: [43.8, 60], 12: [14.3, 25], 13: [42.4, 54], 15: [41.6, 54],
   17: [21.0, 38], 18: [36.0, 72], 19: [43.6, 70], 20: [42.9, 75], 22: [32.4, 65], 23: [37.3, 62], 24: [41.5, 39], 25: [40.9, 59], 55: [32.0, 59], 56: [34.4, 36] };
 for (const [n, [cagr, dd]] of Object.entries(COST_CASH_RESULTS)) {
   const entry = STRATEGY_LIBRARY.find(e => e.n === +n), said = `Now with 4% a year on cash and 0.02% per trade: ${cagr.toFixed(1)}% a year, max drawdown ${dd}% (2010–2025).`;
