@@ -1,5 +1,5 @@
 /*
- * Library strategy #73, "Late-week + overextended SQQQ": #72 (Min - late-week SQQQ) with the
+ * Library strategy #73, "10-25 - Late-week + overextended" (was "Late-week + overextended SQQQ"): #72 (Min - late-week SQQQ) with the
  * overextended line of the fits as one more rule (withOverextendedLine in
  * js/strategy-library-code.js). Pure Node — no browser/server. Checks, on the repo's
  * own price history:
@@ -16,8 +16,8 @@
  *   5. a run without the line's settings is a run at their defaults;
  *   6. the line's trades are marked in its panel and say why, and the dashboard
  *      carries its card and its reading in today's call;
- *   7. the entry is that code at the user's pick on the map of 2010-2025 (27 November 2026): its defaults and nine
- *      tips, and the map's drawdown with the map's money.
+ *   7. the entry is that code at the user's second pick on the map of 2010-2025 (27 November 2026) under its new name:
+ *      its defaults and nine tips, and the map's drawdown with the map's money.
  * Sections 1-6 check the line on the code as it was before the pick (LATE_WEEK_OVER_BASE, which #75 is built from):
  * the line on TQQQ into SQQQ, Min's fund TQQQ, which #71's line and #72's holdings read the same way. #72 there is #72
  * as it was before its own pick of 27 November 2026 (MIN_LATE_WEEK_BASE), the code #73 is built from.
@@ -158,9 +158,10 @@ const minHeld = Object.fromEntries(run(MIN, OWN).log.map(row => [index[row.date]
 
 // ---- 7. The entry at the user's pick ----
 {
-  const PICK = { trendFund: 'qld', trendUnder: 1, trendDays: 26, fund: 'soxl', park: 'soxs', rsiFund: 'qqq', rsiDays: 10, rsiLevel: 41.5, lagFund: 'soxl', lagDays: 16, lagVs: 'tqqq', lagBy: 3,
+  const PICK = { trendFund: 'qld', trendUnder: 1, trendDays: 26, fund: 'soxl', park: 'soxs', rsiFund: 'qqq', rsiDays: 10, rsiLevel: 41.5, lagFund: 'soxs', lagDays: 65, lagVs: 'gld', lagBy: 8,
     overFund: 'spxl', overPct: 67, overWindow: 390, overHold: 'soxs' };
   const now = strategyOf(OVER), d = defaultsOf(now), was = defaultsOf(overBase);
+  ck('its name, the old one kept for saved copies', now.name === '10-25 - Late-week + overextended' && overBase.name === 'Late-week + overextended SQQQ', now.name);
   const moved = Object.keys(d).filter(id => JSON.stringify(d[id]) !== JSON.stringify(was[id]));
   ck('its defaults are the code before at the pick\'s 16, and no other', moved.slice().sort().join() === Object.keys(PICK).sort().join() && moved.every(id => d[id] === PICK[id]), moved.map(id => `${id} ${was[id]} -> ${d[id]}`).join(', '));
   const tipsMoved = settingsOf(now).filter(p => p.tip !== settingsOf(overBase).find(q => q.id === p.id).tip).map(p => p.id);
@@ -168,7 +169,7 @@ const minHeld = Object.fromEntries(run(MIN, OWN).log.map(row => [index[row.date]
   const E2025 = dates.findIndex(d => d >= '2026-01-01') - 1, monthly = Object.fromEntries(dates.slice(START + 1, E2025 + 1).filter((date, k, all) => k === 0 || all[k - 1].slice(0, 7) !== date.slice(0, 7)).map(date => [date, 3000]));
   const log = now.run(data, { ...d, initial: 80000, contributions: monthly, startIdx: START, endIdx: E2025, dailyDisplay: true }).log;
   let peak = 0, fall = 0; log.forEach(r => { peak = Math.max(peak, r.value); fall = Math.max(fall, 1 - r.value / peak); });
-  ck('with $80K and $3K a month on 2010-2025 its max drawdown is the map\'s 64.8%', (fall * 100).toFixed(1) === '64.8', (fall * 100).toFixed(1) + '%');
+  ck('with $80K and $3K a month on 2010-2025 its max drawdown is the map\'s 53.4%', (fall * 100).toFixed(1) === '53.4', (fall * 100).toFixed(1) + '%');
   ck('it holds SOXL, and SOXS in between', log.some(r => r.held === 'SOXL') && log.some(r => r.held === 'SOXS') && !log.some(r => r.held === 'TQQQ' || r.held === 'SQQQ'));
 }
 
