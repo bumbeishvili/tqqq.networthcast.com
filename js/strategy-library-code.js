@@ -5935,6 +5935,13 @@ CODE[66] = bareStrategy({
     const decision = callOf(inNow, "Deep buy", leadVs, inNow ? "deep buy held until the lead is back at " + reentry + "%" : stateNow === 2 ? "armed: buys at a lead of " + deep + "% or lower" : "not armed: the lead is over the floor");`,
 });
 
+// #63, #64 and #66's defaults since 27 November 2026: the user's picks on the maps of 2010-2025 ("include these three").
+// With $80K and $3K a month, before in brackets: buy-back line 48.2% a year, max drawdown 40.1% (18.8%, 61.8%); ceiling
+// 103.2%, 69.9% (68.2%, 69.9%); deep buy 83.7%, 69.9% (27.5%, 38.6%).
+CODE[63] = withDefaults(CODE[63], { name: "Bare buy-back line", defaults: { window: 120, bbPct: -13, exitPct: -48, park: "qld" } });
+CODE[64] = withDefaults(CODE[64], { name: "Bare ceiling", defaults: { lookbackDays: 500, startAvgDays: 68, topLead: 133, backLead: 12, park: "soxs", splitDays: false } });
+CODE[66] = withDefaults(CODE[66], { name: "Bare deep buy", defaults: { lookbackDays: 260, startAvgDays: 198, deepLead: -24.5, reentryLead: 76, park: "soxs", splitDays: false } });
+
 // #67 Bare SOXL lead: "SOXL instead of TQQQ" of #52 and #53 as the whole strategy: TQQQ, and SOXL
 // from the first close with SOXL's lead over SOXX under the entry level until the first close with
 // it over the exit level. The lead loop is theirs (withSoxlPile); the settings are #53's.
