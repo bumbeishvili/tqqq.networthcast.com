@@ -80,6 +80,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Signal: QQQ’s MACD (12/26/9). Enter: MACD above its signal line and zero → TQQQ. Exit: below either → cash, or TQQQ closes 15% under its high since the buy. Freq: daily.',
     here: '—', reported: '+11,194% (Feb 2010–Jul 2025) · defaults fitted to 2010–2025 and rounded: 18.7% a year, max drawdown 39% (published settings: 18.6%, 39%)', src: 'MACD' },
   { n: 18, name: '40-week SMA crossover', formerNames: ['40-week SMA crossover → TQQQ'], tag: 'crossover', runnable: true,
+    hidden: true,   // the user, 2026-11-27: "remove this"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Signal: QQQ’s weekly close vs its 173-day median. Enter: above → TQQQ. Exit: below → cash. Freq: weekly.',
     here: '—', reported: '+2,800% (Petrou comparison window) · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), the 173-day median: with $80K and $3K a month 39.5% a year, max drawdown 62.1% (the rounded fit before, 495 days: 35.9%, 71.6%) · $100K once: 172 days 36.7% (62%), 174 days 35.0% (62%), the average in place of the median 32.2% (62%); 2010–17 27.4% a year, 2018–25 46.7%, 2026 to date +24%; 41 trades in 16 years (15 before); published settings 31.3% (62%) before the cost and interest', src: 'MACD' },
   { n: 19, name: 'Bare golden cross', formerNames: ['Golden cross 50/200', 'Golden / Death Cross 50/200'], tag: 'crossover', runnable: true,
@@ -93,6 +94,7 @@ const STRATEGY_LIBRARY = [
     rules: 'Map VIX to leverage: VIX<15 → 3×, 15–25 → 2×, 25–35 → 1×, >35 → cash. Freq: daily/weekly. Ancestor of the Alvarez VIX gate.',
     here: '—', reported: 'Transparent regime ladder; deleverages into fear', src: 'ALV·QC' },
   { n: 22, name: 'Connors RSI(2) dip-buy', formerNames: ['Connors RSI(2) dip-buy in uptrend'], tag: 'oscillator', runnable: true,
+    hidden: true,   // the user, 2026-11-27: "remove this"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Trend filter: QQQ above its 200-day average. Entry: buy TQQQ when QQQ’s RSI(2) drops under 19.3. Exit: RSI(2) over 95.9, or QQQ closes under the line. Freq: daily.',
     here: '—', reported: 'Short-term mean-reversion inside the trend filter · defaults from your pick on the map of 2010–2025 with the drawdown taken at every close (27 November 2026), buy under RSI(2) 19.3, sell over 95.9, the moving average: with $80K and $3K a month 41.5% a year, max drawdown 46.9% (20, 95 and the median, the rounded fit before: 37.6%, 64.4%) · on the same money: buy under 19 41.3%, under 19.5 40.8%; sell over 95.5 39.6% (48.6%), over 96 40.0% (50.0%); the median 41.3% (61.6%) · 2026 to date −31% ($100K once; −2% before) · published settings 12.0% (45%) with $100K once, before the cost and interest', src: 'QS' },
   { n: 23, name: '200-day SMA + RSI', formerNames: ['200-day SMA + RSI exit & re-entry'], tag: 'app', runnable: true,
