@@ -1,5 +1,5 @@
 /*
- * Library strategy #72, "Min - late-week SQQQ", at the user's pick on the map of Q1 2010 to Q4 2025 (27 November 2026:
+ * Library strategy #72, "10-25 - Min - late-week SQQQ" (was "Min - late-week SQQQ"), at the user's pick on the map of Q1 2010 to Q4 2025 (27 November 2026:
  * "set this as default"). Pure Node — no browser/server. Checks, on the repo's own price history:
  *   1. its defaults are the code's before the pick (MIN_LATE_WEEK_BASE) with the seven the pick moved;
  *   2. it trades as that code does at those seven, row for row: a lump sum, contributions and a withdrawal, one trade
@@ -32,7 +32,7 @@ const sameRows = (a, b) => a.length === b.length && a.every((row, k) => row.valu
 // ---- 1. The defaults ----
 {
   const d = defaultsOf(mine), was = defaultsOf(base);
-  ck('the name', mine.name === 'Min - late-week SQQQ', mine.name);
+  ck('the name, the old one kept for saved copies', mine.name === '10-25 - Min - late-week SQQQ' && base.name === 'Min - late-week SQQQ', mine.name);
   ck('the settings are the code\'s before', settingsOf(mine).map(p => p.id).join() === settingsOf(base).map(p => p.id).join());
   ck('the code before had the defaults the pick moved from', Object.keys(WAS).every(id => JSON.stringify(was[id]) === JSON.stringify(WAS[id])), JSON.stringify(Object.keys(WAS).map(id => [id, was[id]])));
   const wrong = Object.keys(was).filter(id => JSON.stringify(d[id]) !== JSON.stringify(id in MOVED ? MOVED[id] : was[id]));

@@ -121,8 +121,11 @@ const NFCI_EXIT = { ...fitDefaults, bearUnder: 28, bearSlope: 20, bearCloses: 10
   ck('off: the decline of 2022 is spent mostly in the market', cashIn2022(off.log) < cashIn2022(run(FIT).log) / 2, `${cashIn2022(off.log)} closes in cash off, ${cashIn2022(run(FIT).log)} on`);
   const floorIds = strategyOf(BARE_FLOOR).params.filter(param => param.id != null).map(param => param.id);
   ck('the bare floor keeps the floor\'s settings', ['floorLead', 'floorBackDays', 'reentryLead', 'reentryCloses'].every(id => floorIds.includes(id)), floorIds.join(', '));
-  ck('the bare floor still sells at its floor', run(BARE_FLOOR).log.some(row => row.action === 'sell'));
-  ck('the bare deep buy still buys', run(BARE_DEEP_BUY).log.some(row => row.action === 'buy'));
+  // Out of TQQQ or into it, a sale and a purchase or (with another fund held between trades and one close, as their
+  // defaults since 27 November 2026 have it) a switch.
+  const leaves = row => (row.action === 'sell' || row.action === 'switch') && row.held !== 'TQQQ', enters = row => (row.action === 'buy' || row.action === 'switch') && row.held === 'TQQQ';
+  ck('the bare floor still sells at its floor', run(BARE_FLOOR).log.some(leaves));
+  ck('the bare deep buy still buys', run(BARE_DEEP_BUY).log.some(enters));
 }
 
 console.log(failures ? `\n${failures} check(s) failed` : 'library bear exit: all checks passed');

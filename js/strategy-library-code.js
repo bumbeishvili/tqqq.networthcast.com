@@ -251,7 +251,7 @@ function upgradeSavedCode(code) { return upgradeDailyDisplay(upgradeWithdrawalHa
 // for entries renamed since copies of them were made. null for code that is not
 // a library copy. Used by js/saved-configs.js to bring unedited copies up to
 // the current library code at load.
-const LIBRARY_FORMER_NAMES = { 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
+const LIBRARY_FORMER_NAMES = { 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
 const codeName = code => { const m = /^\s*name:\s*"([^"]+)"/m.exec(String(code || '')); return m ? m[1] : null; };
 function libraryEntryOf(code) {
   const name = codeName(code);
@@ -4866,7 +4866,7 @@ function withLateWeekCash(base, spec) {
       ${JSON.stringify(Array.from({ length: 99 }, (_, k) => 2 + k))} },
     { id: "lateRsiLevel", label: "Late-week low at or under", tip: "The week is skipped with the RSI at this level or under.", text: "at {} or under.", default: 40, when: { lateFund: ${funds}, lateRsiSkip: true }, options:
       ${JSON.stringify(Array.from({ length: 131 }, (_, k) => 5 + 0.5 * k))} },
-    { id: "lateLag", label: "Late-week lagging week", tip: "Yes: a week skipped for a low RSI is taken for its first day all the same when SOXX's return trails QQQ's. Found on Min - late-week SQQQ, where TQQQ fell 3.2% on average on the Thursday of such weeks in 2010-2017 and 1.4% in 2018-2025.", text: "Still take such a week for a day when SOXX lags QQQ: {}.", type: "bool", default: ${spec.lag}, when: { lateFund: ${funds}, lateRsiSkip: true }, options: ${LATE_WEEK_YES_NO} },
+    { id: "lateLag", label: "Late-week lagging week", tip: "Yes: a week skipped for a low RSI is taken for its first day all the same when SOXX's return trails QQQ's. Found on 10-25 - Min - late-week SQQQ, where TQQQ fell 3.2% on average on the Thursday of such weeks in 2010-2017 and 1.4% in 2018-2025.", text: "Still take such a week for a day when SOXX lags QQQ: {}.", type: "bool", default: ${spec.lag}, when: { lateFund: ${funds}, lateRsiSkip: true }, options: ${LATE_WEEK_YES_NO} },
     { id: "lateLagDays", label: "Late-week lag over (days)", tip: "Both returns are taken over this many closes.", text: "Lagging is SOXX's return over {} days", default: 20, when: { lateFund: ${funds}, lateRsiSkip: true, lateLag: true }, options:
       ${JSON.stringify(Array.from({ length: 59 }, (_, k) => 2 + k).concat(Array.from({ length: 38 }, (_, k) => 65 + 5 * k)))} },
     { id: "lateLagBy", label: "Late-week lag by more than", tip: "How far under QQQ's return, in points.", text: "under QQQ's by more than {}.", unit: "%", default: 2, when: { lateFund: ${funds}, lateRsiSkip: true, lateLag: true }, options:
@@ -5935,6 +5935,11 @@ CODE[66] = bareStrategy({
     const decision = callOf(inNow, "Deep buy", leadVs, inNow ? "deep buy held until the lead is back at " + reentry + "%" : stateNow === 2 ? "armed: buys at a lead of " + deep + "% or lower" : "not armed: the lead is over the floor");`,
 });
 
+// #65's defaults since 27 November 2026: the user's pick on the map of 2010-2025 ("set these two too"): the lead over 252
+// days ±51, the floor at 5%, back within 20 days after 4 closes 2 points over it, or after 4 closes at −66% or more,
+// SOXL after the break (were 546 ±60, 0%, 3 closes, 35% for 10 closes, cash). With $80K and $3K a month 94.3% a year,
+// max drawdown 59.2% (before: 17.9%, 83.2%).
+CODE[65] = withDefaults(CODE[65], { name: "Bare floor", defaults: { lookbackDays: 252, startAvgDays: 51, floorLead: 5, floorBackCloses: 4, reentryLead: -66, reentryCloses: 4, park: "soxl" } });
 // #63, #64 and #66's defaults since 27 November 2026: the user's picks on the maps of 2010-2025 ("include these three").
 // With $80K and $3K a month, before in brackets: buy-back line 48.2% a year, max drawdown 40.1% (18.8%, 61.8%); ceiling
 // 103.2%, 69.9% (68.2%, 69.9%); deep buy 83.7%, 69.9% (27.5%, 38.6%).
@@ -6555,7 +6560,9 @@ CODE[73] = withTips(withDefaults(LATE_WEEK_OVER_BASE, { name: LATE_WEEK_10_25, d
 // from #72 as it was (MIN_LATE_WEEK_BASE, which the tests also read), so they keep their own. The run's fallbacks for
 // a missing setting stay as they were: the app hands every run each setting, stored or default. The tips that quote
 // facts of the settings before are redone at these.
-const MIN_LATE_WEEK = "Min - late-week SQQQ";
+// Renamed "10-25 - Min - late-week SQQQ" the same day (the user: "Rename this so it says 10-25 min late-week sqqq");
+// the code it is built from keeps the old name line (MIN_LATE_WEEK_BASE, #73's base).
+const MIN_LATE_WEEK = "10-25 - Min - late-week SQQQ";   // was "Min - late-week SQQQ" until 27 November 2026
 const MIN_LATE_WEEK_BASE = CODE[72];
 CODE[72] = withTips(withDefaults(MIN_LATE_WEEK_BASE, { name: MIN_LATE_WEEK, defaults: {
   trendUnder: -1.5, rsiFund: "qqq", rsiLevel: 41.5, lagFund: "spxl", lagDays: 2, lagVs: "qld", lagBy: 1.5 } }),
