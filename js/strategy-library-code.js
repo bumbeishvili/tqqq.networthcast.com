@@ -6058,26 +6058,33 @@ CODE[67] = withDefaults(CODE[67], { name: "Bare SOXL lead", defaults: { soxlLead
 CODE[68] = withDefaults(CODE[68], { name: "Bare RSI overheat", defaults: { rsiDays: 6, oh: 92, cool: 23, park: "soxs", splitDays: false } });
 CODE[69] = withDefaults(CODE[69], { name: "Bare RSI(2) dip-buy", defaults: { rsiDays: 6, buy: 23, sell: 92, park: "soxs", splitDays: false } });
 
-// #70 Bare MACD: #17's signal without its trailing stop: TQQQ while QQQ's MACD (12, 26 and 9-day
-// averages of its closes) is above its signal line and above zero. The averages run from the
-// data's first close, where #17 starts them 60 days before the Entry.
+// #70 Bare MACD: #17's signal without its trailing stop: TQQQ while QQQ's MACD (its fast and slow
+// exponential averages of the closes, and the signal line's days: 12, 26 and 9 by default) is above its
+// signal line and above zero. The averages run from the data's first close, where #17 starts them 60 days
+// before the Entry. The three numbers are settings since 27 November 2026 (the user: "can you make sure
+// these three numbers are dropdown and choosable"); they have no ⓘ of their own, so the sentence reads as
+// one, "QQQ's MACD (12, 26, 9)", and the held fund's ⓘ at its end says what they are.
 CODE[70] = bareStrategy({
   name: "Bare MACD",
-  params: '',
-  park: { label: "Held while out", tip: "What the money is in while the MACD is under its signal line or under zero.", text: "Hold TQQQ while QQQ's MACD (12, 26, 9) is above its signal line and above zero; hold {} otherwise." },
-  columns: `    { key: "macd", label: "MACD", tip: "QQQ's 12-day average close minus its 26-day one (exponential averages)." },
-    { key: "macdSignal", label: "Signal", tip: "The MACD's own 9-day exponential average." },`,
+  params: `    { id: "fastDays", label: "MACD fast (days)", text: "Hold TQQQ while QQQ's MACD ({},", default: 12, options: Array.from({ length: 39 }, (_, k) => 2 + k) },
+    { id: "slowDays", label: "MACD slow (days)", text: "{},", default: 26, options: Array.from({ length: 91 }, (_, k) => 10 + k) },
+    { id: "signalDays", label: "MACD signal (days)", text: "{}) is above its signal line and above zero;", default: 9, options: Array.from({ length: 29 }, (_, k) => 2 + k) },`,
+  park: { label: "Held while out", tip: "The three numbers: the MACD is QQQ's fast exponential average close minus its slow one, over those days; the signal line is the MACD's own exponential average over the third number of days. While the MACD is under its signal line or under zero, the money is in this fund.", text: "hold {} otherwise." },
+  columns: `    { key: "macd", label: "MACD", tip: "QQQ's fast exponential average close minus its slow one." },
+    { key: "macdSignal", label: "Signal", tip: "The MACD's own exponential average, over the signal line's days." },`,
   rest: '"cash"',
   panel: '"QQQ MACD"',
-  setup: `    // QQQ's MACD over the whole history: the 12 and 26-day exponential averages, their difference, and its 9-day average.
+  setup: `    // QQQ's MACD over the whole history: the fast and slow exponential averages, their difference, and its own
+    // average over the signal line's days (12, 26 and 9 by default).
     const macdAt = new Float64Array(p.endIdx + 1).fill(NaN), signalAt = new Float64Array(p.endIdx + 1).fill(NaN), bullAt = new Uint8Array(p.endIdx + 1);
     {
-      const k12 = 2 / 13, k26 = 2 / 27, k9 = 2 / 10, sig = data.qqq;
-      let e12 = 0, e26 = 0, macd = 0, signal = 0, started = false;
+      const days = (v, dflt) => Math.max(1, Math.round(v == null ? dflt : +v));
+      const kFast = 2 / (days(p.fastDays, 12) + 1), kSlow = 2 / (days(p.slowDays, 26) + 1), kSignal = 2 / (days(p.signalDays, 9) + 1), sig = data.qqq;
+      let eFast = 0, eSlow = 0, macd = 0, signal = 0, started = false;
       for (let i = 0; i <= p.endIdx; i++) {
         if (sig[i] > 0) {
-          if (!started) { e12 = sig[i]; e26 = sig[i]; started = true; }
-          else { e12 += k12 * (sig[i] - e12); e26 += k26 * (sig[i] - e26); macd = e12 - e26; signal += k9 * (macd - signal); }
+          if (!started) { eFast = sig[i]; eSlow = sig[i]; started = true; }
+          else { eFast += kFast * (sig[i] - eFast); eSlow += kSlow * (sig[i] - eSlow); macd = eFast - eSlow; signal += kSignal * (macd - signal); }
         }
         if (started) { macdAt[i] = macd; signalAt[i] = signal; bullAt[i] = macd > signal && macd > 0 ? 1 : 0; }
       }
