@@ -44,19 +44,49 @@ let savedConfigs = [];
 // strategy. Exposed on window so chart.js can clear it when a base panel opens.
 window._editingConfigId = null;
 
-(function loadSavedConfigs() {
+// The saved list as it is in localStorage now. A custom strategy has no entry in CONFIG_PARAM_IDS (its params
+// are the ones its own code declares, not sidebar control ids), so it has to be allowed through explicitly, or
+// every custom strategy would be written to localStorage and then dropped on the next page load.
+function readStoredConfigs() {
   try {
-    const raw = localStorage.getItem(LS_SAVED_KEY);
-    if (raw) {
-      const arr = JSON.parse(raw);
-      // A custom strategy has no entry in CONFIG_PARAM_IDS — its params are the
-      // ones its own code declares, not sidebar control ids — so it has to be
-      // allowed through explicitly, or every custom strategy would be written to
-      // localStorage and then dropped on the next page load.
-      if (Array.isArray(arr)) savedConfigs = arr.filter(c => c && c.type && (c.type === 'custom' || CONFIG_PARAM_IDS[c.type]));
-    }
-  } catch (e) {}
-})();
+    const arr = JSON.parse(localStorage.getItem(LS_SAVED_KEY));
+    return Array.isArray(arr) ? arr.filter(c => c && c.type && (c.type === 'custom' || CONFIG_PARAM_IDS[c.type])) : [];
+  } catch (e) { return []; }
+}
+
+// Two windows of the site share one saved list (the user, 2026-11-27: "if I have two windows and set one click
+// one strategy from one window and click it from second window, second usually overwrites first ... make sure
+// overwrite only happens if they are same strategies"). Each window keeps the list as it last read it from
+// storage or wrote it there (its base), so a save can tell its own changes from another window's:
+//   a strategy changed or added here      this window's version
+//   a strategy this window left alone     the stored version, another window's change if it made one, or
+//                                         none if another window deleted it
+//   a strategy only the store has         another window added it: kept; it was deleted here if the base has it
+// The order stays this window's, unless only another window moved the strategies. Another window's saves also
+// reach this one as they happen (the storage event below), so the merge matters only for a save made before
+// that window's news arrived.
+let _savedBase = { ids: [], texts: new Map() };
+const savedConfigText = cfg => JSON.stringify(cfg);
+function rememberSavedBase(list) {
+  _savedBase = { ids: list.map(c => c.id), texts: new Map(list.map(c => [c.id, savedConfigText(c)])) };
+}
+function mergeSavedConfigs(mine, theirs) {
+  const base = _savedBase.texts, mineIds = new Set(mine.map(c => c.id)), theirsById = new Map(theirs.map(c => [c.id, c]));
+  const kept = mine.flatMap((cfg) => {
+    if (base.get(cfg.id) !== savedConfigText(cfg)) return [cfg];   // changed or added here
+    const stored = theirsById.get(cfg.id);
+    return stored ? [stored] : [];                                  // unchanged here: the store's, or deleted elsewhere
+  });
+  const merged = kept.concat(theirs.filter(c => !mineIds.has(c.id) && !base.has(c.id)));
+  const movedHere = mine.map(c => c.id).filter(id => base.has(id)).join() !== _savedBase.ids.filter(id => mineIds.has(id)).join();
+  if (!movedHere) {
+    const at = new Map(theirs.map((c, k) => [c.id, k])), place = c => (at.has(c.id) ? at.get(c.id) : Infinity);
+    merged.sort((a, b) => place(a) - place(b));   // stable: strategies new here keep their order at the end
+  }
+  return merged;
+}
+savedConfigs = readStoredConfigs();
+rememberSavedBase(savedConfigs);
 
 function persistSavedConfigs() {
   // Configs loaded from a share-link arrive as `_transient`: they render on
@@ -64,9 +94,29 @@ function persistSavedConfigs() {
   // localStorage until the user explicitly clicks "Save" on the banner. So
   // every persist filters transient entries out — only saved-for-real configs
   // end up in localStorage.
-  const persistable = savedConfigs.filter(c => !c._transient);
-  try { localStorage.setItem(LS_SAVED_KEY, JSON.stringify(persistable)); } catch (e) {}
+  const mine = savedConfigs.filter(c => !c._transient), merged = mergeSavedConfigs(mine, readStoredConfigs());
+  try { localStorage.setItem(LS_SAVED_KEY, JSON.stringify(merged)); } catch (e) {}
+  rememberSavedBase(merged);
+  // Another window's strategies came in with the merge: this window shows them too.
+  if (merged.length !== mine.length || merged.some((cfg, k) => cfg !== mine[k])) adoptSavedConfigs(merged);
 }
+// This window's list becomes `stored` (with its own changes not saved yet, merged), its share-link strategies
+// kept, and the page is drawn again once. A strategy whose panel is open and that another window deleted closes it.
+let _savedRedraw = 0;
+function adoptSavedConfigs(stored) {
+  savedConfigs = stored.concat(savedConfigs.filter(c => c._transient));
+  const gone = id => id && !savedConfigs.some(c => c.id === id);
+  if (gone(window._editingConfigId)) window._editingConfigId = null;
+  if (gone(window._openCustomCfgId) && typeof closeStrategyPanel === 'function') closeStrategyPanel();
+  if (!_savedRedraw && typeof render === 'function') _savedRedraw = requestAnimationFrame(() => { _savedRedraw = 0; render(); });
+}
+// Another window saved the list: take its strategies now, so this window's next save starts from them.
+window.addEventListener('storage', (e) => {
+  if (e.key !== LS_SAVED_KEY) return;
+  const stored = readStoredConfigs();
+  adoptSavedConfigs(mergeSavedConfigs(savedConfigs.filter(c => !c._transient), stored));
+  rememberSavedBase(stored);
+});
 function getSavedConfigs() { return savedConfigs; }
 
 // --- per-line color (base strategies + saved strategies) ----------------
