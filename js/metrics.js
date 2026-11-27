@@ -94,13 +94,15 @@ const fmtCardDD = (pct) => (pct > 99 ? fmtDD(pct) : Math.round(pct) === 0 ? '0%'
 // will say what it is, move that small number closer to big number and a bitbottom"), in as few words as it takes
 // (the user, of a longer one: "just say this year cagr so far, what the fuck is with thos elengthy words").
 const yearCagrTip = () => `${dataYear()} CAGR so far`;
-const yearCagrHtml = (v) => `<span class="year-so-far"><span class="year-so-far-value ${v >= 0 ? 'positive' : 'negative'}">${fmtWholePct(v)}</span>`
-  + `<span class="info-icon year-so-far-info" tabindex="0" data-tip="${yearCagrTip()}">ⓘ</span></span>`;
+// A small figure with its own ⓘ, or none with no tip: a card has one ⓘ for all its figures (cardTipText in
+// js/saved-configs.js), a chip one after each.
+const yearSoFarHtml = (text, cls, tip) => `<span class="year-so-far"><span class="year-so-far-value ${cls}">${text}</span>`
+  + (tip ? `<span class="info-icon year-so-far-info" tabindex="0" data-tip="${tip}">ⓘ</span>` : '') + '</span>';
+const yearCagrHtml = (v, tip = yearCagrTip()) => yearSoFarHtml(fmtWholePct(v), v >= 0 ? 'positive' : 'negative', tip);
 // The year's max drawdown after a DD, the same way, its ⓘ with the year's name and the fall's dates
 // (maxDDSoFarThisYear's { pct, peakDate, troughDate }).
-const yearDDTip = (dd) => { const range = fmtDDRange(dd.peakDate, dd.troughDate); return `${dataYear()} max drawdown so far${range ? ': ' + range.replace('–', ' to ') : ''}`; };
-const yearDDHtml = (dd) => `<span class="year-so-far"><span class="year-so-far-value negative">${fmtCardDD(dd.pct)}</span>`
-  + `<span class="info-icon year-so-far-info" tabindex="0" data-tip="${yearDDTip(dd)}">ⓘ</span></span>`;
+const yearDDTip = (dd) => { const range = fmtDDRange(dd.peakDate, dd.troughDate); return `${dataYear()} max drawdown so far${range ? ', ' + range.replace('–', ' to ') : ''}`; };
+const yearDDHtml = (dd, tip = yearDDTip(dd)) => yearSoFarHtml(fmtCardDD(dd.pct), 'negative', tip);
 // The year a CAGR "so far" is of: the year of the data's last day (2026 on 26 November 2026).
 const dataYear = () => daily[daily.length - 1].date.slice(0, 4);
 // A run's money-weighted CAGR over the data's year so far (the user, 2026-11-26: "also inside cards and

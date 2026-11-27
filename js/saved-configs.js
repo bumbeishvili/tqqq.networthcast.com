@@ -3097,41 +3097,63 @@ document.addEventListener('change', (e) => {
 // The colour of a card's day event, by the trade's kind: the log tables' own classes for a buy
 // and a sale; a switch and a rebalance keep the card's accent.
 const SC_EVENT_CLASS = { buy: 'action-buy', sell: 'action-sell' };
-// A card's trade in words (dayEventWords) and its ⓘ (icon, its HTML) right after them, on one line: a card too narrow
-// for the words cuts them with "…" and keeps the ⓘ (the user, 2026-11-26: "Make sure its one line").
-function dayEventHtml(event, icon) {
-  return `<span class="sc-event-text">${_escHtml(dayEventWords(event))}</span>${icon}`;
+// A card's trade in words (dayEventWords), on one line: a card too narrow for the words cuts them with "…" (the
+// user, 2026-11-26: "Make sure its one line").
+function dayEventHtml(event) {
+  return `<span class="sc-event-text">${_escHtml(dayEventWords(event))}</span>`;
 }
 // The day's change after a card's trade or fund, as its line's end label has it (configDayChange in js/chart.js): the
-// percent, small, and an ⓘ that says since which close (the user, 2026-11-27: "Lets also add todays change in
-// percentage under today held funds in small fonts as above 2026"). Empty without one.
+// percent, small (the user, 2026-11-27: "Lets also add todays change in percentage under today held funds in small
+// fonts as above 2026"). Empty without one. What it is goes in the card's ⓘ (dayChangeTip).
 function dayChangeHtml(delta) {
-  if (!delta) return '';
+  return delta ? `<span class="sc-day-value ${delta.pct >= 0 ? 'positive' : 'negative'}">${fmtDayChangePct(delta)}</span>` : '';
+}
+// Since which close: "change since the 24 Nov close", or outside the session "after hours change since the 25 Nov close".
+function dayChangeTip(delta) {
   const close = (date) => _miniCloseName(Date.parse(date), false);
-  const session = delta.session ? EXTENDED_SESSION_NAMES[delta.session] : '';
-  const tip = session
-    ? `${session[0].toUpperCase() + session.slice(1)} change since ${close(daily[daily.length - 1].date)}`
-    : `Change since ${close(daily[daily.length - 2].date)}`;
-  return `<span class="sc-day-value ${delta.pct >= 0 ? 'positive' : 'negative'}">${fmtDayChangePct(delta)}</span>`
-    + `<span class="info-icon sc-day-info" tabindex="0" data-tip="${tip}">ⓘ</span>`;
+  return delta.session ? `${EXTENDED_SESSION_NAMES[delta.session]} change since ${close(daily[daily.length - 1].date)}`
+    : `change since ${close(daily[daily.length - 2].date)}`;
 }
 const cardDayChangeHtml = (cfgId) => `<span class="sc-day" data-day-change-for="${cfgId}">${dayChangeHtml(configDayChange(cfgId))}</span>`;
-// The cards' day changes redrawn where they moved (js/chart.js's endLabelPlugin, after each chart update).
+// The card's one ⓘ (the user, 2026-11-27: "just have a single info icon and list everything in here"): each figure the
+// card shows, as it shows it, then what it is, in the card's order, and on a day it trades the trade's reason and
+// whether its price is final. The same conditions as the card's own figures (buildConfigPillHtml).
+function cardTipText(cfgId) {
+  const m = (window._configMetrics || {})[cfgId] || {}, lines = [];
+  const sentence = (text) => (/[.!?]$/.test(text) ? text : text + '.');
+  if (Number.isFinite(m.cagr)) {
+    if (Number.isFinite(m.cagrYear)) lines.push(`${fmtWholePct(m.cagrYear)}: ${yearCagrTip()}`);
+    if (Number.isFinite(m.maxDD)) {
+      const range = fmtDDRange(m.ddPeak, m.ddTrough);
+      lines.push(`${fmtCardDD(m.maxDD)}: max drawdown${range ? ', ' + range.replace('–', ' to ') : ''}`);
+      if (m.ddYear) lines.push(`${fmtCardDD(m.ddYear.pct)}: ${yearDDTip(m.ddYear)}`);
+    }
+  }
+  if (m.event) lines.push(`${dayEventWords(m.event)}.${m.event.why ? ' ' + sentence(m.event.why) : ''}`, dayEventClose(m.event));
+  const delta = m.event || m.held ? configDayChange(cfgId) : null;
+  if (delta) lines.push(`${fmtDayChangePct(delta)}: ${dayChangeTip(delta)}`);
+  return lines.join('\n');
+}
+// The cards' day changes, and the ⓘ that lists them, redrawn where they moved (js/chart.js's endLabelPlugin, after each
+// chart update: a yesterday run or a newer extended-hours print repaints only the chart).
 function refreshCardDayChanges() {
   for (const el of document.querySelectorAll('.saved-config-pill .sc-day[data-day-change-for]')) {
     const html = dayChangeHtml(configDayChange(el.dataset.dayChangeFor));
     if (el.innerHTML !== html) el.innerHTML = html;
+  }
+  for (const icon of document.querySelectorAll('.saved-config-pill [data-card-tip-for]')) {
+    const tip = cardTipText(icon.dataset.cardTipFor);
+    if (icon.getAttribute('data-tip') !== tip) icon.setAttribute('data-tip', tip);
   }
 }
 function buildConfigPillHtml(cfg) {
   const m = (window._configMetrics || {})[cfg.id] || {};
   const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const hidden = !!cfg.hidden;
-  // An ⓘ stands right after what it explains (the user, 2026-11-25: "close to the symbol it is connected to").
-  const tipIcon = (lines) => `<span class="info-icon sc-info" tabindex="0" data-tip="${esc(lines.filter(Boolean).join('\n'))}">ⓘ</span>`;
-  // The numbers on one line. The drawdown's dates are in an ⓘ beside it, and nothing else is
-  // (the user: "only that should have info icon that should only display when that drawdown
-  // happened between").
+  // One ⓘ for the card, after its last number (cardTipText); after the trade or fund when the card has no numbers.
+  const tip = cardTipText(cfg.id);
+  const icon = tip ? `<span class="info-icon sc-info" tabindex="0" data-card-tip-for="${cfg.id}" data-tip="${esc(tip)}">ⓘ</span>` : '';
+  // The numbers on one line: CAGR and DD, each with its year so far beside it.
   let metrics = '';
   if (Number.isFinite(m.cagr)) {
     const cagrSign = m.cagr >= 0 ? '+' : '';
@@ -3140,19 +3162,19 @@ function buildConfigPillHtml(cfg) {
     const ddRange = (typeof fmtDDRange === 'function') ? fmtDDRange(m.ddPeak, m.ddTrough) : '';
     metrics = `
       <div class="sc-metrics">
-        <span class="sc-metric"><span class="sc-metric-label">CAGR</span> <span class="sc-metric-value ${cagrCls}">${fmtWholePct(m.cagr)}</span>${Number.isFinite(m.cagrYear) ? yearCagrHtml(m.cagrYear) : ''}</span>
-        ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRange ? tipIcon([ddRange.replace('–', ' to ')]) : ''}${m.ddYear ? yearDDHtml(m.ddYear) : ''}</span>` : ''}
+        <span class="sc-metric"><span class="sc-metric-label">CAGR</span> <span class="sc-metric-value ${cagrCls}">${fmtWholePct(m.cagr)}</span>${Number.isFinite(m.cagrYear) ? yearCagrHtml(m.cagrYear, null) : ''}${ddStr ? '' : icon}</span>
+        ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${m.ddYear ? yearDDHtml(m.ddYear, null) : ''}${icon}</span>` : ''}
       </div>`;
   }
   // The day's event: the strategy's trade at the latest day's close, on a day it trades
   // (js/signal-chart.js dayEventOf). The card shows where the money goes, in the trade's colour,
-  // and no more. The ⓘ beside it is two lines: why, said once, and whether the price is final.
-  const event = m.event, sentence = (text) => (/[.!?]$/.test(text) ? text : text + '.');
-  const eventHtml = event ? `<div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${dayEventHtml(event, tipIcon([event.why ? sentence(event.why) : '', dayEventClose(event)]))}</b></div>`
+  // and no more; why, and whether the price is final, are in the card's ⓘ.
+  const event = m.event;
+  const eventHtml = event ? `<div class="sc-event"><b class="sc-event-move${SC_EVENT_CLASS[event.kind] ? ' ' + SC_EVENT_CLASS[event.kind] : ''}">${dayEventHtml(event)}</b></div>`
     // On a day without a trade the same line names the fund held now, paler (the user, 2026-11-26: "it should say Currently TQQQ").
     : m.held ? `<div class="sc-holding">Currently ${esc(m.held)}</div>` : '';
   // The day's change right after it.
-  const nowHtml = eventHtml ? `<div class="sc-now">${eventHtml}${cardDayChangeHtml(cfg.id)}</div>` : '';
+  const nowHtml = eventHtml ? `<div class="sc-now">${eventHtml}${cardDayChangeHtml(cfg.id)}${metrics ? '' : icon}</div>` : '';
   const eyeSvg = hidden
     ? '<path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/>'
     : '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/>';

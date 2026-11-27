@@ -2607,9 +2607,8 @@
   }
   .saved-config-pill .sc-info { flex: none; align-self: center; margin: 0 0 0 1px; }
   /* The year so far after a CAGR or a DD on a card or a chip: its figure, small, 1px after the number (the row's 4px
-     gap less 3) and a quarter of its height below its baseline, then its ⓘ. After the card DD's own ⓘ it keeps the gap. */
+     gap less 3) and a quarter of its height below its baseline, then on a chip its ⓘ (a card has one ⓘ for all). */
   .year-so-far { align-self: baseline; margin-left: -3px; position: relative; top: 0.25em; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
-  .sc-info + .year-so-far { margin-left: 0; }
   .year-so-far .year-so-far-info { margin: 0 0 0 2px; }
   .year-so-far-value, .sc-day-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
   .year-so-far-value.positive, .sc-day-value.positive { color: var(--green-text); }
@@ -2633,7 +2632,6 @@
   .saved-config-pill .sc-event { min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; }
   .saved-config-pill .sc-event-move { display: flex; align-items: center; min-width: 0; font-weight: 700; color: var(--accent-text); }
   .saved-config-pill .sc-event-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .saved-config-pill .sc-event .sc-info { margin-left: 4px; }
   /* On a day without a trade: the fund held now, in the event's place and type, paler. */
   .saved-config-pill .sc-holding { min-width: 0; font-size: calc(10px * var(--ui-scale)); line-height: 1.35; font-weight: 700; color: var(--accent-text); opacity: 0.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   /* The trade or the fund, then the day's change: small, a quarter of its height under the line's baseline, as the
@@ -2641,7 +2639,6 @@
   .saved-config-pill .sc-now { display: flex; align-items: baseline; min-width: 0; }
   .saved-config-pill .sc-day { flex: none; align-self: baseline; margin-left: 3px; position: relative; top: 0.25em; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
   .saved-config-pill .sc-day:empty { display: none; }
-  .saved-config-pill .sc-day .sc-day-info { margin: 0 0 0 2px; }
   .saved-config-pill .sc-event-move.action-buy { color: var(--green-text); }
   .saved-config-pill .sc-event-move.action-sell { color: var(--red-text); }
   .saved-config-pill.is-hidden { opacity: var(--state-hidden-opacity); }
