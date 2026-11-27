@@ -27,6 +27,7 @@ const STRATEGY_LIBRARY = [
     rules: 'The app\u2019s canonical trend rule: hold TQQQ while QQQ closes above its 200-day moving average, park in cash (earning interest) when it closes below \u2014 checked daily, no buffers, with an RSI(9)>90 overheat exit, an RSI(7)<80 cool-gate re-entry, T+1 settlement and 15-day ease-ins. Same engine and settings as the SMA sidebar panel.',
     here: '\u2014', reported: 'The app\u2019s own base strategy; numbers are this app\u2019s backtest at canonical defaults' },
   { n: 1, name: 'Faber 10-month timing', formerNames: ['Faber 10-month / 200-day Timing Model'], tag: 'foundation', runnable: true,
+    hidden: true,   // the user, 2026-11-27: "remove this too"; off the catalog, kept in the list so saved copies and share links still resolve
     rules: 'Signal: QQQ vs its 530-day median, read on the month’s last trading day. Enter: above → TQQQ. Exit: below → cash. Freq: monthly.',
     here: '31.3% / −69.9%', reported: '10.2% vs 9.3% B&H (S&P 1901–2012) · defaults fitted to 2010–2025 and rounded: 42.1% a year, max drawdown 70%, 3 trades (published settings: 31.8%, 70%)', src: 'F' },
   { n: 2, name: 'Gayed & Bilello LRS 3×', formerNames: ['Gayed & Bilello LRS 3× — Leverage for the Long Run'], tag: 'academic', runnable: true,
