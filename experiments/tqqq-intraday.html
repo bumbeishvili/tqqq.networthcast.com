@@ -333,7 +333,7 @@
       </div>
       <div class="daily">
         <div class="daily-head">
-          <span class="metric-name" id="daily-name" title="One bar a day, from the period's first day to its last. ⌘/Ctrl + scroll zooms the period, ⌘/Ctrl + drag slides it. Every other week is shaded. Days the other filters leave out of the chart are pale. A hollow bar is not final yet: today so far, or the latest pre-market or after-hours price."></span>
+          <span class="metric-name" id="daily-name" title="One bar a day, from the period's first day to its last. ⌘/Ctrl + scroll zooms this chart, ⌘/Ctrl + drag slides it; the period and the filters stay as they are. Every other week is shaded. Days the other filters leave out of the chart are pale. A hollow bar is not final yet: today so far, or the latest pre-market or after-hours price."></span>
         </div>
         <div id="daily-chart"></div>
       </div>
@@ -1542,9 +1542,9 @@ class WeekdayBarChart extends ChartBase {
 // place after the last day, at its change against that day's close. Neither
 // is final yet: both are drawn hollow and the hover names them.
 //
-// `view` is the period slider's window, { first, days } in days from the
-// first loaded day: whole days at rest, fractions of a day while a zoom or a
-// slide is under way. The bars are the days at least partly inside it, each
+// `view` is the bars' own window inside the period (setupDailyZoom), { first,
+// days } in days from the first loaded day: whole days at rest, fractions of a
+// day while a zoom or a slide is under way. The bars are the days at least partly inside it, each
 // with its place `at`; a day at an edge that the thumbs have not taken in is
 // not among the shown days, so it is pale. The print's place comes into the
 // window as the last day's does, so it stays with the period's end.
@@ -1602,36 +1602,6 @@ const DAILY_DATE_GAP = 8;                // px two dates keep between them
 const DAILY_DATE_ROW = 13;               // px from the plot's bottom to the dates' baseline
 const DAILY_LABEL_ROW = 5;               // px from the plot's top up to the hovered day's label
 const DAILY_HOVER_BAND_MIN = 3;          // px the hovered day's band is wide at least
-// The fisheye: where the days are too thin to tell one from the next, the days
-// around the pointer open up, so the day after a highlighted one can be read
-// (the user, 2026-11-23: "when you charts are too small, add fisheye zoom in
-// view when hovering, I want to see when similar bars are highlighted what
-// the next move was usualy"). slot: px the day under the pointer is opened
-// to, however thin the days are; a period whose days are that wide already
-// has no lens. radius: px along the plot the lens reaches on each side of the
-// pointer, and share: the most of the plot's width it may reach; past it the
-// days stay where they are, so most of the plot keeps its overview. With
-// these, on a plot wide enough for the whole radius, the slots of the four
-// days next to the hovered one are about 12, 10.5, 9 and 8 px wide, whatever
-// the period.
-const DAILY_FISHEYE = { slot: 14, radius: 180, share: 0.3 };
-// A fisheye lens along a line (Sarkar and Brown's distortion, as d3's fisheye
-// plugin has it, kept to a radius): a place within `radius` of `focus` moves
-// away from it, so the stretch at the focus is `power` times as long and the
-// stretch at the lens's rim as much shorter; the focus, the rim and everything
-// past it stay put. Near an end of the line (`min`, `max`) a side reaches only
-// to the end, and its power falls with its reach: the days between the
-// pointer and the plot's edge are not squeezed out of sight to make room.
-function fisheyeLens(focus, radius, power, min, max) {
-  const side = (room) => { const reach = Math.max(0, Math.min(radius, room)); return { reach, power: 1 + (power - 1) * reach / radius }; };
-  const before = side(focus - min), after = side(max - focus);
-  return (x) => {
-    const { reach, power: sidePower } = x < focus ? before : after, away = Math.abs(x - focus);
-    if (away >= reach) return x;
-    const t = away / reach;   // 0 at the focus, 1 at the rim
-    return focus + Math.sign(x - focus) * reach * sidePower * t / ((sidePower - 1) * t + 1);
-  };
-}
 const DAILY_WEEK_ZERO = new Date(2000, 0, 3);   // a Monday: weeks are numbered from it, so a week keeps its shade whatever the period
 const weekOf = date => d3.timeMonday.count(DAILY_WEEK_ZERO, date);
 // The zoom's feel, the main chart's (CHART_ZOOM in js/chart.js): a wheel step
@@ -1658,12 +1628,10 @@ class DailyChangeChart extends ChartBase {
       data: null,               // buildDailyBars' bars
       domain: null,             // [low, high] %: the fixed scale (dailyDomain)
       view: null,               // buildDailyBars' view: { first, days }, the window in the bars' `at`
-      onZoom: null,             // (factor, at): the period's owner scales the days shown
-      onPanStart: null,         // (): the owner takes hold of the period and returns slide(days)
+      onZoom: null,             // (factor, at): the window's owner scales the days shown
+      onPanStart: null,         // (): the owner takes hold of the window and returns slide(days)
       onPanEnd: null,           // (): the slide is over
       pointerX: null,           // px along the plot the pointer rests at; null off the plot
-      lensed: false,            // the days are thin enough for the fisheye (drawScales)
-      lensFrame: null,          // the frame the plot is drawn again in, under the fisheye; null with none on its way
       pan: null,                // a slide under way: where it started and the owner's slide
       chartWidth: null,
       chartHeight: null,
@@ -1681,8 +1649,7 @@ class DailyChangeChart extends ChartBase {
     return this;
   }
 
-  // Everything placed along the days. Under the fisheye the days move with the
-  // pointer, so this is drawn again as it moves (pointTo).
+  // Everything placed along the days.
   drawPlot() {
     this.drawScales();
     this.drawWeekBands();
@@ -1693,29 +1660,21 @@ class DailyChangeChart extends ChartBase {
   }
 
   drawScales() {
-    const { chart, id, data, domain, view, chartWidth, chartHeight, marginTop, marginBottom, pointerX, pan } = this.getState();
+    const { chart, id, data, domain, view, chartWidth, chartHeight, marginTop, marginBottom } = this.getState();
     const y = d3.scaleLinear().domain(domain).range([chartHeight, 0]);   // not clamped: a bar past the scale runs out of the plot
     // The price's own scale, over the plot's whole height: the prices of the days on the plot, out to round values.
     const price = d3.scaleLinear().domain(d3.extent(data, d => d.price)).nice(DAILY_PRICE_TICKS).range([chartHeight, 0]);
     const slot = chartWidth / view.days;                    // px a day takes along the plot
     const left = at => (at - view.first) * slot;            // the left edge of a day's slot, in days of equal width
     const mid = at => left(at) + slot / 2;                  // and its middle
-    // The fisheye, while the pointer rests on days too thin to read and no
-    // slide is under way: a day's slot as it is drawn runs between its two
-    // edges seen through the lens. The plot's ends stay where they are.
-    const power = DAILY_FISHEYE.slot / slot;
-    const lensed = power > 1;
-    const radius = Math.min(DAILY_FISHEYE.radius, chartWidth * DAILY_FISHEYE.share);
-    const lens = lensed && pointerX !== null && !pan ? fisheyeLens(pointerX, radius, power, 0, chartWidth) : x => x;
-    const span = at => [lens(left(at)), lens(left(at) + slot)];
-    const center = at => d3.mean(span(at));
+    const span = at => [left(at), left(at) + slot];         // the slot's two edges
     // What a window's edge cuts: the bands to the plot's box, the bars to its
     // width alone, with the room over and under it a bar past the scale may take.
     const clip = `${id}-plot`, barsClip = `${id}-bars`;
     chart._add('clipPath.daily-clip').attr('id', clip)._add('rect.daily-clip-box').attr('width', chartWidth).attr('height', chartHeight);
     chart._add('clipPath.daily-bars-clip').attr('id', barsClip)._add('rect.daily-bars-clip-box')
       .attr('width', chartWidth).attr('y', -marginTop - DAILY_HEAD_ROOM).attr('height', DAILY_HEAD_ROOM + marginTop + chartHeight + marginBottom);
-    this.setState({ y, price, slot, left, mid, lensed, span, center, clip: `url(#${clip})`, barsClip: `url(#${barsClip})` });
+    this.setState({ y, price, slot, left, mid, span, center: mid, clip: `url(#${clip})`, barsClip: `url(#${barsClip})` });
   }
 
   // Every other calendar week stands on a grey band, from its first day's
@@ -1806,7 +1765,7 @@ class DailyChangeChart extends ChartBase {
   // zoom changes the slot a little at a time and the bars must follow evenly.
   drawBars() {
     const { chart, data, y, span, center, barsClip } = this.getState();
-    // Each bar in the middle of its day's slot as drawn: under the fisheye the slots differ in width.
+    // Each bar in the middle of its day's slot.
     const widths = data.map((d) => { const [from, to] = span(d.at), room = to - from; return Math.min(DAILY_BAR_MAX, Math.max(1, room - Math.min(DAILY_BAR_GAP_MAX, room / 4))); });
     chart._add('g.daily-bars').attr('clip-path', barsClip)._add('rect.daily-bar', data)
       .attr('x', (d, i) => center(d.at) - widths[i] / 2).attr('width', (d, i) => widths[i])
@@ -1818,8 +1777,7 @@ class DailyChangeChart extends ChartBase {
   // The day under the pointer: a band down its slot as drawn, and its date and
   // change over the plot, kept inside the plot's width. A render under a
   // resting pointer (a zoom step, a slide, a data refresh) reads the day now
-  // under it. The pointer is always in its own day: the fisheye's focus stays
-  // where it is, so the day is found in slots of equal width.
+  // under it.
   drawHover() {
     const { chart, data, view, chartWidth, chartHeight, slot, span, center, pointerX, pan } = this.getState();
     const marks = chart._add('g.daily-hover').style('display', pointerX === null ? 'none' : null);
@@ -1838,26 +1796,18 @@ class DailyChangeChart extends ChartBase {
     label.attr('x', Math.max(half, Math.min(chartWidth - half, center(day.at))));
   }
 
-  // The pointer's place along the plot, or null once it has left. Under the
-  // fisheye the days move with it, so the plot is drawn again, once a frame
-  // however many steps the pointer takes in it (a mouse reports far more often
-  // than a screen draws); otherwise only the hovered day's marks, as during a
-  // slide, which has no lens and whose own steps draw the plot.
+  // The pointer's place along the plot, or null once it has left: the hovered day's marks follow it.
   pointTo(x) {
     this.setState({ pointerX: x });
-    const { lensed, lensFrame, pan } = this.getState();
-    if (!lensed || pan) this.drawHover();
-    else if (lensFrame === null) this.setState({ lensFrame: requestAnimationFrame(() => {
-      this.setState({ lensFrame: null });
-      this.drawPlot();   // reads the pointer's place as it is now
-    }) });
+    this.drawHover();
   }
 
-  // ⌘/Ctrl + wheel over the plot zooms the period and ⌘/Ctrl + drag slides it,
+  // ⌘/Ctrl + wheel over the plot zooms its days and ⌘/Ctrl + drag slides them,
   // the gestures of the site's main chart (the user, 2026-11-23: "implement
-  // cmd zoom in and panning functionality on the chart, so that it stays sync
-  // with slider"). The chart reads the gesture and the period's owner moves
-  // the days: onZoom(factor, at) scales the days shown around the pointer's
+  // cmd zoom in and panning functionality on the chart"; since 2026-11-27 they
+  // move this chart's own window inside the period, setupDailyZoom). The chart
+  // reads the gesture and the window's owner moves the days: onZoom(factor, at)
+  // scales the days shown around the pointer's
   // place along the plot (0 its left edge, 1 its right), onPanStart() takes
   // hold of the period and returns the slide(days) the drag then calls, so
   // the day taken hold of stays under the pointer; onPanEnd() when the button
@@ -1912,9 +1862,6 @@ function renderCoverage(days) {
 // as 'edge' so it keeps following the data as days are appended; a thumb in
 // the middle is saved as its date so it lands on the same day next time.
 const PERIOD_STORAGE_KEY = 'tqqq-intraday-period';
-const PERIOD_ZOOM_MIN_DAYS = 5;          // a zoom stops at a week of trading days; the thumbs still go down to one day
-const PERIOD_SETTLE_AFTER_MS = 250;      // a wheel still this long has ended its zoom (the main chart's settleMs)
-const PERIOD_SETTLE_MS = 160;            // the glide of the daily bars' window onto whole days
 const fmtIsoDay = d3.timeFormat('%Y-%m-%d');
 
 // localStorage can be missing or throw (private mode, blocked storage);
@@ -1943,18 +1890,11 @@ function restoreThumb(saved, allDays, edgeIndex, isStart) {
 // Two-thumb period slider over the loaded trading days. Each thumb is an
 // index into allDays; the thumbs cannot cross. Every move re-filters the
 // days, recomputes the aggregates and rules, and re-renders the chart
-// (onChange).
-//
-// The daily bars also draw the slider's window, `view`: { first, days } in
-// days from the first loaded day. At rest it is the thumbs' whole days. A
-// zoom or a slide moves it by fractions of a day, so the bars move evenly
-// with the pointer, with the thumbs on the whole days nearest it; when the
-// gesture is over the window glides onto those days. A step that moves the
-// window and leaves the thumbs where they are redraws the daily bars alone
-// (onView).
-function setupPeriodSlider(allDays, onChange, onView) {
+// (onChange, with the thumbs' days and their window { first, days } in days
+// from the first loaded day, the one the daily bars zoom inside).
+function setupPeriodSlider(allDays, onChange) {
   const start = d3.select('#range-start'), end = d3.select('#range-end'), fill = d3.select('#range-fill');
-  const last = allDays.length - 1, total = allDays.length;
+  const last = allDays.length - 1;
   const saved = readSavedPeriod();
   start.attr('max', last).property('value', restoreThumb(saved.start, allDays, 0, true));
   end.attr('max', last).property('value', restoreThumb(saved.end, allDays, last, false));
@@ -1963,11 +1903,6 @@ function setupPeriodSlider(allDays, onChange, onView) {
     const a = +start.property('value'), b = +end.property('value');
     return { lo: Math.min(a, b), hi: Math.max(a, b) };
   };
-  const whole = () => {
-    const { lo, hi } = read();
-    return { first: lo, days: hi - lo + 1 };
-  };
-  let view = whole();
   let drawn = null;       // the thumbs' days the charts were last given
   let current = true;     // false once newer data has a slider of its own: nothing of this one draws any more
 
@@ -1984,109 +1919,134 @@ function setupPeriodSlider(allDays, onChange, onView) {
       end: hi === last ? 'edge' : fmtIsoDay(allDays[hi].date),
     });
     drawn = { lo, hi };
-    onChange(allDays.slice(lo, hi + 1), view);
+    onChange(allDays.slice(lo, hi + 1), { first: lo, days: hi - lo + 1 });
   };
+  start.on('input', () => apply(true));
+  end.on('input', () => apply(true));
 
-  // The end of a gesture: the window glides onto the thumbs' whole days.
-  let settleTimer = 0, settling = null;
+  // A drag on the stretch between the thumbs moves both by the same number of
+  // days, so the period keeps its length and stops at either end of the data
+  // (the user, 2026-11-23: "make sure I can drag the range"). The pointer is
+  // captured, so the drag goes on outside the slider. The charts follow a
+  // frame at most.
+  let drag = null, frame = 0;
+  fill.on('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    const { lo, hi } = read();
+    drag = { x: event.clientX, lo, length: hi - lo, daysPerPx: last / d3.select('#period-range').node().getBoundingClientRect().width };
+    fill.classed('dragging', true).node().setPointerCapture(event.pointerId);
+    event.preventDefault();   // no text selection while dragging
+  }).on('pointermove', (event) => {
+    if (!drag) return;
+    const lo = Math.max(0, Math.min(last - drag.length, drag.lo + Math.round((event.clientX - drag.x) * drag.daysPerPx)));
+    start.property('value', lo);
+    end.property('value', lo + drag.length);
+    if (!frame) frame = requestAnimationFrame(() => {
+      frame = 0;
+      if (!current) return;
+      const now = read();
+      if (now.lo !== drawn.lo || now.hi !== drawn.hi) apply(true);
+    });
+  }).on('pointerup pointercancel', () => {
+    if (!drag) return;
+    drag = null;
+    fill.classed('dragging', false);
+  });
+  apply(false);
+  const stop = () => { current = false; };
+  // Reset filters: the whole file, saved as both edges.
+  const reset = () => {
+    start.property('value', 0);
+    end.property('value', last);
+    apply(true);
+  };
+  return { stop, reset };
+}
+
+// The daily bars' own window (the user, 2026-11-27: "when zooming in it
+// should not affect other filters, but other filtes should affect it"):
+// ⌘/Ctrl + wheel zooms it and ⌘/Ctrl + drag slides it inside the period the
+// slider sets, and the slider, the other charts and every filter stay as they
+// are. The filters still reach the bars: a day they leave out is pale, and a
+// new period, the slider's, is the window again (follow). `view` is { first,
+// days } in days from the first loaded day: whole days at rest, fractions of
+// a day while a zoom or a slide is under way, so the bars move evenly with the
+// pointer (the user, 2026-11-23: "it's jumpy, can you fix jumpiness when
+// zooming in"); when the gesture is over the window glides onto whole days.
+// onView(): the window moved, the daily bars are drawn again, a frame at most.
+// The page builds everything again when new data comes in (each minute in the
+// session), so a zoomed window is handed on by its first and last dates
+// (carried(), the next one's `kept`) and taken back when the new period still
+// holds both.
+const DAILY_ZOOM_MIN_DAYS = 5;          // a zoom stops at a week of trading days, or at the period's length when it is shorter
+const DAILY_SETTLE_AFTER_MS = 250;      // a wheel still this long has ended its zoom (the main chart's settleMs)
+const DAILY_SETTLE_MS = 160;            // the glide of the window onto whole days
+function setupDailyZoom(allDays, onView, kept) {
+  let bounds = null, view = null;       // the period's window, and the one shown inside it
+  let current = true, frame = 0, settleTimer = 0, settling = null;
+  const draw = () => {
+    if (!frame) frame = requestAnimationFrame(() => { frame = 0; if (current) onView(); });
+  };
   const stopSettling = () => {
     clearTimeout(settleTimer);
     if (settling) settling.stop();
     settling = null;
   };
+  // A window of `days` inside the period, its first day moved in from either end.
+  const inside = (first, days) => ({ first: Math.max(bounds.first, Math.min(bounds.first + bounds.days - days, first)), days });
   const settle = () => {
     stopSettling();
-    const from = view, to = whole();
+    const from = view, days = Math.min(bounds.days, Math.max(1, Math.round(from.days)));
+    const to = inside(Math.round(from.first + (from.days - days) / 2), days);
     if (from.first === to.first && from.days === to.days) return;
     settling = d3.timer((elapsed) => {
-      const t = Math.min(1, elapsed / PERIOD_SETTLE_MS), k = d3.easeCubicOut(t);
+      const t = Math.min(1, elapsed / DAILY_SETTLE_MS), k = d3.easeCubicOut(t);
       view = t === 1 ? to : { first: from.first + (to.first - from.first) * k, days: from.days + (to.days - from.days) * k };
-      onView(view);
+      if (current) onView();
       if (t === 1) stopSettling();
     });
   };
-
-  // A thumb moved by hand: the window is the thumbs' days at once.
-  const fromThumbs = () => {
+  // The window scaled to `factor` times its days around a pivot: `at` runs
+  // from 0, the window's left edge, to 1, its right, and the day there stays
+  // where it is. Never under DAILY_ZOOM_MIN_DAYS and never past the period.
+  // The window settles once the wheel has been still for DAILY_SETTLE_AFTER_MS.
+  const zoom = (factor, at) => {
     stopSettling();
-    view = whole();
-    apply(true);
-  };
-  start.on('input', fromThumbs);
-  end.on('input', fromThumbs);
-
-  // A gesture's step: the window as given, the thumbs on the whole days
-  // nearest it (as many as the window's days rounded, about its middle). The
-  // charts follow a frame at most: all of them when the thumbs moved, the
-  // daily bars alone when only the window did.
-  let frame = 0;
-  const look = (next) => {
-    if (!current) return;
-    view = next;
-    const count = Math.round(view.days);
-    const lo = Math.max(0, Math.min(total - count, Math.round(view.first + (view.days - count) / 2)));
-    start.property('value', lo);
-    end.property('value', lo + count - 1);
-    if (!frame) frame = requestAnimationFrame(() => {
-      frame = 0;
-      if (!current) return;
-      const now = read();
-      if (now.lo === drawn.lo && now.hi === drawn.hi) onView(view); else apply(true);
-    });
+    const days = Math.max(Math.min(DAILY_ZOOM_MIN_DAYS, bounds.days), Math.min(bounds.days, view.days * factor));
+    view = inside(view.first + at * (view.days - days), days);
+    draw();
+    settleTimer = setTimeout(settle, DAILY_SETTLE_AFTER_MS);
   };
   // A hold on the window as it stands: slide(days) puts it that many days from
   // where it was taken hold of, its length kept, stopped at either end of the
-  // data. From the hold and not from the last step, so a drag past an end and
-  // back returns to the same days.
+  // period. From the hold and not from the last step, so a drag past an end
+  // and back returns to the same days.
   const grip = () => {
     stopSettling();
     const held = view;
-    return days => look({ first: Math.max(0, Math.min(total - held.days, held.first + days)), days: held.days });
+    return days => { view = inside(held.first + days, held.days); draw(); };
   };
-  // The window scaled to `factor` times its days around a pivot: `at` runs
-  // from 0, the window's left edge, to 1, its right, and the day there stays
-  // where it is. Never under PERIOD_ZOOM_MIN_DAYS, or under the window's own
-  // length where the thumbs set it shorter, and never past the data. The
-  // window settles once the wheel has been still for PERIOD_SETTLE_AFTER_MS.
-  const zoom = (factor, at) => {
+  // The period's window: the bars' window too, but on the first period of this
+  // data, the window handed on from the data before when the period holds it.
+  const follow = (period) => {
     stopSettling();
-    const days = Math.max(Math.min(PERIOD_ZOOM_MIN_DAYS, view.days), Math.min(total, view.days * factor));
-    look({ first: Math.max(0, Math.min(total - days, view.first + at * (view.days - days))), days });
-    settleTimer = setTimeout(settle, PERIOD_SETTLE_AFTER_MS);
+    bounds = period;
+    const isoDays = kept ? allDays.map(day => fmtIsoDay(day.date)) : null;
+    const from = kept ? isoDays.indexOf(kept.first) : -1, to = kept ? isoDays.indexOf(kept.last) : -1;
+    kept = null;
+    view = from >= period.first && to >= from && to < period.first + period.days ? { first: from, days: to - from + 1 } : period;
   };
-
-  // A drag on the stretch between the thumbs moves both by the same number of
-  // days, so the period keeps its length and stops at either end of the data
-  // (the user, 2026-11-23: "make sure I can drag the range"). The pointer is
-  // captured, so the drag goes on outside the slider.
-  let drag = null;
-  fill.on('pointerdown', (event) => {
-    if (event.button !== 0) return;
-    drag = { x: event.clientX, slide: grip(), daysPerPx: last / d3.select('#period-range').node().getBoundingClientRect().width };
-    fill.classed('dragging', true).node().setPointerCapture(event.pointerId);
-    event.preventDefault();   // no text selection while dragging
-  }).on('pointermove', (event) => {
-    if (drag) drag.slide(Math.round((event.clientX - drag.x) * drag.daysPerPx));
-  }).on('pointerup pointercancel', () => {
-    if (!drag) return;
-    drag = null;
-    fill.classed('dragging', false);
-    settle();
-  });
-  apply(false);
+  // The window's whole days by date while it is narrower than the period; null when it is the period.
+  const carried = () => {
+    if (!view || (view.first === bounds.first && view.days === bounds.days)) return null;
+    const first = Math.max(0, Math.round(view.first)), last = Math.min(allDays.length - 1, first + Math.max(1, Math.round(view.days)) - 1);
+    return { first: fmtIsoDay(allDays[first].date), last: fmtIsoDay(allDays[last].date) };
+  };
   const stop = () => {
     current = false;
     stopSettling();
   };
-  // Reset filters: the whole file, saved as both edges.
-  const reset = () => {
-    stopSettling();
-    start.property('value', 0);
-    end.property('value', last);
-    view = whole();
-    apply(true);
-  };
-  return { grip, zoom, settle, stop, reset };
+  return { zoom, grip, settle, follow, carried, stop, view: () => view };
 }
 
 // On/off switches whose state survives reloads, one localStorage key each.
@@ -2503,7 +2463,8 @@ const chart = new IntradayOverlayChart().container('#chart')
 const weekdayChart = new WeekdayBarChart().container('#weekday-chart');
 // And beside them the daily bars, over the period's days.
 const dailyChart = new DailyChangeChart().container('#daily-chart');
-let period = null;   // the period slider of the data on screen (setupPeriodSlider), which the daily bars' gestures move
+let period = null;      // the period slider of the data on screen (setupPeriodSlider)
+let dailyZoom = null;   // the daily bars' own window inside its period (setupDailyZoom), which their gestures move
 // Embedded, the chart is as tall as its frame (the width already follows the
 // container through setDynamicContainer), with no row under the axis for the
 // hidden scale button, a label gutter on the right just wide enough for the
@@ -2720,10 +2681,9 @@ function loadData() {
     chart.yLimit(Math.max(chart.yLimit() || 0, Math.ceil(Math.max(-d3.min(allPct), d3.max(allPct)))));
     const latestId = allDays[allDays.length - 1].id;
     let periodDays = allDays;
-    let periodView = null;        // the slider's window, for the daily bars
     let shownDays = [];           // the days the chart drew last
     const drawDaily = () => {
-      const { bars, view } = buildDailyBars(allDays, periodView, shownDays, printMeasured(measure.measure) ? print : null, measure.measure);
+      const { bars, view } = buildDailyBars(allDays, daily.view(), shownDays, printMeasured(measure.measure) ? print : null, measure.measure);
       dailyChart.data(bars).view(view).render();
     };
 
@@ -2765,11 +2725,13 @@ function loadData() {
     const trend = setupTrendFilter(allDays[allDays.length - 1], guarded);
     const weekday = setupWeekdayStat(guarded);
     const measure = setupDayMeasure(guarded);
-    if (period) period.stop();   // a gesture on the data just replaced must not draw over the new
-    period = setupPeriodSlider(allDays,
-      (days, view) => { periodDays = days; periodView = view; guarded(); },
-      (view) => { periodView = view; if (!EMBED) drawDaily(); });
-    dailyChart.domain(dailyDomain(asked)).onZoom(period.zoom).onPanStart(period.grip).onPanEnd(period.settle);   // its gestures move the slider's window
+    // A gesture on the data just replaced must not draw over the new; its zoomed window carries over.
+    if (period) period.stop();
+    const kept = dailyZoom ? dailyZoom.carried() : null;
+    if (dailyZoom) dailyZoom.stop();
+    const daily = dailyZoom = setupDailyZoom(allDays, () => { if (!EMBED) drawDaily(); }, kept);
+    period = setupPeriodSlider(allDays, (days, window) => { periodDays = days; daily.follow(window); guarded(); });
+    dailyChart.domain(dailyDomain(asked)).onZoom(daily.zoom).onPanStart(daily.grip).onPanEnd(daily.settle);   // its gestures move its own window
     // Reset filters (the user, 2026-11-27: "make sure intraday has one reset filters option"): every filter that
     // the Filters button counts goes back to keeping all days, held from redrawing until the last, then one draw.
     d3.select('#filters-reset').on('click', () => {
