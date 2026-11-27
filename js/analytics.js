@@ -530,11 +530,15 @@ function strategySeries(sim, strat) {
 // growing series like the cash-only baseline. When `dates` is provided
 // (label-aligned with `series`), also returns peakDate/troughDate so the UI
 // can render the "Sep 2012 – Aug 2014" range that bracketed the drawdown.
-function computeMaxDrawdown(series, dates) {
+// With `from` (a date, and `dates`) it is read from the last point at or before that date on: the year so far
+// (maxDDSoFarThisYear in js/metrics.js).
+function computeMaxDrawdown(series, dates, from) {
   const empty = { pct: 0, peakIdx: -1, troughIdx: -1, peakDate: null, troughDate: null };
   if (!series || series.length < 2) return empty;
+  let first = 0;
+  if (from && dates) while (first + 1 < series.length && dates[first + 1] <= from) first++;
   let peak = -Infinity, peakIdx = -1, maxDD = 0, bestPeakIdx = -1, bestTroughIdx = -1;
-  for (let i = 0; i < series.length; i++) {
+  for (let i = first; i < series.length; i++) {
     const v = series[i];
     if (!Number.isFinite(v)) continue;
     if (v > peak) { peak = v; peakIdx = i; }

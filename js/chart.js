@@ -590,7 +590,7 @@ function buildLegendChipsHtml(indices, opts) {
         ddRow = `
           <div class="legend-metric-row">
             <span class="legend-metric-label">DD</span>
-            <span class="legend-metric-value negative">${ddStr}</span>
+            <span class="legend-metric-value negative">${ddStr}</span>${m.ddYear ? yearDDHtml(m.ddYear) : ''}
             ${rangeHtml}
           </div>`;
       }
@@ -1204,7 +1204,7 @@ function renderStatsGrid(idx) {
     const cfg = getSavedConfigs().find(c => c.id === ecid);
     if (cfg && cfg.type !== 'custom' && PANEL_IDX_BY_KEY[cfg.type] === idx) {
       const cm = (window._configMetrics || {})[ecid];
-      if (cm) m = { cagr: cm.cagr, cagrYear: cm.cagrYear, start: cm.start, end: cm.end, maxDD: cm.maxDD, ddPeak: cm.ddPeak, ddTrough: cm.ddTrough };
+      if (cm) m = { cagr: cm.cagr, cagrYear: cm.cagrYear, start: cm.start, end: cm.end, maxDD: cm.maxDD, ddPeak: cm.ddPeak, ddTrough: cm.ddTrough, ddYear: cm.ddYear };
     }
   }
   if (!m) return '';
@@ -1222,7 +1222,7 @@ function renderStatsGrid(idx) {
         'Your position value at the start of the selected date range — the initial amount put to work here.')}
       ${statCard('Ending Balance', 'flag', fmtFull(Math.round(m.end)), '', '',
         'Portfolio value at the end of the selected date range. This is where the strategy line lands on the chart.')}
-      ${statCard('Max Drawdown', 'trendDown', ddStr, 'negative', ddRange || '',
+      ${statCard('Max Drawdown', 'trendDown', ddStr, 'negative', [ddRange, m.ddYear ? `${dataYear()} so far: ${fmtCardDD(m.ddYear.pct)}` : ''].filter(Boolean).join('<br>'),
         'The worst peak-to-trough drop over the range, revalued at every daily close (so intra-quarter crashes count). The dates below show when it happened.')}
     </div>
   `;
@@ -2906,21 +2906,23 @@ function render() {
   const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl', 7: 'sqqq', 8: 'gld', 9: 'soxl', 10: 'soxx', 11: 'soxs' };
   const sigKey = UL_KEY[sigUlCol] || 'tqqq';
   const bhKeyName = bhKey === 'qqq' ? 'qqq' : bhKey === 'spy' ? 'spy' : bhKey === 'qld' ? 'qld' : bhKey === 'sso' ? 'sso' : bhKey === 'spxl' ? 'spxl' : bhKey === 'sqqq' ? 'sqqq' : bhKey === 'gld' ? 'gld' : bhKey === 'soxl' ? 'soxl' : bhKey === 'soxx' ? 'soxx' : bhKey === 'soxs' ? 'soxs' : 'tqqq';
-  const dailyDDByIdx = {};
+  // Each line's drawdown as a measure from a close on (none: the whole run), so the year so far is read the same way.
+  const ddMeasureByIdx = {};
   if (dailyRows) {
-    dailyDDByIdx[0] = computeDailyMaxDrawdown(nineSigDDControls(log), dailyRows, sigKey);
-    dailyDDByIdx[1] = computeDailyMaxDrawdown(
-      log.map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: 0 })), dailyRows, sigKey);
+    const nineSigControls = nineSigDDControls(log);
+    const holdingControls = log.map(l => ({ date: l.date, shares: l.price > 0 ? l.tqqqVal / l.price : 0, cash: 0 }));
+    ddMeasureByIdx[0] = (from) => computeDailyMaxDrawdown(nineSigControls, dailyRows, sigKey, from);
+    ddMeasureByIdx[1] = (from) => computeDailyMaxDrawdown(holdingControls, dailyRows, sigKey, from);
     if (bhPicked.series && bhPicked.series.length && bhPicked.series[0].shares != null) {
-      dailyDDByIdx[2] = computeDailyMaxDrawdown(
-        bhPicked.series.map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 })), dailyRows, bhKeyName);
+      const bhControls = bhPicked.series.map(pt => ({ date: pt.date, shares: pt.shares, cash: 0 }));
+      ddMeasureByIdx[2] = (from) => computeDailyMaxDrawdown(bhControls, dailyRows, bhKeyName, from);
     }
     if (smaDdControls && smaDdControls.length) {
       // The SMA strategy can hold the leveraged fund, a different out-asset (e.g.
       // SPXL), and cash at once. Revalue each real per-asset holding at its own
       // daily price — the single-asset path mis-valued the summed share count
       // (which becomes the SPXL count when out) against the TQQQ price.
-      dailyDDByIdx[8] = computeDailyMaxDrawdownMulti(smaDdControls, dailyRows);
+      ddMeasureByIdx[8] = (from) => computeDailyMaxDrawdownMulti(smaDdControls, dailyRows, from);
     }
   }
   window._strategyMetrics = {};
@@ -2932,7 +2934,8 @@ function render() {
     const cagrVal = mainCagrIdx[i] !== undefined
       ? mainCagrIdx[i]
       : (years > 0 && start > 0 ? (Math.pow(end / start, 1 / years) - 1) * 100 : 0);
-    const dd = dailyDDByIdx[i] !== undefined ? dailyDDByIdx[i] : computeMaxDrawdown(series, labels);
+    const measureDD = ddMeasureByIdx[i] || ((from) => computeMaxDrawdown(series, labels, from));
+    const dd = measureDD();
     window._strategyMetrics[i] = {
       cagr:  cagrVal,
       // A money-weighted CAGR counts the contributions as the whole one does; a plain one (a line's own balance) none.
@@ -2942,6 +2945,7 @@ function render() {
       maxDD:    dd.pct * 100,
       ddPeak:   dd.peakDate,
       ddTrough: dd.troughDate,
+      ddYear:   maxDDSoFarThisYear(labels[labels.length - 1], measureDD),
     };
   }
   // Shared context for saved-config lines (saved-configs.js). They reuse the

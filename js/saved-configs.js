@@ -1788,14 +1788,16 @@ function cfgMoneyWeightedCAGR(ctx, finalV) {
 // A custom log's max drawdown revalued at every daily close, or null when its
 // rows don't all carry held/shares/cash (buildCustomDDControls). The panel's
 // Max DD and the Fit search both read it, so a fit minimises the number shown.
-function customDailyDrawdown(log) {
+// With `from`, read from that close on (the year so far).
+function customDailyDrawdown(log, from) {
   const ddCtrl = (typeof buildCustomDDControls === 'function') ? buildCustomDDControls(log) : null;
   const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
   return (ddCtrl && dailyRows && typeof computeDailyMaxDrawdownMulti === 'function')
-    ? computeDailyMaxDrawdownMulti(ddCtrl, dailyRows) : null;
+    ? computeDailyMaxDrawdownMulti(ddCtrl, dailyRows, from) : null;
 }
 // Turn a (worker-computed) log into a label-aligned series + stats. No code eval.
-function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
+//   holdingsDD, holdings: the worker's drawdown from the strategy's own holdings, and those holdings (null without)
+function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD, holdings) {
   const labels = ctx.labels;
   if (error) return { data: labels.map(() => null), cagr: 0, maxDD: 0, start: 0, end: 0, ddPeak: null, ddTrough: null, dayEvent: null, held: null };
   const points = (log || [])
@@ -1816,14 +1818,15 @@ function customSeriesResult(log, ctx, error, tcOverride, stale, holdingsDD) {
   // strategy doesn't emit held/shares/cash. CAGR is money-weighted, unaffected.
   const cagr = cfgMoneyWeightedCAGR(ctx, finalV), cagrYear = cagrSoFarThisYear(labels, series, ctx, cagr);
   const ddVals = points.map(p => p.value), ddDates = points.map(p => p.date);
-  let dd = holdingsDD || customDailyDrawdown(log);
-  if (!dd && typeof computeMaxDrawdown === 'function') {
-    dd = computeMaxDrawdown(ddVals.length ? ddVals : series, ddVals.length ? ddDates : labels);
-  }
-  if (!dd) dd = { pct: 0, peakDate: null, troughDate: null };
+  // The drawdown from a close on (none: the whole run): the strategy's holdings, else its rows, else its values.
+  const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
+  const measureDD = (from) => ((holdings && dailyRows ? computeDailyMaxDrawdownMulti(holdings, dailyRows, from) : customDailyDrawdown(log, from))
+    || (typeof computeMaxDrawdown === 'function' ? computeMaxDrawdown(ddVals.length ? ddVals : series, ddVals.length ? ddDates : labels, from) : null));
+  const dd = holdingsDD || measureDD() || { pct: 0, peakDate: null, troughDate: null };
+  const ddYear = maxDDSoFarThisYear(points.length ? points[points.length - 1].date : null, measureDD);
   // The trade at the latest day's close and the fund held at the end, for the card (js/signal-chart.js
   // dayEventOf, heldAtEnd). None from a log that is being run again: it may be yesterday's.
-  return { data: series, cagr, cagrYear, maxDD: dd.pct * 100, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate, dayEvent: stale ? null : dayEventOf(log), held: stale ? null : heldAtEnd(log) };
+  return { data: series, cagr, cagrYear, maxDD: dd.pct * 100, ddYear, start: startV, end: finalV, ddPeak: dd.peakDate, ddTrough: dd.troughDate, dayEvent: stale ? null : dayEventOf(log), held: stale ? null : heldAtEnd(log) };
 }
 
 // Custom strategy series — served from the worker-result cache. On a cache miss
@@ -1852,13 +1855,13 @@ function computeCustomSeries(cfg, ctx) {
     // Today's line is settled — safe to also fetch yesterday's for the
     // day-over-day change badge (endLabelPlugin), sequenced behind it.
     scheduleCustomYesterdayRun(cfg, ctx);
-    return customSeriesResult(cached.log, cached.money === 'own' ? ownMoneyCtx(ctx, cached.log, ctx.entryDateForSim) : ctx, cached.error, cached.totalContributed, false, cached.holdingsDD);
+    return customSeriesResult(cached.log, cached.money === 'own' ? ownMoneyCtx(ctx, cached.log, ctx.entryDateForSim) : ctx, cached.error, cached.totalContributed, false, cached.holdingsDD, cached.holdings);
   }
   scheduleCustomRun(cfg, sig, computeCustomGlobals(cfg, ctx));
   window._customErrors[cfg.id] = null; // computing…
   window._customLogs[cfg.id] = (cached && cached.log) || [];
   const staleCtx = cached && cached.money === 'own' ? ownMoneyCtx(ctx, cached.log, ctx.entryDateForSim) : ctx;
-  return customSeriesResult(cached ? cached.log : [], staleCtx, null, cached ? cached.totalContributed : null, true, cached ? cached.holdingsDD : null);
+  return customSeriesResult(cached ? cached.log : [], staleCtx, null, cached ? cached.totalContributed : null, true, cached ? cached.holdingsDD : null, cached ? cached.holdings : null);
 }
 
 // Run the right engine for a config and return its label-aligned series + stats.
@@ -2128,12 +2131,14 @@ function computeConfigSeries(cfg, ctx) {
   // #3 Daily-sampled drawdown when we have control points to revalue daily;
   // otherwise fall back to the rebalance-grain series drawdown.
   const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
-  const dd = (ddMulti && ddMulti.length && dailyRows && typeof computeDailyMaxDrawdownMulti === 'function')
-    ? computeDailyMaxDrawdownMulti(ddMulti, dailyRows)
+  // The drawdown from a close on (none: the whole run), so the year so far is read the same way.
+  const measureDD = (from) => (ddMulti && ddMulti.length && dailyRows && typeof computeDailyMaxDrawdownMulti === 'function')
+    ? computeDailyMaxDrawdownMulti(ddMulti, dailyRows, from)
     : (ddControls && ddControls.length && dailyRows && typeof computeDailyMaxDrawdown === 'function')
-    ? computeDailyMaxDrawdown(ddControls, dailyRows, ddKey)
-    : ((typeof computeMaxDrawdown === 'function') ? computeMaxDrawdown(data, labels) : { pct: 0, peakDate: null, troughDate: null });
-  return { data, cagr, cagrYear, maxDD: dd.pct * 100, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed, dayEvent, held };
+    ? computeDailyMaxDrawdown(ddControls, dailyRows, ddKey, from)
+    : ((typeof computeMaxDrawdown === 'function') ? computeMaxDrawdown(data, labels, from) : { pct: 0, peakDate: null, troughDate: null });
+  const dd = measureDD(), ddYear = maxDDSoFarThisYear(labels[labels.length - 1], measureDD);
+  return { data, cagr, cagrYear, maxDD: dd.pct * 100, ddYear, start: startV, end: finalV, subPoints, ddPeak: dd.peakDate, ddTrough: dd.troughDate, contributed, dayEvent, held };
 }
 // What a built-in engine's run holds at its end, for its card (heldAtEnd, js/signal-chart.js): the
 // largest of its holdings by value at the latest prices, cash by its name. end: { h: { fund: shares }, cash }.
@@ -2167,7 +2172,7 @@ function appendConfigDatasets(chart, ctx) {
   window._editingConfigSim = null;
   for (const cfg of savedConfigs) {
     const s = computeConfigSeries(cfg, ctx);
-    window._configMetrics[cfg.id] = { cagr: s.cagr, cagrYear: s.cagrYear, maxDD: s.maxDD, start: s.start, end: s.end, ddPeak: s.ddPeak, ddTrough: s.ddTrough, event: s.dayEvent || null, held: s.held || null };
+    window._configMetrics[cfg.id] = { cagr: s.cagr, cagrYear: s.cagrYear, maxDD: s.maxDD, ddYear: s.ddYear || null, start: s.start, end: s.end, ddPeak: s.ddPeak, ddTrough: s.ddTrough, event: s.dayEvent || null, held: s.held || null };
     chart.data.datasets.push({
       label: cfg.name,
       data: s.data,
@@ -3136,7 +3141,7 @@ function buildConfigPillHtml(cfg) {
     metrics = `
       <div class="sc-metrics">
         <span class="sc-metric"><span class="sc-metric-label">CAGR</span> <span class="sc-metric-value ${cagrCls}">${fmtWholePct(m.cagr)}</span>${Number.isFinite(m.cagrYear) ? yearCagrHtml(m.cagrYear) : ''}</span>
-        ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRange ? tipIcon([ddRange.replace('–', ' to ')]) : ''}</span>` : ''}
+        ${ddStr ? `<span class="sc-metric"><span class="sc-metric-label">DD</span> <span class="sc-metric-value negative">${ddStr}</span>${ddRange ? tipIcon([ddRange.replace('–', ' to ')]) : ''}${m.ddYear ? yearDDHtml(m.ddYear) : ''}</span>` : ''}
       </div>`;
   }
   // The day's event: the strategy's trade at the latest day's close, on a day it trades
@@ -5279,7 +5284,7 @@ function renderCustomPanelBody(cfgId) {
       <div class="custom-stats">
         <div class="custom-stat"><span>CAGR</span><b class="${cagrCls}">${m.cagr >= 0 ? '+' : ''}${m.cagr.toFixed(1)}%</b></div>
         ${Number.isFinite(m.cagrYear) ? `<div class="custom-stat"><span>${dataYear()} so far</span><b class="${m.cagrYear >= 0 ? 'positive' : 'negative'}">${fmtWholePct(m.cagrYear)}</b></div>` : ''}
-        <div class="custom-stat"><span>Max DD</span><b class="negative">${ddStr}</b>${ddRangeHtml}</div>
+        <div class="custom-stat"><span>Max DD</span><b class="negative">${ddStr}</b>${ddRangeHtml}${m.ddYear ? `<div class="custom-stat-range">${dataYear()} so far: ${fmtCardDD(m.ddYear.pct)}</div>` : ''}</div>
         <div class="custom-stat"><span>End</span><b>${(typeof fmtFull === 'function') ? fmtFull(m.end || 0) : Math.round(m.end || 0)}</b></div>
       </div>`;
   }

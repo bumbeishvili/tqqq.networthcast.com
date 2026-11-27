@@ -2606,13 +2606,14 @@
     white-space: nowrap;
   }
   .saved-config-pill .sc-info { flex: none; align-self: center; margin: 0 0 0 1px; }
-  /* The year so far after a CAGR on a card or a chip: its figure, small, 1px after the CAGR (the row's 4px gap less 3)
-     and a quarter of its height below the CAGR's baseline, then its ⓘ. */
-  .year-cagr { align-self: baseline; margin-left: -3px; position: relative; top: 0.25em; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
-  .year-cagr .year-cagr-info { margin: 0 0 0 2px; }
-  .year-cagr-value, .sc-day-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
-  .year-cagr-value.positive, .sc-day-value.positive { color: var(--green-text); }
-  .year-cagr-value.negative, .sc-day-value.negative { color: var(--red-text); }
+  /* The year so far after a CAGR or a DD on a card or a chip: its figure, small, 1px after the number (the row's 4px
+     gap less 3) and a quarter of its height below its baseline, then its ⓘ. After the card DD's own ⓘ it keeps the gap. */
+  .year-so-far { align-self: baseline; margin-left: -3px; position: relative; top: 0.25em; font-size: calc(8px * var(--ui-scale)); white-space: nowrap; }
+  .sc-info + .year-so-far { margin-left: 0; }
+  .year-so-far .year-so-far-info { margin: 0 0 0 2px; }
+  .year-so-far-value, .sc-day-value { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+  .year-so-far-value.positive, .sc-day-value.positive { color: var(--green-text); }
+  .year-so-far-value.negative, .sc-day-value.negative { color: var(--red-text); }
   .saved-config-pill .sc-metric-label {
     font-size: calc(8px * var(--ui-scale));
     font-weight: 600;

@@ -88,14 +88,19 @@ function buildContributionFlows(initial, monthly, annualRaise, startDate, endDat
 const fmtWholePct = (v) => (v >= 0 ? '+' : '') + (Math.round(v) || 0).toLocaleString('en-US') + '%';
 // A card's drawdown: a whole percent, but over 99% the decimals fmtDD keeps (−99.9419% and −100% are a live
 // account and a dead one).
-const fmtCardDD = (pct) => (pct > 99 ? fmtDD(pct) : '−' + Math.round(pct) + '%');
+const fmtCardDD = (pct) => (pct > 99 ? fmtDD(pct) : Math.round(pct) === 0 ? '0%' : '−' + Math.round(pct) + '%');   // no fall: "0%", as fmtDD's "0.0%"
 // The year so far after a CAGR on a card or a chip: its figure, small, tight to the CAGR and a little below its
 // baseline, and an ⓘ that says what it is (the user, 2026-11-26: "remove in 2026 text, just add info icon where it
 // will say what it is, move that small number closer to big number and a bitbottom"), in as few words as it takes
 // (the user, of a longer one: "just say this year cagr so far, what the fuck is with thos elengthy words").
 const yearCagrTip = () => `${dataYear()} CAGR so far`;
-const yearCagrHtml = (v) => `<span class="year-cagr"><span class="year-cagr-value ${v >= 0 ? 'positive' : 'negative'}">${fmtWholePct(v)}</span>`
-  + `<span class="info-icon year-cagr-info" tabindex="0" data-tip="${yearCagrTip()}">ⓘ</span></span>`;
+const yearCagrHtml = (v) => `<span class="year-so-far"><span class="year-so-far-value ${v >= 0 ? 'positive' : 'negative'}">${fmtWholePct(v)}</span>`
+  + `<span class="info-icon year-so-far-info" tabindex="0" data-tip="${yearCagrTip()}">ⓘ</span></span>`;
+// The year's max drawdown after a DD, the same way, its ⓘ with the year's name and the fall's dates
+// (maxDDSoFarThisYear's { pct, peakDate, troughDate }).
+const yearDDTip = (dd) => { const range = fmtDDRange(dd.peakDate, dd.troughDate); return `${dataYear()} max drawdown so far${range ? ': ' + range.replace('–', ' to ') : ''}`; };
+const yearDDHtml = (dd) => `<span class="year-so-far"><span class="year-so-far-value negative">${fmtCardDD(dd.pct)}</span>`
+  + `<span class="info-icon year-so-far-info" tabindex="0" data-tip="${yearDDTip(dd)}">ⓘ</span></span>`;
 // The year a CAGR "so far" is of: the year of the data's last day (2026 on 26 November 2026).
 const dataYear = () => daily[daily.length - 1].date.slice(0, 4);
 // A run's money-weighted CAGR over the data's year so far (the user, 2026-11-26: "also inside cards and
@@ -123,6 +128,23 @@ function cagrSoFarThisYear(labels, values, money, wholeCagr) {
     .concat(all.filter(f => f.t > offset + 1e-9).map(f => ({ t: f.t - offset, cf: f.cf })), { t: span, cf: finalValue });
   const r = computeMoneyWeightedReturn(flows);
   return r != null && Number.isFinite(r) ? r : null;
+}
+
+// The last close before the data's year: where the year so far starts, so a fall from that close counts.
+function yearStartClose() {
+  const year = dataYear();
+  for (let i = daily.length - 1; i >= 0; i--) if (daily[i].date.slice(0, 4) < year) return daily[i].date;
+  return null;
+}
+// A run's max drawdown over the data's year so far (the user, 2026-11-27: "Also disay current year max drawdown sr
+// way"), measured as its whole drawdown is: `measure(from)` is the run's own drawdown read from the close `from` on,
+// here the last close before the year. A run that starts inside the year gets its whole drawdown; one that ends
+// before the year (its last date, endDate) none. { pct (percent, as the whole one's maxDD), peakDate, troughDate },
+// or null.
+function maxDDSoFarThisYear(endDate, measure) {
+  if (!endDate || String(endDate).slice(0, 4) < dataYear()) return null;
+  const dd = measure(yearStartClose());
+  return dd ? { pct: dd.pct * 100, peakDate: dd.peakDate, troughDate: dd.troughDate } : null;
 }
 
 // Convenience: money-weighted CAGR (%) for one strategy given its contribution
@@ -196,7 +218,8 @@ function moneyWeightedReturnOfContributions(times, amounts, count, finalValue, y
 //   controls:  [{ date, shares, cash }]  sorted ascending by date
 //   dailyRows: [{ date, [priceKey]:Number, ... }]  e.g. the global `daily`
 //   priceKey:  daily field to revalue against ('tqqq'|'qqq'|'spy'|'qld'|'sso'|'spxl')
-function computeDailyMaxDrawdown(controls, dailyRows, priceKey) {
+//   from:      optional date: read from that close on (the year so far, maxDDSoFarThisYear)
+function computeDailyMaxDrawdown(controls, dailyRows, priceKey, from) {
   const empty = { pct: 0, peakDate: null, troughDate: null };
   if (!controls || !controls.length || !dailyRows || !dailyRows.length) return empty;
   const startDate = controls[0].date;
@@ -204,7 +227,7 @@ function computeDailyMaxDrawdown(controls, dailyRows, priceKey) {
   let peak = -Infinity, peakDate = null, maxDD = 0, bestPeakDate = null, bestTroughDate = null, ci = 0;
   for (let i = 0; i < dailyRows.length; i++) {
     const row = dailyRows[i];
-    if (row.date < startDate) continue;
+    if (row.date < startDate || (from && row.date < from)) continue;
     if (row.date > endDate) break;
     while (ci + 1 < controls.length && controls[ci + 1].date <= row.date) ci++;
     const c = controls[ci];
@@ -229,7 +252,8 @@ function computeDailyMaxDrawdown(controls, dailyRows, priceKey) {
 // that ignored the out-asset bucket entirely.
 //   controls:  [{ date, h: { asset: shares, ... }, cash }]  ascending by date
 //   dailyRows: [{ date, tqqq, qqq, spy, ... }]  e.g. the global `daily`
-function computeDailyMaxDrawdownMulti(controls, dailyRows) {
+//   from:      optional date: read from that close on (the year so far, maxDDSoFarThisYear)
+function computeDailyMaxDrawdownMulti(controls, dailyRows, from) {
   const empty = { pct: 0, peakDate: null, troughDate: null };
   if (!controls || !controls.length || !dailyRows || !dailyRows.length) return empty;
   const startDate = controls[0].date;
@@ -237,7 +261,7 @@ function computeDailyMaxDrawdownMulti(controls, dailyRows) {
   let peak = -Infinity, peakDate = null, maxDD = 0, bestPeakDate = null, bestTroughDate = null, ci = 0;
   for (let i = 0; i < dailyRows.length; i++) {
     const row = dailyRows[i];
-    if (row.date < startDate) continue;
+    if (row.date < startDate || (from && row.date < from)) continue;
     if (row.date > endDate) break;
     while (ci + 1 < controls.length && controls[ci + 1].date <= row.date) ci++;
     const c = controls[ci];
