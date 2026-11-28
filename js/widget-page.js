@@ -75,14 +75,14 @@
   readUiScale();   // the touch type scale (styles.css --ui-scale), before anything draws
   let highLowRows = null, liveQuotes = null;   // the Monday-rule funds' raw high/low rows; the latest live quotes, this page's only source of them
   async function loadMarketData() {
-    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, soxs, nfci, highLow, fetchedAt, live] = await Promise.all([
+    const [qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, soxs, psq, qid, nfci, highLow, fetchedAt, live] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
-      loadSQQQDaily().catch(() => []), loadGLDDaily().catch(() => []), loadSOXLDaily().catch(() => []), loadSOXXDaily().catch(() => []), loadSOXSDaily().catch(() => []), loadNFCIWeekly().catch(() => []), Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
+      loadSQQQDaily().catch(() => []), loadGLDDaily().catch(() => []), loadSOXLDaily().catch(() => []), loadSOXXDaily().catch(() => []), loadSOXSDaily().catch(() => []), loadPSQDaily().catch(() => []), loadQIDDaily().catch(() => []), loadNFCIWeekly().catch(() => []), Promise.all(HIGH_LOW_FUNDS.map(loadHighLow)),
       loadDataFetchedAt(),
       // The live prices; without them the widget runs on the files' last refresh.
       loadLiveQuotes().catch(err => { console.error('Live prices unavailable:', err); return null; }),
     ]);
-    daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, soxs);
+    daily = buildDaily(qqq, tqqq, spy, qld, sso, spxl, sqqq, gld, soxl, soxx, soxs, psq, qid);
     highLowRows = Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, highLow[k]]));
     liveQuotes = live;
     handQuotesToFrame();

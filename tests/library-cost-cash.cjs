@@ -89,7 +89,7 @@ for (const n of added) {
 // ---- 6. Each row says what it holds; the drawdown is taken at every daily close ----
 {
   const { buildCustomDDControls, computeDailyMaxDrawdownMulti } = require('../js/metrics.js');
-  const days = dates.map((date, i) => Object.assign({ date }, ...['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'].map(f => ({ [f]: data[f][i] }))));
+  const days = dates.map((date, i) => Object.assign({ date }, ...['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs', 'psq', 'qid'].map(f => ({ [f]: data[f][i] }))));
   const fund = r => String(r.held).toLowerCase().replace(/\s*\+\s*cash$/, '');
   const fallOf = log => { let peak = 0, fall = 0; log.forEach(r => { peak = Math.max(peak, r.value); fall = Math.max(fall, 1 - r.value / peak); }); return fall * 100; };
   for (const n of added) {

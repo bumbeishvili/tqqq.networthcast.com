@@ -363,10 +363,10 @@ const DATA_ROOT = EMBED && EMBED_QUERY.get('data') ? EMBED_QUERY.get('data') : '
 // is the only place it is kept, so a link always opens the fund it names and
 // the site's "TQQQ intraday" link opens TQQQ. A name the list does not hold
 // is ignored.
-const TICKERS = ['TQQQ', 'QQQ', 'SPY', 'QLD', 'SSO', 'SPXL', 'SQQQ', 'GLD', 'SOXL', 'SOXX', 'SOXS'];
+const TICKERS = ['TQQQ', 'QQQ', 'SPY', 'QLD', 'SSO', 'SPXL', 'SQQQ', 'GLD', 'SOXL', 'SOXX', 'SOXS', 'PSQ', 'QID'];
 // How many times its index each fund moves in a day, with a minus for one that
 // moves against it: the daily bars' fixed scale is sized by it (dailyDomain).
-const TICKER_LEVERAGE = { TQQQ: 3, QQQ: 1, SPY: 1, QLD: 2, SSO: 2, SPXL: 3, SQQQ: -3, GLD: 1, SOXL: 3, SOXX: 1, SOXS: -3 };
+const TICKER_LEVERAGE = { TQQQ: 3, QQQ: 1, SPY: 1, QLD: 2, SSO: 2, SPXL: 3, SQQQ: -3, GLD: 1, SOXL: 3, SOXX: 1, SOXS: -3, PSQ: -1, QID: -2 };
 const DEFAULT_TICKER = TICKERS[0];
 const namedTicker = (EMBED_QUERY.get('ticker') || '').toUpperCase();
 let ticker = TICKERS.includes(namedTicker) ? namedTicker : DEFAULT_TICKER;

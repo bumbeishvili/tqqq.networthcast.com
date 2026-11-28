@@ -1,6 +1,6 @@
 # tqqq.networthcast.com
 
-Backtesting platform for TQQQ. Strategies run over a reconstructed daily price history that starts in 1953, on TQQQ and ten related funds (QQQ, QLD, SQQQ, SPY, SSO, SPXL, GLD, SOXL, SOXX, SOXS): SMA timing, 9Sig, a library of 48 published and community rules, and custom strategies written in JavaScript, with buy & hold and a cash baseline drawn alongside. A real transaction history can be uploaded to put your own portfolio on the same chart, a separate page follows TQQQ's intraday path session by session, and a desktop widget shows both.
+Backtesting platform for TQQQ. Strategies run over a reconstructed daily price history that starts in 1953, on TQQQ and twelve related funds (QQQ, QLD, SQQQ, PSQ, QID, SPY, SSO, SPXL, GLD, SOXL, SOXX, SOXS): SMA timing, 9Sig, a library of 48 published and community rules, and custom strategies written in JavaScript, with buy & hold and a cash baseline drawn alongside. A real transaction history can be uploaded to put your own portfolio on the same chart, a separate page follows TQQQ's intraday path session by session, and a desktop widget shows both.
 
 Live: https://tqqq.networthcast.com
 
@@ -38,7 +38,7 @@ Every start year and holding period at once, coloured against a baseline (here c
 
 ![TQQQ intraday paths](images/readme-intraday.png)
 
-[experiments/tqqq-intraday.html](experiments/tqqq-intraday.html): every session's 5-minute path over ten years (as far back as the data refresh has pulled; Alpaca's history starts in January 2016), for TQQQ or another of the eleven funds (a dropdown, or `?ticker=SOXL` in the address), the mean and median path, bars by weekday and by day for one of the day's prices against another (a dropdown with all ten pairs of the previous close, open, low, high and close; close vs prev close unless changed), and filters behind one button: one month of the year, one weekday (both together keep, say, the Fridays of every November), the trend at the close before the day (that close against the mean or median of the last N closes, or the RSI over N days, more or less than a value; several rules must all hold), the day's open and close, and the period. The days kept are drawn bold on the price line under the daily bars. Hover for the path nearest the pointer; drag across the plot for the move over that span on today's path, the mean, the median and the nearest day.
+[experiments/tqqq-intraday.html](experiments/tqqq-intraday.html): every session's 5-minute path over ten years (as far back as the data refresh has pulled; Alpaca's history starts in January 2016), for TQQQ or another of the twelve other funds (a dropdown, or `?ticker=SOXL` in the address), the mean and median path, bars by weekday and by day for one of the day's prices against another (a dropdown with all ten pairs of the previous close, open, low, high and close; close vs prev close unless changed), and filters behind one button: one month of the year, one weekday (both together keep, say, the Fridays of every November), the trend at the close before the day (that close against the mean or median of the last N closes, or the RSI over N days, more or less than a value; several rules must all hold), the day's open and close, and the period. The days kept are drawn bold on the price line under the daily bars. Hover for the path nearest the pointer; drag across the plot for the move over that span on today's path, the mean, the median and the nearest day.
 
 ### Desktop widget
 
@@ -62,7 +62,7 @@ Every start year and holding period at once, coloured against a baseline (here c
 
 ## Updating price data
 
-The series under `data/` are TSV files: eleven price files, their daily highs and lows, three short-rate files, NFCI, and each fund's intraday bars. See [data/README.md](data/README.md) for the format, the synthesis method, and its known biases.
+The series under `data/` are TSV files: thirteen price files, their daily highs and lows, three short-rate files, NFCI, and each fund's intraday bars. See [data/README.md](data/README.md) for the format, the synthesis method, and its known biases.
 
 ```bash
 # One-time setup (creates a venv and installs yfinance)
@@ -75,7 +75,7 @@ python3 -m venv .venv
 
 The default run pulls `period="max"` with `auto_adjust=True`, so every series is dividend- and split-adjusted on the same basis and comparisons between them stay fair. It replaces the post-IPO tail of each price file and copies the committed pre-IPO synthesized prefix through untouched. It does not contact FRED, so the rate files are left alone.
 
-Price files: `synthetic-qqq.tsv`, `synthetic-qld.tsv`, `synthetic-tqqq.tsv`, `spy.tsv`, `synthetic-sso.tsv`, `synthetic-spxl.tsv`, `synthetic-sqqq.tsv`, `synthetic-gld.tsv`, `synthetic-soxl.tsv`, `synthetic-soxx.tsv`, `synthetic-soxs.tsv`.
+Price files: `synthetic-qqq.tsv`, `synthetic-qld.tsv`, `synthetic-tqqq.tsv`, `spy.tsv`, `synthetic-sso.tsv`, `synthetic-spxl.tsv`, `synthetic-sqqq.tsv`, `synthetic-gld.tsv`, `synthetic-soxl.tsv`, `synthetic-soxx.tsv`, `synthetic-soxs.tsv`, `synthetic-psq.tsv`, `synthetic-qid.tsv`.
 
 High/low files, written on the same runs from the same bars: `tqqq-hl.tsv`, `qqq-hl.tsv`, `spy-hl.tsv` (date, high, low and that bar's close; real trading days only). The Turnaround Monday strategies read them.
 
@@ -83,7 +83,7 @@ Flags cover the rest:
 
 - `--refresh-rates` re-pulls DFF and TB3MS from FRED and rewrites `fed-funds-effective.tsv`, `t-bill-3mo.tsv`, and `short-rates.tsv`. Nothing else refreshes these, so they drift stale until you run it.
 - `--rebuild` regenerates every price TSV from scratch through the backward-synthesis pipeline. It needs a local `^ndx_d.csv` (Stooq) at the repo root to reach pre-1985 Nasdaq history; that file is not committed, and without it the rebuild stops where Yahoo's `^NDX` stops. Run it when adding a ticker or changing the synthesis.
-- `--high-low-history`, `--gold-history`, `--soxl-history`, `--soxx-history` and `--soxs-history` rebuild the pre-launch rows of the high/low files, of `synthetic-gld.tsv`, `synthetic-soxl.tsv`, `synthetic-soxx.tsv` and `synthetic-soxs.tsv`. [data/README.md](data/README.md) has the details.
+- `--high-low-history`, `--gold-history`, `--soxl-history`, `--soxx-history`, `--soxs-history`, `--psq-history` and `--qid-history` rebuild the pre-launch rows of the high/low files, of `synthetic-gld.tsv`, `synthetic-soxl.tsv`, `synthetic-soxx.tsv`, `synthetic-soxs.tsv`, `synthetic-psq.tsv` and `synthetic-qid.tsv`. [data/README.md](data/README.md) has the details.
 
 ## Automated refresh
 

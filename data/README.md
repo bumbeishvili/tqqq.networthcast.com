@@ -1,6 +1,6 @@
-# Long-history price data for TQQQ, QLD, QQQ, SPY, SSO, SPXL, SQQQ, GLD, SOXL, SOXX, and SOXS
+# Long-history price data for TQQQ, QLD, QQQ, SPY, SSO, SPXL, SQQQ, PSQ, QID, GLD, SOXL, SOXX, and SOXS
 
-Daily closing prices for eleven ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://tqqq.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
+Daily closing prices for thirteen ETFs, going back decades before any of them existed, plus the short-term interest rate series the reconstruction runs on. These files feed the [Strategies Simulator](https://tqqq.networthcast.com). They're published here so you can run your own backtests without redoing the synthesis.
 
 ## ETF launch dates
 
@@ -8,6 +8,8 @@ Daily closing prices for eleven ETFs, going back decades before any of them exis
 - **QQQ** — March 1999
 - **SSO** (2× S&P 500, ProShares Ultra S&P500) — June 2006
 - **QLD** (2× Nasdaq-100, ProShares Ultra QQQ) — June 2006
+- **PSQ** (−1× Nasdaq-100, ProShares Short QQQ) — June 2006
+- **QID** (−2× Nasdaq-100, ProShares UltraShort QQQ) — July 2006
 - **SPXL** (3× S&P 500, Direxion Daily S&P500 Bull 3x) — November 2008
 - **TQQQ** (3× Nasdaq-100) — February 2010
 - **SQQQ** (−3× Nasdaq-100, ProShares UltraPro Short QQQ) — February 2010
@@ -52,6 +54,8 @@ The most-asked question about this dataset. The copy-paste answer:
 | **synthetic-soxl.tsv** | March 11, 2010, when SOXL (Direxion Daily Semiconductor Bull 3X) launched. | May 4, 1994 to March 10, 2010: the PHLX Semiconductor index (Yahoo `^SOX`, price-only) walked backward at 3×: `(1 + 3 × SOX_daily − 2 × (short_rate − 1.81%)/yr − 0.75%/yr expense)`. The −1.81 %/yr is an effective spread fitted on March 2010 to May 2021, the years SOXL tracked `^SOX` before moving to the ICE Semiconductor Index: it nets the swap spread against the dividends the price-only index leaves out (about 1 %/yr for semiconductors, 3 pp at 3×). Replayed forward over that window, the formula lands on the real fund's end value, with a median daily error of 0.105 % and a worst rolling year of 17.6 %; at a spread of 0 it runs 3.6 pp/yr light. **January 2, 1953 to May 3, 1994:** no semiconductor index has daily history before `^SOX`, so the index is stood in for by Ken French's "Chips" industry portfolio (CRSP's value-weighted daily return of every listed US electronic-equipment company, SIC 3622, 3661–3666, 3669–3679, 3810, 3812, semiconductors being 3674; dividends and delisted companies included; daily from 1926) with each day's return multiplied by 1.15, the index's daily beta to it where both exist (1.17 over 1994–2001, 1.10 over 2001–2010, 1.04 over 2010–2021, 1.15 since; daily R² 0.79–0.91), then put through the same 3× formula. This stretch is rough. Over 1994–2001 the stand-in ran 4.5 pp/yr under the index at 1×; over 1985–1994 French's series ran 4.5 pp/yr over a real semiconductor fund (Fidelity Select Electronics, monthly correlation 0.905); at 3× such a gap is three times as large. The stand-in is also calmer than semiconductors were (20–24 %/yr against 27 % for the Fidelity fund), so the 3× decay is understated, and before about 1960 the industry is radio, television and electrical-equipment makers. Checks and scripts: `research/soxl-history/`. |
 | **synthetic-soxx.tsv** | July 13, 2001, when SOXX (iShares Semiconductor ETF) launched. Real dividend-adjusted Yahoo Finance data from there on. | May 4, 1994 to July 12, 2001: the PHLX Semiconductor index (`^SOX`) less SOXX's 0.35 %/yr expense ratio, no financing. The index is price-only, so the prefix runs about 1 %/yr light. January 2, 1953 to May 3, 1994: the same stand-in for the index as SOXL's (French's Chips industry × 1.15), less the fee, with the same caveats. SOXX is the 1× leg of the SOXL rule in the library's SOXL, TQQQ VS QQQ, Mon Turns strategy (SOXL's lead over SOXX), as QQQ is of TQQQ vs QQQ. |
 | **synthetic-soxs.tsv** | March 11, 2010, when SOXS (Direxion Daily Semiconductor Bear 3X) launched. Real dividend-adjusted Yahoo Finance data from there on, through ten reverse splits. | Before launch: the same semiconductor index as SOXL's (`^SOX` from May 4, 1994, French's Chips industry × 1.15 before), walked backward by the inverse model `(1 − 3 × SOX_daily + 4 × short_rate/yr − 7.30 %/yr)`. The fund is short 3 units and earns the short rate on 4 units of cash. The −7.30 %/yr is the drag at which the model, replayed over March 2010 to May 2021 (the years SOXS tracked `^SOX`), ends level with the real fund: median daily error 0.115 %, widest gap on the way 4.4 %. It is larger than SQQQ's because the index is price-only (a short pays the dividends, about 3 pp/yr at −3×) and semiconductor swaps cost more; SOXL and SOXS together lost 6.2 %/yr in those years against 3.4 %/yr for TQQQ and SQQQ. The cash multiple is held at the theoretical 4: rates sat near zero for most of the window, so the regression's slope (4.58) says little. The price walked back to 1953 is astronomically large (7.9e27), as SQQQ's is: only its day-to-day moves mean anything. `--soxs-history` prints the fit each time it runs. |
+| **synthetic-psq.tsv** | June 21, 2006, when PSQ (ProShares Short QQQ) launched. Real dividend-adjusted Yahoo Finance data from there on. | Before launch: the Nasdaq-100 walked backward by the inverse model `(1 − 1 × NDX_daily + 2 × short_rate/yr − 0.978 %/yr)`. The index is the QQQ file's daily return with QQQ's 0.20 %/yr fee added back: the total-return index from QQQ's March 1999 launch, the price-only `^NDX` the QQQ prefix was built from before it (the index SQQQ's two phases use). The cash multiple is theory's L + 1 (the regression over June 2006 to October 2026 gives 1.950); the −0.978 %/yr is the drag at which the model, replayed over those years, ends level with the real fund (PSQ's fee is 0.95 %): median daily error 0.043 %, widest gap on the way 4.5 %. `--psq-history` prints the fit each time it runs. |
+| **synthetic-qid.tsv** | July 13, 2006, when QID (ProShares UltraShort QQQ) launched. Real dividend-adjusted Yahoo Finance data from there on, through its reverse splits. | Before launch: the same index at −2×, `(1 − 2 × NDX_daily + 3 × short_rate/yr − 1.385 %/yr)`: the regression over July 2006 to October 2026 gives a cash multiple of 2.891 against theory's 3; the drag is the level one, median daily error 0.064 %, widest gap 10.7 %. The price walked back to 1953 is large (3.2e9): only its day-to-day moves mean anything. `--qid-history` prints the fit each time it runs. |
 | **fed-funds-effective.tsv** | Daily, July 1, 1954 onward. | None. FRED series `DFF`. Supplies the financing cost on the leveraged leg from 1954. |
 | **t-bill-3mo.tsv** | Monthly, January 1934 onward. | None. FRED series `TB3MS`. The pre-Fed-Funds-market short-rate proxy for 1934–1953. |
 | **short-rates.tsv** | Daily, January 2, 1934 onward. | Derived: `DFF` where it exists, `TB3MS` forward-filled where it doesn't. The only rate file the synthesis reads. |
@@ -133,7 +137,7 @@ Net direction on TQQQ before 2010, against what real TQQQ would have done had it
 - **Moderate-rate eras** (most of the history): 1–3 pp/year high.
 - **High-rate eras** (1970s–80s): the rate effect is corrected now, leaving the operational component at 2–3 pp/year high.
 
-From 2010 (TQQQ, SQQQ, SOXL, SOXS), 2008 (SPXL), 2006 (QLD, SSO), 2004 (GLD), 2001 (SOXX), 1999 (QQQ), and 1993 (SPY) onward the prices are real and dividend-adjusted. Backtests confined to the last 15–30 years carry no synthesis bias at all.
+From 2010 (TQQQ, SQQQ, SOXL, SOXS), 2008 (SPXL), 2006 (QLD, SSO, PSQ, QID), 2004 (GLD), 2001 (SOXX), 1999 (QQQ), and 1993 (SPY) onward the prices are real and dividend-adjusted. Backtests confined to the last 15–30 years carry no synthesis bias at all.
 
 ### Checked against official sources (August 2026)
 
@@ -164,6 +168,8 @@ Fetch any file straight from GitHub:
 | SOXL | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxl.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxl.tsv) |
 | SOXX | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxx.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxx.tsv) |
 | SOXS | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxs.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-soxs.tsv) |
+| PSQ  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-psq.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-psq.tsv) |
+| QID  | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-qid.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/synthetic-qid.tsv) |
 | Fed Funds Effective Rate (daily, 1954+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/fed-funds-effective.tsv) |
 | 3-month T-bill (monthly, 1934+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/t-bill-3mo.tsv) |
 | Combined daily short rates (1934+) | [https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/short-rates.tsv](https://raw.githubusercontent.com/bumbeishvili/tqqq.networthcast.com/refs/heads/main/data/short-rates.tsv) |
@@ -195,7 +201,7 @@ Date	Rate               ← rate files (Rate column, value in % per year)
 
 `.github/workflows/update-data.yml` fires hourly on weekdays (`30 13-22 * * 1-5`) and gates each fire to 09:00–17:30 ET, so nine runs land per trading day: one at the open, seven through the session, one after the close. Each run executes `scripts/update_data.py` in its default incremental mode and commits `data/*.tsv` only when the bytes changed, which makes holidays a no-op.
 
-Incremental mode touches the **eleven price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, keeps the committed pre-IPO prefix (times whatever factor Yahoo applied to the fund's history since the last run, see below), and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
+Incremental mode touches the **thirteen price files and the three high/low files**. It pulls fresh yfinance bars for the post-IPO tail of each ETF, keeps the committed pre-IPO prefix (times whatever factor Yahoo applied to the fund's history since the last run, see below), and never contacts FRED (apart from one failure-tolerant NFCI refresh). The three rate files refresh by hand:
 
 ```bash
 python3 scripts/update_data.py --refresh-rates      # re-pull DFF + TB3MS from FRED
@@ -204,6 +210,8 @@ python3 scripts/update_data.py --gold-history       # rebuild synthetic-gld.tsv 
 python3 scripts/update_data.py --soxl-history       # rebuild synthetic-soxl.tsv (real SOXL plus its 3× ^SOX prefix)
 python3 scripts/update_data.py --soxx-history       # rebuild synthetic-soxx.tsv (real SOXX plus its ^SOX prefix)
 python3 scripts/update_data.py --soxs-history       # rebuild synthetic-soxs.tsv (real SOXS plus its −3× ^SOX prefix); prints the model's fit
+python3 scripts/update_data.py --psq-history        # rebuild synthetic-psq.tsv (real PSQ plus its −1× Nasdaq-100 prefix); prints the model's fit
+python3 scripts/update_data.py --qid-history        # rebuild synthetic-qid.tsv (real QID plus its −2× Nasdaq-100 prefix); prints the model's fit
 python3 scripts/update_data.py --rebuild            # full re-synthesis; needs ^ndx_d.csv for pre-1985
 python3 scripts/update_data.py --split-registry     # add every split Yahoo lists to splits.tsv; run it when a fund is added
 ```

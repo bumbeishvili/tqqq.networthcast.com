@@ -202,10 +202,10 @@ function handleSmaMarkerHover(e) {
 // unknown/missing held falls back to the old white outline.
 // Hues chosen for maximum pairwise separation at stroke width — vivid
 // blue / orange / purple / cyan / pink / brown / black / gold / teal / periwinkle / navy /
-// slate — and none close to the green/red fills they wrap.
+// maroon / violet / slate — and none close to the green/red fills they wrap.
 const ASSET_STROKE = {
   tqqq: '#0040ff', qqq: '#ff8c00', spy: '#a020f0', qld: '#00b3e6',
-  sso: '#ff1493', spxl: '#6d4c2f', sqqq: '#000000', gld: '#a68f00', soxl: '#00998a', soxx: '#8079d0', soxs: '#1b2a6b', cash: '#5a6472',
+  sso: '#ff1493', spxl: '#6d4c2f', sqqq: '#000000', gld: '#a68f00', soxl: '#00998a', soxx: '#8079d0', soxs: '#1b2a6b', psq: '#480000', qid: '#740490', cash: '#5a6472',
 };
 // 'TQQQ' / 'tqqq+cash' / 'TQQQ+CASH' → the first known ticker's stroke.
 function assetStrokeFor(held) {
@@ -1349,6 +1349,8 @@ function renderStrategyPanelBody(idx) {
                    : bhKey === 'soxl' ? _logData.soxlPoints
                    : bhKey === 'soxx' ? _logData.soxxPoints
                    : bhKey === 'soxs' ? _logData.soxsPoints
+                   : bhKey === 'psq'  ? _logData.psqPoints
+                   : bhKey === 'qid'  ? _logData.qidPoints
                    :                    _logData.bhPoints;
     html += buildBuyHoldLogTableHtml('Buy & Hold Log', _logData.log, bhSeries, bhKey.toUpperCase());
   }
@@ -2648,8 +2650,8 @@ function render() {
     // rate; the 9sig parked cash uses its own rate (passed as the 3rd arg).
     baselineRate: rate,
   };
-  const { log, bhPoints, qqqPoints, spyPoints, qldPoints, ssoPoints, spxlPoints, sqqqPoints, gldPoints, soxlPoints, soxxPoints, soxsPoints, totalContributed,
-          samplePoints, bhSample, qqqSample, spySample, qldSample, ssoSample, spxlSample, sqqqSample, gldSample, soxlSample, soxxSample, soxsSample } = simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise, sigOpts);
+  const { log, bhPoints, qqqPoints, spyPoints, qldPoints, ssoPoints, spxlPoints, sqqqPoints, gldPoints, soxlPoints, soxxPoints, soxsPoints, psqPoints, qidPoints, totalContributed,
+          samplePoints, bhSample, qqqSample, spySample, qldSample, ssoSample, spxlSample, sqqqSample, gldSample, soxlSample, soxxSample, soxsSample, psqSample, qidSample } = simulate(initial, monthly, nineSigCashRate, simEntryIdx, exitIdx, annualRaise, sigOpts);
   // For each line, the points fed to the chart: the quarter-end snapshots when
   // the run is coarser than the axis (yearly), else the rebalance-grain points.
   // Driven by the SAME sampleQuarterly/sampleWeekly flags passed to simulate()
@@ -2670,6 +2672,8 @@ function render() {
   const soxlPtsD = pick(soxlSample, soxlPoints);
   const soxxPtsD = pick(soxxSample, soxxPoints);
   const soxsPtsD = pick(soxsSample, soxsPoints);
+  const psqPtsD = pick(psqSample, psqPoints);
+  const qidPtsD = pick(qidSample, qidPoints);
 
   // Shared x-axis. When the display grain matches the main's own period (the
   // common case) the labels ARE the main log's dates and every series maps 1:1
@@ -2734,6 +2738,8 @@ function render() {
   const finalSOXL = soxlPoints && soxlPoints.length ? soxlPoints[soxlPoints.length - 1].value : 0;
   const finalSOXX = soxxPoints && soxxPoints.length ? soxxPoints[soxxPoints.length - 1].value : 0;
   const finalSOXS = soxsPoints && soxsPoints.length ? soxsPoints[soxsPoints.length - 1].value : 0;
+  const finalPSQ  = psqPoints  && psqPoints.length  ? psqPoints[psqPoints.length - 1].value   : 0;
+  const finalQID  = qidPoints  && qidPoints.length  ? qidPoints[qidPoints.length - 1].value   : 0;
   const finalSMA  = smaPoints  && smaPoints.length  ? smaPoints[smaPoints.length - 1].value   : 0;
   const years = log.length > 1 ? (new Date(log[log.length-1].date) - new Date(log[0].date)) / (365.25*86400000) : 1;
   // Simple end/start growth — kept for the sub-series fallback (their CAGR is the
@@ -2762,6 +2768,8 @@ function render() {
   const retSOXL = _mw(finalSOXL);
   const retSOXX = _mw(finalSOXX);
   const retSOXS = _mw(finalSOXS);
+  const retPSQ  = _mw(finalPSQ);
+  const retQID  = _mw(finalQID);
   const retSMA  = _mw(finalSMA);
   const retInv = _mw(finalLog.investedCompounded);
 
@@ -2784,6 +2792,8 @@ function render() {
     bhKey === 'soxl' ? { series: soxlPoints || [],  ret: retSOXL } :
     bhKey === 'soxx' ? { series: soxxPoints || [],  ret: retSOXX } :
     bhKey === 'soxs' ? { series: soxsPoints || [],  ret: retSOXS } :
+    bhKey === 'psq'  ? { series: psqPoints || [],   ret: retPSQ }  :
+    bhKey === 'qid'  ? { series: qidPoints || [],   ret: retQID }  :
                        { series: bhPoints,          ret: retBH }   ;
 
   // Static, plain strategy labels — they don't encode (or change with) the
@@ -2846,7 +2856,7 @@ function render() {
     }
     // Consolidated Buy & Hold: pure shares, no cash. (bhKeyName is declared
     // further below — normalize bhKey locally instead of reordering.)
-    const _bhK = ['qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'].includes(bhKey) ? bhKey : 'tqqq';
+    const _bhK = ['qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs', 'psq', 'qid'].includes(bhKey) ? bhKey : 'tqqq';
     const bhLast = bhPicked.series[bhPicked.series.length - 1];
     if (bhLast && bhLast.shares > 0) recordEndState(2, { [_bhK]: bhLast.shares }, 0);
     // SMA: full multi-asset end state from the drawdown control points
@@ -2885,7 +2895,7 @@ function render() {
   // Data fed into the consolidated B&H slot (dataset 2) — display points for the
   // selected underlying (quarter snapshots for a yearly run, else rebalance grain).
   const bhActiveD = onLabels(
-    bhKey === 'qqq' ? qqqPtsD : bhKey === 'spy' ? spyPtsD : bhKey === 'qld' ? qldPtsD : bhKey === 'sso' ? ssoPtsD : bhKey === 'spxl' ? spxlPtsD : bhKey === 'sqqq' ? sqqqPtsD : bhKey === 'gld' ? gldPtsD : bhKey === 'soxl' ? soxlPtsD : bhKey === 'soxx' ? soxxPtsD : bhKey === 'soxs' ? soxsPtsD : bhPtsD,
+    bhKey === 'qqq' ? qqqPtsD : bhKey === 'spy' ? spyPtsD : bhKey === 'qld' ? qldPtsD : bhKey === 'sso' ? ssoPtsD : bhKey === 'spxl' ? spxlPtsD : bhKey === 'sqqq' ? sqqqPtsD : bhKey === 'gld' ? gldPtsD : bhKey === 'soxl' ? soxlPtsD : bhKey === 'soxx' ? soxxPtsD : bhKey === 'soxs' ? soxsPtsD : bhKey === 'psq' ? psqPtsD : bhKey === 'qid' ? qidPtsD : bhPtsD,
     p => p.value);
 
   // Per-dataset stats shown inside the strategy side panel (CAGR / starting
@@ -2903,9 +2913,9 @@ function render() {
   // them. Step series (Target/Cash) and the deterministic Invested baseline
   // keep their rebalance-grain drawdown — they don't move between rebalances.
   const dailyRows = (typeof daily !== 'undefined' && daily) ? daily : null;
-  const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl', 7: 'sqqq', 8: 'gld', 9: 'soxl', 10: 'soxx', 11: 'soxs' };
+  const UL_KEY = { 1: 'tqqq', 2: 'qqq', 3: 'spy', 4: 'qld', 5: 'sso', 6: 'spxl', 7: 'sqqq', 8: 'gld', 9: 'soxl', 10: 'soxx', 11: 'soxs', 12: 'psq', 13: 'qid' };
   const sigKey = UL_KEY[sigUlCol] || 'tqqq';
-  const bhKeyName = bhKey === 'qqq' ? 'qqq' : bhKey === 'spy' ? 'spy' : bhKey === 'qld' ? 'qld' : bhKey === 'sso' ? 'sso' : bhKey === 'spxl' ? 'spxl' : bhKey === 'sqqq' ? 'sqqq' : bhKey === 'gld' ? 'gld' : bhKey === 'soxl' ? 'soxl' : bhKey === 'soxx' ? 'soxx' : bhKey === 'soxs' ? 'soxs' : 'tqqq';
+  const bhKeyName = bhKey === 'qqq' ? 'qqq' : bhKey === 'spy' ? 'spy' : bhKey === 'qld' ? 'qld' : bhKey === 'sso' ? 'sso' : bhKey === 'spxl' ? 'spxl' : bhKey === 'sqqq' ? 'sqqq' : bhKey === 'gld' ? 'gld' : bhKey === 'soxl' ? 'soxl' : bhKey === 'soxx' ? 'soxx' : bhKey === 'soxs' ? 'soxs' : bhKey === 'psq' ? 'psq' : bhKey === 'qid' ? 'qid' : 'tqqq';
   // Each line's drawdown as a measure from a close on (none: the whole run), so the year so far is read the same way.
   const ddMeasureByIdx = {};
   if (dailyRows) {
@@ -4424,7 +4434,7 @@ function render() {
   // Stash latest data for the side-panel log tables. Normally this is the
   // canonical base simulation; but when a saved strategy is open for editing the
   // panel describes THAT strategy, so swap in its (separately computed) sim.
-  _logData = { log, bhPoints, qqqPoints, spyPoints, qldPoints, ssoPoints, spxlPoints, sqqqPoints, gldPoints, soxlPoints, soxxPoints, soxsPoints, smaLog, smaControls: smaDdControls };
+  _logData = { log, bhPoints, qqqPoints, spyPoints, qldPoints, ssoPoints, spxlPoints, sqqqPoints, gldPoints, soxlPoints, soxxPoints, soxsPoints, psqPoints, qidPoints, smaLog, smaControls: smaDdControls };
   if (window._editingConfigId && window._editingConfigSim) {
     const cs = window._editingConfigSim;
     _logData = {
@@ -4440,7 +4450,9 @@ function render() {
       soxlPoints: cs.soxlPoints || soxlPoints,
       soxxPoints: cs.soxxPoints || soxxPoints,
       soxsPoints: cs.soxsPoints || soxsPoints,
-      smaLog:     cs.smaLog     || smaLog,
+      psqPoints:  cs.psqPoints  || psqPoints,
+      qidPoints:  cs.qidPoints  || qidPoints,
+      smaLog:    cs.smaLog     || smaLog,
       smaControls: cs.ddControls || smaDdControls,
     };
   }

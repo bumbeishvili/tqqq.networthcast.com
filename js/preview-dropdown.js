@@ -126,7 +126,7 @@
   function readSmaParams(period) {
     return Object.assign(readBaseParams(period), {
       cashRate:      _num('select-sma-cashrate', 0) / 100,
-      underlyingCol: (function () { const v = _str('select-sma-underlying', 'tqqq'); return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : v === 'sqqq' ? 7 : v === 'gld' ? 8 : v === 'soxl' ? 9 : v === 'soxx' ? 10 : v === 'soxs' ? 11 : 1; })(),
+      underlyingCol: (function () { const v = _str('select-sma-underlying', 'tqqq'); return v === 'qqq' ? 2 : v === 'spy' ? 3 : v === 'qld' ? 4 : v === 'sso' ? 5 : v === 'spxl' ? 6 : v === 'sqqq' ? 7 : v === 'gld' ? 8 : v === 'soxl' ? 9 : v === 'soxx' ? 10 : v === 'soxs' ? 11 : v === 'psq' ? 12 : v === 'qid' ? 13 : 1; })(),
       smaAsset:      _str('select-sma-asset', 'qqq'),
       smaWindow:     _num('select-sma-window', 200),
       // The other ~17 select-sma-* knobs — was a third hand-typed copy of the
@@ -242,7 +242,7 @@
   }
   function bhFinals(period) {
     const r = bhRun(period);
-    return { tqqq: lastVal(r.bhPoints), qqq: lastVal(r.qqqPoints), spy: lastVal(r.spyPoints), qld: lastVal(r.qldPoints), sso: lastVal(r.ssoPoints), spxl: lastVal(r.spxlPoints), sqqq: lastVal(r.sqqqPoints), gld: lastVal(r.gldPoints), soxl: lastVal(r.soxlPoints), soxx: lastVal(r.soxxPoints), soxs: lastVal(r.soxsPoints) };
+    return { tqqq: lastVal(r.bhPoints), qqq: lastVal(r.qqqPoints), spy: lastVal(r.spyPoints), qld: lastVal(r.qldPoints), sso: lastVal(r.ssoPoints), spxl: lastVal(r.spxlPoints), sqqq: lastVal(r.sqqqPoints), gld: lastVal(r.gldPoints), soxl: lastVal(r.soxlPoints), soxx: lastVal(r.soxxPoints), soxs: lastVal(r.soxsPoints), psq: lastVal(r.psqPoints), qid: lastVal(r.qidPoints) };
   }
 
   // Final values for every option of `select`, by its preview kind.

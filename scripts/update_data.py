@@ -53,6 +53,7 @@ Synthesis formulas:
   SPXL 1988 → 2008    ← ^SP500TR                     (3× − 2×rate − SPXL exp)
   SQQQ pre-1999       ← extended ^NDX                (inverse model, below)
   SQQQ 1999 → 2010    ← derived NDX-TR               (inverse model, below)
+  PSQ, QID pre-2006   ← QQQ's returns + QQQ's fee    (inverse model at -1x, -2x; INVERSE_QQQ)
   GLD  pre-2004       ← daily gold prices            (1× − GLD expense;
                         see gold_history for the sources)
 
@@ -187,6 +188,20 @@ SOXS_INVERSE_LEVERAGE = 3
 SOXS_CASH_MULTIPLE    = 4.0        # theory = L + 1; rates sat near zero for most of the window, so the fitted slope (4.577) says little
 SOXS_DRAG_DAILY       = -2.8964e-04 # the drag at which the replay ends level with the real fund (~ -7.30 %/yr; the regression's intercept is -8.17 %/yr)
 SOXS_FIT_WINDOW       = ('2010-03-11', '2021-05-31')
+# PSQ (ProShares Short QQQ, -1x, 2006-06-21+) and QID (ProShares UltraShort QQQ,
+# -2x, 2006-07-13+) by the same model on the Nasdaq-100 (qqq_index): the committed
+# QQQ file's daily returns with QQQ's fee added back, which is the total-return
+# index from QQQ's 1999 launch and the price-only ^NDX the QQQ prefix was built
+# from before it (the index SQQQ's two phases use). The cash multiple is theory's
+# L + 1; the drag is the one at which the replay over the fund's real years ends
+# level with the real fund. --psq-history / --qid-history print the regression
+# and the replay each time they run (write_inverse_qqq_file).
+INVERSE_QQQ = {
+    # Fitted 2026-11-28: cash multiple 1.950 (theory 2), regression drag -0.898 %/yr; level drag -0.978 %/yr (fee 0.95%).
+    'PSQ': {'leverage': 1, 'cash_multiple': 2.0, 'drag_daily': -3.8808e-05, 'fit_window': ('2006-06-21', '2026-10-30')},
+    # Fitted 2026-11-28: cash multiple 2.891 (theory 3), regression drag -1.296 %/yr; level drag -1.385 %/yr (fee 0.95% + spread).
+    'QID': {'leverage': 2, 'cash_multiple': 3.0, 'drag_daily': -5.4947e-05, 'fit_window': ('2006-07-13', '2026-10-30')},
+}
 
 # === Financing-cost model =================================================
 # A leveraged ETF holding $1 of investor NAV achieves $L of index exposure by
@@ -223,6 +238,8 @@ tickers = [
     ('SOXL',   'synthetic-soxl.tsv'),
     ('SOXX',   'synthetic-soxx.tsv'),
     ('SOXS',   'synthetic-soxs.tsv'),
+    ('PSQ',    'synthetic-psq.tsv'),
+    ('QID',    'synthetic-qid.tsv'),
 ]
 # Daily highs and lows of the funds the Turnaround Monday rule can read (its
 # signal: a Monday close under the prior day's low buys, a close over the
@@ -1057,6 +1074,52 @@ def write_soxs_file(soxs_df):
           f"{prefix[0][0].strftime('%Y-%m-%d')} to {soxs_df.index[-1].strftime('%Y-%m-%d')}")
 
 
+def qqq_index(qqq_pairs):
+    """The Nasdaq-100 on the QQQ file's days, as [(Timestamp, level)]: each day
+    QQQ's return with QQQ's fee added back (INVERSE_QQQ). Only the moves mean
+    anything; the first day stands at 1."""
+    out, level = [(qqq_pairs[0][0], 1.0)], 1.0
+    for (_, before), (day, close) in zip(qqq_pairs, qqq_pairs[1:]):
+        level *= close / before + QQQ_EXPENSE_DAILY
+        out.append((day, level))
+    return out
+
+
+def inverse_qqq_prefix(ticker, real_df, qqq_pairs, rate_map):
+    """PSQ's or QID's rows before its launch, as [(Timestamp, close)]: qqq_index
+    walked back from the fund's first close by the inverse model at its numbers
+    in INVERSE_QQQ."""
+    spec, first_real = INVERSE_QQQ[ticker], normalize_ts(real_df.index[0])
+    index = [(d, c) for d, c in qqq_index(qqq_pairs) if d <= first_real]
+    _, pairs = walk_backward_inverse(index, first_real, cell(real_df['Close'].iloc[0]), rate_map,
+                                     leverage=spec['leverage'], cash_multiple=spec['cash_multiple'], drag_daily=spec['drag_daily'])
+    return pairs
+
+
+def write_inverse_qqq_file(ticker, real_df):
+    """synthetic-psq.tsv or synthetic-qid.tsv from scratch: inverse_qqq_prefix on
+    the committed QQQ file with the committed short rates, then the fund's real
+    closes. Prints the model's fit to the real fund over its fit window first."""
+    data_dir = os.path.join(basedir, DATA_DIR)
+    price_file, spec = dict(tickers), INVERSE_QQQ[ticker]
+    qqq_pairs = read_price_tsv(os.path.join(data_dir, price_file['QQQ']))
+    rate_map = dict(read_rate_tsv(os.path.join(data_dir, 'short-rates.tsv')))
+    leverage, cash_multiple, drag_daily, window = spec['leverage'], spec['cash_multiple'], spec['drag_daily'], spec['fit_window']
+    fit_days = inverse_days(df_to_pairs(real_df), qqq_index(qqq_pairs), rate_map, window)
+    slope, drag = inverse_fit(fit_days, leverage)
+    print(f"  {ticker} model over {window[0]}..{window[1]} ({len(fit_days)} days): fitted cash multiple {slope:.3f} "
+          f"(used {cash_multiple}), fitted drag {drag:.4e} a day = {drag * 252 * 100:.3f} %/yr")
+    level = inverse_level_drag(fit_days, leverage, cash_multiple)
+    print(f"  drag at which the replay ends level with the real fund: {level:.4e} a day = {level * 252 * 100:.3f} %/yr (used {drag_daily:.4e})")
+    end, median_error, widest = inverse_replay(fit_days, leverage, cash_multiple, drag_daily)
+    print(f"  replay with the numbers used: model ends at {end:.4f} of the real fund, median daily error "
+          f"{median_error * 100:.3f}%, widest gap on the way {widest * 100:.1f}%")
+    prefix = inverse_qqq_prefix(ticker, real_df, qqq_pairs, rate_map)
+    write_price_tsv(os.path.join(data_dir, price_file[ticker]), prefix, real_df)
+    print(f"  {price_file[ticker]}: {len(prefix)} synthesized + {len(real_df)} real, "
+          f"{prefix[0][0].strftime('%Y-%m-%d')} to {real_df.index[-1].strftime('%Y-%m-%d')}")
+
+
 def yahoo_splits(ticker):
     """Every split Yahoo lists for `ticker`, oldest first, as (day, shares
     ratio: 3.0 for a 3-for-1, 0.2 for a 1-for-5 reverse). Each one that
@@ -1175,6 +1238,13 @@ _argp.add_argument('--soxs-history', action='store_true',
                         'inverse model (cash earning the short rate, fitted drag), '
                         'on the committed QQQ file\'s trading days and short rates. '
                         'Prints the model\'s fit to the real fund. Nothing else is touched.')
+_argp.add_argument('--psq-history', action='store_true',
+                   help='Rewrite synthetic-psq.tsv: PSQ\'s real closes plus its '
+                        'pre-launch rows from the Nasdaq-100 at -1x by the inverse '
+                        'model (see INVERSE_QQQ), on the committed QQQ file and short '
+                        'rates. Prints the model\'s fit to the real fund. Nothing else is touched.')
+_argp.add_argument('--qid-history', action='store_true',
+                   help='Rewrite synthetic-qid.tsv the same way at -2x (QID).')
 _argp.add_argument('--gold-history', action='store_true',
                    help='Rewrite synthetic-gld.tsv: GLD\'s real closes plus its '
                         'pre-launch rows from gold prices (see gold_history), on '
@@ -1217,6 +1287,12 @@ if _args.soxs_history:
     print("Done.")
     sys.exit(0)
 
+if _args.psq_history or _args.qid_history:
+    for ticker in [t for t, asked in (('PSQ', _args.psq_history), ('QID', _args.qid_history)) if asked]:
+        write_inverse_qqq_file(ticker, fetch(ticker))
+    print("Done.")
+    sys.exit(0)
+
 if not _args.rebuild:
     incremental_refresh()
     print("Done.")
@@ -1239,6 +1315,8 @@ sqqq_df         = fetch('SQQQ')                             # ProShares UltraPro
 soxl_df         = fetch('SOXL')                             # Direxion 3× semiconductors, 2010-03-11+
 soxx_df         = fetch('SOXX')                             # iShares Semiconductor, 2001-07-13+
 soxs_df         = fetch('SOXS')                             # Direxion -3× semiconductors, 2010-03-11+
+psq_df          = fetch('PSQ')                              # ProShares Short QQQ (-1×), 2006-06-21+
+qid_df          = fetch('QID')                              # ProShares UltraShort QQQ (-2×), 2006-07-13+
 ndx_df          = fetch('^NDX')
 gspc_df         = fetch('^GSPC')
 sp500tr_df      = fetch('^SP500TR')
@@ -1435,13 +1513,21 @@ soxl_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_sox
 soxx_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxx_prefix(soxx_df, qqq_days)]
 soxs_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in build_soxs_prefix(soxs_df, qqq_days, rate_map)]
 
+# ---- PSQ and QID: real from 2006, the Nasdaq-100 at -1x / -2x by the inverse model before (INVERSE_QQQ) ----
+# On the QQQ series this run builds, its prefix and then its real closes.
+qqq_built = [(parse_tsv_date(s), c) for s, c in qqq_prefix_rows] + df_to_pairs(qqq_df)
+psq_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in inverse_qqq_prefix('PSQ', psq_df, qqq_built, rate_map)]
+qid_prefix_rows = [(d.strftime('%-m/%-d/%Y 16:00:00'), c) for d, c in inverse_qqq_prefix('QID', qid_df, qqq_built, rate_map)]
+
 
 prefix_by_ticker = {'QQQ': qqq_prefix_rows, 'QLD': qld_prefix_rows,
                     'TQQQ': tqqq_prefix_rows, 'SPY': spy_prefix_rows,
                     'SSO': sso_prefix_rows, 'SPXL': spxl_prefix_rows,
-                    'SQQQ': sqqq_prefix_rows, 'GLD': gld_prefix_rows, 'SOXL': soxl_prefix_rows, 'SOXX': soxx_prefix_rows, 'SOXS': soxs_prefix_rows}
+                    'SQQQ': sqqq_prefix_rows, 'GLD': gld_prefix_rows, 'SOXL': soxl_prefix_rows, 'SOXX': soxx_prefix_rows, 'SOXS': soxs_prefix_rows,
+                    'PSQ': psq_prefix_rows, 'QID': qid_prefix_rows}
 real_by_ticker   = {'QQQ': qqq_df, 'QLD': qld_df, 'TQQQ': tqqq_df, 'SPY': spy_df,
-                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df, 'GLD': gld_df, 'SOXL': soxl_df, 'SOXX': soxx_df, 'SOXS': soxs_df}
+                    'SSO': sso_df, 'SPXL': spxl_df, 'SQQQ': sqqq_df, 'GLD': gld_df, 'SOXL': soxl_df, 'SOXX': soxx_df, 'SOXS': soxs_df,
+                    'PSQ': psq_df, 'QID': qid_df}
 
 data_dir = os.path.join(basedir, DATA_DIR)
 os.makedirs(data_dir, exist_ok=True)

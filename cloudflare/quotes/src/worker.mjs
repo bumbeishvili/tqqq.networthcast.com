@@ -26,7 +26,7 @@
 // QUOTE_TTL / BARS_TTL seconds; the browser may reuse a response for BROWSER_TTL.
 
 const ORIGINS = [/^https:\/\/tqqq\.networthcast\.com$/, /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/];
-const SYMBOLS = ['TQQQ', 'QQQ', 'SPY', 'QLD', 'SSO', 'SPXL', 'SQQQ', 'GLD', 'SOXL', 'SOXX', 'SOXS'];
+const SYMBOLS = ['TQQQ', 'QQQ', 'SPY', 'QLD', 'SSO', 'SPXL', 'SQQQ', 'GLD', 'SOXL', 'SOXX', 'SOXS', 'PSQ', 'QID'];
 const BAR_RANGES = { '1d': ['1m', '5m'], '5d': ['5m'] };
 const QUOTE_TTL = 60, BARS_TTL = 60, BROWSER_TTL = 20;
 const UPSTREAM = 'https://query1.finance.yahoo.com/v8/finance/chart/';

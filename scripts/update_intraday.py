@@ -44,9 +44,9 @@ import traceback
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-# The site's funds: the same eleven as the quotes worker's SYMBOLS
+# The site's funds: the same thirteen as the quotes worker's SYMBOLS
 # (cloudflare/quotes/src/worker.mjs) and the intraday page's TICKERS.
-TICKERS = ['TQQQ', 'QQQ', 'SPY', 'QLD', 'SSO', 'SPXL', 'SQQQ', 'GLD', 'SOXL', 'SOXX', 'SOXS']
+TICKERS = ['TQQQ', 'QQQ', 'SPY', 'QLD', 'SSO', 'SPXL', 'SQQQ', 'GLD', 'SOXL', 'SOXX', 'SOXS', 'PSQ', 'QID']
 BAR_MINUTES = 5
 MARKET_TZ = ZoneInfo('America/New_York')
 SESSION_OPEN = (9, 30)

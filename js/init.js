@@ -1,11 +1,11 @@
 // Initialize: load CSV, derive data, set slider max, restore state, render
 (async function init() {
   readUiScale();   // the touch type scale (styles.css --ui-scale), before anything draws
-  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, SOXS_DAILY, NFCI_WEEKLY, HIGH_LOW, LIVE;
+  let QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, SOXS_DAILY, PSQ_DAILY, QID_DAILY, NFCI_WEEKLY, HIGH_LOW, LIVE;
   try {
-    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, SOXS_DAILY, NFCI_WEEKLY, HIGH_LOW, LIVE] = await Promise.all([
+    [QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, SOXS_DAILY, PSQ_DAILY, QID_DAILY, NFCI_WEEKLY, HIGH_LOW, LIVE] = await Promise.all([
       loadQQQDaily(), loadTQQQDaily(), loadSPYDaily(), loadQLDDaily(), loadSSODaily(), loadSPXLDaily(),
-      // SQQQ, GLD, SOXL, SOXX and SOXS are first-class columns (0-filled on failure):
+      // SQQQ, GLD, SOXL, SOXX, SOXS, PSQ and QID are first-class columns (0-filled on failure):
       // every engine guards zero prices, so a fetch failure degrades their
       // options to empty/zero lines instead of blanking the app.
       loadSQQQDaily().catch(() => []),
@@ -13,6 +13,8 @@
       loadSOXLDaily().catch(() => []),
       loadSOXXDaily().catch(() => []),
       loadSOXSDaily().catch(() => []),
+      loadPSQDaily().catch(() => []),
+      loadQIDDaily().catch(() => []),
       // NFCI is a signal series, not a price: on failure the credit-veto
       // strategy sees NaN and the veto never fires — degraded, not broken.
       loadNFCIWeekly().catch(() => []),
@@ -36,7 +38,7 @@
     if (spinner) spinner.style.display = 'none';
     return;
   }
-  daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, SOXS_DAILY);
+  daily = buildDaily(QQQ_DAILY, TQQQ_DAILY, SPY_DAILY, QLD_DAILY, SSO_DAILY, SPXL_DAILY, SQQQ_DAILY, GLD_DAILY, SOXL_DAILY, SOXX_DAILY, SOXS_DAILY, PSQ_DAILY, QID_DAILY);
   // Today's live prices over the files' last row (or as a new row before the
   // first refresh of the day); the Monday rule's highs and lows follow.
   const highLowRows = Object.fromEntries(HIGH_LOW_FUNDS.map((f, k) => [f, HIGH_LOW[k]]));

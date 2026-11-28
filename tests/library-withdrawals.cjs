@@ -30,11 +30,12 @@ const ck = (name, ok, detail) => {
 };
 
 // ---- data: the same arrays the app hands a custom strategy (buildCustomData) ----
-const TICKERS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs'];
+const TICKERS = ['tqqq', 'qqq', 'spy', 'qld', 'sso', 'spxl', 'sqqq', 'gld', 'soxl', 'soxx', 'soxs', 'psq', 'qid'];
 const series = file => parseDataFile(fs.readFileSync(path.join(ROOT, 'data', file), 'utf8'));
 const daily = buildDaily(series('synthetic-qqq.tsv'), series('synthetic-tqqq.tsv'), series('spy.tsv'),
   series('synthetic-qld.tsv'), series('synthetic-sso.tsv'), series('synthetic-spxl.tsv'), series('synthetic-sqqq.tsv'),
-  series('synthetic-gld.tsv'), series('synthetic-soxl.tsv'), series('synthetic-soxx.tsv'), series('synthetic-soxs.tsv'));
+  series('synthetic-gld.tsv'), series('synthetic-soxl.tsv'), series('synthetic-soxx.tsv'), series('synthetic-soxs.tsv'),
+  series('synthetic-psq.tsv'), series('synthetic-qid.tsv'));
 const data = {
   dates: daily.map(d => d.date),
   nfci: buildNfciDaily(daily, series('nfci.tsv')),
