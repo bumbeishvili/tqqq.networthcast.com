@@ -185,6 +185,16 @@
     grid-template-columns: 288px 1fr;
     gap: var(--layout-gap);
   }
+  /* On a desktop the sidebar ends where the chart's column ends, at the foot of the
+     window (js/chart.js's fitChartHeight), and only its list of added strategies
+     scrolls (the user, 28 November 2026: "make sure scroll happens only for the added
+     strategies"). Size containment keeps the list out of the row's height, so the
+     column beside it sets that. Narrower screens stack the two and the page scrolls. */
+  @media (min-width: 901px) {
+    .layout > .panel { contain: size; display: flex; flex-direction: column; }
+    .layout > .panel > * { flex: none; }
+    .layout > .panel > #saved-configs { flex: 0 1 auto; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  }
 
   /* Layout collapses to single-column AND the share button + legend chips
      get the same tablet-width treatment as phones — the previous 600px
@@ -609,12 +619,15 @@
   }
 
   .panel-head {
+    /* One height for the line: the two square buttons and the dropdown's face. */
+    --panel-head-h: calc(29px * var(--ui-scale));
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
     margin-bottom: 18px;
   }
+  .panel-head .analytics-menu summary { min-height: var(--panel-head-h); }
   .panel-head h2 {
     margin-bottom: 0;
   }
@@ -765,25 +778,31 @@
     .date-pick-btn { width: 30px; height: 30px; }
   }
 
-  /* --- Strategy Library --- */
+  /* --- The top line's two buttons: + Custom strategy and the Strategy Library --- */
+  /* Square, as tall as the "advanced analytics" dropdown beside them, each its icon
+     alone with its name in its title. */
+  .panel-head-btn {
+    flex: none;
+    width: var(--panel-head-h);
+    height: var(--panel-head-h);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.05s;
+  }
+  .panel-head-btn:active { transform: translateY(1px); }
   .strategy-library-btn {
-    width: 100%;
-    margin-top: 16px;
-    padding: 12px 14px;
     background: linear-gradient(180deg, rgba(198, 78, 255, 0.10), rgba(134, 118, 255, 0.06));
     border: 1px solid var(--border);
-    border-radius: 8px;
     color: var(--text);
-    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
-    letter-spacing: 0.3px;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s, transform 0.05s;
   }
   .strategy-library-btn:hover {
     border-color: var(--accent2);
     background: linear-gradient(180deg, rgba(198, 78, 255, 0.18), rgba(134, 118, 255, 0.10));
   }
-  .strategy-library-btn:active { transform: translateY(1px); }
 
   /* Link from the SMA panel out to the standalone overfit explorer. */
   .sma-explorer-link {
@@ -3128,18 +3147,11 @@
     font-size: calc(10px * var(--ui-scale));
   }
 
-  /* + Custom strategy button (Parameters panel) */
+  /* + Custom strategy button (the sidebar's top line, .panel-head-btn) */
   .new-custom-btn {
-    margin-top: 12px;
-    width: 100%;
-    padding: 9px 10px;
-    font: 600 calc(12px * var(--ui-scale)) 'Open Sans', sans-serif;
-    border-radius: 6px;
     border: 1px dashed var(--border);
     background: transparent;
     color: var(--text-muted);
-    cursor: pointer;
-    transition: border-color 0.15s, color 0.15s, background 0.15s;
   }
   .new-custom-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(134, 118, 255, 0.06); }
 
@@ -5079,6 +5091,8 @@
   .menu-icon--ninesig         { --icon: url("images/icons/ninesig.svg"); }
   .menu-icon--sma             { --icon: url("images/icons/sma.svg"); }
   .menu-icon--install         { --icon: url("images/icons/install.svg"); }
+  .menu-icon--custom-strategy { --icon: url("images/icons/custom-strategy.svg"); }
+  .menu-icon--library         { --icon: url("images/icons/library.svg"); }
   /* "Install app" stays out of the menu until the browser offers the installation: the flex above would show it. */
   .resources-list button[hidden] { display: none; }
   .resources-list a:hover,

@@ -34,7 +34,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=682">
+<link rel="stylesheet" href="styles.css?v=683">
 </head>
 <body>
 
@@ -92,8 +92,15 @@
 <div class="layout">
   <div class="panel">
     <div class="panel-head">
-      <!-- Heading text removed by request. One dropdown at the right edge opens
-           the chart windows; it works as the header's Resources menu does. -->
+      <!-- The two buttons that add a strategy, as square icons (the user, 28 November
+           2026: "add these two buttons in one line at the top"), then one dropdown at
+           the right edge that opens the chart windows; it works as the header's
+           Resources menu does. -->
+      <!-- Build a strategy from pasted (e.g. LLM-written) code. -->
+      <button id="new-custom-strategy" type="button" class="panel-head-btn new-custom-btn" title="Custom strategy" aria-label="Custom strategy"><span class="menu-icon menu-icon--custom-strategy" aria-hidden="true"></span></button>
+      <!-- Strategy Library: read-only catalog of the best-known LETF strategies
+           (incl. the app's own canonical 9sig/SMA presets, listed first). -->
+      <button id="strategy-library-btn" type="button" class="panel-head-btn strategy-library-btn" onclick="toggleStrategyLibrary()" title="Strategy Library" aria-label="Strategy Library"><span class="menu-icon menu-icon--library" aria-hidden="true"></span></button>
       <details class="analytics-menu dropdown-menu" id="analytics-menu">
         <summary title="Charts over every start year">advanced analytics</summary>
         <div class="analytics-menu-list">
@@ -191,15 +198,9 @@
       </div>
     </div>
 
-    <!-- Build a strategy from pasted (e.g. LLM-written) code. -->
-    <button id="new-custom-strategy" type="button" class="new-custom-btn">+ Custom strategy</button>
-    <!-- Strategy Library: read-only catalog of the best-known LETF strategies
-         (incl. the app's own canonical 9sig/SMA presets, listed first). -->
-    <button id="strategy-library-btn" type="button" class="strategy-library-btn" onclick="toggleStrategyLibrary()">
-      Strategy Library
-    </button>
     <!-- Saved strategies (saved-configs.js) — every type, incl. custom. Hidden
-         until the user has at least one. Each pill = an independent line. -->
+         until the user has at least one. Each pill = an independent line. On a
+         desktop the only part of the sidebar that scrolls (styles.css). -->
     <div id="saved-configs" hidden></div>
   </div>
 
@@ -1451,26 +1452,26 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=682"></script>
-<script src="js/utils.js?v=682"></script>
-<script src="js/simulate.js?v=682"></script>
-<script src="js/metrics.js?v=682"></script>
-<script src="js/chart.js?v=682"></script>
-<script src="js/controls.js?v=682"></script>
-<script src="js/date-picker.js?v=682"></script>
-<script src="js/transactions.js?v=682"></script>
-<script src="js/analytics.js?v=682"></script>
-<script src="js/years-held-chart.js?v=682"></script>
-<script src="js/years-held.js?v=682"></script>
-<script src="js/preview-dropdown.js?v=682"></script>
-<script src="js/signal-chart.js?v=682"></script>
-<script src="js/saved-configs.js?v=682"></script>
-<script src="js/settings-map-chart.js?v=682"></script>
-<script src="js/settings-map.js?v=682"></script>
-<script src="js/strategy-library-code.js?v=682"></script>
-<script src="js/strategy-library.js?v=682"></script>
-<script src="js/init.js?v=682"></script>
-<script src="js/app-install.js?v=682"></script>
+<script src="js/data.js?v=683"></script>
+<script src="js/utils.js?v=683"></script>
+<script src="js/simulate.js?v=683"></script>
+<script src="js/metrics.js?v=683"></script>
+<script src="js/chart.js?v=683"></script>
+<script src="js/controls.js?v=683"></script>
+<script src="js/date-picker.js?v=683"></script>
+<script src="js/transactions.js?v=683"></script>
+<script src="js/analytics.js?v=683"></script>
+<script src="js/years-held-chart.js?v=683"></script>
+<script src="js/years-held.js?v=683"></script>
+<script src="js/preview-dropdown.js?v=683"></script>
+<script src="js/signal-chart.js?v=683"></script>
+<script src="js/saved-configs.js?v=683"></script>
+<script src="js/settings-map-chart.js?v=683"></script>
+<script src="js/settings-map.js?v=683"></script>
+<script src="js/strategy-library-code.js?v=683"></script>
+<script src="js/strategy-library.js?v=683"></script>
+<script src="js/init.js?v=683"></script>
+<script src="js/app-install.js?v=683"></script>
 
 </body>
 </html>
