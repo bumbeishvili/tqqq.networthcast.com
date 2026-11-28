@@ -2,12 +2,12 @@
  * Library strategy #74, "10-25 - SOXL, TQQQ" (was "SOXL, TQQQ - 2010-2025 fit"): #53 (the 1983 fit) at the user's pick on
  * the map of Q1 2010 to Q4 2025, set as the defaults on 27 November 2026 (the #74 section of js/strategy-library-code.js).
  * Pure Node — no browser/server. Checks, on the repo's own price history:
- *   1. its settings are #53's, in the same order, with 29 defaults moved and no other;
- *   2. it trades as #53 does with those 29 set by hand, row for row, with a lump sum and
+ *   1. its settings are #53's, in the same order, with 28 defaults moved and no other (29 until 28 November 2026);
+ *   2. it trades as #53 does with those 28 set by hand, row for row, with a lump sum and
  *      with contributions and a withdrawal;
  *   3. its texts are #53's but for its name and the three of the late-week trade that state
  *      facts of a strategy's own trades, and those facts are this strategy's;
- *   4. with the map's money ($80K and $3K a month, Q1 2010 to Q4 2025) its max drawdown is the map's 37.6%.
+ *   4. with the map's money ($80K and $3K a month, Q1 2010 to Q4 2025) its max drawdown is 38.0%, and its money-weighted rate 374.5%.
  *
  *   node tests/library-2010-2025-fit.cjs
  */
@@ -22,11 +22,13 @@ const ck = (name, ok, detail) => {
 
 const FIT = 53, FIT_2010 = 74;
 // The settings that are not #53's defaults, at the map pick.
+// Since 28 November 2026 the user's next pick on that map ("set default for this"): 28 of them.
 const MOVED = {
-  lookbackDays: 579, startAvgDays: 96, topLead: 109, topDays: 9, backLead: 29, bearUnder: 25.5, bearSlope: 21, bearCloses: 40, overPct: 53.5, overWindow: 234, sqqqMaxDays: 42,
-  soxlLeadDays: 340, soxlLeadEnter: -35, soxlSell: 'turn', soxlLeadExit: 150, soxlTrail: 40, soxlTrailFrom: 40, soxlPile: true, dipDay: 4, dipUnder: 34, dipUnderMax: 69, dipSellDay: 1,
-  lateFund: 'soxs', lateRsiSkip: true, lateRsiDays: 6, lateRsiLevel: 41.5, lateLagDays: 17, lateLagBy: 0.5, lateTrendDays: 37,
+  lookbackDays: 500, startAvgDays: 66, topLead: 133, topDays: 18, backLead: 22, bearUnder: 28, bearSlope: 0, bearCloses: 40, overPct: 56, overWindow: 253, sqqqMaxDays: 85,
+  soxlLeadEnter: -35, soxlSell: 'turn', soxlLeadExit: 150, soxlTrail: 55, soxlTrailFrom: -10, soxlPile: true, bigRise: 8.5, dipDay: 4, dipUnder: 51.5, dipUnderMax: 73,
+  lateFund: 'soxs', lateRsiSkip: true, lateRsiLevel: 40.5, lateLagDays: 22, lateLagBy: 1.5, lateTrend: false, lateTrendDays: 37,
 };
+const COUNT = Object.keys(MOVED).length;
 const { dates } = data;
 const START = dates.findIndex(d => d >= '2010-01-04') - 1, END = dates.findIndex(d => d > '2025-12-31') - 1;
 const fit = strategyOf(FIT), mine = strategyOf(FIT_2010);
@@ -41,17 +43,17 @@ const monthly = amount => Object.fromEntries(dates.slice(START + 1, END + 1).fil
   ck('its settings are #53\'s, in the same order', ids.join() === fitIds.join(), ids.join());
   const fitDefaults = defaultsOf(fit), defaults = defaultsOf(mine);
   const moved = ids.filter(id => JSON.stringify(defaults[id]) !== JSON.stringify(fitDefaults[id]));
-  ck('29 defaults differ from #53\'s, the map pick\'s', moved.slice().sort().join() === Object.keys(MOVED).sort().join() && moved.every(id => defaults[id] === MOVED[id]), moved.map(id => id + '=' + defaults[id]).join(', '));
+  ck(`${COUNT} defaults differ from #53's, the map pick's`, moved.slice().sort().join() === Object.keys(MOVED).sort().join() && moved.every(id => defaults[id] === MOVED[id]), moved.map(id => id + '=' + defaults[id]).join(', '));
   const byId = Object.fromEntries(settingsOf(mine).map(param => [param.id, param]));
   const optionValues = id => byId[id].options.map(option => (option && typeof option === 'object' ? option.value : option));
   ck('each of them is one of its setting\'s own choices', Object.entries(MOVED).every(([id, value]) => optionValues(id).includes(value)));
   ck('its name, the old one kept for saved copies', mine.name === '10-25 - SOXL, TQQQ', mine.name);
 }
 
-// ---- 2. It is #53 with the 29 set by hand ----
+// ---- 2. It is #53 with the 28 set by hand ----
 {
   const withMoney = { ...monthly(4000), '2020-06-15': -50000 };
-  ck('a lump sum: #53 with the 29 set by hand, row for row', sameRows(run(mine, {}), run(fit, MOVED)));
+  ck(`a lump sum: #53 with the ${COUNT} set by hand, row for row`, sameRows(run(mine, {}), run(fit, MOVED)));
   ck('contributions and a withdrawal: the same', sameRows(run(mine, {}, withMoney), run(fit, MOVED, withMoney)));
   ck('with #53\'s own values put back by hand it is #53', sameRows(run(mine, Object.fromEntries(Object.keys(MOVED).map(id => [id, defaultsOf(fit)[id]]))), run(fit, {})));
   ck('and the two differ at their defaults, so the checks above can fail', !sameRows(run(mine, {}), run(fit, {})));
@@ -75,7 +77,7 @@ const monthly = amount => Object.fromEntries(dates.slice(START + 1, END + 1).fil
   for (let i = START; i < END; i++) if (wd[i] === 3 && rows.get(dates[i]) && rows.get(dates[i]).lateTrade && wd[i + 1] === 4 && wd[i + 2] === 5 && wd[i + 3] === 1) (T[i + 2] < T[i] ? under : over).push(T[i + 3] / T[i + 2] - 1);
   const mean = xs => 100 * xs.reduce((s, v) => s + v, 0) / xs.length, signed = v => (v >= 0 ? '+' : '') + v.toFixed(2) + '%';
   ck(`the weekend check's tip gives this strategy's Mondays: ${mean(under).toFixed(2)}%, ${mean(over).toFixed(2)}%`, byId.lateWeekend.tip.includes(`TQQQ fell ${(-mean(under)).toFixed(2)}% on average on the Monday after such a close and moved ${signed(mean(over))} after the others.`), byId.lateWeekend.tip);
-  ck('the down trend\'s tip names its 37 days', /On here, at 37 days\.$/.test(byId.lateTrend.tip), byId.lateTrend.tip);
+  ck('the down trend\'s tip says it is off here', /Off here\.$/.test(byId.lateTrend.tip), byId.lateTrend.tip);
   ck('#53\'s text keeps its own section and facts', /section: "Late-week SQQQ"/.test(CODE[FIT]) && !/Late-week SOXS/.test(CODE[FIT]) && /122 trades, 47% of them up/.test(CODE[FIT]));
 }
 
@@ -83,7 +85,13 @@ const monthly = amount => Object.fromEntries(dates.slice(START + 1, END + 1).fil
 {
   const log = run(mine, {}, monthly(3000), 80000);
   let peak = 0, fall = 0; log.forEach((row) => { peak = Math.max(peak, row.value); fall = Math.max(fall, 1 - row.value / peak); });
-  ck('with $80K and $3K a month its max drawdown is the map\'s 37.6%', (fall * 100).toFixed(1) === '37.6', (fall * 100).toFixed(1) + '%');
+  ck('with $80K and $3K a month its max drawdown is 38.0%', (fall * 100).toFixed(1) === '38.0', (fall * 100).toFixed(1) + '%');
+  // The map's rate is the chart's (cfgMoneyWeightedCAGR -> moneyWeightedCAGR): the money counted at the month-end rows.
+  const { moneyWeightedCAGR } = require('../js/metrics.js');
+  const monthEnds = dates.filter((d, k) => k === dates.length - 1 || dates[k + 1].slice(0, 7) !== d.slice(0, 7)).map(d => [d]);
+  const paid = Object.keys(monthly(3000)).length, years = (Date.parse(dates[END]) - Date.parse(dates[START])) / (365.25 * 864e5);
+  const rate = moneyWeightedCAGR(80000, 3000, 0, dates[START], dates[END], years, log[log.length - 1].value, monthEnds, 80000 + 3000 * paid);
+  ck('and its money-weighted rate 374.5% a year', rate.toFixed(1) === '374.5', rate.toFixed(1) + '%');
   ck('it holds SOXS late in the week', log.some(row => row.held === 'SOXS') && !run(fit, {}).some(row => row.held === 'SOXS'));
 }
 
