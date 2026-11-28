@@ -5051,20 +5051,22 @@ const FIT_2010_2025 = "10-25 - SOXL, TQQQ";   // was "SOXL, TQQQ - 2010-2025 fit
 // map: CAGR 353.9%, max drawdown 37.6%), 26 settings moved from the fit of 24 November; 29 differ from #53's. With $80K
 // and $3K a month these make a money-weighted 353.2% a year with a 37.6% max drawdown; $100K lump sum 347.7% (41.2%)
 // against 287.4% (47.2%) at the settings before. The card has the rest.
-// Since 28 November 2026 the user's next pick on the same map ("set default for this"), 22 settings moved: the lookback 500
-// days (579), the start over ±66 (96); the ceiling 133% (109%), SQQQ there 18 days (9), back at 22% (29%); the bear exit
-// 28% under the median (25.5%) while it rises less than 0% a year (21%); overextended at 56% (53.5%) over a 253-day median
-// (234); SQQQ 85 days at most (42); SOXL's lead over 330 days (340), turned down 55 points (40) once its high is over −10%
-// (40%); Big days out after a rise of 8.5% (10%); the Month-end dip from 51.5% to 73% under the high (34% to 69%), sold on
-// the next month's 4th day (1st); the late-week RSI over 10 days (6) at 40.5 (41.5), the lagging week over 22 days (17) by
-// more than 1.5% (0.5%), the down trend off (on). 28 differ from #53's. With $80K and $3K a month 374.5% a year, max
-// drawdown 38.0% (353.9%, 37.6% before); $100K lump sum 371.2% (39.9%).
+// Since 28 November 2026 the user's second pick that day on the same map ("found even better"; the first, "set default for
+// this", made $100K lump sum 371.2%, 39.9%), 24 settings moved from the ones before that day: the lookback 500 days (579),
+// the start over ±67 (96); the ceiling 133% (109%), SQQQ there 20 days (9), back at 21% (29%); the bear exit 28% under the
+// median (25.5%) while it rises less than 0% a year (21%); overextended at 56% (53.5%) over a 253-day median (234); SQQQ
+// 85 days at most (42); the NFCI veto at 1.22 (0.5); SOXL's lead turned down 50 points (40) once its high is over 0%
+// (40%); Big days out after a rise of 8.5% (10%), in after a fall of 16.5% (20%); the Month-end dip from 51.5% to 73.5%
+// under the high (34% to 69%), sold on the next month's 4th day (1st); the late-week fund sold at Tuesday's close
+// (Monday's), the RSI over 18 days (6) at 42 (41.5), the lagging week over 15 days (17) by more than 1% (0.5%), the down
+// trend off (on). 33 differ from #53's. $100K lump sum 383.3% a year, max drawdown 39.9% (347.7%, 41.2% before), the
+// map's; with $80K and $3K a month 387.8%, 37.9% (353.9%, 37.6%).
 const FIT_2010_2025_DEFAULTS = {
-  lookbackDays: 500, startAvgDays: 66, topLead: 133, topDays: 18, backLead: 22, bearUnder: 28, bearSlope: 0, bearCloses: 40, overPct: 56, overWindow: 253, sqqqMaxDays: 85,
-  soxlLeadDays: 330, soxlLeadEnter: -35, soxlLeadExit: 150, soxlSell: "turn", soxlTrail: 55, soxlTrailFrom: -10, soxlPile: true,
-  bigRise: 8.5, dipDay: 4, dipUnder: 51.5, dipUnderMax: 73, dipSellDay: 4, lateFund: "soxs", lateRsiSkip: true, lateRsiDays: 10, lateRsiLevel: 40.5, lateLagDays: 22, lateLagBy: 1.5, lateTrend: false, lateTrendDays: 37 };
-const FIT_2010_2025_LATE_WEEK = { section: "Late-week SOXS", mondayFell: "1.65%", mondayElse: "+0.43%", trendTip: "Off here.",
-  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 140 trades, 62% of them up, 4.6% each on average; 40% of the gain came in 2022." };
+  lookbackDays: 500, startAvgDays: 67, topLead: 133, topDays: 20, backLead: 21, bearUnder: 28, bearSlope: 0, bearCloses: 40, overPct: 56, overWindow: 253, sqqqMaxDays: 85, nfciVeto: 1.22,
+  soxlLeadDays: 340, soxlLeadEnter: -35, soxlLeadExit: 150, soxlSell: "turn", soxlTrail: 50, soxlTrailFrom: 0, soxlPile: true,
+  bigRise: 8.5, bigDrop: 16.5, dipDay: 4, dipUnder: 51.5, dipUnderMax: 73.5, dipSellDay: 4, lateFund: "soxs", lateBackDay: 2, lateRsiSkip: true, lateRsiDays: 18, lateRsiLevel: 42, lateLagDays: 15, lateLagBy: 1, lateTrend: false, lateTrendDays: 37 };
+const FIT_2010_2025_LATE_WEEK = { section: "Late-week SOXS", mondayFell: "1.97%", mondayElse: "+0.63%", trendTip: "Off here.",
+  tip: "Trades the rules' idle cash late in the week. Since 2010 that was 138 trades, 59% of them up, 5.1% each on average; 45% of the gain came in 2022." };
 // A late-week text as #53's spec writes it into the settings, and as #74's does.
 const lateWeekTexts = (late) => [
   `{ section: "${late.section}", tip: "${late.tip}" }`,
