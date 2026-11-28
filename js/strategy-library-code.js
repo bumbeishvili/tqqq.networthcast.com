@@ -6555,16 +6555,21 @@ CODE[75] = withTips(withDefaults(CODE[73], { name: LATE_WEEK_84_25, defaults: {
 // Renamed with the second pick, beside #75 (the user: "rename that counterpart then, I want consistent names").
 const LATE_WEEK_10_25 = "10-25 - Late-week + overextended";   // was "Late-week + overextended SQQQ" until 27 November 2026
 const LATE_WEEK_OVER_BASE = CODE[73];
-CODE[73] = withTips(withDefaults(LATE_WEEK_OVER_BASE, { name: LATE_WEEK_10_25, defaults: {
-  trendFund: "qld", trendUnder: 1, trendDays: 26, fund: "soxl", park: "soxs", rsiFund: "qqq", rsiDays: 10, rsiLevel: 41.5, lagFund: "soxs", lagDays: 65, lagVs: "gld", lagBy: 8,
-  overFund: "spxl", overPct: 67, overWindow: 390, overHold: "soxs" } }),
-{ name: LATE_WEEK_10_25, tips: {
+// The late-week tips without the facts of one entry's settings, for the entries made from #72's code at other
+// settings (#73 here, #78 below).
+const LATE_WEEK_PLAIN_TIPS = {
   weekendCheck: "Yes: at the last close before a weekend inside the days out, the fund is bought back if it is not under the close it was sold at. Left out with one trade per day and another fund held in between.",
   rsiSkip: "Yes: a week is skipped, and the fund held through it, when the RSI is at the level or under at the close that would leave the fund.",
   rsiLevel: "The week is skipped with the RSI at this level or under.",
   lagTake: "Yes: a week skipped for a low RSI is taken all the same when one fund's return trails another's at that close. Left out with one trade per day and another fund held in between.",
   lagBy: "How far under the other fund's return, in points.",
   lagHold: "One day: the fund is bought back at the next close. The days before the weekend: at the last close before a weekend, or where the days out end.",
+};
+CODE[73] = withTips(withDefaults(LATE_WEEK_OVER_BASE, { name: LATE_WEEK_10_25, defaults: {
+  trendFund: "qld", trendUnder: 1, trendDays: 26, fund: "soxl", park: "soxs", rsiFund: "qqq", rsiDays: 10, rsiLevel: 41.5, lagFund: "soxs", lagDays: 65, lagVs: "gld", lagBy: 8,
+  overFund: "spxl", overPct: 67, overWindow: 390, overHold: "soxs" } }),
+{ name: LATE_WEEK_10_25, tips: {
+  ...LATE_WEEK_PLAIN_TIPS,
   overTake: "Yes: the fund is also left while a fund closes far above its median, and bought back at the first close that does not. In 2010-2025 SPXL closed more than 67% above its 390-day median in 45 stretches, and SOXS rose over 38 of them.",
   overPct: "How far above its median the close must be. With SPXL's 390-day median in 2010-2025: 60% made 203.7% a year, 65% 239.3%, 67% 264.9%, 70% 212.0%, 75% 165.5%. Without the rule, 157.6%.",
   overHold: "What the money is in while overextended. Cash in SOXS's place made 213.6% a year in 2010-2025, SQQQ 237.4%, against 264.9%. On the week's own days out the fund held in between comes first.",
@@ -6651,6 +6656,25 @@ CODE[50] = withDefaults(TQQQ_QQQ_TURN_BASE, { name: "10-25 - TQQQ-QQQ floor turn
   lookbackDays: 553, startAvgDays: 66, topLead: 124, topDays: 18, floorLead: 9, floorBackDays: 5, floorBackCloses: 2, deepLead: -32.5, overPct: 53.5, overWindow: 234, bigRise: 8.6, bigDrop: 16.3, splitDays: false } });
 CODE[45] = withDefaults(BUY_BACK_BASE, { name: "10-25 - Stretch buy-back", defaults: {
   window: 234, overPct: 53.5, park: "soxs", crashAsset: "gld", confirmDays: 35, dipReentry: 97, sliceStop: 6.5, sliceCap: 2, splitDays: false } });
+
+// #77 and #78: #49 and #72 at the user's picks on the map of Q1 1984 to Q4 2025 (28 November 2026, on their copies of
+// the two: "Add both of these, call them same name but start with 84-25 instedad of 10-25"). Each is built from the
+// 10-25 entry as it is above, so its card can say what moved from that entry.
+//   #77, eleven moved from #49: the median over 243 closes (252), out over 54.5% (55.5%) into PSQ (SOXS); the sell line
+//   10% above the median (1.5% under it), 3 closes to buy back (11), a correction's re-entry line 10% of the way down
+//   (77%); the buy-back line 27.5% under (35%), its slice sold 11.5% under its price (6%), 57 slices (2); Big days 9.5%
+//   up, 23.5% down (8.5%, 16.4%). With $80K and $3K a month on 1984-2025 87.7% a year, max drawdown 63.6% (48.4%, 98.9%
+//   before; the map: 88.1%, 63.6% and 48.8%, 98.9%). No tip quotes a default.
+//   #78, nine moved from #72: QLD held and the down trend read on it (TQQQ, TQQQ), 3% (1.5%) over its 27-day median
+//   (30); the RSI over 6 days (10) at 38 (41.5); the lagging rule on GLD (SPXL) by more than 3.5% (1.5%), to the
+//   weekend (one day). 72.9% a year, max drawdown 69.5% (62.3%, 99.6%; the map: 73.3%, 69.5% and 62.8%, 99.6%). The
+//   tips that quoted #72's own facts are the plain ones #73 has.
+const BUY_BACK_TURN_84_25 = "84-25 - Extend buy-back turn", MIN_LATE_WEEK_84_25 = "84-25 - Min - late-week SQQQ";
+CODE[77] = withDefaults(CODE[49], { name: BUY_BACK_TURN_84_25, defaults: {
+  window: 243, overPct: 54.5, park: "psq", exitPct: 10, confirmDays: 3, dipReentry: 10, bbPct: -27.5, sliceStop: 11.5, sliceCap: 57, bigRise: 9.5, bigDrop: 23.5 } });
+CODE[78] = withTips(withDefaults(CODE[72], { name: MIN_LATE_WEEK_84_25, defaults: {
+  trendFund: "qld", trendUnder: -3, trendDays: 27, fund: "qld", rsiDays: 6, rsiLevel: 38, lagFund: "gld", lagBy: 3.5, lagHold: "weekend" } }),
+{ name: MIN_LATE_WEEK_84_25, tips: LATE_WEEK_PLAIN_TIPS });
 
 // ----- TQQQ's price on the charts of the renamed entries that lack it -----
 // #10, #19, #7 and #20 chart the fund or the measure their rule reads. As bare entries they get
