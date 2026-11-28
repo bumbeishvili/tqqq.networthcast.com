@@ -25,7 +25,7 @@ require('dns').setDefaultResultOrder('ipv4first');
 
 const ROOT = path.resolve(__dirname, '..');
 const LIB = require(path.join(ROOT, 'js', 'strategy-library-code.js'));
-const WIDGET_ENTRY = 50;   // the strategy the widget tracks: TQQQ vs QQQ + Turnaround Monday
+const WIDGET_ENTRY = 50;   // the strategy the widget tracks: 10-25 - TQQQ-QQQ floor turns (TQQQ vs QQQ + Turnaround Monday before 28 November 2026)
 const SIGNAL_MONTHS = 6;
 const CACHE_DIR = path.join(os.homedir(), 'Library', 'Caches', 'tqqq-widget');
 // The files js/init.js loads, in the argument order of buildDaily (js/data.js).

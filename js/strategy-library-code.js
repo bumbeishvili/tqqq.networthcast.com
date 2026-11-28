@@ -251,7 +251,7 @@ function upgradeSavedCode(code) { return upgradeDailyDisplay(upgradeWithdrawalHa
 // for entries renamed since copies of them were made. null for code that is not
 // a library copy. Used by js/saved-configs.js to bring unedited copies up to
 // the current library code at load.
-const LIBRARY_FORMER_NAMES = { 40: ['Median overextension (250d)'], 48: ['NFCI veto + Turnaround Monday'], 49: ['Buy-back + Turnaround Monday'], 29: ['9sig · max return 1990–2025'], 35: ['SMA · max return 1990–2025'], 44: ['NFCI veto, med stretch with SQQQ and med crash exit'], 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back', 'SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
+const LIBRARY_FORMER_NAMES = { 40: ['Median overextension (250d)'], 48: ['NFCI veto + Turnaround Monday'], 49: ['Buy-back + Turnaround Monday'], 50: ['TQQQ vs QQQ + Turnaround Monday'],29: ['9sig · max return 1990–2025'], 35: ['SMA · max return 1990–2025'], 44: ['NFCI veto, med stretch with SQQQ and med crash exit'], 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back', 'SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
 const codeName = code => { const m = /^\s*name:\s*"([^"]+)"/m.exec(String(code || '')); return m ? m[1] : null; };
 function libraryEntryOf(code) {
   const name = codeName(code);
@@ -6628,6 +6628,17 @@ CODE[48] = withDefaults(NFCI_TURN_BASE, { name: "10-25 - Extend floor turn", def
   asset: "soxl", stat: "sma", window: 70, overPct: 35, park: "soxs", crashStat: "median", crashWindow: 110, exitPct: 17.5, slopeGate: 105, belowGate: 14, bigRise: 5.5, bigDrop: 17, splitDays: false } });
 CODE[49] = withDefaults(BUY_BACK_TURN_BASE, { name: "10-25 - Extend buy-back turn", defaults: {
   window: 252, overPct: 55.5, park: "soxs", exitPct: -1.5, confirmDays: 11, dipReentry: 77, bbPct: -35, sliceStop: 6, sliceCap: 2, bigRise: 8.5, bigDrop: 16.4, splitDays: false } });
+// #50 at the user's pick on the map of Q1 2010 to Q4 2025, renamed (28 November 2026: "set this as default, call it
+// 10-25 tqqq-qqq floor turns"; was "TQQQ vs QQQ + Turnaround Monday"). #52 is built from #50's code further up, before
+// this, so it keeps the settings before; the code before (TQQQ_QQQ_TURN_BASE) is kept for the tests. Thirteen moved: the
+// lookback 553 days (550), the start price over ±66 (65); the ceiling at 124% (125%), SQQQ for at most 18 days (20); the
+// floor at 9% (5%), back within 5 days of a break (off) after 2 closes in a row (3) at 2 points over it; the deep buy at
+// −32.5% (−30%); the overextended line 53.5% (55%) over the 234-day median (250); Big days 8.6% up, 16.3% down (15%,
+// 15%; both lie between the options, as the map can pick); a switch at one close (two days). $100K once 170.4% a year,
+// max drawdown 41.2% (144.9%, 40.8% before); with $80K and $3K a month 172.7%, 37.3% (146.7%, 38.3%).
+const TQQQ_QQQ_TURN_BASE = CODE[50];
+CODE[50] = withDefaults(TQQQ_QQQ_TURN_BASE, { name: "10-25 - TQQQ-QQQ floor turns", defaults: {
+  lookbackDays: 553, startAvgDays: 66, topLead: 124, topDays: 18, floorLead: 9, floorBackDays: 5, floorBackCloses: 2, deepLead: -32.5, overPct: 53.5, overWindow: 234, bigRise: 8.6, bigDrop: 16.3, splitDays: false } });
 CODE[45] = withDefaults(BUY_BACK_BASE, { name: "10-25 - Stretch buy-back", defaults: {
   window: 234, overPct: 53.5, park: "soxs", crashAsset: "gld", confirmDays: 35, dipReentry: 97, sliceStop: 6.5, sliceCap: 2, splitDays: false } });
 
@@ -7197,6 +7208,7 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'OVER_PARK_BASE', { value: OVER_PARK_BASE });
   Object.defineProperty(module.exports, 'NFCI_TURN_BASE', { value: NFCI_TURN_BASE });
   Object.defineProperty(module.exports, 'BUY_BACK_TURN_BASE', { value: BUY_BACK_TURN_BASE });
+  Object.defineProperty(module.exports, 'TQQQ_QQQ_TURN_BASE', { value: TQQQ_QQQ_TURN_BASE });
   Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });

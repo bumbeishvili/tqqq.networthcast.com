@@ -1,7 +1,9 @@
 /*
  * Library strategies #48 "10-25 - Extend floor turn" (was "NFCI veto + Turnaround Monday") and #49 "10-25 - Extend
  * buy-back turn" (was "Buy-back + Turnaround Monday") at the user's picks on the map of Q1 2010 to Q4 2025 (28 November
- * 2026: "set these two / first one should be 10-25 extend floor turn / second one should be 10-25 extend buyback turn").
+ * 2026: "set these two / first one should be 10-25 extend floor turn / second one should be 10-25 extend buyback turn"),
+ * and #50 "10-25 - TQQQ-QQQ floor turns" (was "TQQQ vs QQQ + Turnaround Monday") at the user's pick on the same map (28
+ * November 2026: "set this as default, call it 10-25 tqqq-qqq floor turns"; its map ran $100K once, the `lump` line).
  * Pure Node — no browser/server. Checks, for each, on the repo's own price history:
  *   1. its defaults are the code's before the pick (NFCI_TURN_BASE, BUY_BACK_TURN_BASE) with the ones the pick moved,
  *      each an option or, as the map can pick, a value between two options next to each other;
@@ -34,6 +36,13 @@ const PICKS = [
     map: '147.7%, 40.9%', before: '123.4%, 47.3%', lump: '145.3%, 41.6%',
     rules: [/^Hold TQQQ\. When it closes 55\.5% above its median of the last 252 closes, switch to SOXS\./, /Sell line: 1\.5% below the median\. The first close under it sells to cash\. Buy back after 11 closes in a row above it\./, /77% of the way/, /Buy-back line: 35% below the median/, /6% under its buy price, and it can happen twice/,
       /Big days: after TQQQ rises 8\.5% or more in a day, sell and buy back at the next close\. When the rules want cash and TQQQ falls 16\.4% or more in a day, buy TQQQ and sell at the next close\.$/] },
+  { n: 50, name: '10-25 - TQQQ-QQQ floor turns', former: 'TQQQ vs QQQ + Turnaround Monday', base: 'TQQQ_QQQ_TURN_BASE',
+    moved: { lookbackDays: 553, startAvgDays: 66, topLead: 124, topDays: 18, floorLead: 9, floorBackDays: 5, floorBackCloses: 2, deepLead: -32.5, overPct: 53.5, overWindow: 234, bigRise: 8.6, bigDrop: 16.3, splitDays: false },
+    map: '172.7%, 37.3%', before: '146.7%, 38.3%', lump: '170.4%, 41.2%',
+    rules: [/1\.9 to 2\.5 years ago/, /Ceiling: at 124% ahead \(TQQQ grew 2\.24 times as much as QQQ\), switch to SQQQ for up to 18 days, then cash\. Back to TQQQ at 25% ahead\./,
+      /Floor: under 9% ahead, sell to cash\. Within 5 days of the break, 2 closes in a row at 11% ahead or more buy TQQQ back; after that, 5 closes in a row at 25% ahead\./, /Deep buy: at 32\.5% behind/, /more than 53\.5% above its 234-day median/,
+      /Hold SQQQ at most 40 days/, /falls 25%/, /NFCI\) is above 0\.5\./, /A switch between two funds sells and buys at the same close\./, /closes a Monday under the prior day's low/,
+      /Big days: after TQQQ rises 8\.6% or more in a day, sell and buy back at the next close\. When the rules want cash and TQQQ falls 16\.3% or more in a day, buy TQQQ and sell at the next close\.$/] },
 ];
 const { dates } = data;
 const START = dates.findIndex(d => d >= '2010-01-04') - 1, END = dates.findIndex(d => d >= '2026-01-01') - 1;
