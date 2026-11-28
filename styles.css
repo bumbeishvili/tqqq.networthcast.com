@@ -4472,6 +4472,11 @@
   @media (min-width: 901px) {
     .chart-container { height: var(--chart-fit-height, 700px); }
   }
+  /* Narrower, the chart fills the height only while the strategy panel is docked beside it
+     (fitChartHeight measures it then too); 420px is its floor there. */
+  @media (max-width: 900px) {
+    body.panel-docked .chart-container { height: var(--chart-fit-height, 420px); }
+  }
 
   /* Shown in place of the chart while the daily TSVs are fetched and the
      first Chart.js instance is built (js/init.js). Removed once render()

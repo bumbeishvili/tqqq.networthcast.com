@@ -2254,7 +2254,10 @@ function fitChartHeight() {
   if (_chartFitRaf) return; // coalesce bursts (resize, rapid render() calls)
   _chartFitRaf = requestAnimationFrame(() => {
     _chartFitRaf = null;
-    if (window.innerWidth <= 900) return; // mobile/tablet keep their fixed 420px
+    // Mobile/tablet keep their fixed 420px, unless the strategy panel is docked beside the chart (680px
+    // and wider): then the chart fills the screen's height as on a desktop, and the panel's column with
+    // it. Until 28 November 2026 a docked chart stayed 420px there and left the screen's lower part blank.
+    if (window.innerWidth <= 900 && !document.body.classList.contains('panel-docked')) return;
     const container = document.querySelector('.chart-container');
     const controlGroup = document.querySelector('.right-col .control-group');
     if (!container || !controlGroup) return;
@@ -3331,6 +3334,13 @@ function render() {
     compact: { namePx: 8, valuePx: 10, badgePx: 9, touchScaled: false, badgeText: deltaPercentText, marginMin: 40, marginMax: 130, marginGaps: 12, gap: 24 },
     full: { namePx: 9, valuePx: 11, badgePx: 9, touchScaled: true, badgeText: deltaLabelText, marginMin: 100, marginMax: 260, marginGaps: 16, gap: 26 },
   };
+  // The layout goes by the chart's own width: a chart this wide or narrower gets the compact one.
+  // It went by the window's (600px) until 28 November 2026, when the user, on a fold's inner screen
+  // with the strategy panel docked beside a chart 363px wide: "can you fix this unusable space issue
+  // on smaller width screens". The full layout's labels took 253px of it and left the plot 42px.
+  // A phone's chart, about the window less 24px, keeps the compact layout it had.
+  const END_LABEL_COMPACT_MAX_W = 600;
+  const endLabelSpec = (c) => (c.width <= END_LABEL_COMPACT_MAX_W ? END_LABEL.compact : END_LABEL.full);
   // A font size of the layout on screen, and the three fonts.
   const endLabelPx = (spec, px) => px * (spec.touchScaled ? uiScale() : 1);
   const endLabelNamePx = (spec) => endLabelPx(spec, spec.namePx);
@@ -3381,8 +3391,8 @@ function render() {
       const lastIdx = c.data.labels.length - 1;
       if (lastIdx < 0) return;
       const cx = c.ctx;
-      // A phone-width window gets the compact layout (END_LABEL).
-      const spec = window.innerWidth <= 600 ? END_LABEL.compact : END_LABEL.full;
+      // A phone-width chart gets the compact layout (END_LABEL, endLabelSpec).
+      const spec = endLabelSpec(c);
       let maxW = 0;
       c.data.datasets.forEach((ds, i) => {
         if (ds._isShift || !c.isDatasetVisible(i)) return;
@@ -3415,7 +3425,7 @@ function render() {
         }
       }
       fitChartZoomUi(c);
-      const spec = window.innerWidth <= 600 ? END_LABEL.compact : END_LABEL.full;
+      const spec = endLabelSpec(c);
       const lineHeight = endLabelLineHeight(spec);
       // The value's row to a change drawn under it.
       const valueRowHeight = Math.round(endLabelPx(spec, spec.valuePx) * 1.2);
