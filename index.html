@@ -34,7 +34,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js" defer></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/js-beautify/1.15.4/beautify.min.js" defer></script>
-<link rel="stylesheet" href="styles.css?v=683">
+<link rel="stylesheet" href="styles.css?v=684">
 </head>
 <body>
 
@@ -73,7 +73,7 @@
 </div>
 <script>
   // <details> stays open until clicked again; close a dropdown menu (the
-  // resources menu, the advanced analytics menu) when the click lands anywhere
+  // resources menu, the analytics menu) when the click lands anywhere
   // else, or on one of its buttons, so it behaves like a dropdown.
   document.addEventListener('click', (event) => {
     const picked = event.target.closest('details.dropdown-menu button');
@@ -81,7 +81,7 @@
       if (!menu.contains(event.target) || menu.contains(picked)) menu.open = false;
     }
   });
-  // The advanced analytics dropdown wears the resources menu's chevron: one
+  // The analytics dropdown wears the resources menu's chevron: one
   // drawing, copied once the page is parsed, so the two cannot drift apart.
   document.addEventListener('DOMContentLoaded', () => {
     const chevron = document.querySelector('#resources-menu summary svg');
@@ -92,17 +92,18 @@
 <div class="layout">
   <div class="panel">
     <div class="panel-head">
-      <!-- The two buttons that add a strategy, as square icons (the user, 28 November
-           2026: "add these two buttons in one line at the top"), then one dropdown at
-           the right edge that opens the chart windows; it works as the header's
-           Resources menu does. -->
+      <!-- The two buttons that add a strategy (the user, 28 November 2026: "add these
+           two buttons in one line at the top", then "strategies for library, custom
+           for plus button, lets just have analytics for advanced analytics"), then one
+           dropdown at the right edge that opens the chart windows; it works as the
+           header's Resources menu does. -->
       <!-- Build a strategy from pasted (e.g. LLM-written) code. -->
-      <button id="new-custom-strategy" type="button" class="panel-head-btn new-custom-btn" title="Custom strategy" aria-label="Custom strategy"><span class="menu-icon menu-icon--custom-strategy" aria-hidden="true"></span></button>
+      <button id="new-custom-strategy" type="button" class="panel-head-btn new-custom-btn" title="Custom strategy: build one from code">+ custom</button>
       <!-- Strategy Library: read-only catalog of the best-known LETF strategies
            (incl. the app's own canonical 9sig/SMA presets, listed first). -->
-      <button id="strategy-library-btn" type="button" class="panel-head-btn strategy-library-btn" onclick="toggleStrategyLibrary()" title="Strategy Library" aria-label="Strategy Library"><span class="menu-icon menu-icon--library" aria-hidden="true"></span></button>
+      <button id="strategy-library-btn" type="button" class="panel-head-btn strategy-library-btn" onclick="toggleStrategyLibrary()" title="Strategy Library">strategies</button>
       <details class="analytics-menu dropdown-menu" id="analytics-menu">
-        <summary title="Charts over every start year">advanced analytics</summary>
+        <summary title="Charts over every start year">analytics</summary>
         <div class="analytics-menu-list">
           <button type="button" id="analytics-toggle" onclick="toggleAnalytics()" title="Every start year by years held, as a heatmap against a comparison"><span class="menu-icon menu-icon--comparison-grid" aria-hidden="true"></span>comparison grid</button>
           <button type="button" id="years-held-toggle" onclick="toggleYearsHeld()" title="The median CAGR for each number of years held, a line per strategy"><span class="menu-icon menu-icon--years-held" aria-hidden="true"></span>CAGR by years held</button>
@@ -1452,26 +1453,26 @@
      returning browsers fetch the new files instead of serving stale cached
      copies (a stale JS file against fresh HTML throws null-element errors).
      Keep this in sync with APP_VERSION in controls.js. -->
-<script src="js/data.js?v=683"></script>
-<script src="js/utils.js?v=683"></script>
-<script src="js/simulate.js?v=683"></script>
-<script src="js/metrics.js?v=683"></script>
-<script src="js/chart.js?v=683"></script>
-<script src="js/controls.js?v=683"></script>
-<script src="js/date-picker.js?v=683"></script>
-<script src="js/transactions.js?v=683"></script>
-<script src="js/analytics.js?v=683"></script>
-<script src="js/years-held-chart.js?v=683"></script>
-<script src="js/years-held.js?v=683"></script>
-<script src="js/preview-dropdown.js?v=683"></script>
-<script src="js/signal-chart.js?v=683"></script>
-<script src="js/saved-configs.js?v=683"></script>
-<script src="js/settings-map-chart.js?v=683"></script>
-<script src="js/settings-map.js?v=683"></script>
-<script src="js/strategy-library-code.js?v=683"></script>
-<script src="js/strategy-library.js?v=683"></script>
-<script src="js/init.js?v=683"></script>
-<script src="js/app-install.js?v=683"></script>
+<script src="js/data.js?v=684"></script>
+<script src="js/utils.js?v=684"></script>
+<script src="js/simulate.js?v=684"></script>
+<script src="js/metrics.js?v=684"></script>
+<script src="js/chart.js?v=684"></script>
+<script src="js/controls.js?v=684"></script>
+<script src="js/date-picker.js?v=684"></script>
+<script src="js/transactions.js?v=684"></script>
+<script src="js/analytics.js?v=684"></script>
+<script src="js/years-held-chart.js?v=684"></script>
+<script src="js/years-held.js?v=684"></script>
+<script src="js/preview-dropdown.js?v=684"></script>
+<script src="js/signal-chart.js?v=684"></script>
+<script src="js/saved-configs.js?v=684"></script>
+<script src="js/settings-map-chart.js?v=684"></script>
+<script src="js/settings-map.js?v=684"></script>
+<script src="js/strategy-library-code.js?v=684"></script>
+<script src="js/strategy-library.js?v=684"></script>
+<script src="js/init.js?v=684"></script>
+<script src="js/app-install.js?v=684"></script>
 
 </body>
 </html>

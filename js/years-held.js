@@ -1,5 +1,5 @@
 // Years-held window ("CAGR by years held", under "comparison grid" in the
-// side panel's "advanced analytics" dropdown). One line per chosen strategy:
+// side panel's "analytics" dropdown). One line per chosen strategy:
 // for each number of years held, the median money-weighted CAGR over every
 // start year that has been held that long — or the average, the best or the
 // worst of them, by the sentence's first dropdown. Hover a column for all four.

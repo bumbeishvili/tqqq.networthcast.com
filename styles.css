@@ -619,19 +619,19 @@
   }
 
   .panel-head {
-    /* One height for the line: the two square buttons and the dropdown's face. */
+    /* One height for the line: the two buttons and the dropdown's face. */
     --panel-head-h: calc(29px * var(--ui-scale));
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 8px;
     margin-bottom: 18px;
   }
-  .panel-head .analytics-menu summary { min-height: var(--panel-head-h); }
+  .panel-head .analytics-menu summary { min-height: var(--panel-head-h); padding: 0 8px; }
   .panel-head h2 {
     margin-bottom: 0;
   }
-  /* "advanced analytics": the dropdown that opens the chart windows (the
+  /* "analytics": the dropdown that opens the chart windows (the
      comparison grid, CAGR by years held). A native <details> like the header's
      Resources menu, which lends it the list's look (.resources-list). */
   .analytics-menu {
@@ -778,18 +778,20 @@
     .date-pick-btn { width: 30px; height: 30px; }
   }
 
-  /* --- The top line's two buttons: + Custom strategy and the Strategy Library --- */
-  /* Square, as tall as the "advanced analytics" dropdown beside them, each its icon
-     alone with its name in its title. */
+  /* --- The top line's two buttons: "+ custom" and "strategies" (the Strategy Library) --- */
+  /* As tall as the "analytics" dropdown beside them and in its type, each a word or two,
+     the full name in its title. With 8px sides the three fit the sidebar's 238px line
+     with some 16px to spare; an icon beside each word needs some 280px. */
   .panel-head-btn {
     flex: none;
-    width: var(--panel-head-h);
     height: var(--panel-head-h);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 0;
+    padding: 0 8px;
     border-radius: 6px;
+    font: 500 calc(11px * var(--ui-scale)) 'Open Sans', sans-serif;
+    white-space: nowrap;
     cursor: pointer;
     transition: border-color 0.15s, color 0.15s, background 0.15s, transform 0.05s;
   }
@@ -5090,10 +5092,7 @@
   .menu-icon--intraday        { --icon: url("images/icons/intraday.svg"); }
   .menu-icon--ninesig         { --icon: url("images/icons/ninesig.svg"); }
   .menu-icon--sma             { --icon: url("images/icons/sma.svg"); }
-  .menu-icon--install         { --icon: url("images/icons/install.svg"); }
-  .menu-icon--custom-strategy { --icon: url("images/icons/custom-strategy.svg"); }
-  .menu-icon--library         { --icon: url("images/icons/library.svg"); }
-  /* "Install app" stays out of the menu until the browser offers the installation: the flex above would show it. */
+  .menu-icon--install         { --icon: url("images/icons/install.svg"); }  /* "Install app" stays out of the menu until the browser offers the installation: the flex above would show it. */
   .resources-list button[hidden] { display: none; }
   .resources-list a:hover,
   .resources-list button:hover,
