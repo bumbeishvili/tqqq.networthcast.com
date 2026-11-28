@@ -8,8 +8,8 @@
  *   3. the map's numbers: with $80K and $3K a month a money-weighted 94.2% a year and a 54.5% max drawdown (82.8%
  *      and 60.2% at the settings before), on the app's own rate; $100K once 93.8% (54.5%);
  *   4. what the card says of the credit rule: from 1953 it fired 13 times, the last from 30 November to 20 December 2007;
- *   5. NFCI veto + Turnaround Monday (#48) still runs the code before at its settings, and its card still starts with
- *      the rules NFCI veto had.
+ *   5. #48 (since 28 November 2026 "10-25 - Extend floor turn", at a pick of its own) is built from the code before
+ *      #44's pick: the settings its own pick left alone keep that code's values, not #44's.
  *
  *   node tests/library-nfci-10-25.cjs
  */
@@ -86,18 +86,17 @@ const sameRows = (a, b) => a.length === b.length && a.every((row, k) => row.valu
     `${all[0].date}: ${stretches.length} stretches, ${stretches.map(s => s.from + '→' + s.to).join(', ')}`);
 }
 
-// ---- 5. NFCI veto + Turnaround Monday keeps NFCI veto as it was ----
+// ---- 5. #48 is built from the code before #44's pick ----
 {
-  const monday = defaultsOf(strategyOf(48));
-  ck('#48 runs the code before at its settings', Object.keys(WAS).every(id => JSON.stringify(monday[id]) === JSON.stringify(WAS[id])), JSON.stringify(Object.keys(WAS).map(id => [id, monday[id]])));
+  const turn = defaultsOf(strategyOf(48)), LEFT = ['crashAsset', 'nfciTh'];
+  ck('#48 keeps the code before\'s values where its own pick left them: cash after the crash exit, the credit rule at 0.4', LEFT.every(id => JSON.stringify(turn[id]) === JSON.stringify(WAS[id])), JSON.stringify(LEFT.map(id => [id, turn[id]])));
   const stub = new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => '' : stub), apply: () => stub });
   const page = { console, window: {}, document: stub, localStorage: stub, setTimeout: () => 0 };
   vm.createContext(page);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'strategy-library.js'), 'utf8') + '\nthis.LIBRARY = STRATEGY_LIBRARY; this.OLD = NFCI_VETO_RULES;', page);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'strategy-library.js'), 'utf8') + '\nthis.LIBRARY = STRATEGY_LIBRARY;', page);
   const card = (n) => page.LIBRARY.find(e => e.n === n);
   ck('#44\'s card: the new name, the old ones kept for saved copies', card(44).name === '10-25 - NFCI, overextend, crash' && card(44).formerNames.includes('NFCI veto'), card(44).name);
   ck('#44\'s card gives the pick\'s rules', /55\.5% above its median of the last 251 closes, hold SOXS/.test(card(44).rules) && /210-day moving average/.test(card(44).rules) && /\+0\.3/.test(card(44).rules) && !/SQQQ/.test(card(44).rules));
-  ck('#48\'s card still starts with the rules NFCI veto had', card(48).rules.startsWith(page.OLD + '\n\n') && /55% above its 250-day median, switch to SQQQ/.test(page.OLD), card(48).rules.slice(0, 80));
 }
 
 console.log(failures ? `${failures} failure(s)` : 'library-nfci-10-25: all checks pass');

@@ -6,8 +6,8 @@
  *      over two days, cash in between;
  *   3. the map's numbers, on the app's own rate: with $80K and $3K a month a money-weighted 122.7% a year and a 45.3%
  *      max drawdown (100.4% and 49.6% at the settings before); $100K once 121.6% (45.3%);
- *   4. Buy-back + Turnaround Monday (#49) still runs the code before at its settings, and its card still starts with
- *      the rules SQQQ stretch + buy-back had.
+ *   4. #49 (since 28 November 2026 "10-25 - Extend buy-back turn", at a pick of its own) is built from the code before
+ *      #45's pick: the settings its own pick left alone keep that code's values, not #45's.
  *
  *   node tests/library-buy-back-pick.cjs
  */
@@ -73,18 +73,17 @@ const firstCloses = (amount) => Object.fromEntries(dates.slice(START + 1, END + 
   ck('the settings before: 100.4% a year, max drawdown 49.6%', mapRate(base) === '100.4%, 49.6%', mapRate(base));
 }
 
-// ---- 4. Buy-back + Turnaround Monday keeps SQQQ stretch + buy-back as it was ----
+// ---- 4. #49 is built from the code before #45's pick ----
 {
-  const monday = defaultsOf(strategyOf(49));
-  ck('#49 runs the code before at its settings', Object.keys(WAS).every(id => JSON.stringify(monday[id]) === JSON.stringify(WAS[id])), JSON.stringify(Object.keys(WAS).map(id => [id, monday[id]])));
+  const turn = defaultsOf(strategyOf(49)), LEFT = ['crashAsset'];
+  ck('#49 keeps the code before\'s values where its own pick left them: cash after the sell line', LEFT.every(id => JSON.stringify(turn[id]) === JSON.stringify(WAS[id])), JSON.stringify(LEFT.map(id => [id, turn[id]])));
   const stub = new Proxy(function () {}, { get: (t, k) => (k === Symbol.toPrimitive ? () => '' : stub), apply: () => stub });
   const page = { console, window: {}, document: stub, localStorage: stub, setTimeout: () => 0 };
   vm.createContext(page);
-  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'strategy-library.js'), 'utf8') + '\nthis.LIBRARY = STRATEGY_LIBRARY; this.OLD = BUY_BACK_RULES;', page);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, '..', 'js', 'strategy-library.js'), 'utf8') + '\nthis.LIBRARY = STRATEGY_LIBRARY;', page);
   const card = (n) => page.LIBRARY.find(e => e.n === n);
   ck('#45\'s card: the new name, the old ones kept for saved copies', card(45).name === '10-25 - Stretch buy-back' && card(45).formerNames.includes('SQQQ stretch + buy-back'), card(45).name);
   ck('#45\'s card gives the pick\'s rules', /53\.5% above its median of the last 234 closes, switch to SOXS/.test(card(45).rules) && /switches to GLD\. Buy back after 35 closes/.test(card(45).rules) && /97% of the way/.test(card(45).rules) && /6\.5% under its buy price/.test(card(45).rules) && !/SQQQ/.test(card(45).rules));
-  ck('#49\'s card still starts with the rules SQQQ stretch + buy-back had', card(49).rules.startsWith(page.OLD + '\n\n') && /55% above its 250-day median, switch to SQQQ/.test(page.OLD), card(49).rules.slice(0, 80));
 }
 
 console.log(failures ? `${failures} failure(s)` : 'library-buy-back-pick: all checks pass');

@@ -251,7 +251,7 @@ function upgradeSavedCode(code) { return upgradeDailyDisplay(upgradeWithdrawalHa
 // for entries renamed since copies of them were made. null for code that is not
 // a library copy. Used by js/saved-configs.js to bring unedited copies up to
 // the current library code at load.
-const LIBRARY_FORMER_NAMES = { 40: ['Median overextension (250d)'], 29: ['9sig · max return 1990–2025'], 35: ['SMA · max return 1990–2025'], 44: ['NFCI veto, med stretch with SQQQ and med crash exit'], 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back', 'SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
+const LIBRARY_FORMER_NAMES = { 40: ['Median overextension (250d)'], 48: ['NFCI veto + Turnaround Monday'], 49: ['Buy-back + Turnaround Monday'], 29: ['9sig · max return 1990–2025'], 35: ['SMA · max return 1990–2025'], 44: ['NFCI veto, med stretch with SQQQ and med crash exit'], 45: ['NFCI veto, SQQQ stretch, sell line + crash buy-back', 'SQQQ stretch, sell line + crash buy-back'], 72: ['Short strat - late-week SQQQ', 'Min - late-week SQQQ'], 73: ['Late-week + overextended SQQQ'] };
 const codeName = code => { const m = /^\s*name:\s*"([^"]+)"/m.exec(String(code || '')); return m ? m[1] : null; };
 function libraryEntryOf(code) {
   const name = codeName(code);
@@ -6611,6 +6611,23 @@ const BUY_BACK_BASE = CODE[45];
 // for the tests.
 const OVER_PARK_BASE = CODE[40];
 CODE[40] = withDefaults(OVER_PARK_BASE, { name: "10-25 - Min - Overextension park", defaults: { park: "soxs", window: 234, overPct: 53.5, splitDays: false } });
+// #48 and #49 at the user's picks on the map of Q1 2010 to Q4 2025, renamed (28 November 2026: "set these two / first
+// one should be 10-25 extend floor turn / second one should be 10-25 extend buyback turn"; were "NFCI veto + Turnaround
+// Monday" and "Buy-back + Turnaround Monday"). Nothing is built from either code; the codes before (NFCI_TURN_BASE,
+// BUY_BACK_TURN_BASE) are kept for the tests.
+//   #48, thirteen moved: SOXL as the main fund (TQQQ), its 70-day moving average (250-day median), out over 35% (55%)
+//   into SOXS (SQQQ); the crash exit on a 110-day median (the main line) at +17.5% (−28%), while it rises less than 105%
+//   a year (20%) and after 14 closes under it (10); Big days 5.5% up, 17% down (15%, 15%); a switch at one close (two
+//   days). With $80K and $3K a month 170.5% a year, max drawdown 55.5% (100.3%, 58.0% before).
+//   #49, twelve moved: the median over 252 closes (250), out over 55.5% (55%) into SOXS (SQQQ); the sell line 1.5% under
+//   it (3%), 11 closes to buy back (5), a correction's re-entry line 77% of the way down (50%); the buy-back line 35%
+//   under (34%), its slice sold 6% under its price (20%), two slices (one); Big days 8.5% up, 16.4% down (15%, 15%; 16.4
+//   lies between the options, as the map can pick); a switch at one close. 147.7% a year, max drawdown 40.9% (123.4%, 47.3%).
+const NFCI_TURN_BASE = CODE[48], BUY_BACK_TURN_BASE = CODE[49];
+CODE[48] = withDefaults(NFCI_TURN_BASE, { name: "10-25 - Extend floor turn", defaults: {
+  asset: "soxl", stat: "sma", window: 70, overPct: 35, park: "soxs", crashStat: "median", crashWindow: 110, exitPct: 17.5, slopeGate: 105, belowGate: 14, bigRise: 5.5, bigDrop: 17, splitDays: false } });
+CODE[49] = withDefaults(BUY_BACK_TURN_BASE, { name: "10-25 - Extend buy-back turn", defaults: {
+  window: 252, overPct: 55.5, park: "soxs", exitPct: -1.5, confirmDays: 11, dipReentry: 77, bbPct: -35, sliceStop: 6, sliceCap: 2, bigRise: 8.5, bigDrop: 16.4, splitDays: false } });
 CODE[45] = withDefaults(BUY_BACK_BASE, { name: "10-25 - Stretch buy-back", defaults: {
   window: 234, overPct: 53.5, park: "soxs", crashAsset: "gld", confirmDays: 35, dipReentry: 97, sliceStop: 6.5, sliceCap: 2, splitDays: false } });
 
@@ -7178,6 +7195,8 @@ if (typeof module !== 'undefined' && module.exports) {
   Object.defineProperty(module.exports, 'NFCI_VETO_BASE', { value: NFCI_VETO_BASE });
   Object.defineProperty(module.exports, 'BUY_BACK_BASE', { value: BUY_BACK_BASE });
   Object.defineProperty(module.exports, 'OVER_PARK_BASE', { value: OVER_PARK_BASE });
+  Object.defineProperty(module.exports, 'NFCI_TURN_BASE', { value: NFCI_TURN_BASE });
+  Object.defineProperty(module.exports, 'BUY_BACK_TURN_BASE', { value: BUY_BACK_TURN_BASE });
   Object.defineProperty(module.exports, 'upgradeDailyDisplay', { value: upgradeDailyDisplay });
   Object.defineProperty(module.exports, 'upgradeSavedCode', { value: upgradeSavedCode });
   Object.defineProperty(module.exports, 'libraryEntryOf', { value: libraryEntryOf });
